@@ -34,6 +34,10 @@ Current implemented layers:
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
   - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-SAT`, `MON-RF`
   - RTCM3 framing, CRC24Q, and message-type extraction/classification
+- `gnss_driver`
+  - receiver profile declarations
+  - protocol support and feature flags
+  - lightweight stream-family detection
 - `gnss_tools`
   - `rtcm_inspect` CLI for binary RTCM frame inspection and summary output
 - `gnss_ros2`
@@ -78,6 +82,9 @@ runtime mapping coverage, and intentionally deferred protocol support.
 See [docs/vendors/ublox/runtime_mapping.md](docs/vendors/ublox/runtime_mapping.md)
 for the current u-blox-specific runtime mapping policy used by the UBX semantic
 layer.
+
+See [docs/driver.md](docs/driver.md) for the current driver-layer boundary,
+receiver profiles, and stream-detection foundation.
 
 See [docs/runtime_aggregation.md](docs/runtime_aggregation.md) for the generic
 merge rules that combine partial protocol/runtime updates into one coherent

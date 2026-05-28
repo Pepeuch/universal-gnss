@@ -242,11 +242,10 @@ It does not guarantee:
 The following are intentionally deferred:
 
 - UBX `CFG-*` messages
-- UBX `NAV-STATUS`
 - full RTCM semantic decoding
 - RTCM MSM satellite / signal parsing
 - NTRIP
-- driver layer
+- concrete receiver drivers
 - serial transport
 - auto-detection
 - ROS 2 nodes
