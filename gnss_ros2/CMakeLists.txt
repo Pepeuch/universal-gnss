@@ -6,6 +6,7 @@ find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -41,8 +42,25 @@ rosidl_get_typesupport_target(
 )
 target_link_libraries(${PROJECT_NAME}_gnss_status_adapter "${cpp_typesupport_target}")
 
+add_library(${PROJECT_NAME}_navsat_fix_adapter src/navsat_fix_adapter.cpp)
+target_compile_features(${PROJECT_NAME}_navsat_fix_adapter PUBLIC cxx_std_17)
+target_include_directories(
+  ${PROJECT_NAME}_navsat_fix_adapter
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(${PROJECT_NAME}_navsat_fix_adapter sensor_msgs)
+target_link_libraries(
+  ${PROJECT_NAME}_navsat_fix_adapter
+  ${PROJECT_NAME}_gnss_status_adapter
+)
+
 install(
-  TARGETS ${PROJECT_NAME}_gnss_status_adapter
+  TARGETS
+    ${PROJECT_NAME}_gnss_status_adapter
+    ${PROJECT_NAME}_navsat_fix_adapter
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -67,10 +85,24 @@ if(BUILD_TESTING)
         ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
     )
   endif()
+
+  ament_add_gtest(test_navsat_fix_adapter tests/test_navsat_fix_adapter.cpp)
+  if(TARGET test_navsat_fix_adapter)
+    target_link_libraries(
+      test_navsat_fix_adapter
+      ${PROJECT_NAME}_navsat_fix_adapter
+    )
+    target_include_directories(
+      test_navsat_fix_adapter
+      PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+    )
+  endif()
 endif()
 
 ament_export_include_directories(include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(builtin_interfaces rosidl_default_runtime)
+ament_export_dependencies(builtin_interfaces rosidl_default_runtime sensor_msgs)
 
 ament_package()
