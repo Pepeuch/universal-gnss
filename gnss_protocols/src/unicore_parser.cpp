@@ -99,6 +99,29 @@ bool TryParseUnsigned(std::string_view text, unsigned int& value)
   return true;
 }
 
+bool TryParseSigned(std::string_view text, int& value)
+{
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return false;
+  }
+
+  std::string buffer(text);
+  char* end = nullptr;
+  errno = 0;
+  const long parsed = std::strtol(buffer.c_str(), &end, 10);
+  if (errno != 0 || end == nullptr || *end != '\0' ||
+      parsed < std::numeric_limits<int>::min() ||
+      parsed > std::numeric_limits<int>::max())
+  {
+    return false;
+  }
+
+  value = static_cast<int>(parsed);
+  return true;
+}
+
 bool TryParseDouble(std::string_view text, double& value)
 {
   text = TrimField(text);
@@ -485,6 +508,27 @@ bool TokenizeBody(std::string_view body,
                   std::size_t& field_count)
 {
   return TokenizeCsv(body, fields, field_count);
+}
+
+bool ConsumeCsvField(std::string_view& text, std::string_view& field)
+{
+  if (text.empty())
+  {
+    field = std::string_view{};
+    return false;
+  }
+
+  const std::size_t comma = text.find(',');
+  if (comma == std::string_view::npos)
+  {
+    field = text;
+    text = std::string_view{};
+    return true;
+  }
+
+  field = text.substr(0, comma);
+  text.remove_prefix(comma + 1u);
+  return true;
 }
 
 universal_gnss::GnssFixType MapFixType(const UnicorePositionType type)
@@ -928,6 +972,116 @@ ParserResult<UnicoreRtcmStatusRecord> ParseUnicoreRtcmStatus(const UnicoreFrame&
   return ParserResult<UnicoreRtcmStatusRecord>::RecordReady(record);
 }
 
+ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "SATSINFOA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreSatsInfoRecord>();
+  }
+
+  std::string_view remaining = parsed->body;
+  std::string_view field{};
+  unsigned int tracked_satellite_count = 0u;
+  unsigned int version = 0u;
+  unsigned int reserve0 = 0u;
+  unsigned int reserve1 = 0u;
+  unsigned int reserve2 = 0u;
+  unsigned int frequency_flag = 0u;
+  if (!ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, tracked_satellite_count) ||
+      !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, version) ||
+      !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, reserve0) ||
+      !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, reserve1) ||
+      !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, reserve2) ||
+      !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, frequency_flag) ||
+      tracked_satellite_count > kMaxUnicoreSatsInfoSatellites ||
+      version > std::numeric_limits<std::uint8_t>::max() ||
+      reserve0 > std::numeric_limits<std::uint8_t>::max() ||
+      reserve1 > std::numeric_limits<std::uint8_t>::max() ||
+      reserve2 > std::numeric_limits<std::uint8_t>::max() ||
+      frequency_flag > std::numeric_limits<std::uint8_t>::max())
+  {
+    return InvalidResult<UnicoreSatsInfoRecord>();
+  }
+
+  UnicoreSatsInfoRecord record;
+  record.header = parsed->header;
+  record.tracked_satellite_count = static_cast<std::uint16_t>(tracked_satellite_count);
+  record.version = static_cast<std::uint8_t>(version);
+  record.frequency_flag = static_cast<std::uint8_t>(frequency_flag);
+
+  for (unsigned int satellite_index = 0u; satellite_index < tracked_satellite_count; ++satellite_index)
+  {
+    unsigned int satellite_id = 0u;
+    int azimuth_deg = 0;
+    int elevation_deg = 0;
+    unsigned int system_id = 0u;
+    unsigned int snr = 0u;
+    unsigned int frequency_status = 0u;
+    unsigned int frequency_count = 0u;
+    if (!ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, satellite_id) ||
+        !ConsumeCsvField(remaining, field) || !TryParseSigned(field, azimuth_deg) ||
+        !ConsumeCsvField(remaining, field) || !TryParseSigned(field, elevation_deg) ||
+        !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, system_id) ||
+        !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, snr) ||
+        !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, frequency_status) ||
+        !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, frequency_count) ||
+        satellite_id > std::numeric_limits<std::uint16_t>::max() ||
+        azimuth_deg < std::numeric_limits<std::int16_t>::min() ||
+        azimuth_deg > std::numeric_limits<std::int16_t>::max() ||
+        elevation_deg < std::numeric_limits<std::int16_t>::min() ||
+        elevation_deg > std::numeric_limits<std::int16_t>::max() ||
+        system_id > std::numeric_limits<std::uint8_t>::max() ||
+        snr > std::numeric_limits<std::uint8_t>::max() ||
+        frequency_status > std::numeric_limits<std::uint8_t>::max() ||
+        frequency_count == 0u ||
+        frequency_count > std::numeric_limits<std::uint8_t>::max())
+    {
+      return InvalidResult<UnicoreSatsInfoRecord>();
+    }
+
+    UnicoreSatsInfoSatellite satellite;
+    satellite.satellite_id = static_cast<std::uint16_t>(satellite_id);
+    satellite.azimuth_deg = static_cast<std::int16_t>(azimuth_deg);
+    satellite.elevation_deg = static_cast<std::int16_t>(elevation_deg);
+    satellite.system_id = static_cast<std::uint8_t>(system_id);
+    satellite.frequency_status = static_cast<std::uint8_t>(frequency_status);
+    satellite.frequency_count = static_cast<std::uint8_t>(frequency_count);
+    satellite.cn0_db_hz = static_cast<std::uint8_t>(snr);
+
+    for (unsigned int frequency_index = 1u; frequency_index < frequency_count; ++frequency_index)
+    {
+      unsigned int next_system_id = 0u;
+      unsigned int next_snr = 0u;
+      unsigned int next_frequency_status = 0u;
+      unsigned int next_frequency_count = 0u;
+      if (!ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, next_system_id) ||
+          !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, next_snr) ||
+          !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, next_frequency_status) ||
+          !ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, next_frequency_count) ||
+          next_system_id > std::numeric_limits<std::uint8_t>::max() ||
+          next_snr > std::numeric_limits<std::uint8_t>::max() ||
+          next_frequency_status > std::numeric_limits<std::uint8_t>::max() ||
+          next_frequency_count == 0u ||
+          next_frequency_count > std::numeric_limits<std::uint8_t>::max())
+      {
+        return InvalidResult<UnicoreSatsInfoRecord>();
+      }
+
+      satellite.cn0_db_hz = std::max(satellite.cn0_db_hz, static_cast<std::uint8_t>(next_snr));
+    }
+
+    record.satellites[record.parsed_satellite_count++] = satellite;
+  }
+
+  if (!remaining.empty())
+  {
+    return InvalidResult<UnicoreSatsInfoRecord>();
+  }
+
+  return ParserResult<UnicoreSatsInfoRecord>::RecordReady(record);
+}
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
@@ -1016,6 +1170,57 @@ universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(const UnicoreSatsInfoRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesTracked);
+  universal_gnss::SetOptionalValue(
+      state,
+      universal_gnss::GnssCapability::kSatellitesTracked,
+      state.satellites_tracked,
+      record.tracked_satellite_count);
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMeanCn0);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMaxCn0);
+
+  float cn0_sum = 0.0f;
+  std::size_t cn0_count = 0u;
+  float max_cn0 = 0.0f;
+  for (std::size_t satellite_index = 0u;
+       satellite_index < static_cast<std::size_t>(record.parsed_satellite_count);
+       ++satellite_index)
+  {
+    const float cn0 = static_cast<float>(record.satellites[satellite_index].cn0_db_hz);
+    if (cn0 <= 0.0f)
+    {
+      continue;
+    }
+
+    cn0_sum += cn0;
+    max_cn0 = std::max(max_cn0, cn0);
+    ++cn0_count;
+  }
+
+  if (cn0_count > 0u)
+  {
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kMeanCn0,
+        state.mean_cn0_db_hz,
+        cn0_sum / static_cast<float>(cn0_count));
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kMaxCn0,
+        state.max_cn0_db_hz,
+        max_cn0);
+  }
+
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }

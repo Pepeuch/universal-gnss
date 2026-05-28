@@ -193,6 +193,7 @@ Implemented semantic messages:
 - `BESTNAVA`
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
+- `SATSINFOA`
 
 Implemented behaviors:
 
@@ -208,6 +209,7 @@ Current Unicore notes:
   fields
 - `RTKSTATUSA` complements position messages with RTK-mode and dual-antenna
   status
+- `SATSINFOA` provides tracked-satellite counts and CN0 summaries
 - `RTCMSTATUSA` is parsed semantically but does not project into runtime state
   yet
 
@@ -217,9 +219,9 @@ for the current message-by-message Unicore runtime mapping contract.
 What Unicore does not do yet:
 
 - binary `N4`
-- `SATSINFOA` semantic parsing
 - receiver configuration commands
 - Mowgli-style diagnostics projection
+- constellation-specific aggregate statistics
 
 ## Runtime Mapping Coverage
 
@@ -240,7 +242,8 @@ hdop                     NMEA GGA, NMEA GSA, Unicore PVTSLNA
 vdop                     NMEA GSA
 satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore BESTNAVA
 satellites_visible       NMEA GSV, UBX NAV-SAT
-mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT
+satellites_tracked       Unicore PVTSLNA, Unicore BESTNAVA, Unicore SATSINFOA
+mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
 heading                  UBX NAV-PVT, Unicore PVTSLNA
 interference / jamming   UBX MON-RF
 correction_age           Unicore PVTSLNA, Unicore BESTNAVA

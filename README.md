@@ -33,7 +33,7 @@ Current implemented layers:
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
   - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-SAT`, `MON-RF`
-  - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`, `RTCMSTATUSA`
+  - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`, `RTCMSTATUSA`, `SATSINFOA`
   - RTCM3 framing, CRC24Q, and message-type extraction/classification
 - `gnss_driver`
   - receiver profile declarations

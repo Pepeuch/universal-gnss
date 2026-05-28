@@ -18,10 +18,10 @@ Current parsed Unicore ASCII messages:
 - `BESTNAVA`
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
+- `SATSINFOA`
 
 Not implemented yet:
 
-- `SATSINFOA` semantic parsing
 - binary `N4`
 - Unicore configuration commands like `MODE`, `CONFIG`, and `LOG`
 
@@ -132,6 +132,42 @@ Reason:
 - correction transport metrics belong more naturally in `gnss_ntrip`,
   `gnss_tools`, or a future driver/session layer
 
+## SATSINFOA
+
+`SATSINFOA` is the current Unicore satellite-signal summary message.
+
+Current semantic coverage:
+
+- documented tracked-satellite count
+- per-satellite PRN
+- azimuth
+- elevation
+- system identifier
+- frequency status
+- frequency count
+- per-satellite CN0 / SNR summary
+
+Current runtime mappings:
+
+- tracked-satellite count -> `satellites_tracked`
+- mean CN0 across parsed tracked satellites -> `mean_cn0`
+- max CN0 across parsed tracked satellites -> `max_cn0`
+
+Current CN0 strategy:
+
+- the semantic record keeps one CN0 summary per satellite
+- when multiple frequency tuples exist for one satellite, the current parser
+  keeps the maximum documented SNR across those tuples
+- runtime `mean_cn0` and `max_cn0` are then computed from those per-satellite
+  summaries
+
+Current conservative rules:
+
+- `SATSINFOA` does not currently claim `satellites_visible`
+- `SATSINFOA` does not currently claim `satellites_used`
+- no RTK, correction-age, or RF state is inferred from signal-strength data
+- no constellation-specific aggregate fields are projected into core yet
+
 ## Position-Type Mapping
 
 Current generic mapping rules:
@@ -167,6 +203,7 @@ Examples:
 
 - `BESTNAVA` can refresh coordinates, accuracy, and correction age
 - `RTKSTATUSA` can refresh RTK mode and dual-antenna state
+- `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
 - `RTCMSTATUSA` can be retained as a semantic record without touching the core
   runtime state
 
@@ -188,7 +225,7 @@ were reused conceptually.
 Still intentionally deferred:
 
 - binary `N4`
-- `SATSINFOA` semantic parsing
+- constellation-specific satellite statistics
 - Unicore receiver configuration commands
 - transport integration
 - NTRIP injection

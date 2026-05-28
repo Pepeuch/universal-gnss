@@ -16,6 +16,7 @@ using universal_gnss_protocols::ParseUnicoreBestNav;
 using universal_gnss_protocols::ParseUnicorePvtsln;
 using universal_gnss_protocols::ParseUnicoreRtkStatus;
 using universal_gnss_protocols::ParseUnicoreRtcmStatus;
+using universal_gnss_protocols::ParseUnicoreSatsInfo;
 using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
@@ -210,6 +211,56 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
   }
 }
 
+void TestSatsInfoParsingAndRuntimeMapping(TestContext& ctx)
+{
+  const std::string line =
+      "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
+      "3,2,0,0,0,63,"
+      "2,302,51,0,45,0,2,0,42,9,2,"
+      "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
+      "5,225,14,1,50,0,1*abcdef12\r\n";
+
+  const auto result = ParseUnicoreSatsInfo(BuildAsciiFrame(line, 5555));
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid SATSINFOA line should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.header.timestamp_ns == 5555 &&
+                 record.tracked_satellite_count == 3u &&
+                 record.parsed_satellite_count == 3u &&
+                 record.frequency_flag == 63u,
+             "SATSINFOA should parse the common header and tracked-satellite count");
+  ctx.Expect(record.satellites[0].satellite_id == 2u &&
+                 record.satellites[0].azimuth_deg == 302 &&
+                 record.satellites[0].elevation_deg == 51 &&
+                 record.satellites[0].cn0_db_hz == 45u &&
+                 record.satellites[1].frequency_count == 3u &&
+                 record.satellites[1].cn0_db_hz == 43u &&
+                 record.satellites[2].system_id == 1u,
+             "SATSINFOA should keep the stable per-satellite identity and CN0 summary");
+
+  const auto state = universal_gnss_protocols::UnicoreSatsInfoToRuntimeState(record);
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kSatellitesTracked) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kMeanCn0) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kMaxCn0),
+             "SATSINFOA runtime mapping should advertise tracked-satellite and CN0 support");
+  ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kSatellitesTracked) &&
+                 state.satellites_tracked == 3u &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kMeanCn0) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kMaxCn0) &&
+                 state.mean_cn0_db_hz == 46.0f &&
+                 state.max_cn0_db_hz == 50.0f,
+             "SATSINFOA runtime mapping should expose tracked count and mean/max CN0");
+  ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kRtkMode) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kCorrectionAge) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kInterferenceState),
+             "SATSINFOA should not invent RTK, correction, or RF capabilities");
+}
+
 void TestMalformedAndMissingFields(TestContext& ctx)
 {
   const std::string malformed_bestnav =
@@ -234,6 +285,30 @@ void TestMalformedAndMissingFields(TestContext& ctx)
                    !universal_gnss::HasValueAvailable(state, GnssCapability::kHdop),
                "missing trailing optional fields should stay unset in runtime mapping");
   }
+
+  const std::string malformed_satsinfo =
+      "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
+      "1,2,0,0,0,63,2,302,51,0,45,0,0*badc0de0\r\n";
+  const auto malformed_satsinfo_result = ParseUnicoreSatsInfo(BuildAsciiFrame(malformed_satsinfo));
+  ctx.Expect(malformed_satsinfo_result.status == ParserStatus::kInvalidData,
+             "SATSINFOA should reject malformed essentials like a zero frequency count");
+
+  const std::string empty_satsinfo =
+      "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;0,2,0,0,0,63*12345678\r\n";
+  const auto empty_satsinfo_result = ParseUnicoreSatsInfo(BuildAsciiFrame(empty_satsinfo, 6666));
+  ctx.Expect(empty_satsinfo_result.status == ParserStatus::kRecordReady &&
+                 empty_satsinfo_result.record.has_value(),
+             "SATSINFOA should accept an empty satellite list");
+  if (empty_satsinfo_result.record.has_value())
+  {
+    const auto state =
+        universal_gnss_protocols::UnicoreSatsInfoToRuntimeState(*empty_satsinfo_result.record);
+    ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kSatellitesTracked) &&
+                   state.satellites_tracked == 0u &&
+                   !universal_gnss::HasValueAvailable(state, GnssCapability::kMeanCn0) &&
+                   !universal_gnss::HasValueAvailable(state, GnssCapability::kMaxCn0),
+               "empty SATSINFOA should keep tracked count but leave CN0 values unset");
+  }
 }
 
 }  // namespace
@@ -245,6 +320,7 @@ int main()
   TestPvtslnParsingAndRuntimeMapping(ctx);
   TestBestNavParsingAndMapping(ctx);
   TestRtkStatusAndRtcmStatusParsing(ctx);
+  TestSatsInfoParsingAndRuntimeMapping(ctx);
   TestMalformedAndMissingFields(ctx);
 
   if (ctx.failures != 0)

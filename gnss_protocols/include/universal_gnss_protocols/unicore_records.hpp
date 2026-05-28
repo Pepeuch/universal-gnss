@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -159,6 +160,30 @@ struct UnicoreRtcmStatusRecord
   std::uint8_t l4_observables{0};
   std::uint8_t l5_observables{0};
   std::uint8_t l6_observables{0};
+};
+
+constexpr std::size_t kMaxUnicoreSatsInfoSatellites = 64u;
+
+struct UnicoreSatsInfoSatellite
+{
+  std::uint16_t satellite_id{0};
+  std::int16_t azimuth_deg{0};
+  std::int16_t elevation_deg{0};
+  std::uint8_t system_id{0};
+  std::uint8_t frequency_status{0};
+  std::uint8_t frequency_count{0};
+  std::uint8_t cn0_db_hz{0};
+};
+
+struct UnicoreSatsInfoRecord
+{
+  UnicoreAsciiHeader header{};
+
+  std::uint16_t tracked_satellite_count{0};
+  std::uint8_t version{0};
+  std::uint8_t frequency_flag{0};
+  std::uint16_t parsed_satellite_count{0};
+  std::array<UnicoreSatsInfoSatellite, kMaxUnicoreSatsInfoSatellites> satellites{};
 };
 
 }  // namespace universal_gnss_protocols
