@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -70,6 +72,38 @@ struct UbxNavPvtRecord
   float heading_motion_deg{0.0f};
   float heading_vehicle_deg{0.0f};
   float heading_accuracy_deg{0.0f};
+};
+
+enum class UbxNavSatHealth : std::uint8_t
+{
+  kUnknown = 0,
+  kHealthy = 1,
+  kUnhealthy = 2,
+};
+
+struct UbxNavSatSatellite
+{
+  std::uint8_t gnss_id{0};
+  std::uint8_t sv_id{0};
+  std::uint8_t cno_db_hz{0};
+  std::int8_t elevation_deg{0};
+  std::int16_t azimuth_deg{0};
+  std::uint8_t quality_indicator{0};
+  bool used_in_navigation{false};
+  std::optional<bool> healthy{};
+};
+
+struct UbxNavSatRecord
+{
+  static constexpr std::size_t kMaxSatellites = 64;
+
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::uint32_t i_tow_ms{0};
+  std::uint8_t version{0};
+  std::uint8_t num_svs{0};
+  std::array<UbxNavSatSatellite, kMaxSatellites> satellites{};
+  std::size_t satellite_count{0};
+  std::uint8_t used_satellite_count{0};
 };
 
 }  // namespace universal_gnss_protocols

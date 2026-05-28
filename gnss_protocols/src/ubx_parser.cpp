@@ -11,7 +11,10 @@ namespace
 
 constexpr std::uint8_t kUbxNavClass = 0x01u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
+constexpr std::uint8_t kUbxNavSatId = 0x35u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
+constexpr std::size_t kUbxNavSatHeaderSize = 8u;
+constexpr std::size_t kUbxNavSatBlockSize = 12u;
 
 constexpr std::uint8_t kValidDateBit = 1u << 0;
 constexpr std::uint8_t kValidTimeBit = 1u << 1;
@@ -23,6 +26,9 @@ constexpr std::uint8_t kHeadVehValidBit = 1u << 5;
 constexpr std::uint8_t kCarrSolnMask = 0xC0u;
 
 constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
+constexpr std::uint32_t kNavSatQualityMask = 0x00000007u;
+constexpr std::uint32_t kNavSatUsedBit = 1u << 3;
+constexpr std::uint32_t kNavSatHealthMask = 0x00000030u;
 
 std::uint16_t ReadLeU2(const ByteVector& payload, std::size_t offset)
 {
@@ -41,6 +47,11 @@ std::uint32_t ReadLeU4(const ByteVector& payload, std::size_t offset)
 std::int32_t ReadLeI4(const ByteVector& payload, std::size_t offset)
 {
   return static_cast<std::int32_t>(ReadLeU4(payload, offset));
+}
+
+std::int16_t ReadLeI2(const ByteVector& payload, std::size_t offset)
+{
+  return static_cast<std::int16_t>(ReadLeU2(payload, offset));
 }
 
 float ScaleMillimetersToMeters(std::int32_t millimeters)
@@ -73,6 +84,19 @@ UbxCarrierSolutionStatus DecodeCarrierSolution(std::uint8_t flags)
       return UbxCarrierSolutionStatus::kFixed;
     default:
       return UbxCarrierSolutionStatus::kNone;
+  }
+}
+
+std::optional<bool> DecodeNavSatHealth(std::uint32_t flags)
+{
+  switch ((flags & kNavSatHealthMask) >> 4)
+  {
+    case 1u:
+      return true;
+    case 2u:
+      return false;
+    default:
+      return std::nullopt;
   }
 }
 
@@ -137,6 +161,71 @@ ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame)
   record.heading_vehicle_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 84u));
 
   return ParserResult<UbxNavPvtRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxNavClass || frame.message_id != kUbxNavSatId)
+  {
+    return ParserResult<UbxNavSatRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxNavSatRecord>::InvalidData();
+  }
+  if (frame.payload.size() < kUbxNavSatHeaderSize)
+  {
+    return ParserResult<UbxNavSatRecord>::InvalidData();
+  }
+
+  const std::uint8_t version = frame.payload[4u];
+  const std::uint8_t num_svs = frame.payload[5u];
+  if (version != 0x01u)
+  {
+    return ParserResult<UbxNavSatRecord>::InvalidData();
+  }
+
+  const std::size_t expected_payload_size =
+      kUbxNavSatHeaderSize + (static_cast<std::size_t>(num_svs) * kUbxNavSatBlockSize);
+  if (frame.payload.size() != expected_payload_size)
+  {
+    return ParserResult<UbxNavSatRecord>::InvalidData();
+  }
+  if (num_svs > UbxNavSatRecord::kMaxSatellites)
+  {
+    return ParserResult<UbxNavSatRecord>::Overflow();
+  }
+
+  UbxNavSatRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.i_tow_ms = ReadLeU4(frame.payload, 0u);
+  record.version = version;
+  record.num_svs = num_svs;
+
+  for (std::size_t index = 0; index < static_cast<std::size_t>(num_svs); ++index)
+  {
+    const std::size_t offset = kUbxNavSatHeaderSize + (index * kUbxNavSatBlockSize);
+    const std::uint32_t flags = ReadLeU4(frame.payload, offset + 8u);
+
+    UbxNavSatSatellite satellite;
+    satellite.gnss_id = frame.payload[offset];
+    satellite.sv_id = frame.payload[offset + 1u];
+    satellite.cno_db_hz = frame.payload[offset + 2u];
+    satellite.elevation_deg = static_cast<std::int8_t>(frame.payload[offset + 3u]);
+    satellite.azimuth_deg = ReadLeI2(frame.payload, offset + 4u);
+    satellite.quality_indicator = static_cast<std::uint8_t>(flags & kNavSatQualityMask);
+    satellite.used_in_navigation = (flags & kNavSatUsedBit) != 0u;
+    satellite.healthy = DecodeNavSatHealth(flags);
+
+    record.satellites[index] = satellite;
+    ++record.satellite_count;
+    if (satellite.used_in_navigation && record.used_satellite_count < num_svs)
+    {
+      ++record.used_satellite_count;
+    }
+  }
+
+  return ParserResult<UbxNavSatRecord>::RecordReady(std::move(record));
 }
 
 universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& record)
@@ -239,6 +328,56 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
     universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
     universal_gnss::SetOptionalValue(
         state, universal_gnss::GnssCapability::kHeading, state.heading_deg, record.heading_vehicle_deg);
+  }
+
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UbxNavSatToRuntimeState(const UbxNavSatRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesVisible);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMeanCn0);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMaxCn0);
+
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kSatellitesVisible,
+                                   state.satellites_visible,
+                                   static_cast<std::uint16_t>(record.num_svs));
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kSatellitesUsed,
+                                   state.satellites_used,
+                                   static_cast<std::uint16_t>(record.used_satellite_count));
+
+  std::uint32_t cn0_sum = 0u;
+  std::uint32_t cn0_count = 0u;
+  std::uint8_t max_cn0 = 0u;
+  for (std::size_t index = 0; index < record.satellite_count; ++index)
+  {
+    const std::uint8_t cno = record.satellites[index].cno_db_hz;
+    if (cno == 0u)
+    {
+      continue;
+    }
+
+    cn0_sum += cno;
+    max_cn0 = (cn0_count == 0u || cno > max_cn0) ? cno : max_cn0;
+    ++cn0_count;
+  }
+
+  if (cn0_count > 0u)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kMeanCn0,
+                                     state.mean_cn0_db_hz,
+                                     static_cast<float>(cn0_sum) / static_cast<float>(cn0_count));
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kMaxCn0,
+                                     state.max_cn0_db_hz,
+                                     static_cast<float>(max_cn0));
   }
 
   return state;
