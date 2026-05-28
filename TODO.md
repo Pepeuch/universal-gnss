@@ -36,6 +36,7 @@ Implemented:
 - [x] Route to `UnicoreSession`
 - [x] Expose unified runtime state
 - [x] Expose generic session metrics
+- [x] Add portable `ReceiverSessionRunner`
 - [ ] Prepare future auto-detection
 
 ### 2. Runtime diagnostics model
@@ -183,6 +184,7 @@ Implemented:
 - [x] UbloxSession
 - [x] UnicoreSession
 - [x] Generic receiver session router
+- [x] ReceiverSession byte-source runner
 
 To do:
 

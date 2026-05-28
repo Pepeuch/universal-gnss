@@ -255,6 +255,39 @@ This router is intentionally not:
 - a full auto-detection engine
 - a ROS 2 node
 
+### Receiver session runner
+
+`receiver_session_runner.*` is the first small bridge between `gnss_transport`
+and `gnss_driver`.
+
+Its job is intentionally narrow:
+
+- accept any `ByteSource`
+- read synchronous fixed-size chunks
+- feed those chunks into a `ReceiverSession`
+- stop on EOF, closed source, or read error
+- expose lightweight runner metrics
+
+Current runner metrics include:
+
+- bytes read
+- chunks read
+- EOF observed
+- read-error count
+- runtime updates observed from the wrapped receiver session
+
+Current policy:
+
+- this is not a serial driver
+- this is not a TCP client
+- this does not own reconnect logic
+- this does not configure the receiver
+- this only bridges portable byte input into an already configured session
+
+This allows future POSIX serial, TCP, replay, NTRIP, or embedded adapters to
+plug into the same session surface without moving transport concerns into the
+session layer.
+
 ## Relationship To Protocol Parsers
 
 The parser layer and driver layer have different jobs.

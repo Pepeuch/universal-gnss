@@ -167,6 +167,27 @@ Examples:
 - a future TCP NTRIP socket would likely provide a `ByteSource` or `ByteDuplex`
 - `gnss_protocols` would consume the resulting bytes for framing and parsing
 - `gnss_driver` would stay above transport and below application logic
+- `receiver_session_runner.*` is the current synchronous bridge from a
+  `ByteSource` into a portable receiver session
+
+## Current Driver Bridge
+
+`gnss_driver/receiver_session_runner.*` is the first integration point that
+consumes transport abstractions directly.
+
+Current role:
+
+- read fixed-size chunks from any `ByteSource`
+- feed those chunks into `ReceiverSession`
+- stop on EOF, closed transport, or read error
+- surface lightweight runner metrics for offline and embedded use
+
+It is still intentionally not:
+
+- a transport implementation
+- a reconnect manager
+- an async loop
+- a serial or TCP adapter
 
 ## Deferred Work
 

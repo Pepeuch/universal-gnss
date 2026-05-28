@@ -2,6 +2,7 @@ add_library(
   universal_gnss_driver
   src/receiver_profiles.cpp
   src/receiver_session.cpp
+  src/receiver_session_runner.cpp
   src/stream_detector.cpp
   src/ublox_session.cpp
   src/unicore_session.cpp
@@ -13,7 +14,12 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(universal_gnss_driver PUBLIC universal_gnss_protocols)
+target_link_libraries(
+  universal_gnss_driver
+  PUBLIC
+    universal_gnss_protocols
+    universal_gnss_transport
+)
 
 target_compile_features(universal_gnss_driver PUBLIC cxx_std_17)
 
@@ -61,4 +67,18 @@ if(BUILD_TESTING)
       universal_gnss_driver
   )
   add_test(NAME gnss_driver_test_receiver_session COMMAND gnss_driver_test_receiver_session)
+
+  add_executable(
+    gnss_driver_test_receiver_session_runner
+    tests/test_receiver_session_runner.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_session_runner
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_session_runner
+    COMMAND gnss_driver_test_receiver_session_runner
+  )
 endif()
