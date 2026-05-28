@@ -135,6 +135,36 @@ Current policy:
 - this layer does not generate vendor payloads yet
 - this layer does not send bytes to a transport yet
 
+### Receiver command dispatcher
+
+`receiver_command_dispatcher.*` is the first write-side bridge between the
+portable command model and `gnss_transport`.
+
+Current role:
+
+- accept prepared `ReceiverCommand` values
+- verify dispatch safety using the existing safety helpers
+- reject empty payloads by default
+- write text or binary payload bytes to any `ByteSink`
+- expose lightweight dispatcher metrics
+
+Current policy:
+
+- runtime commands can be sent without extra confirmation
+- persistent and factory-reset commands are rejected unless explicitly confirmed
+- no ACK/NAK handling exists yet
+- no retry or timeout state machine exists yet
+- this layer writes prepared bytes only; it does not generate vendor payloads
+
+Current dispatcher metrics include:
+
+- commands attempted
+- commands sent
+- safety rejections
+- invalid-command rejections
+- bytes written
+- write errors
+
 ### Receiver config profiles
 
 `receiver_config_profile.hpp` defines a small generic vocabulary for future

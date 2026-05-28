@@ -16,6 +16,7 @@ Implemented:
 - UnicoreSession foundation
 - Generic ReceiverSession router
 - Receiver command/config profile model
+- Receiver command dispatcher foundation
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - ROS2 adapter foundation
@@ -40,6 +41,7 @@ Implemented:
 - [x] Add portable `ReceiverSessionRunner`
 - [ ] Prepare future auto-detection
 - [x] Define portable receiver command/config profile model
+- [x] Add portable receiver command dispatcher
 
 ### 2. Runtime diagnostics model
 
@@ -192,6 +194,7 @@ To do:
 
 - [ ] Session auto-detection
 - [x] Receiver config command model
+- [x] Receiver command dispatcher
 - [ ] u-blox config engine
 - [ ] Unicore config engine
 - [ ] Quectel config engine

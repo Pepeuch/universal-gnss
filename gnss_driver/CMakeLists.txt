@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_driver
+  src/receiver_command_dispatcher.cpp
   src/receiver_profiles.cpp
   src/receiver_session.cpp
   src/receiver_session_runner.cpp
@@ -80,6 +81,20 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_driver_test_receiver_session_runner
     COMMAND gnss_driver_test_receiver_session_runner
+  )
+
+  add_executable(
+    gnss_driver_test_receiver_command_dispatcher
+    tests/test_receiver_command_dispatcher.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_command_dispatcher
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_command_dispatcher
+    COMMAND gnss_driver_test_receiver_command_dispatcher
   )
 
   add_executable(
