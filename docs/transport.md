@@ -10,9 +10,14 @@ It currently provides:
 - generic transport status and error enums
 - transport metrics helpers
 - in-memory test transports
+- a Linux-only POSIX serial adapter
 - a small fixed-capacity ring buffer helper
 
 It does not yet provide any OS or network transport implementation.
+
+Exception:
+
+- Linux now has a minimal POSIX serial adapter for local byte-stream I/O
 
 ## Purpose
 
@@ -141,6 +146,35 @@ Current behavior:
 - injected read/write failures can be used in tests
 - metrics are updated directly by the transport object
 
+## POSIX Serial Transport
+
+`posix_serial_transport.*` is the first real transport adapter in the project.
+
+Current scope:
+
+- Linux-only
+- `ByteDuplex` implementation
+- open a device path
+- configure a small set of common baud rates
+- raw serial read/write
+- explicit close
+- transport metrics and error surfacing
+
+Current non-goals:
+
+- reconnect logic
+- background threads
+- async I/O
+- line discipline helpers
+- receiver configuration
+
+Current policy:
+
+- build only on Linux
+- keep the API synchronous and minimal
+- allow optional nonblocking or read-timeout configuration
+- use pseudo-terminal tests so no real GNSS hardware is required
+
 ## Ring Buffer Helper
 
 `ring_buffer.hpp` currently provides a small fixed-capacity byte FIFO.
@@ -193,7 +227,6 @@ It is still intentionally not:
 
 Still intentionally deferred:
 
-- POSIX serial transport
 - TCP / UDP sockets
 - TLS
 - async I/O

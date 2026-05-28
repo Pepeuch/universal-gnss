@@ -3,6 +3,19 @@ add_library(
   src/memory_stream.cpp
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  target_sources(
+    universal_gnss_transport
+    PRIVATE
+      src/posix_serial_transport.cpp
+  )
+  target_compile_definitions(
+    universal_gnss_transport
+    PUBLIC
+      UNIVERSAL_GNSS_TRANSPORT_HAS_POSIX_SERIAL=1
+  )
+endif()
+
 target_include_directories(
   universal_gnss_transport
   PUBLIC
@@ -22,4 +35,20 @@ if(BUILD_TESTING)
       universal_gnss_transport
   )
   add_test(NAME gnss_transport_test_foundation COMMAND gnss_transport_test_foundation)
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(
+      gnss_transport_test_posix_serial_transport
+      tests/test_posix_serial_transport.cpp
+    )
+    target_link_libraries(
+      gnss_transport_test_posix_serial_transport
+      PRIVATE
+        universal_gnss_transport
+    )
+    add_test(
+      NAME gnss_transport_test_posix_serial_transport
+      COMMAND gnss_transport_test_posix_serial_transport
+    )
+  endif()
 endif()
