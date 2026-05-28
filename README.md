@@ -25,6 +25,7 @@ Current implemented layers:
 
 - `gnss_core`
   - portable C++ runtime model
+  - runtime aggregation of partial normalized updates
   - fix / RTK enums
   - capability and value flag system
   - no ROS 2 dependency
@@ -63,6 +64,10 @@ protocol parser / driver / transport
 
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts and the
 current status / covariance policy.
+
+See [docs/runtime_aggregation.md](docs/runtime_aggregation.md) for the generic
+merge rules that combine partial protocol/runtime updates into one coherent
+`GnssRuntimeState`.
 
 ## License
 
