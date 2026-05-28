@@ -19,85 +19,51 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 - Replacing vendor tools for firmware updates.
 - Mixing ROS 2 code into the portable parser core.
 
+## Architecture
+
+Current implemented layers:
+
+- `gnss_core`
+  - portable C++ runtime model
+  - fix / RTK enums
+  - capability and value flag system
+  - no ROS 2 dependency
+- `gnss_ros2`
+  - ROS 2 package `universal_gnss_ros2`
+  - `GnssStatus` message
+  - `GnssRuntimeState -> GnssStatus` adapter
+  - `GnssRuntimeState -> NavSatFix` adapter
+
+Planned layers:
+
+- `gnss_protocols`
+  - NMEA, RTCM3, UBX, Unicore, Quectel, and other protocol parsers
+- `gnss_driver`
+  - transport, detection, configuration, and runtime-state mapping
+- `gnss_ntrip`
+  - NTRIP client, RTCM relay, correction transport metrics
+- `gnss_rtk_base`
+  - survey-in, fixed-base workflows, RTCM routing
+- `gnss_esp32`
+  - lightweight embedded integration
+
+The intended flow is:
+
+```text
+protocol parser / driver / transport
+                |
+                v
+  universal_gnss::GnssRuntimeState
+                |
+        +-------+-------+
+        |               |
+        v               v
+   GnssStatus.msg   sensor_msgs/NavSatFix
+```
+
+See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts and the
+current status / covariance policy.
+
 ## License
 
 This project is licensed under LGPLv3.
-
-- Layers
-- gnss_core
-
-Portable C/C++ core with no ROS 2 dependency.
-
-## Responsibilities:
-
-- runtime model
-- capability flags
-- common GNSS types
-- parser interfaces
-- error/status types
-- gnss_protocols
-
-# Protocol-specific parsers.
-
-## Planned protocols:
-
-- NMEA
-- RTCM3
-- UBX
-- Unicore
-- Quectel PQTM/PAIR
-- Septentrio SBF
-- gnss_driver
-
-# Receiver control layer.
-
-## Responsibilities:
-
-- UART/TCP/UDP transport
-- auto-detection
-- receiver configuration
-- message rates
-- rover/base mode
-- PPS and constellation settings
-- gnss_ntrip
-
-## NTRIP and RTCM transport layer.
-
-## Responsibilities:
-
-- NTRIP client
-- GGA injection
-- RTCM frame relay
-- correction age metrics
-- reconnect/backoff
-- gnss_ros2
-
-# ROS 2 integration.
-
-## Responsibilities:
-```
-/gps/fix
-/gps/status
-/gps/azimuth
-/diagnostics
-configuration services
-gnss_rtk_base
-```
-# RTK base orchestration.
-
-## Responsibilities:
-
-- survey-in
-- fixed base mode
-- RTCM routing
-- local caster integration
-- gnss_esp32
-
-# Embedded adapter for ESP32-based RTK gateways.
-
-## Responsibilities:
-
-- lightweight parser build
-- WebUI/MQTT integration
-- LoRa/RTCM routing
-- NTRIP forwarding
