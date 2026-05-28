@@ -38,6 +38,10 @@ Current implemented layers:
   - receiver profile declarations
   - protocol support and feature flags
   - lightweight stream-family detection
+- `gnss_transport`
+  - portable byte source / sink interfaces
+  - memory-backed test / replay transport
+  - transport metrics and buffer helpers
 - `gnss_ntrip`
   - portable NTRIP config types
   - request and auth header generation
@@ -57,7 +61,9 @@ Planned layers:
 - `gnss_protocols`
   - NMEA, RTCM3, UBX, Unicore, Quectel, and other protocol parsers
 - `gnss_driver`
-  - transport, detection, configuration, and runtime-state mapping
+  - detection, configuration, and runtime-state mapping
+- `gnss_transport`
+  - serial, TCP / UDP, replay, and embedded byte-stream adapters
 - `gnss_ntrip`
   - NTRIP client, RTCM relay, correction transport metrics
 - `gnss_rtk_base`
@@ -98,6 +104,9 @@ merge rules that combine partial protocol/runtime updates into one coherent
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs and
 usage examples.
+
+See [docs/transport.md](docs/transport.md) for the current portable byte-stream
+abstraction layer and memory transport behavior.
 
 See [docs/ntrip.md](docs/ntrip.md) for the current NTRIP layer scope,
 request-format policy, and deferred networking work.

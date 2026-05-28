@@ -6,8 +6,6 @@ Today `gnss_driver` is only a portable abstraction foundation.
 
 It does not yet contain:
 
-- serial transport
-- TCP / UDP transport
 - receiver configuration
 - correction injection
 - auto-detection loops
@@ -25,6 +23,9 @@ gnss_protocols
   -> framing
   -> checksums
   -> semantic message parsers
+
+gnss_transport
+  -> future serial / TCP / UDP / replay adapters
 
 gnss_driver
   -> receiver profiles
@@ -49,6 +50,9 @@ should not decide:
 
 Those are driver concerns, even before transport or configuration commands are
 implemented.
+
+Likewise, `gnss_driver` should not own raw byte transport implementations.
+Those belong in `gnss_transport`.
 
 ## Current Abstractions
 
@@ -162,14 +166,11 @@ Later concrete drivers may:
 
 The following driver-layer work is intentionally deferred:
 
-- serial transport
-- TCP / UDP transport
 - receiver config commands
 - UBX `CFG-*`
 - Quectel config messages
 - Unicore config messages
 - auto-detection state machines
-- stream timeouts and reconnection logic
 - correction injection paths
 - receiver-family runtime arbitration
 - ROS 2 driver nodes

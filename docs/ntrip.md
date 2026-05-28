@@ -26,8 +26,7 @@ Current responsibilities:
 
 Current non-responsibilities:
 
-- TCP sockets
-- TLS
+- concrete gnss_transport socket adapters
 - reconnect loops
 - RTCM forwarding
 - serial output
@@ -43,7 +42,7 @@ NtripConfig
    ->
 BuildNtripGetRequest(...)
    ->
-future socket / TLS transport
+future gnss_transport adapter
    ->
 incoming RTCM byte stream
    ->
