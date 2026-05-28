@@ -7,6 +7,7 @@
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
+#include "testdata_utils.hpp"
 
 namespace
 {
@@ -137,6 +138,26 @@ void TestFormattedOutput(TestContext& ctx)
              "JSON summary should include the expected aggregate counters");
 }
 
+void TestFileBackedInspection(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("rtcm/basic_msm.rtcm");
+  const auto result = universal_gnss_tools::InspectRtcmBytes(bytes);
+
+  ctx.Expect(result.summary.total_bytes_read == bytes.size(),
+             "file-backed RTCM inspection should report the file byte size");
+  ctx.Expect(result.summary.total_frames_found == 3u &&
+                 result.summary.valid_frames == 3u &&
+                 result.summary.invalid_frames == 0u,
+             "file-backed RTCM inspection should find three valid frames");
+  ctx.Expect(result.summary.malformed_events == 0u &&
+                 result.summary.truncated_frames == 0u,
+             "file-backed RTCM inspection should not report malformed trailing data");
+  ctx.Expect(result.summary.counts_by_message_type.at(1005u) == 1u &&
+                 result.summary.counts_by_message_type.at(1077u) == 1u &&
+                 result.summary.counts_by_message_type.at(1087u) == 1u,
+             "file-backed RTCM inspection should expose the expected message-type counts");
+}
+
 }  // namespace
 
 int main()
@@ -146,6 +167,7 @@ int main()
   TestInspectionCounts(ctx);
   TestInvalidCrcFrameHandling(ctx);
   TestFormattedOutput(ctx);
+  TestFileBackedInspection(ctx);
 
   if (ctx.failures != 0)
   {

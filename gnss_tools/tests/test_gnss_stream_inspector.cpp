@@ -9,6 +9,7 @@
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/gnss_stream_inspector.hpp"
+#include "testdata_utils.hpp"
 
 namespace
 {
@@ -277,6 +278,39 @@ void TestUnicoreInspection(TestContext& ctx)
              "JSON output should include Unicore item and counters");
 }
 
+void TestFileBackedMixedInspection(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile(
+      "mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
+
+  ctx.Expect(result.summary.total_bytes_read == bytes.size(),
+             "file-backed mixed inspection should report the file byte size");
+  ctx.Expect(result.summary.total_items_found == 10u &&
+                 result.summary.valid_items == 9u &&
+                 result.summary.invalid_items == 1u,
+             "file-backed mixed inspection should recognize the expected records");
+  ctx.Expect(result.summary.malformed_events == 1u &&
+                 result.summary.truncated_items == 1u &&
+                 result.summary.noise_bytes == 3u &&
+                 result.summary.noise_spans == 1u,
+             "file-backed mixed inspection should retain malformed and noise statistics");
+  ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 3u &&
+                 result.summary.counts_by_protocol.at("ubx") == 3u &&
+                 result.summary.counts_by_protocol.at("rtcm3") == 2u &&
+                 result.summary.counts_by_protocol.at("unicore") == 2u,
+             "file-backed mixed inspection should count protocols correctly");
+  ctx.Expect(result.summary.counts_by_unicore_message.at("BESTNAVA") == 1u &&
+                 result.summary.counts_by_unicore_message.at("SATSINFOA") == 1u &&
+                 result.summary.counts_by_rtcm_message_type.at(1005u) == 1u &&
+                 result.summary.counts_by_rtcm_message_type.at(1077u) == 1u,
+             "file-backed mixed inspection should classify Unicore and RTCM records");
+  ctx.Expect(result.items.size() == 10u &&
+                 result.items.front().identity == "GPGGA" &&
+                 result.items.back().identity == "01:03",
+             "file-backed mixed inspection should keep the expected timeline identities");
+}
+
 }  // namespace
 
 int main()
@@ -287,6 +321,7 @@ int main()
   TestSummaryOnlyAndFormatting(ctx);
   TestStreamInput(ctx);
   TestUnicoreInspection(ctx);
+  TestFileBackedMixedInspection(ctx);
 
   if (ctx.failures != 0)
   {

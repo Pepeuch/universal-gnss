@@ -10,6 +10,7 @@
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/gnss_replay.hpp"
+#include "testdata_utils.hpp"
 
 namespace
 {
@@ -333,6 +334,41 @@ void TestReplayStreamInput(TestContext& ctx)
              "stream replay should match byte-vector replay");
 }
 
+void TestFileBackedReplay(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile(
+      "mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+
+  ctx.Expect(result.summary.total_bytes_read == bytes.size(),
+             "file-backed replay should report the file byte size");
+  ctx.Expect(result.summary.recognized_records == 10u &&
+                 result.summary.runtime_updates == 7u,
+             "file-backed replay should preserve the expected recognized-record and update counts");
+  ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 3u &&
+                 result.summary.counts_by_protocol.at("ubx") == 3u &&
+                 result.summary.counts_by_protocol.at("rtcm3") == 2u &&
+                 result.summary.counts_by_protocol.at("unicore") == 2u,
+             "file-backed replay should count protocols correctly");
+  ctx.Expect(result.summary.counts_by_rtcm_message_type.at(1005u) == 1u &&
+                 result.summary.counts_by_rtcm_message_type.at(1077u) == 1u,
+             "file-backed replay should retain RTCM type counts");
+
+  const auto& final_state = result.final_state;
+  ctx.Expect(final_state.fix_type == universal_gnss::GnssFixType::kRtkFloat &&
+                 final_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
+                                        universal_gnss::GnssRtkMode::kFloat),
+             "file-backed replay should end with the expected RTK float state");
+  ctx.Expect(final_state.latitude_deg == std::optional<double>(40.0789588272) &&
+                 final_state.longitude_deg == std::optional<double>(116.2365102982) &&
+                 final_state.altitude_m == std::optional<double>(65.8312),
+             "file-backed replay should preserve the final sanitized BESTNAVA position");
+  ctx.Expect(final_state.satellites_used == std::optional<std::uint16_t>(28u) &&
+                 final_state.satellites_tracked == std::optional<std::uint16_t>(3u) &&
+                 final_state.satellites_visible == std::optional<std::uint16_t>(3u),
+             "file-backed replay should merge satellite counts across protocols");
+}
+
 }  // namespace
 
 int main()
@@ -342,6 +378,7 @@ int main()
   TestReplayMergesMixedRuntimeState(ctx);
   TestReplaySummaryOnlyAndFormatting(ctx);
   TestReplayStreamInput(ctx);
+  TestFileBackedReplay(ctx);
 
   if (ctx.failures != 0)
   {
