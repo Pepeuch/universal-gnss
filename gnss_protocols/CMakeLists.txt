@@ -65,4 +65,15 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_ubx_nav_sat COMMAND gnss_protocols_test_ubx_nav_sat)
+
+  add_executable(
+    gnss_protocols_test_ubx_mon_rf
+    tests/test_ubx_mon_rf.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_mon_rf
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_mon_rf COMMAND gnss_protocols_test_ubx_mon_rf)
 endif()

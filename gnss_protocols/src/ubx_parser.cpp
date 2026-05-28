@@ -10,11 +10,15 @@ namespace
 {
 
 constexpr std::uint8_t kUbxNavClass = 0x01u;
+constexpr std::uint8_t kUbxMonClass = 0x0Au;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
+constexpr std::uint8_t kUbxMonRfId = 0x38u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
 constexpr std::size_t kUbxNavSatBlockSize = 12u;
+constexpr std::size_t kUbxMonRfHeaderSize = 4u;
+constexpr std::size_t kUbxMonRfBlockSize = 24u;
 
 constexpr std::uint8_t kValidDateBit = 1u << 0;
 constexpr std::uint8_t kValidTimeBit = 1u << 1;
@@ -29,6 +33,7 @@ constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
 constexpr std::uint32_t kNavSatQualityMask = 0x00000007u;
 constexpr std::uint32_t kNavSatUsedBit = 1u << 3;
 constexpr std::uint32_t kNavSatHealthMask = 0x00000030u;
+constexpr std::uint8_t kMonRfJammingMask = 0x03u;
 
 std::uint16_t ReadLeU2(const ByteVector& payload, std::size_t offset)
 {
@@ -97,6 +102,21 @@ std::optional<bool> DecodeNavSatHealth(std::uint32_t flags)
       return false;
     default:
       return std::nullopt;
+  }
+}
+
+UbxMonRfJammingState DecodeMonRfJammingState(std::uint8_t flags)
+{
+  switch (flags & kMonRfJammingMask)
+  {
+    case 1u:
+      return UbxMonRfJammingState::kOk;
+    case 2u:
+      return UbxMonRfJammingState::kWarning;
+    case 3u:
+      return UbxMonRfJammingState::kCritical;
+    default:
+      return UbxMonRfJammingState::kUnknown;
   }
 }
 
@@ -226,6 +246,63 @@ ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame)
   }
 
   return ParserResult<UbxNavSatRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxMonClass || frame.message_id != kUbxMonRfId)
+  {
+    return ParserResult<UbxMonRfRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxMonRfRecord>::InvalidData();
+  }
+  if (frame.payload.size() < kUbxMonRfHeaderSize)
+  {
+    return ParserResult<UbxMonRfRecord>::InvalidData();
+  }
+
+  const std::uint8_t version = frame.payload[0u];
+  const std::uint8_t block_count = frame.payload[1u];
+  if (version != 0x00u)
+  {
+    return ParserResult<UbxMonRfRecord>::InvalidData();
+  }
+
+  const std::size_t expected_payload_size =
+      kUbxMonRfHeaderSize + (static_cast<std::size_t>(block_count) * kUbxMonRfBlockSize);
+  if (frame.payload.size() != expected_payload_size)
+  {
+    return ParserResult<UbxMonRfRecord>::InvalidData();
+  }
+  if (block_count > UbxMonRfRecord::kMaxBlocks)
+  {
+    return ParserResult<UbxMonRfRecord>::Overflow();
+  }
+
+  UbxMonRfRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.version = version;
+  record.block_count = block_count;
+
+  for (std::size_t index = 0; index < static_cast<std::size_t>(block_count); ++index)
+  {
+    const std::size_t offset = kUbxMonRfHeaderSize + (index * kUbxMonRfBlockSize);
+    UbxMonRfBlock block;
+    block.block_id = frame.payload[offset];
+    block.flags = frame.payload[offset + 1u];
+    block.jamming_state = DecodeMonRfJammingState(block.flags);
+    block.antenna_status = frame.payload[offset + 2u];
+    block.antenna_power = frame.payload[offset + 3u];
+    block.post_status = ReadLeU4(frame.payload, offset + 4u);
+    block.noise_per_ms = ReadLeU2(frame.payload, offset + 12u);
+    block.agc_count = ReadLeU2(frame.payload, offset + 14u);
+    block.cw_suppression = frame.payload[offset + 16u];
+    record.blocks[index] = block;
+  }
+
+  return ParserResult<UbxMonRfRecord>::RecordReady(std::move(record));
 }
 
 universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& record)
@@ -378,6 +455,53 @@ universal_gnss::GnssRuntimeState UbxNavSatToRuntimeState(const UbxNavSatRecord& 
                                      universal_gnss::GnssCapability::kMaxCn0,
                                      state.max_cn0_db_hz,
                                      static_cast<float>(max_cn0));
+  }
+
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UbxMonRfToRuntimeState(const UbxMonRfRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  if (record.block_count == 0u)
+  {
+    return state;
+  }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kJammingState);
+
+  bool has_known_monitor_state = false;
+  bool issue_detected = false;
+  for (std::size_t index = 0; index < static_cast<std::size_t>(record.block_count); ++index)
+  {
+    const UbxMonRfJammingState jamming_state = record.blocks[index].jamming_state;
+    if (jamming_state == UbxMonRfJammingState::kUnknown)
+    {
+      continue;
+    }
+
+    has_known_monitor_state = true;
+    if (jamming_state == UbxMonRfJammingState::kWarning ||
+        jamming_state == UbxMonRfJammingState::kCritical)
+    {
+      issue_detected = true;
+      break;
+    }
+  }
+
+  if (has_known_monitor_state)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kInterferenceState,
+                                     state.interference_detected,
+                                     issue_detected);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kJammingState,
+                                     state.jamming_detected,
+                                     issue_detected);
   }
 
   return state;

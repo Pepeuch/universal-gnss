@@ -106,4 +106,35 @@ struct UbxNavSatRecord
   std::uint8_t used_satellite_count{0};
 };
 
+enum class UbxMonRfJammingState : std::uint8_t
+{
+  kUnknown = 0,
+  kOk = 1,
+  kWarning = 2,
+  kCritical = 3,
+};
+
+struct UbxMonRfBlock
+{
+  std::uint8_t block_id{0};
+  std::uint8_t flags{0};
+  UbxMonRfJammingState jamming_state{UbxMonRfJammingState::kUnknown};
+  std::uint8_t antenna_status{0};
+  std::uint8_t antenna_power{0};
+  std::uint32_t post_status{0};
+  std::uint16_t noise_per_ms{0};
+  std::uint16_t agc_count{0};
+  std::uint8_t cw_suppression{0};
+};
+
+struct UbxMonRfRecord
+{
+  static constexpr std::size_t kMaxBlocks = 8;
+
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::uint8_t version{0};
+  std::uint8_t block_count{0};
+  std::array<UbxMonRfBlock, kMaxBlocks> blocks{};
+};
+
 }  // namespace universal_gnss_protocols
