@@ -28,6 +28,24 @@ Current non-responsibilities:
 - ROS 2 nodes
 - persistent session tracking
 
+## Current Tools
+
+The first standalone inspection tool now lives in `gnss_tools`.
+
+- `rtcm_inspect`
+  - reads binary RTCM-like data from a file or stdin
+  - reuses the RTCM framer, CRC24Q validation, and message-type helpers
+  - prints per-frame summaries, aggregate counts, or simple JSON
+
+Examples:
+
+```text
+rtcm_inspect file.rtcm
+cat file.rtcm | rtcm_inspect -
+rtcm_inspect --summary file.rtcm
+rtcm_inspect --json file.rtcm
+```
+
 ## Data Flow
 
 The intended flow is:
