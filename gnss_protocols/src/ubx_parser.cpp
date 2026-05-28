@@ -1,0 +1,247 @@
+#include "universal_gnss_protocols/ubx_parser.hpp"
+
+#include <cstddef>
+#include <cstdint>
+
+namespace universal_gnss_protocols
+{
+
+namespace
+{
+
+constexpr std::uint8_t kUbxNavClass = 0x01u;
+constexpr std::uint8_t kUbxNavPvtId = 0x07u;
+constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
+
+constexpr std::uint8_t kValidDateBit = 1u << 0;
+constexpr std::uint8_t kValidTimeBit = 1u << 1;
+constexpr std::uint8_t kFullyResolvedBit = 1u << 2;
+
+constexpr std::uint8_t kGnssFixOkBit = 1u << 0;
+constexpr std::uint8_t kDiffSolnBit = 1u << 1;
+constexpr std::uint8_t kHeadVehValidBit = 1u << 5;
+constexpr std::uint8_t kCarrSolnMask = 0xC0u;
+
+constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
+
+std::uint16_t ReadLeU2(const ByteVector& payload, std::size_t offset)
+{
+  return static_cast<std::uint16_t>(payload[offset]) |
+         (static_cast<std::uint16_t>(payload[offset + 1u]) << 8);
+}
+
+std::uint32_t ReadLeU4(const ByteVector& payload, std::size_t offset)
+{
+  return static_cast<std::uint32_t>(payload[offset]) |
+         (static_cast<std::uint32_t>(payload[offset + 1u]) << 8) |
+         (static_cast<std::uint32_t>(payload[offset + 2u]) << 16) |
+         (static_cast<std::uint32_t>(payload[offset + 3u]) << 24);
+}
+
+std::int32_t ReadLeI4(const ByteVector& payload, std::size_t offset)
+{
+  return static_cast<std::int32_t>(ReadLeU4(payload, offset));
+}
+
+float ScaleMillimetersToMeters(std::int32_t millimeters)
+{
+  return static_cast<float>(millimeters) / 1000.0f;
+}
+
+float ScaleMillimetersToMeters(std::uint32_t millimeters)
+{
+  return static_cast<float>(millimeters) / 1000.0f;
+}
+
+double ScaleMillimetersToMetersDouble(std::int32_t millimeters)
+{
+  return static_cast<double>(millimeters) / 1000.0;
+}
+
+float ScaleHeading1e5ToDegrees(std::int32_t scaled_heading)
+{
+  return static_cast<float>(scaled_heading) * 1e-5f;
+}
+
+UbxCarrierSolutionStatus DecodeCarrierSolution(std::uint8_t flags)
+{
+  switch ((flags & kCarrSolnMask) >> 6)
+  {
+    case 1u:
+      return UbxCarrierSolutionStatus::kFloat;
+    case 2u:
+      return UbxCarrierSolutionStatus::kFixed;
+    default:
+      return UbxCarrierSolutionStatus::kNone;
+  }
+}
+
+}  // namespace
+
+ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxNavClass || frame.message_id != kUbxNavPvtId)
+  {
+    return ParserResult<UbxNavPvtRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxNavPvtRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxNavPvtPayloadSize)
+  {
+    return ParserResult<UbxNavPvtRecord>::InvalidData();
+  }
+
+  UbxNavPvtRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.i_tow_ms = ReadLeU4(frame.payload, 0u);
+  record.year = ReadLeU2(frame.payload, 4u);
+  record.month = frame.payload[6u];
+  record.day = frame.payload[7u];
+  record.hour = frame.payload[8u];
+  record.minute = frame.payload[9u];
+  record.second = frame.payload[10u];
+
+  const std::uint8_t valid = frame.payload[11u];
+  record.valid_date = (valid & kValidDateBit) != 0u;
+  record.valid_time = (valid & kValidTimeBit) != 0u;
+  record.fully_resolved_time = (valid & kFullyResolvedBit) != 0u;
+  record.nano_ns = ReadLeI4(frame.payload, 16u);
+
+  record.fix_type = static_cast<UbxNavPvtFixType>(frame.payload[20u]);
+  record.flags = frame.payload[21u];
+  record.flags2 = frame.payload[22u];
+  record.flags3 = ReadLeU2(frame.payload, 78u);
+
+  record.gnss_fix_ok = (record.flags & kGnssFixOkBit) != 0u;
+  record.differential_solution = (record.flags & kDiffSolnBit) != 0u;
+  record.heading_vehicle_valid = (record.flags & kHeadVehValidBit) != 0u;
+  record.invalid_llh = (record.flags3 & kInvalidLlhBit) != 0u;
+  record.carrier_solution = DecodeCarrierSolution(record.flags);
+
+  record.num_sv = frame.payload[23u];
+  record.longitude_deg = static_cast<double>(ReadLeI4(frame.payload, 24u)) * 1e-7;
+  record.latitude_deg = static_cast<double>(ReadLeI4(frame.payload, 28u)) * 1e-7;
+  record.height_ellipsoid_m = ScaleMillimetersToMetersDouble(ReadLeI4(frame.payload, 32u));
+  record.height_msl_m = ScaleMillimetersToMetersDouble(ReadLeI4(frame.payload, 36u));
+  record.horizontal_accuracy_m = ScaleMillimetersToMeters(ReadLeU4(frame.payload, 40u));
+  record.vertical_accuracy_m = ScaleMillimetersToMeters(ReadLeU4(frame.payload, 44u));
+
+  record.vel_north_mm_s = ReadLeI4(frame.payload, 48u);
+  record.vel_east_mm_s = ReadLeI4(frame.payload, 52u);
+  record.vel_down_mm_s = ReadLeI4(frame.payload, 56u);
+  record.ground_speed_mm_s = ReadLeI4(frame.payload, 60u);
+  record.heading_motion_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 64u));
+  record.heading_accuracy_deg = static_cast<float>(ReadLeU4(frame.payload, 72u)) * 1e-5f;
+  record.heading_vehicle_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 84u));
+
+  return ParserResult<UbxNavPvtRecord>::RecordReady(std::move(record));
+}
+
+universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  const bool position_valid =
+      !record.invalid_llh &&
+      (record.fix_type == UbxNavPvtFixType::k2D ||
+       record.fix_type == UbxNavPvtFixType::k3D ||
+       record.fix_type == UbxNavPvtFixType::kGnssDeadReckoningCombined) &&
+      record.gnss_fix_ok;
+
+  switch (record.fix_type)
+  {
+    case UbxNavPvtFixType::kNoFix:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      break;
+    case UbxNavPvtFixType::kDeadReckoningOnly:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kDeadReckoning;
+      break;
+    case UbxNavPvtFixType::k2D:
+    case UbxNavPvtFixType::k3D:
+      state.fix_valid = position_valid;
+      state.fix_type = position_valid ? universal_gnss::GnssFixType::kFix
+                                      : universal_gnss::GnssFixType::kNoFix;
+      break;
+    case UbxNavPvtFixType::kGnssDeadReckoningCombined:
+      state.fix_valid = position_valid;
+      state.fix_type = position_valid ? universal_gnss::GnssFixType::kFix
+                                      : universal_gnss::GnssFixType::kDeadReckoning;
+      break;
+    case UbxNavPvtFixType::kTimeOnly:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      break;
+    default:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kUnknown;
+      break;
+  }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+
+  switch (record.carrier_solution)
+  {
+    case UbxCarrierSolutionStatus::kFloat:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kFloat);
+      break;
+    case UbxCarrierSolutionStatus::kFixed:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kFixed);
+      break;
+    case UbxCarrierSolutionStatus::kNone:
+    default:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kNone);
+      break;
+  }
+
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kSatellitesUsed,
+                                   state.satellites_used,
+                                   record.num_sv);
+
+  if (position_valid)
+  {
+    state.latitude_deg = record.latitude_deg;
+    state.longitude_deg = record.longitude_deg;
+    state.altitude_m = record.height_msl_m;
+
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                     state.horizontal_accuracy_m,
+                                     record.horizontal_accuracy_m);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kVerticalAccuracy,
+                                     state.vertical_accuracy_m,
+                                     record.vertical_accuracy_m);
+  }
+
+  if (record.heading_vehicle_valid && position_valid)
+  {
+    universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kHeading, state.heading_deg, record.heading_vehicle_deg);
+  }
+
+  return state;
+}
+
+}  // namespace universal_gnss_protocols

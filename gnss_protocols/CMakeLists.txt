@@ -4,6 +4,7 @@ add_library(
   src/nmea_parser.cpp
   src/rtcm_crc24q.cpp
   src/ubx_checksum.cpp
+  src/ubx_parser.cpp
   src/nmea_framer.cpp
   src/rtcm_framer.cpp
   src/ubx_framer.cpp
@@ -42,4 +43,15 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_nmea_parser COMMAND gnss_protocols_test_nmea_parser)
+
+  add_executable(
+    gnss_protocols_test_ubx_nav_pvt
+    tests/test_ubx_nav_pvt.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_nav_pvt
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_nav_pvt COMMAND gnss_protocols_test_ubx_nav_pvt)
 endif()
