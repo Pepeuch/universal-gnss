@@ -1,6 +1,7 @@
 #include "universal_gnss_protocols/rtcm_framer.hpp"
 
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 
 namespace universal_gnss_protocols
 {
@@ -117,11 +118,9 @@ RtcmFrame RtcmFrameFramer::BuildFrame() const
   frame.payload.assign(buffer_.begin() + static_cast<std::ptrdiff_t>(kRtcmHeaderSize),
                        buffer_.begin() + static_cast<std::ptrdiff_t>(kRtcmHeaderSize + payload_size));
 
-  if (frame.payload.size() >= 2u)
+  if (const auto message_type = ExtractRtcmMessageType(frame.payload); message_type.has_value())
   {
-    frame.message_type =
-        static_cast<std::uint16_t>((static_cast<std::uint16_t>(frame.payload[0]) << 4) |
-                                   (static_cast<std::uint16_t>(frame.payload[1]) >> 4));
+    frame.message_type = *message_type;
   }
 
   frame.reported_crc24q =
