@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_capabilities.hpp"
+#include "universal_gnss/gnss_runtime_aggregator.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
@@ -20,6 +21,7 @@ namespace
 
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
+using universal_gnss::GnssRuntimeAggregator;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaDate;
 using universal_gnss_protocols::NmeaFixDimension;
@@ -517,6 +519,55 @@ void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
              "GSV runtime merge should not invent RTK capability");
 }
 
+void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
+{
+  const NmeaSentence gga_sentence = FrameSentence(
+      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      1000);
+  const NmeaSentence gsa_sentence = FrameSentence(
+      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
+      1010);
+  const NmeaSentence gsv_sentence = FrameSentence(
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      1020);
+
+  const auto gga = universal_gnss_protocols::ParseNmeaGga(gga_sentence);
+  const auto gsa = universal_gnss_protocols::ParseNmeaGsa(gsa_sentence);
+  const auto gsv = universal_gnss_protocols::ParseNmeaGsv(gsv_sentence);
+
+  ctx.Expect(gga.record.has_value() && gsa.record.has_value() && gsv.record.has_value(),
+             "NMEA aggregation test requires parsed GGA, GSA, and GSV records");
+  if (!gga.record.has_value() || !gsa.record.has_value() || !gsv.record.has_value())
+  {
+    return;
+  }
+
+  universal_gnss::GnssRuntimeState gsv_state;
+  universal_gnss_protocols::MergeNmeaGsvIntoRuntimeState(*gsv.record, gsv_state);
+
+  GnssRuntimeAggregator aggregator;
+  aggregator.Merge(universal_gnss_protocols::NmeaGgaToRuntimeState(*gga.record));
+  aggregator.Merge(universal_gnss_protocols::NmeaGsaToRuntimeState(*gsa.record));
+  aggregator.Merge(gsv_state);
+
+  const universal_gnss::GnssRuntimeState& state = aggregator.state();
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
+             "aggregated NMEA state should retain a generic valid fix");
+  ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 48.1173) &&
+                 state.longitude_deg.has_value() && NearlyEqual(*state.longitude_deg, 11.5166667) &&
+                 state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 545.4),
+             "aggregated NMEA state should retain position from GGA");
+  ctx.Expect(state.hdop.has_value() && NearlyEqual(*state.hdop, 1.0) &&
+                 state.vdop.has_value() && NearlyEqual(*state.vdop, 1.5),
+             "aggregated NMEA state should merge GSA DOP values");
+  ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(8u) &&
+                 state.satellites_visible == std::optional<std::uint16_t>(8u),
+             "aggregated NMEA state should merge GSA and GSV satellite counts");
+  ctx.Expect(state.mean_cn0_db_hz.has_value() && NearlyEqual(*state.mean_cn0_db_hz, 41.25) &&
+                 state.max_cn0_db_hz.has_value() && NearlyEqual(*state.max_cn0_db_hz, 43.0),
+             "aggregated NMEA state should merge per-sentence CN0 summaries");
+}
+
 }  // namespace
 
 int main()
@@ -539,6 +590,7 @@ int main()
   TestMissingOptionalGsaFields(ctx);
   TestGsvMissingOptionalFields(ctx);
   TestGsaAndGsvRuntimeMapping(ctx);
+  TestNmeaPartialStatesCanBeAggregated(ctx);
 
   if (ctx.failures != 0)
   {
