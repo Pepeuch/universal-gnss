@@ -1,0 +1,69 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string_view>
+#include <vector>
+
+#include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
+
+namespace universal_gnss_driver
+{
+
+struct UnicoreSessionConfig
+{
+  std::size_t max_frame_length_bytes{2048u};
+};
+
+struct UnicoreSessionMetrics
+{
+  std::size_t bytes_seen{0u};
+  std::size_t lines_seen{0u};
+  std::size_t ascii_records_seen{0u};
+  std::size_t records_parsed{0u};
+  std::size_t records_rejected{0u};
+  std::size_t runtime_updates{0u};
+  std::size_t unknown_records{0u};
+  std::size_t malformed_lines{0u};
+};
+
+class UnicoreSession
+{
+public:
+  explicit UnicoreSession(UnicoreSessionConfig config = {});
+
+  void FeedBytes(const std::uint8_t* data,
+                 std::size_t size,
+                 std::optional<std::int64_t> timestamp_ns = std::nullopt);
+
+  void FeedBytes(const std::vector<std::uint8_t>& bytes,
+                 std::optional<std::int64_t> timestamp_ns = std::nullopt);
+
+  void FeedString(std::string_view text,
+                  std::optional<std::int64_t> timestamp_ns = std::nullopt);
+
+  void Finalize();
+
+  void Reset();
+
+  const universal_gnss::GnssRuntimeState& current_state() const;
+
+  const UnicoreSessionMetrics& metrics() const;
+
+  const UnicoreSessionConfig& config() const;
+
+private:
+  void HandleFramerResult(
+      const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>&
+          result);
+  void HandleFrame(const universal_gnss_protocols::UnicoreFrame& frame);
+
+  UnicoreSessionConfig config_{};
+  universal_gnss_protocols::UnicoreFrameFramer framer_;
+  universal_gnss::GnssRuntimeAggregator aggregator_{};
+  UnicoreSessionMetrics metrics_{};
+};
+
+}  // namespace universal_gnss_driver

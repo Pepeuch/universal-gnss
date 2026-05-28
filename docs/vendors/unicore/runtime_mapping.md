@@ -42,6 +42,17 @@ coherent portable runtime state
 Each Unicore message can contribute only part of the runtime view. The
 aggregator is responsible for merging those pieces.
 
+The first portable consumer of these mappings now exists in
+`gnss_driver::UnicoreSession`:
+
+- frame Unicore ASCII input
+- parse supported messages
+- turn them into partial `GnssRuntimeState` updates
+- merge them through `GnssRuntimeAggregator`
+
+That session layer is transport-agnostic. It does not configure the receiver,
+open serial ports, publish ROS topics, or manage reconnects.
+
 ## PVTSLNA
 
 `PVTSLNA` is the richest current Unicore ASCII source.

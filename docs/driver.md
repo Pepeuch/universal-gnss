@@ -31,6 +31,7 @@ gnss_driver
   -> receiver profiles
   -> protocol support declarations
   -> stream-family detection
+  -> portable receiver sessions
   -> future receiver-family mapping and configuration
 
 gnss_core
@@ -130,6 +131,45 @@ Current policy:
 
 This is intentionally not a full auto-detection state machine yet.
 
+### Unicore session
+
+`unicore_session.*` is the first portable receiver-session layer in
+`gnss_driver`.
+
+Its job is narrow:
+
+- accept byte chunks or strings
+- frame Unicore ASCII records
+- route supported messages to existing semantic parsers
+- map those records into partial `GnssRuntimeState` updates
+- merge them through `GnssRuntimeAggregator`
+- expose current runtime state and lightweight session metrics
+
+Current supported routed messages:
+
+- `PVTSLNA`
+- `BESTNAVA`
+- `RTKSTATUSA`
+- `RTCMSTATUSA`
+- `SATSINFOA`
+
+Current metrics include:
+
+- bytes seen
+- framed lines seen
+- parsed vs rejected records
+- runtime updates applied
+- unknown records
+- malformed trailing or overflowed lines
+
+This is intentionally not yet:
+
+- a serial driver
+- a TCP driver
+- a ROS 2 node
+- a receiver configuration engine
+- a reconnecting session manager
+
 ## Relationship To Protocol Parsers
 
 The parser layer and driver layer have different jobs.
@@ -162,6 +202,12 @@ Later concrete drivers may:
 - enrich or arbitrate runtime updates per receiver family
 - declare receiver-specific capability expectations
 
+`UnicoreSession` is one example of that bridge:
+
+- `gnss_protocols` still owns framing and semantic decode
+- `gnss_core` still owns normalized runtime state and merge policy
+- `gnss_driver` owns the receiver-session routing glue
+
 ## Deferred Work
 
 The following driver-layer work is intentionally deferred:
@@ -170,6 +216,7 @@ The following driver-layer work is intentionally deferred:
 - UBX `CFG-*`
 - Quectel config messages
 - Unicore config messages
+- binary `N4` Unicore session routing
 - auto-detection state machines
 - correction injection paths
 - receiver-family runtime arbitration
