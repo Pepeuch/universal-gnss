@@ -39,7 +39,8 @@ Current implemented layers:
   - protocol support and feature flags
   - lightweight stream-family detection
 - `gnss_tools`
-  - `rtcm_inspect` CLI for binary RTCM frame inspection and summary output
+  - `rtcm_inspect` CLI for RTCM-only frame inspection
+  - `gnss_inspect` CLI for mixed NMEA / UBX / RTCM log inspection
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
   - `GnssStatus` message
@@ -89,6 +90,9 @@ receiver profiles, and stream-detection foundation.
 See [docs/runtime_aggregation.md](docs/runtime_aggregation.md) for the generic
 merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
+
+See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs and
+usage examples.
 
 ## License
 

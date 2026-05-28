@@ -30,12 +30,16 @@ Current non-responsibilities:
 
 ## Current Tools
 
-The first standalone inspection tool now lives in `gnss_tools`.
+Standalone inspection tools now live in `gnss_tools`.
 
 - `rtcm_inspect`
   - reads binary RTCM-like data from a file or stdin
   - reuses the RTCM framer, CRC24Q validation, and message-type helpers
   - prints per-frame summaries, aggregate counts, or simple JSON
+- `gnss_inspect`
+  - reads mixed GNSS byte streams from a file or stdin
+  - recognizes NMEA, UBX, RTCM3, and noise spans
+  - prints a compact timeline, aggregate counts, or simple JSON
 
 Examples:
 
@@ -44,7 +48,14 @@ rtcm_inspect file.rtcm
 cat file.rtcm | rtcm_inspect -
 rtcm_inspect --summary file.rtcm
 rtcm_inspect --json file.rtcm
+
+gnss_inspect file.bin
+cat file.bin | gnss_inspect -
+gnss_inspect --summary file.bin
+gnss_inspect --json file.bin
 ```
+
+See [tools.md](tools.md) for the current tool-focused usage notes.
 
 ## Data Flow
 
