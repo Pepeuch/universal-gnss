@@ -108,6 +108,59 @@ They are not yet:
 - hardware probes
 - guarantees about every model in a vendor family
 
+### Receiver command model
+
+`receiver_command.hpp` defines the first portable command/request model for
+future receiver configuration work.
+
+Current model coverage:
+
+- generic command kind
+- target receiver selector
+- expected response kind
+- timeout and retry policy
+- binary or text payload container
+- command safety level
+
+Current safety levels are:
+
+- `runtime`
+- `persistent`
+- `factory_reset`
+
+Current policy:
+
+- runtime commands are considered safe-by-default
+- persistent and factory-reset commands require explicit safety confirmation
+- this layer does not generate vendor payloads yet
+- this layer does not send bytes to a transport yet
+
+### Receiver config profiles
+
+`receiver_config_profile.hpp` defines a small generic vocabulary for future
+high-level configuration intents such as:
+
+- rover
+- base
+- survey-in
+- NMEA output
+- RTCM output
+- diagnostics output
+
+These profiles declare:
+
+- required receiver features
+- required input/output protocol support
+- default command safety level
+
+Today they are validation and planning primitives only.
+
+They are not yet:
+
+- vendor payload generators
+- live config transactions
+- guarantees that every profile maps to one vendor command
+
 ### Stream detection
 
 `stream_detector.*` provides lightweight byte-stream classification into likely

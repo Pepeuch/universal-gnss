@@ -81,4 +81,18 @@ if(BUILD_TESTING)
     NAME gnss_driver_test_receiver_session_runner
     COMMAND gnss_driver_test_receiver_session_runner
   )
+
+  add_executable(
+    gnss_driver_test_receiver_command_model
+    tests/test_receiver_command_model.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_command_model
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_command_model
+    COMMAND gnss_driver_test_receiver_command_model
+  )
 endif()
