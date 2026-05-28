@@ -14,6 +14,7 @@ Implemented:
 - Driver abstraction foundation
 - UbloxSession foundation
 - UnicoreSession foundation
+- Generic ReceiverSession router
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - ROS2 adapter foundation
@@ -30,11 +31,11 @@ Implemented:
 
 ### 1. Generic receiver session router
 
-- [ ] Add generic `ReceiverSession`
-- [ ] Route to `UbloxSession`
-- [ ] Route to `UnicoreSession`
-- [ ] Expose unified runtime state
-- [ ] Expose generic session metrics
+- [x] Add generic `ReceiverSession`
+- [x] Route to `UbloxSession`
+- [x] Route to `UnicoreSession`
+- [x] Expose unified runtime state
+- [x] Expose generic session metrics
 - [ ] Prepare future auto-detection
 
 ### 2. Runtime diagnostics model
@@ -181,10 +182,10 @@ Implemented:
 - [x] Stream detection foundation
 - [x] UbloxSession
 - [x] UnicoreSession
+- [x] Generic receiver session router
 
 To do:
 
-- [ ] Generic receiver session router
 - [ ] Session auto-detection
 - [ ] Receiver config command model
 - [ ] u-blox config engine
@@ -347,4 +348,3 @@ To do:
 - [ ] ROS2 CI matrix
 - [ ] arm64 build check
 - [ ] ESP32 build check
-

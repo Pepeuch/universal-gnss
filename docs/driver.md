@@ -208,6 +208,53 @@ This session is intentionally not yet:
 - a survey-in controller
 - a ROS 2 node
 
+### Generic receiver session
+
+`receiver_session.*` is the portable router on top of vendor sessions.
+
+It wraps:
+
+- `UbloxSession`
+- `UnicoreSession`
+
+and exposes a unified runtime-state and metrics surface.
+
+Current modes:
+
+- explicit `ublox`
+- explicit `unicore`
+- conservative `auto_detect`
+
+Current policy:
+
+- explicit mode is preferred for production use
+- auto mode only locks on vendor-specific evidence
+- `UBX` selects the u-blox session
+- Unicore ASCII selects the Unicore session
+- `NMEA` alone does not select a vendor
+- `RTCM3` alone does not select a vendor
+- ambiguous mixed vendor evidence stays undecided
+
+Current generic metrics include:
+
+- total bytes seen
+- selected session kind
+- selection lock state
+- runtime updates
+- malformed record count
+- unknown record count
+
+Vendor-specific child metrics remain accessible separately through the wrapped
+session accessors.
+
+This router is intentionally not:
+
+- a serial transport
+- a TCP transport
+- a reconnect lifecycle manager
+- a full auto-detection engine
+- a ROS 2 node
+
 ## Relationship To Protocol Parsers
 
 The parser layer and driver layer have different jobs.
@@ -252,6 +299,12 @@ streams:
 - `gnss_protocols` owns framing, checksum validation, and semantic decode
 - `gnss_core` owns normalized state and merge invariants
 - `gnss_driver` owns byte-stream session routing and per-session metrics
+
+`ReceiverSession` sits one level above those vendor sessions:
+
+- it chooses which vendor session should own the stream
+- it keeps a small, unified metrics surface
+- it forwards runtime state from the selected vendor session
 
 ## Deferred Work
 
