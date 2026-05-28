@@ -1,6 +1,7 @@
 add_library(
   universal_gnss_protocols
   src/nmea_checksum.cpp
+  src/nmea_parser.cpp
   src/rtcm_crc24q.cpp
   src/ubx_checksum.cpp
   src/nmea_framer.cpp
@@ -15,6 +16,8 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+target_link_libraries(universal_gnss_protocols PUBLIC universal_gnss_core)
+
 target_compile_features(universal_gnss_protocols PUBLIC cxx_std_17)
 
 if(BUILD_TESTING)
@@ -28,4 +31,15 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_foundation COMMAND gnss_protocols_test_foundation)
+
+  add_executable(
+    gnss_protocols_test_nmea_parser
+    tests/test_nmea_parser.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_nmea_parser
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_nmea_parser COMMAND gnss_protocols_test_nmea_parser)
 endif()
