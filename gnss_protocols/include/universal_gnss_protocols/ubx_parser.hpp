@@ -8,11 +8,15 @@
 namespace universal_gnss_protocols
 {
 
+ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame);
+
 ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame);
 
 ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame);
 
 ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame);
+
+universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record);
 
 universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& record);
 

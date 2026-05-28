@@ -11,9 +11,11 @@ namespace
 
 constexpr std::uint8_t kUbxNavClass = 0x01u;
 constexpr std::uint8_t kUbxMonClass = 0x0Au;
+constexpr std::uint8_t kUbxNavStatusId = 0x03u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
 constexpr std::uint8_t kUbxMonRfId = 0x38u;
+constexpr std::size_t kUbxNavStatusPayloadSize = 16u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
 constexpr std::size_t kUbxNavSatBlockSize = 12u;
@@ -27,6 +29,7 @@ constexpr std::uint8_t kFullyResolvedBit = 1u << 2;
 constexpr std::uint8_t kGnssFixOkBit = 1u << 0;
 constexpr std::uint8_t kDiffSolnBit = 1u << 1;
 constexpr std::uint8_t kHeadVehValidBit = 1u << 5;
+constexpr std::uint8_t kCarrSolnValidBit = 1u << 1;
 constexpr std::uint8_t kCarrSolnMask = 0xC0u;
 
 constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
@@ -121,6 +124,39 @@ UbxMonRfJammingState DecodeMonRfJammingState(std::uint8_t flags)
 }
 
 }  // namespace
+
+ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxNavClass || frame.message_id != kUbxNavStatusId)
+  {
+    return ParserResult<UbxNavStatusRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxNavStatusRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxNavStatusPayloadSize)
+  {
+    return ParserResult<UbxNavStatusRecord>::InvalidData();
+  }
+
+  UbxNavStatusRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.i_tow_ms = ReadLeU4(frame.payload, 0u);
+  record.gps_fix = static_cast<UbxNavStatusFixType>(frame.payload[4u]);
+  record.flags = frame.payload[5u];
+  record.fix_stat = frame.payload[6u];
+  record.flags2 = frame.payload[7u];
+  record.ttff_ms = ReadLeU4(frame.payload, 8u);
+  record.msss_ms = ReadLeU4(frame.payload, 12u);
+
+  record.gnss_fix_ok = (record.flags & kGnssFixOkBit) != 0u;
+  record.differential_solution = (record.flags & kDiffSolnBit) != 0u;
+  record.carrier_solution_valid = (record.fix_stat & kCarrSolnValidBit) != 0u;
+  record.carrier_solution = DecodeCarrierSolution(record.flags2);
+
+  return ParserResult<UbxNavStatusRecord>::RecordReady(std::move(record));
+}
 
 ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame)
 {
@@ -303,6 +339,77 @@ ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame)
   }
 
   return ParserResult<UbxMonRfRecord>::RecordReady(std::move(record));
+}
+
+universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  switch (record.gps_fix)
+  {
+    case UbxNavStatusFixType::kNoFix:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      break;
+    case UbxNavStatusFixType::kDeadReckoningOnly:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kDeadReckoning;
+      break;
+    case UbxNavStatusFixType::k2D:
+    case UbxNavStatusFixType::k3D:
+      state.fix_valid = record.gnss_fix_ok;
+      state.fix_type = record.gnss_fix_ok ? universal_gnss::GnssFixType::kFix
+                                          : universal_gnss::GnssFixType::kNoFix;
+      break;
+    case UbxNavStatusFixType::kGnssDeadReckoningCombined:
+      state.fix_valid = record.gnss_fix_ok;
+      state.fix_type = record.gnss_fix_ok ? universal_gnss::GnssFixType::kFix
+                                          : universal_gnss::GnssFixType::kDeadReckoning;
+      break;
+    case UbxNavStatusFixType::kTimeOnly:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      break;
+    default:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kUnknown;
+      break;
+  }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
+  if (!record.carrier_solution_valid)
+  {
+    return state;
+  }
+
+  switch (record.carrier_solution)
+  {
+    case UbxCarrierSolutionStatus::kFloat:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kFloat);
+      break;
+    case UbxCarrierSolutionStatus::kFixed:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kFixed);
+      break;
+    case UbxCarrierSolutionStatus::kNone:
+    default:
+      universal_gnss::SetOptionalValue(
+          state,
+          universal_gnss::GnssCapability::kRtkMode,
+          state.rtk_mode,
+          universal_gnss::GnssRtkMode::kNone);
+      break;
+  }
+
+  return state;
 }
 
 universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& record)

@@ -32,7 +32,7 @@ Current implemented layers:
 - `gnss_protocols`
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
-  - UBX semantic parsing: `NAV-PVT`, `NAV-SAT`, `MON-RF`
+  - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-SAT`, `MON-RF`
   - RTCM3 framing, CRC24Q, and message-type extraction/classification
 - `gnss_tools`
   - `rtcm_inspect` CLI for binary RTCM frame inspection and summary output

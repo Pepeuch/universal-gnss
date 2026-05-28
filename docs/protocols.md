@@ -115,6 +115,7 @@ What NMEA does not do yet:
 
 Implemented semantic messages:
 
+- `NAV-STATUS`
 - `NAV-PVT`
 - `NAV-SAT`
 - `MON-RF`
@@ -127,6 +128,8 @@ Implemented behaviors:
 
 Current UBX notes:
 
+- `NAV-STATUS` provides fix-status metadata, differential-solution state, and
+  carrier-solution status when valid
 - `NAV-PVT` is the main source for normalized fix, position, accuracy, and RTK
   mode
 - `NAV-SAT` provides satellites visible / used and CN0 summaries
@@ -134,7 +137,6 @@ Current UBX notes:
 
 What UBX does not do yet:
 
-- `NAV-STATUS`
 - `CFG-*`
 - `MON-SPAN`
 - richer RF diagnostics or spoofing classification
@@ -177,9 +179,9 @@ by protocol-specific mapping helpers.
 ```text
 Runtime field            Current protocol sources
 ---------------------------------------------------------------
-fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-PVT
-fix_type                 NMEA GGA, UBX NAV-PVT
-rtk_mode                 UBX NAV-PVT
+fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT
+fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT
+rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT
 latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT
 altitude                 NMEA GGA, UBX NAV-PVT
 horizontal accuracy      UBX NAV-PVT

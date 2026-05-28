@@ -27,6 +27,27 @@ enum class UbxCarrierSolutionStatus : std::uint8_t
   kFixed = 2,
 };
 
+using UbxNavStatusFixType = UbxNavPvtFixType;
+
+struct UbxNavStatusRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+
+  std::uint32_t i_tow_ms{0};
+  UbxNavStatusFixType gps_fix{UbxNavStatusFixType::kNoFix};
+  std::uint8_t flags{0};
+  std::uint8_t fix_stat{0};
+  std::uint8_t flags2{0};
+
+  std::uint32_t ttff_ms{0};
+  std::uint32_t msss_ms{0};
+
+  bool gnss_fix_ok{false};
+  bool differential_solution{false};
+  bool carrier_solution_valid{false};
+  UbxCarrierSolutionStatus carrier_solution{UbxCarrierSolutionStatus::kNone};
+};
+
 struct UbxNavPvtRecord
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};
