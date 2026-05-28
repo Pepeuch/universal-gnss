@@ -22,7 +22,9 @@ using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaDate;
+using universal_gnss_protocols::NmeaFixDimension;
 using universal_gnss_protocols::NmeaGgaFixQuality;
+using universal_gnss_protocols::NmeaGsaMode;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::NmeaUtcTime;
@@ -321,6 +323,200 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
              "RMC runtime mapping should not map course over ground to heading");
 }
 
+void TestValidGsaParsing(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
+      333);
+  const auto result = universal_gnss_protocols::ParseNmeaGsa(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid GSA should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(333),
+             "GSA should preserve the framing timestamp");
+  ctx.Expect(record.fix_mode == NmeaGsaMode::kAutomatic,
+             "GSA should decode the automatic/manual mode");
+  ctx.Expect(record.fix_dimension == NmeaFixDimension::k3D,
+             "GSA should decode the fix dimension");
+  ctx.Expect(record.pdop.has_value() && NearlyEqual(*record.pdop, 1.8),
+             "GSA should decode PDOP");
+  ctx.Expect(record.hdop.has_value() && NearlyEqual(*record.hdop, 1.0),
+             "GSA should decode HDOP");
+  ctx.Expect(record.vdop.has_value() && NearlyEqual(*record.vdop, 1.5),
+             "GSA should decode VDOP");
+  ctx.Expect(record.active_satellite_count == 8u,
+             "GSA should count active satellite PRNs");
+  ctx.Expect(record.active_satellite_prns[0] == std::optional<std::uint16_t>(4u) &&
+                 record.active_satellite_prns[7] == std::optional<std::uint16_t>(31u),
+             "GSA should preserve active satellite PRNs");
+}
+
+void TestValidGsvParsing(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      444);
+  const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid GSV should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(444),
+             "GSV should preserve the framing timestamp");
+  ctx.Expect(record.total_messages == 2u && record.message_index == 1u,
+             "GSV should decode message sequencing");
+  ctx.Expect(record.satellites_in_view == 8u,
+             "GSV should decode the visible satellite count");
+  ctx.Expect(record.satellite_count == 4u,
+             "GSV should decode all complete satellite blocks");
+  ctx.Expect(record.satellites[0].prn == std::optional<std::uint16_t>(1u) &&
+                 record.satellites[0].elevation_deg == std::optional<std::uint8_t>(40u) &&
+                 record.satellites[0].azimuth_deg == std::optional<std::uint16_t>(83u) &&
+                 record.satellites[0].cn0_db_hz.has_value() &&
+                 NearlyEqual(*record.satellites[0].cn0_db_hz, 41.0),
+             "GSV should decode per-satellite fields");
+}
+
+void TestPartialGsvSatelliteBlockHandling(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15"));
+  const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "GSV should tolerate a trailing incomplete satellite block");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(result.record->satellite_count == 2u,
+             "GSV should keep only complete satellite blocks");
+  ctx.Expect(result.record->satellites[1].prn == std::optional<std::uint16_t>(18u),
+             "GSV should preserve complete satellites before the truncated tail");
+}
+
+void TestMalformedDopRejected(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,X,1.0,1.5"));
+  ctx.Expect(universal_gnss_protocols::ParseNmeaGsa(sentence).status == ParserStatus::kInvalidData,
+             "GSA should reject malformed DOP values");
+}
+
+void TestMissingOptionalGsaFields(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSA,M,1,,,,,,,,,,,,,,,"));
+  const auto result = universal_gnss_protocols::ParseNmeaGsa(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "GSA should tolerate missing optional fields");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(result.record->fix_mode == NmeaGsaMode::kManual,
+             "GSA should still decode required fix mode");
+  ctx.Expect(result.record->fix_dimension == NmeaFixDimension::kNoFix,
+             "GSA should still decode required fix dimension");
+  ctx.Expect(result.record->active_satellite_count == 0u,
+             "GSA should keep active satellite count at zero when none are listed");
+  ctx.Expect(!result.record->pdop.has_value() && !result.record->hdop.has_value() &&
+                 !result.record->vdop.has_value(),
+             "missing GSA DOP values should stay unset");
+}
+
+void TestGsvMissingOptionalFields(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGSV,1,1,02,01,40,083,,02,17,308,43"));
+  const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "GSV should tolerate missing optional CN0 values");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(result.record->satellite_count == 2u,
+             "GSV should decode satellite blocks with partial optional data");
+  ctx.Expect(!result.record->satellites[0].cn0_db_hz.has_value(),
+             "missing CN0 should stay unset");
+  ctx.Expect(result.record->satellites[1].cn0_db_hz.has_value() &&
+                 NearlyEqual(*result.record->satellites[1].cn0_db_hz, 43.0),
+             "present CN0 should still parse");
+}
+
+void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
+{
+  const NmeaSentence gsa_sentence = FrameSentence(
+      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
+      555);
+  const auto gsa_result = universal_gnss_protocols::ParseNmeaGsa(gsa_sentence);
+  ctx.Expect(gsa_result.record.has_value(), "runtime mapping test requires a parsed GSA record");
+  if (!gsa_result.record.has_value())
+  {
+    return;
+  }
+
+  const auto gsa_state = universal_gnss_protocols::NmeaGsaToRuntimeState(*gsa_result.record);
+  ctx.Expect(gsa_state.timestamp_ns == std::optional<std::int64_t>(555),
+             "GSA runtime mapping should preserve the sample timestamp");
+  ctx.Expect(gsa_state.fix_valid && gsa_state.fix_type == GnssFixType::kFix,
+             "GSA runtime mapping should turn 3D fix dimension into a generic fix");
+  ctx.Expect(universal_gnss::HasCapability(gsa_state, GnssCapability::kHdop) &&
+                 universal_gnss::HasCapability(gsa_state, GnssCapability::kVdop) &&
+                 universal_gnss::HasCapability(gsa_state, GnssCapability::kSatellitesUsed),
+             "GSA runtime mapping should advertise supported optional fields");
+  ctx.Expect(universal_gnss::HasValueAvailable(gsa_state, GnssCapability::kHdop) &&
+                 universal_gnss::HasValueAvailable(gsa_state, GnssCapability::kVdop) &&
+                 universal_gnss::HasValueAvailable(gsa_state, GnssCapability::kSatellitesUsed),
+             "GSA runtime mapping should expose present optional values");
+  ctx.Expect(gsa_state.satellites_used == std::optional<std::uint16_t>(8u),
+             "GSA runtime mapping should count active satellites");
+
+  const NmeaSentence gsv_sentence = FrameSentence(
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      666);
+  const auto gsv_result = universal_gnss_protocols::ParseNmeaGsv(gsv_sentence);
+  ctx.Expect(gsv_result.record.has_value(), "runtime mapping test requires a parsed GSV record");
+  if (!gsv_result.record.has_value())
+  {
+    return;
+  }
+
+  universal_gnss::GnssRuntimeState state;
+  universal_gnss_protocols::MergeNmeaGsvIntoRuntimeState(*gsv_result.record, state);
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(666),
+             "GSV runtime merge should preserve the sample timestamp");
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kSatellitesVisible) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kMeanCn0) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kMaxCn0),
+             "GSV runtime merge should advertise visibility and CN0 capabilities");
+  ctx.Expect(state.satellites_visible == std::optional<std::uint16_t>(8u),
+             "GSV runtime merge should expose satellites visible");
+  ctx.Expect(state.mean_cn0_db_hz.has_value() && NearlyEqual(*state.mean_cn0_db_hz, 41.25),
+             "GSV runtime merge should compute mean CN0 from valid satellites in the sentence");
+  ctx.Expect(state.max_cn0_db_hz.has_value() && NearlyEqual(*state.max_cn0_db_hz, 43.0),
+             "GSV runtime merge should compute max CN0 from valid satellites in the sentence");
+  ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kRtkMode),
+             "GSV runtime merge should not invent RTK capability");
+}
+
 }  // namespace
 
 int main()
@@ -336,6 +532,13 @@ int main()
   TestSouthWestCoordinates(ctx);
   TestInvalidFixQualityRejected(ctx);
   TestRuntimeMappingBehavior(ctx);
+  TestValidGsaParsing(ctx);
+  TestValidGsvParsing(ctx);
+  TestPartialGsvSatelliteBlockHandling(ctx);
+  TestMalformedDopRejected(ctx);
+  TestMissingOptionalGsaFields(ctx);
+  TestGsvMissingOptionalFields(ctx);
+  TestGsaAndGsvRuntimeMapping(ctx);
 
   if (ctx.failures != 0)
   {

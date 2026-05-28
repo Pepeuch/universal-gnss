@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -20,6 +22,21 @@ struct NmeaDate
   std::uint8_t day{0};
   std::uint8_t month{0};
   std::uint8_t year_two_digits{0};
+};
+
+enum class NmeaGsaMode : std::uint8_t
+{
+  kUnknown = 0,
+  kManual = 1,
+  kAutomatic = 2,
+};
+
+enum class NmeaFixDimension : std::uint8_t
+{
+  kUnknown = 0,
+  kNoFix = 1,
+  k2D = 2,
+  k3D = 3,
 };
 
 enum class NmeaGgaFixQuality : std::uint8_t
@@ -58,6 +75,40 @@ struct NmeaRmcRecord
   std::optional<float> speed_over_ground_knots{};
   std::optional<float> course_over_ground_deg{};
   bool fix_valid{false};
+};
+
+struct NmeaGsaRecord
+{
+  static constexpr std::size_t kMaxActiveSatellites = 12;
+
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  NmeaGsaMode fix_mode{NmeaGsaMode::kUnknown};
+  NmeaFixDimension fix_dimension{NmeaFixDimension::kUnknown};
+  std::optional<float> pdop{};
+  std::optional<float> hdop{};
+  std::optional<float> vdop{};
+  std::array<std::optional<std::uint16_t>, kMaxActiveSatellites> active_satellite_prns{};
+  std::size_t active_satellite_count{0};
+};
+
+struct NmeaGsvSatellite
+{
+  std::optional<std::uint16_t> prn{};
+  std::optional<std::uint8_t> elevation_deg{};
+  std::optional<std::uint16_t> azimuth_deg{};
+  std::optional<float> cn0_db_hz{};
+};
+
+struct NmeaGsvRecord
+{
+  static constexpr std::size_t kMaxSatellitesPerSentence = 4;
+
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::uint8_t total_messages{0};
+  std::uint8_t message_index{0};
+  std::uint16_t satellites_in_view{0};
+  std::array<NmeaGsvSatellite, kMaxSatellitesPerSentence> satellites{};
+  std::size_t satellite_count{0};
 };
 
 }  // namespace universal_gnss_protocols

@@ -24,8 +24,20 @@ ParserResult<NmeaGgaRecord> ParseNmeaGga(const NmeaSentence& sentence);
 
 ParserResult<NmeaRmcRecord> ParseNmeaRmc(const NmeaSentence& sentence);
 
+ParserResult<NmeaGsaRecord> ParseNmeaGsa(const NmeaSentence& sentence);
+
+ParserResult<NmeaGsvRecord> ParseNmeaGsv(const NmeaSentence& sentence);
+
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record);
 
 universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& record);
+
+universal_gnss::GnssRuntimeState NmeaGsaToRuntimeState(const NmeaGsaRecord& record);
+
+void MergeNmeaGsaIntoRuntimeState(const NmeaGsaRecord& record,
+                                  universal_gnss::GnssRuntimeState& state);
+
+void MergeNmeaGsvIntoRuntimeState(const NmeaGsvRecord& record,
+                                  universal_gnss::GnssRuntimeState& state);
 
 }  // namespace universal_gnss_protocols

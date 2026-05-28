@@ -287,6 +287,109 @@ ParserResult<NmeaRmcRecord> InvalidRmc()
   return ParserResult<NmeaRmcRecord>::InvalidData();
 }
 
+ParserResult<NmeaGsaRecord> InvalidGsa()
+{
+  return ParserResult<NmeaGsaRecord>::InvalidData();
+}
+
+ParserResult<NmeaGsvRecord> InvalidGsv()
+{
+  return ParserResult<NmeaGsvRecord>::InvalidData();
+}
+
+OptionalFieldStatus ParseOptionalPositiveFloat(std::string_view text, std::optional<float>& value)
+{
+  const OptionalFieldStatus status = ParseOptionalFloat(text, value);
+  if (status == OptionalFieldStatus::kValue && value.has_value() && *value < 0.0f)
+  {
+    value.reset();
+    return OptionalFieldStatus::kInvalid;
+  }
+
+  return status;
+}
+
+OptionalFieldStatus ParseOptionalUnsigned8(std::string_view text, std::optional<std::uint8_t>& value)
+{
+  value.reset();
+  if (text.empty())
+  {
+    return OptionalFieldStatus::kMissing;
+  }
+
+  unsigned int parsed = 0;
+  if (!TryParseUnsigned(text, parsed) ||
+      parsed > static_cast<unsigned int>(std::numeric_limits<std::uint8_t>::max()))
+  {
+    return OptionalFieldStatus::kInvalid;
+  }
+
+  value = static_cast<std::uint8_t>(parsed);
+  return OptionalFieldStatus::kValue;
+}
+
+bool ParseGsaMode(std::string_view text, NmeaGsaMode& fix_mode)
+{
+  if (text == "M")
+  {
+    fix_mode = NmeaGsaMode::kManual;
+    return true;
+  }
+  if (text == "A")
+  {
+    fix_mode = NmeaGsaMode::kAutomatic;
+    return true;
+  }
+  return false;
+}
+
+bool ParseFixDimension(std::string_view text, NmeaFixDimension& fix_dimension)
+{
+  unsigned int raw_dimension = 0;
+  if (!TryParseUnsigned(text, raw_dimension) || raw_dimension < 1u || raw_dimension > 3u)
+  {
+    return false;
+  }
+
+  fix_dimension = static_cast<NmeaFixDimension>(raw_dimension);
+  return true;
+}
+
+bool HasAnySatelliteBlockValue(const std::array<std::string_view, 4>& fields)
+{
+  for (const std::string_view field : fields)
+  {
+    if (!field.empty())
+    {
+      return true;
+    }
+  }
+  return false;
+}
+
+void UpdateFixDimensionInState(NmeaFixDimension fix_dimension,
+                               universal_gnss::GnssRuntimeState& state)
+{
+  switch (fix_dimension)
+  {
+    case NmeaFixDimension::kNoFix:
+      state.fix_valid = false;
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      break;
+    case NmeaFixDimension::k2D:
+    case NmeaFixDimension::k3D:
+      state.fix_valid = true;
+      if (state.fix_type == universal_gnss::GnssFixType::kUnknown ||
+          state.fix_type == universal_gnss::GnssFixType::kNoFix)
+      {
+        state.fix_type = universal_gnss::GnssFixType::kFix;
+      }
+      break;
+    case NmeaFixDimension::kUnknown:
+      break;
+  }
+}
+
 }  // namespace
 
 bool IsNmeaSentenceType(const NmeaSentence& sentence, std::string_view sentence_type)
@@ -528,6 +631,151 @@ ParserResult<NmeaRmcRecord> ParseNmeaRmc(const NmeaSentence& sentence)
   return ParserResult<NmeaRmcRecord>::RecordReady(std::move(record));
 }
 
+ParserResult<NmeaGsaRecord> ParseNmeaGsa(const NmeaSentence& sentence)
+{
+  if (!IsNmeaSentenceType(sentence, "GSA"))
+  {
+    return ParserResult<NmeaGsaRecord>::Skipped();
+  }
+  if (sentence.checksum_status != ChecksumStatus::kValid)
+  {
+    return InvalidGsa();
+  }
+
+  std::array<std::string_view, 24> fields{};
+  std::size_t field_count = 0;
+  if (!TokenizeCsv(sentence.payload_text, fields, field_count) || field_count < 3u)
+  {
+    return InvalidGsa();
+  }
+
+  NmeaGsaRecord record;
+  record.timestamp_ns = sentence.timestamp_ns;
+
+  if (!ParseGsaMode(fields[1], record.fix_mode) ||
+      !ParseFixDimension(fields[2], record.fix_dimension))
+  {
+    return InvalidGsa();
+  }
+
+  for (std::size_t field_index = 3u;
+       field_index < field_count && field_index < 15u &&
+       record.active_satellite_count < record.active_satellite_prns.size();
+       ++field_index)
+  {
+    std::optional<std::uint16_t> prn;
+    const OptionalFieldStatus status = ParseOptionalUnsigned16(fields[field_index], prn);
+    if (status == OptionalFieldStatus::kInvalid)
+    {
+      return InvalidGsa();
+    }
+    if (status == OptionalFieldStatus::kValue && prn.has_value())
+    {
+      record.active_satellite_prns[record.active_satellite_count++] = *prn;
+    }
+  }
+
+  if (field_count > 15u &&
+      ParseOptionalPositiveFloat(fields[15], record.pdop) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidGsa();
+  }
+  if (field_count > 16u &&
+      ParseOptionalPositiveFloat(fields[16], record.hdop) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidGsa();
+  }
+  if (field_count > 17u &&
+      ParseOptionalPositiveFloat(fields[17], record.vdop) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidGsa();
+  }
+
+  return ParserResult<NmeaGsaRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<NmeaGsvRecord> ParseNmeaGsv(const NmeaSentence& sentence)
+{
+  if (!IsNmeaSentenceType(sentence, "GSV"))
+  {
+    return ParserResult<NmeaGsvRecord>::Skipped();
+  }
+  if (sentence.checksum_status != ChecksumStatus::kValid)
+  {
+    return InvalidGsv();
+  }
+
+  std::array<std::string_view, 24> fields{};
+  std::size_t field_count = 0;
+  if (!TokenizeCsv(sentence.payload_text, fields, field_count) || field_count < 4u)
+  {
+    return InvalidGsv();
+  }
+
+  NmeaGsvRecord record;
+  record.timestamp_ns = sentence.timestamp_ns;
+
+  unsigned int total_messages = 0;
+  unsigned int message_index = 0;
+  unsigned int satellites_in_view = 0;
+  if (!TryParseUnsigned(fields[1], total_messages) || !TryParseUnsigned(fields[2], message_index) ||
+      !TryParseUnsigned(fields[3], satellites_in_view) || total_messages == 0u || message_index == 0u ||
+      message_index > total_messages ||
+      total_messages > static_cast<unsigned int>(std::numeric_limits<std::uint8_t>::max()) ||
+      message_index > static_cast<unsigned int>(std::numeric_limits<std::uint8_t>::max()) ||
+      satellites_in_view > static_cast<unsigned int>(std::numeric_limits<std::uint16_t>::max()))
+  {
+    return InvalidGsv();
+  }
+
+  record.total_messages = static_cast<std::uint8_t>(total_messages);
+  record.message_index = static_cast<std::uint8_t>(message_index);
+  record.satellites_in_view = static_cast<std::uint16_t>(satellites_in_view);
+
+  for (std::size_t start = 4u;
+       start + 3u < field_count && record.satellite_count < record.satellites.size();
+       start += 4u)
+  {
+    const std::array<std::string_view, 4> satellite_fields = {
+        fields[start], fields[start + 1u], fields[start + 2u], fields[start + 3u]};
+    if (!HasAnySatelliteBlockValue(satellite_fields))
+    {
+      continue;
+    }
+
+    NmeaGsvSatellite satellite;
+    std::optional<std::uint16_t> prn;
+    std::optional<std::uint8_t> elevation;
+    std::optional<std::uint16_t> azimuth;
+    std::optional<float> cn0;
+
+    if (ParseOptionalUnsigned16(satellite_fields[0], prn) == OptionalFieldStatus::kInvalid ||
+        ParseOptionalUnsigned8(satellite_fields[1], elevation) == OptionalFieldStatus::kInvalid ||
+        ParseOptionalUnsigned16(satellite_fields[2], azimuth) == OptionalFieldStatus::kInvalid ||
+        ParseOptionalPositiveFloat(satellite_fields[3], cn0) == OptionalFieldStatus::kInvalid)
+    {
+      return InvalidGsv();
+    }
+
+    if (elevation.has_value() && *elevation > 90u)
+    {
+      return InvalidGsv();
+    }
+    if (azimuth.has_value() && *azimuth >= 360u)
+    {
+      return InvalidGsv();
+    }
+
+    satellite.prn = prn;
+    satellite.elevation_deg = elevation;
+    satellite.azimuth_deg = azimuth;
+    satellite.cn0_db_hz = cn0;
+    record.satellites[record.satellite_count++] = satellite;
+  }
+
+  return ParserResult<NmeaGsvRecord>::RecordReady(std::move(record));
+}
+
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
@@ -568,6 +816,112 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   state.latitude_deg = record.latitude_deg;
   state.longitude_deg = record.longitude_deg;
   return state;
+}
+
+universal_gnss::GnssRuntimeState NmeaGsaToRuntimeState(const NmeaGsaRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  MergeNmeaGsaIntoRuntimeState(record, state);
+  return state;
+}
+
+void MergeNmeaGsaIntoRuntimeState(const NmeaGsaRecord& record,
+                                  universal_gnss::GnssRuntimeState& state)
+{
+  if (record.timestamp_ns.has_value())
+  {
+    state.timestamp_ns = record.timestamp_ns;
+  }
+
+  UpdateFixDimensionInState(record.fix_dimension, state);
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVdop);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+
+  if (record.hdop.has_value())
+  {
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kHdop, state.hdop, *record.hdop);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state, universal_gnss::GnssCapability::kHdop, state.hdop);
+  }
+
+  if (record.vdop.has_value())
+  {
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kVdop, state.vdop, *record.vdop);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state, universal_gnss::GnssCapability::kVdop, state.vdop);
+  }
+
+  if (record.active_satellite_count > 0u)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSatellitesUsed,
+                                     state.satellites_used,
+                                     static_cast<std::uint16_t>(record.active_satellite_count));
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kSatellitesUsed, state.satellites_used);
+  }
+}
+
+void MergeNmeaGsvIntoRuntimeState(const NmeaGsvRecord& record,
+                                  universal_gnss::GnssRuntimeState& state)
+{
+  if (record.timestamp_ns.has_value())
+  {
+    state.timestamp_ns = record.timestamp_ns;
+  }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesVisible);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMeanCn0);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMaxCn0);
+
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kSatellitesVisible,
+                                   state.satellites_visible,
+                                   record.satellites_in_view);
+
+  float cn0_sum = 0.0f;
+  float cn0_max = 0.0f;
+  std::size_t cn0_count = 0;
+  for (std::size_t index = 0; index < record.satellite_count; ++index)
+  {
+    const auto& satellite = record.satellites[index];
+    if (!satellite.cn0_db_hz.has_value())
+    {
+      continue;
+    }
+
+    cn0_sum += *satellite.cn0_db_hz;
+    cn0_max = (cn0_count == 0u || *satellite.cn0_db_hz > cn0_max) ? *satellite.cn0_db_hz : cn0_max;
+    ++cn0_count;
+  }
+
+  if (cn0_count > 0u)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kMeanCn0,
+                                     state.mean_cn0_db_hz,
+                                     cn0_sum / static_cast<float>(cn0_count));
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kMaxCn0, state.max_cn0_db_hz, cn0_max);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kMeanCn0, state.mean_cn0_db_hz);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kMaxCn0, state.max_cn0_db_hz);
+  }
 }
 
 }  // namespace universal_gnss_protocols
