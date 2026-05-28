@@ -98,6 +98,8 @@ Implemented:
 - [x] NAV-SAT
 - [x] NAV-STATUS
 - [x] MON-RF
+- [x] CFG-VALGET payload builder
+- [x] CFG-VALSET payload builder
 
 To do:
 
@@ -105,8 +107,6 @@ To do:
 - [ ] MON-HW / MON-HW2 if useful
 - [ ] MON-SPAN
 - [ ] RXM-RTCM
-- [ ] CFG-VALGET
-- [ ] CFG-VALSET
 - [ ] ACK/NAK
 - [ ] survey-in support
 - [ ] receiver configuration profiles

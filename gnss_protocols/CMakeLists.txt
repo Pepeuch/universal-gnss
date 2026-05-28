@@ -5,6 +5,7 @@ add_library(
   src/rtcm_crc24q.cpp
   src/rtcm_parser.cpp
   src/ubx_checksum.cpp
+  src/ubx_cfg_builder.cpp
   src/ubx_parser.cpp
   src/unicore_parser.cpp
   src/nmea_framer.cpp
@@ -56,6 +57,17 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_rtcm_parser COMMAND gnss_protocols_test_rtcm_parser)
+
+  add_executable(
+    gnss_protocols_test_ubx_cfg_builder
+    tests/test_ubx_cfg_builder.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_cfg_builder
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_cfg_builder COMMAND gnss_protocols_test_ubx_cfg_builder)
 
   add_executable(
     gnss_protocols_test_ubx_nav_status

@@ -136,6 +136,8 @@ What NMEA does not do yet:
 
 Implemented semantic messages:
 
+- `CFG-VALSET` payload builders
+- `CFG-VALGET` payload builders
 - `NAV-STATUS`
 - `NAV-PVT`
 - `NAV-SAT`
@@ -145,10 +147,14 @@ Implemented behaviors:
 
 - UBX sync and checksum validation through the UBX framer
 - fixed-layout semantic decode for the messages above
+- modern `CFG-VALSET` / `CFG-VALGET` payload and full-frame generation
 - conservative `GnssRuntimeState` mapping helpers
 
 Current UBX notes:
 
+- `CFG-VALSET` builders currently generate version `0x01` transaction-capable
+  payloads only; they do not send them anywhere
+- `CFG-VALGET` builders currently generate version `0x00` poll requests only
 - `NAV-STATUS` provides fix-status metadata, differential-solution state, and
   carrier-solution status when valid
 - `NAV-PVT` is the main source for normalized fix, position, accuracy, and RTK
@@ -161,7 +167,8 @@ for the current message-by-message UBX runtime mapping contract.
 
 What UBX does not do yet:
 
-- `CFG-*`
+- `CFG-*` transaction execution
+- `ACK/NAK` state handling
 - `MON-SPAN`
 - richer RF diagnostics or spoofing classification
 
