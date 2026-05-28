@@ -6,6 +6,7 @@ add_library(
   src/rtcm_parser.cpp
   src/ubx_checksum.cpp
   src/ubx_parser.cpp
+  src/unicore_parser.cpp
   src/nmea_framer.cpp
   src/rtcm_framer.cpp
   src/ubx_framer.cpp
@@ -99,4 +100,15 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_ubx_mon_rf COMMAND gnss_protocols_test_ubx_mon_rf)
+
+  add_executable(
+    gnss_protocols_test_unicore_ascii_parser
+    tests/test_unicore_ascii_parser.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_unicore_ascii_parser
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_unicore_ascii_parser COMMAND gnss_protocols_test_unicore_ascii_parser)
 endif()

@@ -33,6 +33,7 @@ Current implemented layers:
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
   - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-SAT`, `MON-RF`
+  - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`, `RTCMSTATUSA`
   - RTCM3 framing, CRC24Q, and message-type extraction/classification
 - `gnss_driver`
   - receiver profile declarations
@@ -94,6 +95,10 @@ runtime mapping coverage, and intentionally deferred protocol support.
 See [docs/vendors/ublox/runtime_mapping.md](docs/vendors/ublox/runtime_mapping.md)
 for the current u-blox-specific runtime mapping policy used by the UBX semantic
 layer.
+
+See [docs/vendors/unicore/runtime_mapping.md](docs/vendors/unicore/runtime_mapping.md)
+for the current Unicore ASCII runtime mapping policy and extraction boundary
+from earlier Mowgli-specific prototypes.
 
 See [docs/driver.md](docs/driver.md) for the current driver-layer boundary,
 receiver profiles, and stream-detection foundation.

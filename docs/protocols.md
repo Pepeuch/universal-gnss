@@ -185,6 +185,42 @@ What RTCM does not do yet:
 - correction-age estimation
 - runtime-state mapping
 
+### Unicore ASCII
+
+Implemented semantic messages:
+
+- `PVTSLNA`
+- `BESTNAVA`
+- `RTKSTATUSA`
+- `RTCMSTATUSA`
+
+Implemented behaviors:
+
+- Unicore ASCII framing through the existing line framer
+- fixed-layout semantic decode for the messages above
+- conservative `GnssRuntimeState` mapping helpers for position / RTK / heading /
+  correction-age fields that are explicitly documented
+
+Current Unicore notes:
+
+- `PVTSLNA` is the richest current Unicore position / heading source
+- `BESTNAVA` provides stable position-quality, accuracy, and correction-age
+  fields
+- `RTKSTATUSA` complements position messages with RTK-mode and dual-antenna
+  status
+- `RTCMSTATUSA` is parsed semantically but does not project into runtime state
+  yet
+
+See [docs/vendors/unicore/runtime_mapping.md](vendors/unicore/runtime_mapping.md)
+for the current message-by-message Unicore runtime mapping contract.
+
+What Unicore does not do yet:
+
+- binary `N4`
+- `SATSINFOA` semantic parsing
+- receiver configuration commands
+- Mowgli-style diagnostics projection
+
 ## Runtime Mapping Coverage
 
 The table below describes which normalized runtime fields are currently filled
@@ -193,22 +229,22 @@ by protocol-specific mapping helpers.
 ```text
 Runtime field            Current protocol sources
 ---------------------------------------------------------------
-fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT
-fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT
-rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT
-latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT
-altitude                 NMEA GGA, UBX NAV-PVT
-horizontal accuracy      UBX NAV-PVT
-vertical accuracy        UBX NAV-PVT
-hdop                     NMEA GGA, NMEA GSA
+fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore RTKSTATUSA
+fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore RTKSTATUSA
+rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore RTKSTATUSA
+latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+horizontal accuracy      UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+vertical accuracy        UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+hdop                     NMEA GGA, NMEA GSA, Unicore PVTSLNA
 vdop                     NMEA GSA
-satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT
+satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore BESTNAVA
 satellites_visible       NMEA GSV, UBX NAV-SAT
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT
-heading                  UBX NAV-PVT
+heading                  UBX NAV-PVT, Unicore PVTSLNA
 interference / jamming   UBX MON-RF
-correction_age           not implemented yet
-dual antenna state       not implemented yet
+correction_age           Unicore PVTSLNA, Unicore BESTNAVA
+dual antenna state       Unicore RTKSTATUSA
 ```
 
 ### Mapping Policy
@@ -229,6 +265,8 @@ Examples:
   fixed
 - UBX `NAV-PVT` can set normalized RTK mode from documented carrier-solution
   bits
+- Unicore `PVTSLNA` and `BESTNAVA` can set RTK mode only from documented
+  position-type enums, not from indirect heuristics
 - RTCM currently does not modify runtime state at all
 
 ## Current Guarantees
@@ -266,7 +304,8 @@ The following are intentionally deferred:
 
 Also deferred for later protocol growth:
 
-- Unicore semantic decoding
+- Unicore binary `N4`
+- Unicore receiver configuration commands
 - Quectel semantic decoding
 - Septentrio or other vendor-specific semantic layers
 - correction relay metrics
