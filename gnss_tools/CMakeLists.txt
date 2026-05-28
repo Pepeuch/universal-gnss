@@ -3,6 +3,7 @@ add_library(
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
   src/gnss_replay.cpp
+  src/runtime_state_format.cpp
 )
 
 target_include_directories(
@@ -11,7 +12,12 @@ target_include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(universal_gnss_tools PUBLIC universal_gnss_protocols)
+target_link_libraries(
+  universal_gnss_tools
+  PUBLIC
+    universal_gnss_driver
+    universal_gnss_protocols
+)
 
 target_compile_features(universal_gnss_tools PUBLIC cxx_std_17)
 
@@ -48,7 +54,32 @@ target_link_libraries(
     universal_gnss_tools
 )
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(
+    gnss_serial_monitor
+    src/gnss_serial_monitor.cpp
+  )
+  target_link_libraries(
+    gnss_serial_monitor
+    PRIVATE
+      universal_gnss_driver
+      universal_gnss_tools
+      universal_gnss_transport
+  )
+endif()
+
 if(BUILD_TESTING)
+  add_executable(
+    gnss_tools_test_runtime_state_format
+    tests/test_runtime_state_format.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_runtime_state_format
+    PRIVATE
+      universal_gnss_tools
+  )
+  add_test(NAME gnss_tools_test_runtime_state_format COMMAND gnss_tools_test_runtime_state_format)
+
   add_executable(
     gnss_tools_test_rtcm_inspector
     tests/test_rtcm_inspector.cpp

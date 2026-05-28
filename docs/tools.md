@@ -7,7 +7,6 @@ These tools are intentionally offline and file/stdin oriented.
 
 Current non-goals:
 
-- live serial input
 - TCP/UDP ingestion
 - NTRIP client behavior
 - ROS 2 output
@@ -130,22 +129,64 @@ gnss_replay --summary file.bin
 gnss_replay --json file.bin
 ```
 
+### `gnss_serial_monitor`
+
+`gnss_serial_monitor` is the first live hardware-facing CLI.
+
+It reuses:
+
+- Linux `PosixSerialTransport`
+- `ReceiverSession`
+- `ReceiverSessionRunner`
+- the existing normalized runtime-state formatters
+
+Current behavior:
+
+- opens a serial device path
+- routes bytes into the portable receiver session stack
+- supports explicit `ublox` / `unicore` routing or conservative `auto` mode
+- prints compact normalized runtime-state updates as they change
+- prints a final runner/session summary when the process exits normally
+
+Current scope:
+
+- Linux-only
+- manual field testing
+- read-only monitoring
+
+Current non-goals:
+
+- receiver configuration
+- NTRIP injection
+- reconnect lifecycle
+- ROS 2 publishing
+- threaded or async reading
+
+Examples:
+
+```text
+gnss_serial_monitor --port /dev/ttyACM0 --baud 921600 --vendor auto
+gnss_serial_monitor --port /dev/ttyUSB0 --baud 115200 --vendor ublox
+gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor unicore
+gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor auto --max-bytes 200000
+```
+
 ## Output Philosophy
 
 The tools stay compact on purpose.
 
 - text mode is optimized for quick terminal inspection
 - `--summary` suppresses the per-item timeline
+- `gnss_serial_monitor` prints compact live updates instead of a file timeline
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
-- all tools are currently offline and file/stdin oriented only
+- most tools are currently offline and file/stdin oriented only
 
 ## Deferred Tooling
 
 Still intentionally deferred:
 
-- live stream readers
-- serial device support
+- richer live stream readers
 - socket readers
 - NTRIP client inspection
 - live playback timing

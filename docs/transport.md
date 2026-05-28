@@ -223,6 +223,15 @@ It is still intentionally not:
 - an async loop
 - a serial or TCP adapter
 
+The current Linux `gnss_serial_monitor` CLI is built on top of this bridge:
+
+```text
+PosixSerialTransport
+  -> ReceiverSessionRunner
+  -> ReceiverSession
+  -> normalized runtime state
+```
+
 ## Deferred Work
 
 Still intentionally deferred:

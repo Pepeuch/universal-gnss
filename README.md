@@ -42,6 +42,7 @@ Current implemented layers:
 - `gnss_transport`
   - portable byte source / sink interfaces
   - memory-backed test / replay transport
+  - Linux POSIX serial transport
   - transport metrics and buffer helpers
 - `gnss_ntrip`
   - portable NTRIP config types
@@ -52,6 +53,7 @@ Current implemented layers:
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
   - `gnss_replay` CLI for semantic offline runtime replay
+  - `gnss_serial_monitor` CLI for live Linux serial monitoring
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
   - `GnssStatus` message
@@ -109,7 +111,7 @@ merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs and
-runtime replay usage examples.
+runtime replay usage examples, plus the live Linux serial monitor.
 
 See [docs/transport.md](docs/transport.md) for the current portable byte-stream
 abstraction layer and memory transport behavior.
