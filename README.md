@@ -29,6 +29,11 @@ Current implemented layers:
   - fix / RTK enums
   - capability and value flag system
   - no ROS 2 dependency
+- `gnss_protocols`
+  - portable framing and checksum helpers
+  - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
+  - UBX semantic parsing: `NAV-PVT`, `NAV-SAT`, `MON-RF`
+  - RTCM3 framing, CRC24Q, and message-type extraction/classification
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
   - `GnssStatus` message
@@ -64,6 +69,9 @@ protocol parser / driver / transport
 
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts and the
 current status / covariance policy.
+
+See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
+runtime mapping coverage, and intentionally deferred protocol support.
 
 See [docs/runtime_aggregation.md](docs/runtime_aggregation.md) for the generic
 merge rules that combine partial protocol/runtime updates into one coherent
