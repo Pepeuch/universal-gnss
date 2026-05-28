@@ -1,0 +1,223 @@
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "universal_gnss_protocols/nmea_checksum.hpp"
+#include "universal_gnss_protocols/nmea_framer.hpp"
+#include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_framer.hpp"
+#include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
+
+namespace
+{
+
+using universal_gnss_protocols::ChecksumStatus;
+using universal_gnss_protocols::NmeaSentenceFramer;
+using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::RtcmFrameFramer;
+using universal_gnss_protocols::UbxChecksum;
+using universal_gnss_protocols::UbxFrameFramer;
+using universal_gnss_protocols::UnicoreFrameFramer;
+
+struct TestContext
+{
+  int failures{0};
+
+  void Expect(bool condition, const std::string& message)
+  {
+    if (!condition)
+    {
+      ++failures;
+      std::cerr << "FAILED: " << message << '\n';
+    }
+  }
+};
+
+template <typename FramerT, typename RecordT>
+universal_gnss_protocols::ParserResult<RecordT> FeedBytes(
+    FramerT& framer,
+    const std::vector<std::uint8_t>& bytes,
+    std::optional<std::int64_t> timestamp_ns = std::nullopt)
+{
+  universal_gnss_protocols::ParserResult<RecordT> result;
+  for (const auto byte : bytes)
+  {
+    result = framer.PushByte(byte, timestamp_ns);
+  }
+  return result;
+}
+
+std::vector<std::uint8_t> ToBytes(const std::string& text)
+{
+  return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+void TestNmeaChecksumHelpers(TestContext& ctx)
+{
+  const std::string frame = "$GPGLL,4916.45,N,12311.12,W,225444,A,*1D\r\n";
+  std::optional<std::uint8_t> reported;
+  std::optional<std::uint8_t> computed;
+  const auto status =
+      universal_gnss_protocols::ValidateNmeaChecksum(frame, &reported, &computed);
+
+  ctx.Expect(status == ChecksumStatus::kValid, "known NMEA vector should validate");
+  ctx.Expect(reported.has_value() && *reported == 0x1Du,
+             "known NMEA vector should expose the reported checksum");
+  ctx.Expect(computed.has_value() && *computed == 0x1Du,
+             "known NMEA vector should expose the computed checksum");
+
+  const auto invalid_status =
+      universal_gnss_protocols::ValidateNmeaChecksum("$GPGLL,4916.45,N*ZZ\r\n");
+  ctx.Expect(invalid_status == ChecksumStatus::kInvalid,
+             "malformed NMEA checksum text should be rejected");
+}
+
+void TestRtcmCrc24QHelpers(TestContext& ctx)
+{
+  const std::string payload = "123456789";
+  const auto crc = universal_gnss_protocols::ComputeRtcmCrc24Q(
+      reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size());
+  ctx.Expect(crc == 0x00CDE703u, "CRC24Q known vector should match 0xCDE703");
+  ctx.Expect(universal_gnss_protocols::ValidateRtcmCrc24Q(
+                 reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size(), crc),
+             "CRC24Q validation should accept the known vector");
+  ctx.Expect(!universal_gnss_protocols::ValidateRtcmCrc24Q(
+                 reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size(),
+                 crc ^ 0x1u),
+             "CRC24Q validation should reject a modified checksum");
+}
+
+void TestUbxChecksumHelpers(TestContext& ctx)
+{
+  const std::uint8_t message[] = {0x01u, 0x07u, 0x00u, 0x00u};
+  const UbxChecksum checksum =
+      universal_gnss_protocols::ComputeUbxChecksum(message, sizeof(message));
+
+  ctx.Expect(checksum.ck_a == 0x08u && checksum.ck_b == 0x19u,
+             "UBX Fletcher checksum known vector should match 0x08 0x19");
+  ctx.Expect(universal_gnss_protocols::ValidateUbxChecksum(message, sizeof(message), checksum),
+             "UBX checksum validation should accept the known vector");
+  ctx.Expect(!universal_gnss_protocols::ValidateUbxChecksum(
+                 message, sizeof(message), UbxChecksum{checksum.ck_a, static_cast<std::uint8_t>(
+                                                                          checksum.ck_b + 1u)}),
+             "UBX checksum validation should reject a modified checksum");
+}
+
+void TestNmeaFramerPartialAndTruncatedHandling(TestContext& ctx)
+{
+  NmeaSentenceFramer framer;
+  const auto partial = FeedBytes<NmeaSentenceFramer, universal_gnss_protocols::NmeaSentence>(
+      framer, ToBytes("$GPGLL,4916.45,N,12311.12,W,225444,A,*1D\r"));
+  ctx.Expect(partial.status == ParserStatus::kNeedMoreData,
+             "NMEA framer should wait for LF while the frame is partial");
+
+  const auto ready = framer.PushByte('\n', 1234);
+  ctx.Expect(ready.status == ParserStatus::kRecordReady && ready.record.has_value(),
+             "NMEA framer should emit a record once LF arrives");
+  ctx.Expect(ready.record->talker == "GP", "NMEA framer should extract the talker");
+  ctx.Expect(ready.record->sentence_type == "GLL",
+             "NMEA framer should extract the sentence type");
+  ctx.Expect(ready.record->checksum_status == ChecksumStatus::kValid,
+             "NMEA framer should validate the sentence checksum");
+
+  FeedBytes<NmeaSentenceFramer, universal_gnss_protocols::NmeaSentence>(
+      framer, ToBytes("$GPRMC,1"));
+  const auto truncated = framer.Finalize();
+  ctx.Expect(truncated.status == ParserStatus::kTruncated,
+             "NMEA framer should report truncated data on finalize");
+}
+
+void TestRtcmFramerBoundaryAndSyncRecovery(TestContext& ctx)
+{
+  RtcmFrameFramer framer;
+  const std::vector<std::uint8_t> frame = {0x00u, 0xD3u, 0x00u, 0x02u, 0x3Eu, 0xD0u, 0xA4u, 0xE0u,
+                                           0x00u};
+  auto result =
+      FeedBytes<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(framer, frame, 222);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "RTCM framer should recover after noise and emit a record");
+  ctx.Expect(result.record->message_type == 1005u,
+             "RTCM framer should extract the 12-bit message type");
+  ctx.Expect(result.record->checksum_status == ChecksumStatus::kValid,
+             "RTCM framer should validate the frame CRC");
+
+  const std::vector<std::uint8_t> invalid_header = {0xD3u, 0xFFu, 0xD3u, 0x00u, 0x02u, 0x3Eu,
+                                                    0xD0u, 0xA4u, 0xE0u, 0x00u};
+  result = FeedBytes<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+      framer, invalid_header);
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "RTCM framer should recover from an invalid header and resync on a new preamble");
+
+  FeedBytes<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+      framer, {0xD3u, 0x00u, 0x02u, 0x3Eu});
+  const auto truncated = framer.Finalize();
+  ctx.Expect(truncated.status == ParserStatus::kTruncated,
+             "RTCM framer should report truncated data on finalize");
+}
+
+void TestUbxFramerPartialHandlingAndChecksum(TestContext& ctx)
+{
+  UbxFrameFramer framer;
+  const std::vector<std::uint8_t> frame = {0x00u, 0xB5u, 0x00u, 0xB5u, 0x62u, 0x01u,
+                                           0x07u, 0x00u, 0x00u, 0x08u, 0x19u};
+  const auto result =
+      FeedBytes<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(framer, frame, 555);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "UBX framer should recover sync and emit a frame");
+  ctx.Expect(result.record->class_id == 0x01u && result.record->message_id == 0x07u,
+             "UBX framer should expose class and message ids");
+  ctx.Expect(result.record->checksum_status == ChecksumStatus::kValid,
+             "UBX framer should validate the checksum");
+
+  FeedBytes<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(
+      framer, {0xB5u, 0x62u, 0x01u, 0x07u});
+  const auto truncated = framer.Finalize();
+  ctx.Expect(truncated.status == ParserStatus::kTruncated,
+             "UBX framer should report truncated data on finalize");
+}
+
+void TestUnicoreFramerSyncRecovery(TestContext& ctx)
+{
+  UnicoreFrameFramer framer;
+  const auto result =
+      FeedBytes<UnicoreFrameFramer, universal_gnss_protocols::UnicoreFrame>(
+          framer, ToBytes("noise#BESTPOSA,1,2,3*00\r\n"), 999);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "Unicore framer should recover after noise and emit a frame");
+  ctx.Expect(result.record->message_name == "BESTPOSA",
+             "Unicore framer should extract the message name");
+  ctx.Expect(result.record->checksum_status == ChecksumStatus::kNotChecked,
+             "Unicore framer should not invent checksum validation");
+}
+
+}  // namespace
+
+int main()
+{
+  TestContext ctx;
+
+  TestNmeaChecksumHelpers(ctx);
+  TestRtcmCrc24QHelpers(ctx);
+  TestUbxChecksumHelpers(ctx);
+  TestNmeaFramerPartialAndTruncatedHandling(ctx);
+  TestRtcmFramerBoundaryAndSyncRecovery(ctx);
+  TestUbxFramerPartialHandlingAndChecksum(ctx);
+  TestUnicoreFramerSyncRecovery(ctx);
+
+  if (ctx.failures != 0)
+  {
+    std::cerr << ctx.failures << " test(s) failed\n";
+    return EXIT_FAILURE;
+  }
+
+  std::cout << "All gnss_protocols foundation tests passed\n";
+  return EXIT_SUCCESS;
+}
