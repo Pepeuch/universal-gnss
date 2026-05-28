@@ -2,6 +2,7 @@ add_library(
   universal_gnss_driver
   src/receiver_profiles.cpp
   src/stream_detector.cpp
+  src/ublox_session.cpp
   src/unicore_session.cpp
 )
 
@@ -37,4 +38,15 @@ if(BUILD_TESTING)
       universal_gnss_driver
   )
   add_test(NAME gnss_driver_test_unicore_session COMMAND gnss_driver_test_unicore_session)
+
+  add_executable(
+    gnss_driver_test_ublox_session
+    tests/test_ublox_session.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_ublox_session
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(NAME gnss_driver_test_ublox_session COMMAND gnss_driver_test_ublox_session)
 endif()

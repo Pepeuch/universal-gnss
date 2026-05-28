@@ -58,6 +58,20 @@ coherent runtime state
 
 Each UBX message contributes only the fields it actually knows about.
 
+The first portable consumer of these mappings now exists in
+`gnss_driver::UbloxSession`.
+
+That session layer:
+
+- accepts mixed `UBX`, `NMEA`, and `RTCM3` byte streams
+- routes supported `UBX` messages into these mapping helpers
+- optionally accepts conservative `NMEA` runtime updates
+- keeps `RTCM3` as correction metadata only
+- merges all runtime updates through `GnssRuntimeAggregator`
+
+It does not configure the receiver, send `CFG-*`, process `ACK/NAK`, manage
+survey-in control, or own transport/reconnect policy.
+
 This means:
 
 - `NAV-STATUS` can contribute fix and RTK-status metadata without coordinates

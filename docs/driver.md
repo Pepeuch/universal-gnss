@@ -170,6 +170,44 @@ This is intentionally not yet:
 - a receiver configuration engine
 - a reconnecting session manager
 
+### u-blox session
+
+`ublox_session.*` is the equivalent portable session layer for mixed u-blox
+streams.
+
+Its job is:
+
+- accept incremental byte chunks
+- route `UBX`, `NMEA`, and `RTCM3` using the existing framers
+- parse supported `UBX` semantic messages:
+  - `NAV-PVT`
+  - `NAV-SAT`
+  - `NAV-STATUS`
+  - `MON-RF`
+- optionally merge valid `NMEA` runtime updates
+- keep `RTCM3` as correction metadata only
+- merge all runtime updates through `GnssRuntimeAggregator`
+- expose current runtime state and lightweight session metrics
+
+Current metrics include:
+
+- bytes seen
+- UBX / NMEA / RTCM frame counts
+- parsed vs rejected frames
+- runtime updates
+- unknown frames
+- malformed checksum / truncated / overflowed frames
+- RTCM message-type counts
+
+This session is intentionally not yet:
+
+- a serial driver
+- a TCP driver
+- a command/configuration engine
+- an ACK/NAK session manager
+- a survey-in controller
+- a ROS 2 node
+
 ## Relationship To Protocol Parsers
 
 The parser layer and driver layer have different jobs.
@@ -208,12 +246,20 @@ Later concrete drivers may:
 - `gnss_core` still owns normalized runtime state and merge policy
 - `gnss_driver` owns the receiver-session routing glue
 
+`UbloxSession` is the same kind of bridge for mixed `UBX` / `NMEA` / `RTCM3`
+streams:
+
+- `gnss_protocols` owns framing, checksum validation, and semantic decode
+- `gnss_core` owns normalized state and merge invariants
+- `gnss_driver` owns byte-stream session routing and per-session metrics
+
 ## Deferred Work
 
 The following driver-layer work is intentionally deferred:
 
 - receiver config commands
 - UBX `CFG-*`
+- ACK / NAK handling
 - Quectel config messages
 - Unicore config messages
 - binary `N4` Unicore session routing
