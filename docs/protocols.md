@@ -135,6 +135,9 @@ Current UBX notes:
 - `NAV-SAT` provides satellites visible / used and CN0 summaries
 - `MON-RF` provides documented RF-interference / jamming state only
 
+See [docs/vendors/ublox/runtime_mapping.md](vendors/ublox/runtime_mapping.md)
+for the current message-by-message UBX runtime mapping contract.
+
 What UBX does not do yet:
 
 - `CFG-*`

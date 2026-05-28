@@ -75,6 +75,10 @@ current status / covariance policy.
 See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
 runtime mapping coverage, and intentionally deferred protocol support.
 
+See [docs/vendors/ublox/runtime_mapping.md](docs/vendors/ublox/runtime_mapping.md)
+for the current u-blox-specific runtime mapping policy used by the UBX semantic
+layer.
+
 See [docs/runtime_aggregation.md](docs/runtime_aggregation.md) for the generic
 merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
