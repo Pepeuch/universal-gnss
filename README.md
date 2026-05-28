@@ -38,6 +38,11 @@ Current implemented layers:
   - receiver profile declarations
   - protocol support and feature flags
   - lightweight stream-family detection
+- `gnss_ntrip`
+  - portable NTRIP config types
+  - request and auth header generation
+  - GGA injection policy types
+  - connection metrics models
 - `gnss_tools`
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for mixed NMEA / UBX / RTCM log inspection
@@ -93,6 +98,9 @@ merge rules that combine partial protocol/runtime updates into one coherent
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs and
 usage examples.
+
+See [docs/ntrip.md](docs/ntrip.md) for the current NTRIP layer scope,
+request-format policy, and deferred networking work.
 
 ## License
 
