@@ -121,6 +121,29 @@ std::uint8_t BuildValsetLayerMask(const std::initializer_list<UbxCfgLayer> layer
   return mask;
 }
 
+std::uint8_t BuildValsetLayerMask(const std::vector<UbxCfgLayer>& layers)
+{
+  std::uint8_t mask = 0u;
+  for (const auto layer : layers)
+  {
+    switch (layer)
+    {
+      case UbxCfgLayer::kRam:
+        mask = static_cast<std::uint8_t>(mask | (1u << 0u));
+        break;
+      case UbxCfgLayer::kBbr:
+        mask = static_cast<std::uint8_t>(mask | (1u << 1u));
+        break;
+      case UbxCfgLayer::kFlash:
+        mask = static_cast<std::uint8_t>(mask | (1u << 2u));
+        break;
+      case UbxCfgLayer::kDefault:
+        break;
+    }
+  }
+  return mask;
+}
+
 UbxCfgBuilderResult MakeError(const UbxCfgBuilderStatus status, const char* message)
 {
   UbxCfgBuilderResult result;
@@ -250,7 +273,52 @@ UbxCfgBuilderResult BuildUbxCfgValsetFrame(
 }
 
 UbxCfgBuilderResult BuildUbxCfgValsetFrame(
+    const std::vector<UbxCfgLayer>& layers,
+    const std::vector<UbxCfgKeyValue>& key_values,
+    const UbxCfgTransaction transaction)
+{
+  if (key_values.size() > kMaxCfgItemsPerMessage)
+  {
+    return MakeError(UbxCfgBuilderStatus::kTooManyItems, "too many key/value pairs");
+  }
+
+  const std::uint8_t layer_mask = BuildValsetLayerMask(layers);
+  if (layer_mask == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "at least one VALSET layer is required");
+  }
+
+  std::vector<std::uint8_t> payload;
+  payload.reserve(4u + key_values.size() * 8u);
+  payload.push_back(0x01u);
+  payload.push_back(layer_mask);
+  payload.push_back(static_cast<std::uint8_t>(transaction));
+  payload.push_back(0x00u);
+
+  for (const auto& key_value : key_values)
+  {
+    if (!DoesValueTypeMatchKey(key_value.key_id, key_value.value.type))
+    {
+      return MakeError(UbxCfgBuilderStatus::kSizeMismatch, "key/value type size mismatch");
+    }
+
+    AppendLeU4(payload, key_value.key_id);
+    AppendValue(payload, key_value.value);
+  }
+
+  return MakeFrameResult(payload, kUbxIdCfgValset);
+}
+
+UbxCfgBuilderResult BuildUbxCfgValsetFrame(
     const std::initializer_list<UbxCfgLayer> layers,
+    const UbxCfgKeyValue& key_value,
+    const UbxCfgTransaction transaction)
+{
+  return BuildUbxCfgValsetFrame(layers, std::vector<UbxCfgKeyValue>{key_value}, transaction);
+}
+
+UbxCfgBuilderResult BuildUbxCfgValsetFrame(
+    const std::vector<UbxCfgLayer>& layers,
     const UbxCfgKeyValue& key_value,
     const UbxCfgTransaction transaction)
 {
@@ -303,6 +371,18 @@ UbxCfgBuilderResult BuildEnableMessageRateFrame(
       transaction);
 }
 
+UbxCfgBuilderResult BuildEnableMessageRateFrame(
+    const std::uint32_t message_rate_key,
+    const std::uint8_t rate,
+    const std::vector<UbxCfgLayer>& layers,
+    const UbxCfgTransaction transaction)
+{
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{message_rate_key, UbxCfgValue::U1(rate)},
+      transaction);
+}
+
 UbxCfgBuilderResult BuildDisableMessageFrame(
     const std::uint32_t message_rate_key,
     const std::initializer_list<UbxCfgLayer> layers,
@@ -311,9 +391,33 @@ UbxCfgBuilderResult BuildDisableMessageFrame(
   return BuildEnableMessageRateFrame(message_rate_key, 0u, layers, transaction);
 }
 
+UbxCfgBuilderResult BuildDisableMessageFrame(
+    const std::uint32_t message_rate_key,
+    const std::vector<UbxCfgLayer>& layers,
+    const UbxCfgTransaction transaction)
+{
+  return BuildEnableMessageRateFrame(message_rate_key, 0u, layers, transaction);
+}
+
 UbxCfgBuilderResult BuildUart1BaudrateFrame(
     const std::uint32_t baud_rate,
     const std::initializer_list<UbxCfgLayer> layers,
+    const UbxCfgTransaction transaction)
+{
+  if (baud_rate == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "baud rate must be non-zero");
+  }
+
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{ubx_cfg_keys::kUart1Baudrate, UbxCfgValue::U4(baud_rate)},
+      transaction);
+}
+
+UbxCfgBuilderResult BuildUart1BaudrateFrame(
+    const std::uint32_t baud_rate,
+    const std::vector<UbxCfgLayer>& layers,
     const UbxCfgTransaction transaction)
 {
   if (baud_rate == 0u)
@@ -354,10 +458,55 @@ UbxCfgBuilderResult BuildRateHzFrame(const double rate_hz,
       transaction);
 }
 
+UbxCfgBuilderResult BuildRateHzFrame(const double rate_hz,
+                                     const std::vector<UbxCfgLayer>& layers,
+                                     const UbxCfgTransaction transaction)
+{
+  if (!(rate_hz > 0.0))
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "rate must be positive");
+  }
+
+  const double period_ms = 1000.0 / rate_hz;
+  if (period_ms < 1.0 || period_ms > 65535.0)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "rate is out of supported range");
+  }
+
+  const std::uint16_t meas_period_ms = static_cast<std::uint16_t>(std::llround(period_ms));
+  if (meas_period_ms == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "rate produced an invalid period");
+  }
+
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{ubx_cfg_keys::kRateMeas, UbxCfgValue::U2(meas_period_ms)},
+      transaction);
+}
+
 UbxCfgBuilderResult BuildEnableConstellationFrame(
     const UbxCfgConstellation constellation,
     const bool enabled,
     const std::initializer_list<UbxCfgLayer> layers,
+    const UbxCfgTransaction transaction)
+{
+  const std::uint32_t key = ConstellationEnableKey(constellation);
+  if (key == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "unsupported constellation");
+  }
+
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{key, UbxCfgValue::Boolean(enabled)},
+      transaction);
+}
+
+UbxCfgBuilderResult BuildEnableConstellationFrame(
+    const UbxCfgConstellation constellation,
+    const bool enabled,
+    const std::vector<UbxCfgLayer>& layers,
     const UbxCfgTransaction transaction)
 {
   const std::uint32_t key = ConstellationEnableKey(constellation);

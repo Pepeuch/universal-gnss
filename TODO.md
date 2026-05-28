@@ -102,6 +102,7 @@ Implemented:
 - [x] MON-RF
 - [x] CFG-VALGET payload builder
 - [x] CFG-VALSET payload builder
+- [x] config profile command builder
 
 To do:
 
@@ -111,7 +112,7 @@ To do:
 - [ ] RXM-RTCM
 - [ ] ACK/NAK
 - [ ] survey-in support
-- [ ] receiver configuration profiles
+- [ ] live configuration transactions
 
 ### Unicore
 
@@ -195,7 +196,8 @@ To do:
 - [ ] Session auto-detection
 - [x] Receiver config command model
 - [x] Receiver command dispatcher
-- [ ] u-blox config engine
+- [x] u-blox config profile builder
+- [ ] u-blox ACK/NAK + transaction engine
 - [ ] Unicore config engine
 - [ ] Quectel config engine
 - [ ] transport binding

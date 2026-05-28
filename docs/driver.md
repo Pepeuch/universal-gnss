@@ -6,7 +6,7 @@ Today `gnss_driver` is only a portable abstraction foundation.
 
 It does not yet contain:
 
-- receiver configuration
+- live receiver configuration
 - correction injection
 - auto-detection loops
 - ROS 2 nodes
@@ -164,6 +164,45 @@ Current dispatcher metrics include:
 - invalid-command rejections
 - bytes written
 - write errors
+
+### u-blox config profile builder
+
+`ublox_config_profile_builder.*` is the first vendor-specific bridge from a
+high-level configuration intent to prepared `ReceiverCommand` objects.
+
+Current role:
+
+- describe a small `UbloxConfigProfile`
+- convert that profile into a deterministic list of prepared `ReceiverCommand`
+  values
+- reuse the existing `UBX-CFG-VALSET` payload builders from `gnss_protocols`
+- mark commands as `runtime` or `persistent` based on requested safety and
+  target CFG layers
+
+Current coverage:
+
+- UART1 baud-rate command generation
+- measurement-rate command generation
+- message enable/disable command generation
+- constellation enable/disable command generation
+- modest predefined helper profiles for rover, diagnostics, and a minimal base
+  monitoring setup
+
+Current policy:
+
+- this layer generates commands only
+- it does not write to a transport
+- persistent safety is inferred when a profile targets `BBR` or `Flash`
+- explicit confirmation is still enforced later by the dispatcher, not at
+  generation time
+
+Still deferred:
+
+- ACK/NAK handling
+- transaction/retry orchestration
+- survey-in orchestration
+- full base-station setup
+- live serial/TCP configuration flows
 
 ### Receiver config profiles
 
