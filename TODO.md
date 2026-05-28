@@ -123,6 +123,7 @@ Implemented:
 - [x] RTKSTATUSA
 - [x] RTCMSTATUSA
 - [x] SATSINFOA
+- [x] text config profile builder
 
 To do:
 
@@ -131,8 +132,7 @@ To do:
 - [ ] BESTSATA if useful
 - [ ] RF/jamming messages
 - [ ] hardware status messages
-- [ ] receiver configuration commands
-- [ ] profile generation
+- [ ] live receiver configuration transactions
 - [ ] raw observation support
 
 ### RTCM3
@@ -198,7 +198,8 @@ To do:
 - [x] Receiver command dispatcher
 - [x] u-blox config profile builder
 - [ ] u-blox ACK/NAK + transaction engine
-- [ ] Unicore config engine
+- [x] Unicore config profile builder
+- [ ] Unicore response/transaction engine
 - [ ] Quectel config engine
 - [ ] transport binding
 - [ ] reconnect/session lifecycle

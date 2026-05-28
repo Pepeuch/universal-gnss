@@ -204,6 +204,59 @@ Still deferred:
 - full base-station setup
 - live serial/TCP configuration flows
 
+### Unicore config profile builder
+
+`unicore_config_profile_builder.*` is the equivalent vendor-specific bridge
+for Unicore text commands.
+
+Current role:
+
+- describe a small `UnicoreConfigProfile`
+- convert that profile into deterministic CRLF-terminated text
+  `ReceiverCommand` values
+- separate runtime-safe commands from safety-gated persistent commands
+- reuse the existing command/dispatcher model without sending anything
+
+Current coverage:
+
+- `MODE ROVER`
+- `CONFIG NMEA0183`
+- `CONFIG RTK TIMEOUT`
+- `CONFIG RTK RELIABILITY`
+- `CONFIG DGPS TIMEOUT`
+- `CONFIG SIGNALGROUP`
+- output-message enables for:
+  - `GPGGA`
+  - `PVTSLNA`
+  - `BESTNAVA`
+  - `RTKSTATUSA`
+  - `RTCMSTATUSA`
+  - `SATSINFOA`
+- optional `SAVECONFIG`
+
+Current policy:
+
+- output commands use a small per-message syntax table:
+  - `LOG ... ONTIME` for `GPGGA` and `PVTSLNA`
+  - direct-period syntax for `BESTNAVA`, `RTKSTATUSA`, and `SATSINFOA`
+  - `ONCHANGED` for `RTCMSTATUSA`
+- `SAVECONFIG` is generated only when persistent storage is explicitly requested
+- `CONFIG SIGNALGROUP` is treated as persistent/safety-gated because it is
+  model-specific and not a lightweight runtime tweak
+- generation is deterministic and transport-agnostic
+
+What this does not do:
+
+- serial writes
+- response parsing
+- retries
+- survey-in/base orchestration
+- binary N4 configuration
+
+The message-format choices are inspired by the practical per-message syntax
+table developed in MowgliNext, but the builder does not copy ROS 2 glue,
+start scripts, or Mowgli-specific runtime assumptions.
+
 ### Receiver config profiles
 
 `receiver_config_profile.hpp` defines a small generic vocabulary for future
