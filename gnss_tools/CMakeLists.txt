@@ -2,6 +2,7 @@ add_library(
   universal_gnss_tools
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
+  src/gnss_replay.cpp
 )
 
 target_include_directories(
@@ -36,6 +37,17 @@ target_link_libraries(
     universal_gnss_tools
 )
 
+add_executable(
+  gnss_replay
+  src/gnss_replay_cli.cpp
+)
+
+target_link_libraries(
+  gnss_replay
+  PRIVATE
+    universal_gnss_tools
+)
+
 if(BUILD_TESTING)
   add_executable(
     gnss_tools_test_rtcm_inspector
@@ -58,4 +70,15 @@ if(BUILD_TESTING)
       universal_gnss_tools
   )
   add_test(NAME gnss_tools_test_gnss_stream_inspector COMMAND gnss_tools_test_gnss_stream_inspector)
+
+  add_executable(
+    gnss_tools_test_gnss_replay
+    tests/test_gnss_replay.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_gnss_replay
+    PRIVATE
+      universal_gnss_tools
+  )
+  add_test(NAME gnss_tools_test_gnss_replay COMMAND gnss_tools_test_gnss_replay)
 endif()

@@ -50,7 +50,8 @@ Current implemented layers:
   - connection metrics models
 - `gnss_tools`
   - `rtcm_inspect` CLI for RTCM-only frame inspection
-  - `gnss_inspect` CLI for mixed NMEA / UBX / RTCM log inspection
+  - `gnss_inspect` CLI for structural mixed-stream frame inspection
+  - `gnss_replay` CLI for semantic offline runtime replay
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
   - `GnssStatus` message
@@ -108,7 +109,7 @@ merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs and
-usage examples.
+runtime replay usage examples.
 
 See [docs/transport.md](docs/transport.md) for the current portable byte-stream
 abstraction layer and memory transport behavior.

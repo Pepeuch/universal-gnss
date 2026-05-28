@@ -44,10 +44,12 @@ rtcm_inspect --json file.rtcm
 
 ### `gnss_inspect`
 
-`gnss_inspect` is a mixed-stream inspector for raw GNSS logs that may contain:
+`gnss_inspect` is a structural mixed-stream inspector for raw GNSS logs that may
+contain:
 
 - NMEA
 - UBX
+- Unicore ASCII
 - RTCM3
 - arbitrary noise bytes between frames
 
@@ -59,6 +61,7 @@ The tool scans a byte stream and emits a compact timeline of recognized items:
 - NMEA sentence identity as `talker + sentence type`, for example `GPGGA`
 - UBX class/id and a known message name when available, for example `01:07`
   and `NAV-PVT`
+- Unicore message name, for example `BESTNAVA`
 - RTCM message type plus the current lightweight classification, for example
   `1005` and `station_arp`
 
@@ -72,6 +75,7 @@ Summary output includes:
 - counts by protocol
 - counts by NMEA sentence type
 - counts by UBX class/id
+- counts by Unicore message name
 - counts by RTCM message type
 
 Examples:
@@ -83,6 +87,49 @@ gnss_inspect --summary file.bin
 gnss_inspect --json file.bin
 ```
 
+### `gnss_replay`
+
+`gnss_replay` is the first semantic offline replay tool.
+
+It reuses:
+
+- the mixed-stream structural scan
+- existing NMEA / UBX / Unicore semantic parsers
+- protocol-to-runtime mapping helpers
+- `GnssRuntimeAggregator`
+
+Current replay behavior:
+
+- recognizes mixed NMEA / UBX / Unicore / RTCM / noise streams
+- maps supported semantic GNSS messages into partial `GnssRuntimeState` updates
+- merges those updates into one coherent runtime state timeline
+- keeps RTCM as correction-stream metadata only for now
+
+The replay timeline shows, for each recognized record:
+
+- byte offset
+- protocol and message identity
+- whether the record produced a runtime update
+- the current normalized runtime state after that event
+
+Summary output includes:
+
+- total bytes
+- recognized records
+- runtime updates
+- protocol counts
+- RTCM message type counts
+- final normalized runtime state
+
+Examples:
+
+```text
+gnss_replay file.bin
+cat file.bin | gnss_replay -
+gnss_replay --summary file.bin
+gnss_replay --json file.bin
+```
+
 ## Output Philosophy
 
 The tools stay compact on purpose.
@@ -91,6 +138,7 @@ The tools stay compact on purpose.
 - `--summary` suppresses the per-item timeline
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
+- all tools are currently offline and file/stdin oriented only
 
 ## Deferred Tooling
 
@@ -100,6 +148,8 @@ Still intentionally deferred:
 - serial device support
 - socket readers
 - NTRIP client inspection
+- live playback timing
+- ROS 2 bag or topic output
 - RTCM payload semantic decode
 - MSM satellite/signal views
-- ROS 2 publishing from inspection tools
+- persistent satellite tracking in replay

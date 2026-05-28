@@ -38,8 +38,13 @@ Standalone inspection tools now live in `gnss_tools`.
   - prints per-frame summaries, aggregate counts, or simple JSON
 - `gnss_inspect`
   - reads mixed GNSS byte streams from a file or stdin
-  - recognizes NMEA, UBX, RTCM3, and noise spans
+  - recognizes NMEA, UBX, Unicore ASCII, RTCM3, and noise spans
   - prints a compact timeline, aggregate counts, or simple JSON
+- `gnss_replay`
+  - reads mixed GNSS byte streams from a file or stdin
+  - reuses semantic parsers and the runtime aggregator to produce normalized
+    runtime-state timelines
+  - prints per-record runtime updates, aggregate counts, or simple JSON
 
 Examples:
 
@@ -53,6 +58,11 @@ gnss_inspect file.bin
 cat file.bin | gnss_inspect -
 gnss_inspect --summary file.bin
 gnss_inspect --json file.bin
+
+gnss_replay file.bin
+cat file.bin | gnss_replay -
+gnss_replay --summary file.bin
+gnss_replay --json file.bin
 ```
 
 See [tools.md](tools.md) for the current tool-focused usage notes.

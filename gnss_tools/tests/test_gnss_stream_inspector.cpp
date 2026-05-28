@@ -99,6 +99,11 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildAsciiLine(const std::string& line)
+{
+  return std::vector<std::uint8_t>(line.begin(), line.end());
+}
+
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
 {
   destination.insert(destination.end(), source.begin(), source.end());
@@ -240,6 +245,38 @@ void TestStreamInput(TestContext& ctx)
              "stream inspection should match byte-vector inspection");
 }
 
+void TestUnicoreInspection(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes = {0x99u};
+  Append(bytes,
+         BuildAsciiLine(
+             "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+             "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+             "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+             "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+
+  const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
+  ctx.Expect(result.summary.total_items_found == 1u &&
+                 result.summary.counts_by_protocol.at("unicore") == 1u &&
+                 result.summary.counts_by_unicore_message.at("BESTNAVA") == 1u,
+             "inspection should recognize Unicore ASCII messages");
+  ctx.Expect(result.items.size() == 1u &&
+                 result.items[0].protocol == universal_gnss_protocols::ProtocolType::kUnicore &&
+                 result.items[0].identity == "BESTNAVA",
+             "inspection should expose the Unicore message identity");
+
+  const std::string text = universal_gnss_tools::FormatGnssStreamInspectionText(result);
+  const std::string json = universal_gnss_tools::FormatGnssStreamInspectionJson(result);
+  ctx.Expect(text.find("proto=unicore") != std::string::npos &&
+                 text.find("name=BESTNAVA") != std::string::npos &&
+                 text.find("unicore_messages BESTNAVA=1") != std::string::npos,
+             "text output should include Unicore timeline and counts");
+  ctx.Expect(json.find("\"protocol\":\"unicore\"") != std::string::npos &&
+                 json.find("\"unicore_message\":\"BESTNAVA\"") != std::string::npos &&
+                 json.find("\"counts_by_unicore_message\":{\"BESTNAVA\":1}") != std::string::npos,
+             "JSON output should include Unicore item and counters");
+}
+
 }  // namespace
 
 int main()
@@ -249,6 +286,7 @@ int main()
   TestMixedStreamInspection(ctx);
   TestSummaryOnlyAndFormatting(ctx);
   TestStreamInput(ctx);
+  TestUnicoreInspection(ctx);
 
   if (ctx.failures != 0)
   {

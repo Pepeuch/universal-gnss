@@ -52,6 +52,7 @@ struct GnssStreamInspectionSummary
   std::map<std::string, std::size_t> counts_by_protocol{};
   std::map<std::string, std::size_t> counts_by_nmea_sentence_type{};
   std::map<std::string, std::size_t> counts_by_ubx_message{};
+  std::map<std::string, std::size_t> counts_by_unicore_message{};
   std::map<std::uint16_t, std::size_t> counts_by_rtcm_message_type{};
   std::map<universal_gnss_protocols::RtcmConstellation, std::size_t>
       rtcm_msm_counts_by_constellation{};

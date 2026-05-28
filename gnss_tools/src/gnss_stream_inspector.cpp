@@ -15,6 +15,7 @@
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
 
@@ -28,14 +29,16 @@ using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserResult;
-using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::ProtocolType;
-using universal_gnss_protocols::RtcmConstellation;
-using universal_gnss_protocols::RtcmFrame;
-using universal_gnss_protocols::RtcmFrameFramer;
-using universal_gnss_protocols::RtcmMessageInfo;
-using universal_gnss_protocols::UbxFrame;
-using universal_gnss_protocols::UbxFrameFramer;
+    using universal_gnss_protocols::ParserStatus;
+    using universal_gnss_protocols::ProtocolType;
+    using universal_gnss_protocols::RtcmConstellation;
+    using universal_gnss_protocols::RtcmFrame;
+    using universal_gnss_protocols::RtcmFrameFramer;
+    using universal_gnss_protocols::RtcmMessageInfo;
+    using universal_gnss_protocols::UnicoreFrame;
+    using universal_gnss_protocols::UnicoreFrameFramer;
+    using universal_gnss_protocols::UbxFrame;
+    using universal_gnss_protocols::UbxFrameFramer;
 
 template <typename RecordT>
 struct ProbeResult
@@ -188,6 +191,21 @@ GnssStreamInspectionItem MakeRtcmItem(const RtcmFrame& frame,
   return item;
 }
 
+GnssStreamInspectionItem MakeUnicoreItem(const UnicoreFrame& frame,
+                                         const std::size_t byte_offset,
+                                         const std::size_t item_index)
+{
+  GnssStreamInspectionItem item;
+  item.item_index = item_index;
+  item.byte_offset = byte_offset;
+  item.length_bytes = frame.raw_bytes.size();
+  item.protocol = ProtocolType::kUnicore;
+  item.checksum_status = frame.checksum_status;
+  item.identity = frame.message_name;
+  item.classification = frame.message_name;
+  return item;
+}
+
 void AccumulateItem(const GnssStreamInspectionItem& item,
                     const bool include_items,
                     GnssStreamInspectionResult& result)
@@ -214,6 +232,11 @@ void AccumulateItem(const GnssStreamInspectionItem& item,
     ++result.summary.counts_by_ubx_message[FormatUbxMessageKey(
         item.ubx_class_id,
         item.ubx_message_id)];
+  }
+
+  if (item.protocol == ProtocolType::kUnicore && !item.identity.empty())
+  {
+    ++result.summary.counts_by_unicore_message[item.identity];
   }
 
   if (item.protocol == ProtocolType::kRtcm3)
@@ -263,6 +286,50 @@ bool ConsumeNmeaAtOffset(const std::vector<std::uint8_t>& bytes,
     ++result.summary.malformed_events;
     AddNoiseBytes(sentence.raw_bytes.size(), result.summary, in_noise_span);
     next_offset = start_offset + sentence.raw_bytes.size();
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kTruncated)
+  {
+    ++result.summary.malformed_events;
+    ++result.summary.truncated_items;
+    EndNoiseSpan(in_noise_span);
+    next_offset = bytes.size();
+    stop_scan = true;
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kInvalidData || probe.status == ParserStatus::kOverflow)
+  {
+    ++result.summary.malformed_events;
+  }
+
+  AddNoiseBytes(1u, result.summary, in_noise_span);
+  next_offset = start_offset + 1u;
+  return true;
+}
+
+bool ConsumeUnicoreAtOffset(const std::vector<std::uint8_t>& bytes,
+                            const std::size_t start_offset,
+                            const bool include_items,
+                            GnssStreamInspectionResult& result,
+                            std::size_t& next_offset,
+                            bool& stop_scan,
+                            bool& in_noise_span)
+{
+  UnicoreFrameFramer framer;
+  const ProbeResult<UnicoreFrame> probe =
+      ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, start_offset);
+
+  if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
+  {
+    EndNoiseSpan(in_noise_span);
+    const auto item = MakeUnicoreItem(
+        *probe.record,
+        start_offset,
+        result.summary.total_items_found + 1u);
+    AccumulateItem(item, include_items, result);
+    next_offset = start_offset + probe.record->raw_bytes.size();
     return true;
   }
 
@@ -492,6 +559,20 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
       continue;
     }
 
+    if (byte == '#' || byte == '%')
+    {
+      ConsumeUnicoreAtOffset(
+          bytes,
+          offset,
+          include_items,
+          result,
+          next_offset,
+          stop_scan,
+          in_noise_span);
+      offset = next_offset;
+      continue;
+    }
+
     if (byte == 0xD3u)
     {
       ConsumeRtcmAtOffset(
@@ -591,6 +672,10 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
         output << " id=" << item.identity
                << " name=" << item.ubx_message_name;
       }
+      else if (item.protocol == ProtocolType::kUnicore)
+      {
+        output << " name=" << item.identity;
+      }
       else if (item.protocol == ProtocolType::kRtcm3)
       {
         output << " type=" << item.rtcm_message_type
@@ -636,6 +721,16 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
   {
     output << "ubx_messages";
     for (const auto& entry : result.summary.counts_by_ubx_message)
+    {
+      output << ' ' << entry.first << '=' << entry.second;
+    }
+    output << '\n';
+  }
+
+  if (!result.summary.counts_by_unicore_message.empty())
+  {
+    output << "unicore_messages";
+    for (const auto& entry : result.summary.counts_by_unicore_message)
     {
       output << ' ' << entry.first << '=' << entry.second;
     }
@@ -704,6 +799,10 @@ std::string FormatGnssStreamInspectionJson(const GnssStreamInspectionResult& res
                << ",\"ubx_message_id\":" << static_cast<unsigned int>(item.ubx_message_id)
                << ",\"ubx_name\":\"" << EscapeJsonString(item.ubx_message_name) << "\"";
       }
+      else if (item.protocol == ProtocolType::kUnicore)
+      {
+        output << ",\"unicore_message\":\"" << EscapeJsonString(item.identity) << "\"";
+      }
       else if (item.protocol == ProtocolType::kRtcm3)
       {
         output << ",\"message_type\":" << item.rtcm_message_type
@@ -759,6 +858,16 @@ std::string FormatGnssStreamInspectionJson(const GnssStreamInspectionResult& res
   for (const auto& entry : result.summary.counts_by_ubx_message)
   {
     AppendJsonFieldSeparator(output, first_ubx_entry);
+    output << '"' << EscapeJsonString(entry.first) << "\":" << entry.second;
+  }
+  output << '}';
+
+  AppendJsonFieldSeparator(output, first_summary_field);
+  output << "\"counts_by_unicore_message\":{";
+  bool first_unicore_entry = true;
+  for (const auto& entry : result.summary.counts_by_unicore_message)
+  {
+    AppendJsonFieldSeparator(output, first_unicore_entry);
     output << '"' << EscapeJsonString(entry.first) << "\":" << entry.second;
   }
   output << '}';
