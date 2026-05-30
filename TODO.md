@@ -327,6 +327,26 @@ To do:
 
 ---
 
+## GUI / Web dashboard
+
+This GUI work comes before ESP32 / LoRa / RTK base gateway work.
+
+To do:
+
+- [ ] live GNSS status
+- [ ] RTK/correction status
+- [ ] satellite/CN0 view
+- [ ] receiver configuration page
+- [ ] predefined mode selection: rover, diagnostics, base
+- [ ] safe config apply buttons
+- [ ] receiver reset button
+- [ ] debug/log viewer
+- [ ] NTRIP status view
+- [ ] RTCM message rate view
+- [ ] export JSON/debug snapshot
+
+---
+
 ## ESP32 integration
 
 To do:
