@@ -154,6 +154,17 @@ use the older generator naming.
 - policy tracking through `GgaInjectionPolicy::last_sent_timestamp_ns`
 - GGA send metrics and last-error tracking
 
+`gga_injector.*` now also provides a small reusable explicit-call helper that:
+
+- evaluates `GgaInjectionPolicy`
+- decides whether injection is due at a caller-supplied timestamp
+- builds a GGA sentence through the portable sentence builder
+- writes through a generic `ByteSink`
+- updates `last_sent_timestamp_ns` only after a successful write
+
+This helper intentionally does not own any timer, thread, or autonomous loop.
+The caller still owns scheduling and decides when to call it.
+
 What it does not do yet:
 
 - schedule GGA sending automatically
@@ -300,6 +311,7 @@ Still intentionally deferred:
 - RTCM forwarding to serial or sockets
 - sourcetable handling
 - automatic periodic GGA sending
+- `NtripClient` delegation to the reusable `GgaInjector`
 - ROS 2 / GUI-driven GGA scheduling
 - ROS 2 nodes
 - ESP32-specific networking code

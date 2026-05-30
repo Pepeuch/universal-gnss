@@ -1,6 +1,7 @@
 add_library(
   universal_gnss_ntrip
   src/gga_generator.cpp
+  src/gga_injector.cpp
   src/gga_sentence_builder.cpp
   src/ntrip_request.cpp
   src/ntrip_client.cpp
@@ -82,5 +83,19 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_ntrip_test_gga_sentence_builder
     COMMAND gnss_ntrip_test_gga_sentence_builder
+  )
+
+  add_executable(
+    gnss_ntrip_test_gga_injector
+    tests/test_gga_injector.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_gga_injector
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(
+    NAME gnss_ntrip_test_gga_injector
+    COMMAND gnss_ntrip_test_gga_injector
   )
 endif()

@@ -35,6 +35,7 @@ Implemented:
 - NTRIP request/config/metrics foundation
 - Portable NMEA GGA sentence builder foundation
 - Explicit NTRIP GGA injection support
+- Explicit-call GGA injector helper
 - NTRIP reconnect/backoff policy foundation
 - TCP-backed NTRIP client foundation
 - ROS2 adapter foundation
@@ -112,6 +113,7 @@ Implemented:
 - [x] GGA injection policy model
 - [x] GGA sentence generation
 - [x] configurable GGA talker / UTC formatting
+- [x] explicit-call GGA injector helper
 - [x] metrics model
 
 To do:
