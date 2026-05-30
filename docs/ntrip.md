@@ -7,6 +7,7 @@ Today this layer is intentionally small. It provides:
 - portable NTRIP configuration types
 - request/header generation
 - basic authentication helpers
+- portable sourcetable parsing helpers
 - GGA injection policy types
 - portable GGA sentence generation
 - explicit synchronous GGA injection support
@@ -24,6 +25,7 @@ Current responsibilities:
 
 - normalize caster connection settings
 - build deterministic NTRIP GET requests
+- parse sourcetable text into portable stream / caster / network records
 - open a synchronous TCP connection through `gnss_transport`
 - validate the initial NTRIP response header
 - model whether periodic GGA injection is enabled
@@ -37,7 +39,6 @@ Current non-responsibilities:
 
 - TLS
 - reconnect loops
-- sourcetable parsing
 - RTCM forwarding
 - serial output
 - ROS 2 nodes
@@ -122,6 +123,32 @@ Current rules:
 
 This keeps request generation deterministic and testable before any network code
 exists.
+
+## Sourcetable Parser
+
+`ntrip_sourcetable.*` now provides a small portable parser for sourcetable text
+responses.
+
+Current scope:
+
+- parse `STR`, `CAS`, `NET`, and `ENDSOURCETABLE`
+- extract the common typed `STR` fields used for diagnostics and later
+  selection workflows
+- keep missing fields optional instead of forcing partial defaults
+- report malformed lines separately from valid records
+- expose helpers for:
+  - RTCM stream detection
+  - NMEA-required detection
+  - MSM capability checks
+  - mountpoint lookup
+  - filtering RTCM-capable streams
+
+Current non-goals:
+
+- live sourcetable fetch workflow
+- automatic mountpoint selection
+- GUI or ROS 2 presentation
+- ESP32-specific integration
 
 ## GGA Injection Policy
 
@@ -265,7 +292,7 @@ Current non-goals:
 
 - TLS
 - reconnect loop or background timers
-- sourcetable parsing
+- live sourcetable fetch workflow
 - chunked transfer support
 - redirects
 - automatic periodic GGA sending
@@ -288,7 +315,7 @@ Current non-goals:
 
 - TLS
 - reconnect loops
-- sourcetable parsing
+- live sourcetable fetch or discovery orchestration
 - automatic position sources
 - ROS 2 or GUI ownership
 
@@ -322,7 +349,8 @@ Still intentionally deferred:
 - reconnect loop or state machine
 - multi-caster orchestration
 - RTCM forwarding to serial or sockets
-- sourcetable handling
+- live sourcetable fetch and discovery workflows
+- automatic mountpoint selection
 - automatic periodic GGA sending
 - `NtripClient` delegation to the reusable `GgaInjector`
 - ROS 2 / GUI-driven GGA scheduling

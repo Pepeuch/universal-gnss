@@ -125,7 +125,7 @@ To do:
 - [ ] Keep TLS optional/deferred
 - [ ] Keep ROS2/ESP32 adapters separate
 - [x] TCP-backed NTRIP client
-- [ ] sourcetable support
+- [x] sourcetable support
 - [x] RTCM frame extraction from stream
 - [ ] correction age estimation
 - [ ] automatic periodic GGA sending
