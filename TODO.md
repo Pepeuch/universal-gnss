@@ -33,6 +33,7 @@ Implemented:
 - Unicore driver
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
+- TCP-backed NTRIP client foundation
 - ROS2 adapter foundation
 - Tools:
   - rtcm_inspect
@@ -109,13 +110,13 @@ Implemented:
 
 To do:
 
-- [ ] Implement NTRIP connection state
-- [ ] Feed RTCM frames into metrics
+- [x] Implement NTRIP connection state
+- [x] Feed RTCM frames into metrics
 - [ ] Keep TLS optional/deferred
 - [ ] Keep ROS2/ESP32 adapters separate
-- [ ] TCP-backed NTRIP client
+- [x] TCP-backed NTRIP client
 - [ ] sourcetable support
-- [ ] RTCM frame extraction from stream
+- [x] RTCM frame extraction from stream
 - [ ] correction age estimation
 - [ ] GGA sentence generation
 - [ ] multi-caster support

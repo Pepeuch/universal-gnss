@@ -22,11 +22,15 @@ enum class NtripClientError : std::uint8_t
 struct NtripConnectionMetrics
 {
   std::uint64_t bytes_received{0u};
+  std::uint64_t bytes_sent{0u};
+  std::uint64_t rtcm_frames_seen{0u};
   std::uint64_t rtcm_frames_received{0u};
   std::uint64_t invalid_rtcm_frames{0u};
   std::optional<std::uint16_t> last_rtcm_message_type{};
   std::optional<float> last_correction_age_s{};
   bool connected{false};
+  bool request_sent{false};
+  bool response_received{false};
   std::uint32_t reconnect_count{0u};
   NtripClientError last_error{NtripClientError::kNone};
 };
@@ -36,10 +40,16 @@ inline void NoteReceivedBytes(NtripConnectionMetrics& metrics, const std::size_t
   metrics.bytes_received += static_cast<std::uint64_t>(byte_count);
 }
 
+inline void NoteSentBytes(NtripConnectionMetrics& metrics, const std::size_t byte_count)
+{
+  metrics.bytes_sent += static_cast<std::uint64_t>(byte_count);
+}
+
 inline void NoteRtcmFrame(NtripConnectionMetrics& metrics,
                           const std::optional<std::uint16_t> message_type,
                           const bool valid_frame)
 {
+  ++metrics.rtcm_frames_seen;
   if (valid_frame)
   {
     ++metrics.rtcm_frames_received;
@@ -54,6 +64,16 @@ inline void NoteRtcmFrame(NtripConnectionMetrics& metrics,
 inline void MarkConnected(NtripConnectionMetrics& metrics)
 {
   metrics.connected = true;
+}
+
+inline void MarkRequestSent(NtripConnectionMetrics& metrics)
+{
+  metrics.request_sent = true;
+}
+
+inline void MarkResponseReceived(NtripConnectionMetrics& metrics)
+{
+  metrics.response_received = true;
 }
 
 inline void MarkDisconnected(NtripConnectionMetrics& metrics,

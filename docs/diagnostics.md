@@ -75,6 +75,14 @@ That RTCM monitor only tracks activity, message presence, and timing. It does
 not add full RTCM payload decode, LoRa policy, ROS 2 adapters, or GUI-specific
 presentation concerns.
 
+The first live network-side consumer is the TCP-backed NTRIP client in
+`gnss_ntrip`. It reuses the same RTCM correction monitor while streaming bytes
+from a caster, so:
+
+- the live client can surface portable correction health without ROS 2
+- future ROS 2, GUI, and tool adapters can map one shared health model
+- NTRIP transport logic stays separate from any future diagnostics adapter
+
 ## Deferred integrations
 
 The following remain intentionally out of scope for this layer:

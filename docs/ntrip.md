@@ -9,8 +9,7 @@ Today this layer is intentionally small. It provides:
 - basic authentication helpers
 - GGA injection policy types
 - connection and RTCM-flow metrics models
-
-It does not provide a socket client yet.
+- a first synchronous TCP-backed live client foundation
 
 ## Purpose
 
@@ -21,13 +20,17 @@ Current responsibilities:
 
 - normalize caster connection settings
 - build deterministic NTRIP GET requests
+- open a synchronous TCP connection through `gnss_transport`
+- validate the initial NTRIP response header
 - model whether periodic GGA injection is enabled
 - track correction-stream metrics independently from ROS 2 or any network stack
+- feed incoming correction bytes into the existing RTCM framer and correction monitor
 
 Current non-responsibilities:
 
-- concrete gnss_transport socket adapters
+- TLS
 - reconnect loops
+- sourcetable parsing
 - RTCM forwarding
 - serial output
 - ROS 2 nodes
@@ -42,18 +45,20 @@ NtripConfig
    ->
 BuildNtripGetRequest(...)
    ->
-future gnss_transport adapter
+TcpClientTransport
+   ->
+NtripClient
    ->
 incoming RTCM byte stream
    ->
 gnss_protocols RTCM framer + parser helpers
    ->
-NtripConnectionMetrics updates
+RtcmCorrectionMonitor + NtripConnectionMetrics updates
    ->
 future ROS 2 / ESP32 / tools integrations
 ```
 
-`gnss_ntrip` stays above raw protocol framing and below application-specific
+`gnss_ntrip` stays above raw socket mechanics and below application-specific
 runtime orchestration.
 
 ## Configuration Model
@@ -137,6 +142,10 @@ transport stack.
 `NtripConnectionMetrics` currently tracks:
 
 - total bytes received
+- total bytes sent
+- request-sent flag
+- response-received flag
+- total RTCM frames seen
 - valid RTCM frames received
 - invalid RTCM frames
 - last RTCM message type
@@ -152,6 +161,39 @@ The current model is compatible with the existing RTCM parser/tooling:
 - future NTRIP clients can update these same counters while feeding the RTCM
   stream into runtime or tool adapters
 
+## Live TCP Client
+
+`ntrip_client.*` provides the first live NTRIP client layer in the project.
+
+Current state model:
+
+- `kDisconnected`
+- `kConnecting`
+- `kConnected`
+- `kStreaming`
+- `kFailed`
+
+Current behavior:
+
+- connect through `TcpClientTransport`
+- build and send one NTRIP GET request with `BuildNtripGetRequest(...)`
+- accept `ICY 200 OK`, `HTTP/1.0 200`, and `HTTP/1.1 200`
+- reject non-200 responses as HTTP failures
+- reject malformed response headers as protocol failures
+- strip the HTTP/NTRIP response header from streamed output
+- feed streamed payload bytes into `RtcmFrameFramer` and `RtcmCorrectionMonitor`
+- expose portable correction health through the existing diagnostics model
+
+Current non-goals:
+
+- TLS
+- reconnect or backoff
+- sourcetable parsing
+- chunked transfer support
+- redirects
+- automatic GGA sentence generation
+- multi-caster orchestration
+
 ## Future Uses
 
 This foundation is intended to support later:
@@ -166,7 +208,6 @@ This foundation is intended to support later:
 
 Still intentionally deferred:
 
-- TCP socket client
 - TLS
 - reconnect state machine
 - multi-caster orchestration

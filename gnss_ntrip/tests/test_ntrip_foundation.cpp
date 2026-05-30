@@ -147,15 +147,22 @@ void TestMetricsModel(TestContext& ctx)
 {
   universal_gnss_ntrip::NtripConnectionMetrics metrics;
   ctx.Expect(metrics.bytes_received == 0u &&
+                 metrics.bytes_sent == 0u &&
+                 metrics.rtcm_frames_seen == 0u &&
                  metrics.rtcm_frames_received == 0u &&
                  metrics.invalid_rtcm_frames == 0u &&
                  !metrics.connected &&
+                 !metrics.request_sent &&
+                 !metrics.response_received &&
                  metrics.reconnect_count == 0u &&
                  metrics.last_error == universal_gnss_ntrip::NtripClientError::kNone,
              "default metrics should start empty and disconnected");
 
   universal_gnss_ntrip::MarkConnected(metrics);
   universal_gnss_ntrip::NoteReceivedBytes(metrics, 120u);
+  universal_gnss_ntrip::NoteSentBytes(metrics, 64u);
+  universal_gnss_ntrip::MarkRequestSent(metrics);
+  universal_gnss_ntrip::MarkResponseReceived(metrics);
   universal_gnss_ntrip::NoteRtcmFrame(metrics, 1005u, true);
   universal_gnss_ntrip::NoteRtcmFrame(metrics, std::nullopt, false);
   universal_gnss_ntrip::NoteReconnect(metrics);
@@ -164,10 +171,14 @@ void TestMetricsModel(TestContext& ctx)
       universal_gnss_ntrip::NtripClientError::kTimeout);
 
   ctx.Expect(metrics.bytes_received == 120u &&
+                 metrics.bytes_sent == 64u &&
+                 metrics.rtcm_frames_seen == 2u &&
                  metrics.rtcm_frames_received == 1u &&
                  metrics.invalid_rtcm_frames == 1u &&
-                 metrics.last_rtcm_message_type == 1005u,
-             "metrics helpers should track received bytes and RTCM frame counts");
+                 metrics.last_rtcm_message_type == 1005u &&
+                 metrics.request_sent &&
+                 metrics.response_received,
+             "metrics helpers should track request/response state and RTCM frame counts");
   ctx.Expect(!metrics.connected &&
                  metrics.reconnect_count == 1u &&
                  metrics.last_error == universal_gnss_ntrip::NtripClientError::kTimeout,

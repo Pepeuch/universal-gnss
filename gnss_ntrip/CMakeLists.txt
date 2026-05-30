@@ -1,6 +1,7 @@
 add_library(
   universal_gnss_ntrip
   src/ntrip_request.cpp
+  src/ntrip_client.cpp
 )
 
 target_include_directories(
@@ -10,6 +11,13 @@ target_include_directories(
 )
 
 target_compile_features(universal_gnss_ntrip PUBLIC cxx_std_17)
+
+target_link_libraries(
+  universal_gnss_ntrip
+  PUBLIC
+    universal_gnss_protocols
+    universal_gnss_transport
+)
 
 if(BUILD_TESTING)
   add_executable(
@@ -22,4 +30,15 @@ if(BUILD_TESTING)
       universal_gnss_ntrip
   )
   add_test(NAME gnss_ntrip_test_foundation COMMAND gnss_ntrip_test_foundation)
+
+  add_executable(
+    gnss_ntrip_test_ntrip_client
+    tests/test_ntrip_client.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_ntrip_client
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(NAME gnss_ntrip_test_ntrip_client COMMAND gnss_ntrip_test_ntrip_client)
 endif()
