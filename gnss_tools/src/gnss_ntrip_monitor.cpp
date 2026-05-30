@@ -475,7 +475,7 @@ int main(int argc, char** argv)
       }
       else if (options.gga_interval_s.has_value())
       {
-        const auto gga_result = client.MaybeSendGga(*runtime_state, MonotonicNowNs());
+        const auto gga_result = client.MaybeInjectGga(*runtime_state, MonotonicNowNs());
         if (gga_result.status == NtripGgaSendStatus::kError)
         {
           stop_reason = NtripMonitorStopReason::kGgaSendFailed;
