@@ -16,4 +16,8 @@ if(BUILD_TESTING)
   add_executable(gnss_core_test_runtime_aggregator tests/test_runtime_aggregator.cpp)
   target_link_libraries(gnss_core_test_runtime_aggregator PRIVATE universal_gnss_core)
   add_test(NAME gnss_core_test_runtime_aggregator COMMAND gnss_core_test_runtime_aggregator)
+
+  add_executable(gnss_core_test_diagnostics tests/test_diagnostics.cpp)
+  target_link_libraries(gnss_core_test_diagnostics PRIVATE universal_gnss_core)
+  add_test(NAME gnss_core_test_diagnostics COMMAND gnss_core_test_diagnostics)
 endif()

@@ -7,6 +7,8 @@ Implemented:
 - Portable GNSS runtime core
 - Runtime capability/value flags
 - Runtime aggregation layer
+- Portable diagnostics/event model
+- Portable health summary foundation
 - NMEA parser: GGA, RMC, GSA, GSV
 - UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF
 - Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
@@ -41,38 +43,26 @@ Implemented:
 
 ---
 
-## Short-term priorities
+## Immediate priorities
 
-### 1. Generic receiver session router
+### Common runtime diagnostics
 
-- [x] Add generic `ReceiverSession`
-- [x] Route to `UbloxSession`
-- [x] Route to `UnicoreSession`
-- [x] Expose unified runtime state
-- [x] Expose generic session metrics
-- [x] Add portable `ReceiverSessionRunner`
-- [ ] Prepare future auto-detection
-- [x] Define portable receiver command/config profile model
-- [x] Add portable receiver command dispatcher
-- [x] Add portable receiver command transaction/response model
-- [x] Add portable receiver command transaction engine foundation
-- [x] Add portable receiver config application foundation
-- [x] Add u-blox response router foundation
-- [x] Add Unicore response router foundation
-- [x] Add receiver driver abstraction
-- [x] Add u-blox driver
-- [x] Add Unicore driver
+To do:
 
-### 2. Runtime diagnostics model
-
-- [ ] Define portable diagnostics/event model
-- [ ] Add severity levels
-- [ ] Add session health summary
-- [ ] Add parser health counters
-- [ ] Add correction stream health
+- [x] Define portable diagnostics/event model
+- [x] Add severity levels
 - [ ] Keep ROS2 diagnostics as adapter-only
 
-### 3. RTCM correction monitor
+### RTCM correction monitor
+
+Implemented:
+
+- [x] framing
+- [x] CRC24Q
+- [x] message type extraction
+- [x] MSM constellation classification
+
+To do:
 
 - [ ] Track RTCM frame rate
 - [ ] Track message type rates
@@ -80,19 +70,80 @@ Implemented:
 - [ ] Track base position messages 1005/1006
 - [ ] Track MSM constellation availability
 - [ ] Prepare LoRa filtering policy
+- [ ] message rate monitor
+- [ ] basic 1005/1006 base position decode
+- [ ] 1230 GLONASS bias decode
+- [ ] MSM signal/satellite summary
+- [ ] LoRa filtering policy
+- [ ] RTCM relay helpers
 
-### 4. NTRIP live client
+### Transport TCP/UDP basics
+
+Implemented:
+
+- [x] ByteSource / ByteSink / ByteDuplex
+- [x] Memory transport
+- [x] Ring buffer
+- [x] transport metrics
+
+To do:
 
 - [ ] Add portable TCP abstraction or adapter
+- [ ] POSIX serial transport
+- [ ] TCP client transport
+- [ ] UDP transport
+- [ ] TLS adapter
+
+### NTRIP live client
+
+Implemented:
+
+- [x] NTRIP config model
+- [x] request builder
+- [x] Basic Auth
+- [x] GGA injection policy model
+- [x] metrics model
+
+To do:
+
 - [ ] Implement NTRIP connection state
-- [ ] Implement reconnect/backoff loop
 - [ ] Feed RTCM frames into metrics
 - [ ] Keep TLS optional/deferred
 - [ ] Keep ROS2/ESP32 adapters separate
+- [ ] TCP-backed NTRIP client
+- [ ] sourcetable support
+- [ ] RTCM frame extraction from stream
+- [ ] correction age estimation
+- [ ] GGA sentence generation
+- [ ] multi-caster support
+- [ ] local caster / base mode support
+
+### Session lifecycle/reconnect
+
+To do:
+
+- [ ] Prepare future auto-detection
+- [ ] Session auto-detection
+- [ ] transport binding
+- [ ] Implement reconnect/backoff loop
+- [ ] reconnect/backoff
+- [ ] reconnect/session lifecycle
+- [ ] reconnect policies
+- [ ] timeout policies
+
+### Health monitoring
+
+To do:
+
+- [x] Add session health summary
+- [ ] Add parser health counters
+- [ ] Add correction stream health
+- [ ] RTCM health monitor
+- [ ] health monitoring
 
 ---
 
-## Protocol roadmap
+## Finish existing receiver families
 
 ### NMEA
 
@@ -112,7 +163,7 @@ To do:
 - [ ] multi-sentence GSV aggregation
 - [ ] persistent satellite tracking
 
-### UBX
+### u-blox
 
 Implemented:
 
@@ -132,7 +183,6 @@ To do:
 - [ ] MON-SPAN
 - [ ] RXM-RTCM
 - [ ] survey-in support
-- [ ] live configuration transactions
 
 ### Unicore
 
@@ -152,54 +202,13 @@ To do:
 - [ ] BESTSATA if useful
 - [ ] RF/jamming messages
 - [ ] hardware status messages
-- [ ] live receiver configuration transactions
 - [ ] raw observation support
-
-### RTCM3
-
-Implemented:
-
-- [x] framing
-- [x] CRC24Q
-- [x] message type extraction
-- [x] MSM constellation classification
-
-To do:
-
-- [ ] message rate monitor
-- [ ] RTCM health monitor
-- [ ] basic 1005/1006 base position decode
-- [ ] 1230 GLONASS bias decode
-- [ ] MSM signal/satellite summary
-- [ ] LoRa filtering policy
-- [ ] RTCM relay helpers
-
-### Quectel
-
-To do:
-
-- [ ] Audit local Quectel docs
-- [ ] Add PQTM/PAIR framing
-- [ ] Add basic fix/status parser
-- [ ] Add RTK status mapping
-- [ ] Add jamming/interference mapping if documented
-- [ ] Add receiver profile
-- [ ] Add session foundation
-
-### Septentrio
-
-To do:
-
-- [ ] Audit SBF protocol docs
-- [ ] Add SBF framing
-- [ ] Add PVT/status parser
-- [ ] Add satellite/RF parser
-- [ ] Add receiver profile
-- [ ] Add session foundation
 
 ---
 
-## Driver roadmap
+## Driver/config completion
+
+### Session/router foundation
 
 Implemented:
 
@@ -213,76 +222,65 @@ Implemented:
 - [x] Receiver driver abstraction
 - [x] u-blox driver
 - [x] Unicore driver
+- [x] Add generic `ReceiverSession`
+- [x] Route to `UbloxSession`
+- [x] Route to `UnicoreSession`
+- [x] Expose unified runtime state
+- [x] Expose generic session metrics
+- [x] Add portable `ReceiverSessionRunner`
+- [x] Add receiver driver abstraction
+- [x] Add u-blox driver
+- [x] Add Unicore driver
+
+### u-blox live transaction integration
+
+Implemented:
+
+- [x] u-blox config profile builder
+- [x] u-blox ACK/NAK parser + response mapper
+- [x] u-blox response router
+- [x] Add u-blox response router foundation
 
 To do:
 
-- [ ] Session auto-detection
+- [ ] live configuration transactions
+- [ ] u-blox live transaction integration
+
+### Unicore live transaction integration
+
+Implemented:
+
+- [x] Unicore config profile builder
+- [x] Unicore response router foundation
+- [x] Add Unicore response router foundation
+
+To do:
+
+- [ ] live receiver configuration transactions
+- [ ] Unicore response/transaction engine
+
+### Command/profile application hardening
+
+Implemented:
+
 - [x] Receiver config command model
 - [x] Receiver command dispatcher
 - [x] Receiver command transaction/response model
 - [x] Receiver command transaction engine foundation
 - [x] Receiver config application foundation
-- [x] u-blox config profile builder
-- [x] u-blox ACK/NAK parser + response mapper
-- [x] u-blox response router
-- [x] Unicore response router foundation
-- [ ] u-blox live transaction integration
-- [x] Unicore config profile builder
-- [ ] Unicore response/transaction engine
-- [ ] Quectel config engine
-- [ ] transport binding
-- [ ] reconnect/session lifecycle
-- [ ] health monitoring
+- [x] Define portable receiver command/config profile model
+- [x] Add portable receiver command dispatcher
+- [x] Add portable receiver command transaction/response model
+- [x] Add portable receiver command transaction engine foundation
+- [x] Add portable receiver config application foundation
+
+To do:
+
 - [ ] runtime arbitration
 
 ---
 
-## Transport roadmap
-
-Implemented:
-
-- [x] ByteSource / ByteSink / ByteDuplex
-- [x] Memory transport
-- [x] Ring buffer
-- [x] transport metrics
-
-To do:
-
-- [ ] POSIX serial transport
-- [ ] TCP client transport
-- [ ] UDP transport
-- [ ] TLS adapter
-- [ ] ESP32 UART adapter
-- [ ] ESP32 WiFi/Ethernet adapter
-- [ ] reconnect policies
-- [ ] timeout policies
-
----
-
-## NTRIP roadmap
-
-Implemented:
-
-- [x] NTRIP config model
-- [x] request builder
-- [x] Basic Auth
-- [x] GGA injection policy model
-- [x] metrics model
-
-To do:
-
-- [ ] TCP-backed NTRIP client
-- [ ] reconnect/backoff
-- [ ] sourcetable support
-- [ ] RTCM frame extraction from stream
-- [ ] correction age estimation
-- [ ] GGA sentence generation
-- [ ] multi-caster support
-- [ ] local caster / base mode support
-
----
-
-## Tools roadmap
+## Tools stabilization
 
 Implemented:
 
@@ -308,7 +306,7 @@ To do:
 
 ---
 
-## ROS2 roadmap
+## ROS2 integration
 
 Implemented:
 
@@ -329,7 +327,7 @@ To do:
 
 ---
 
-## ESP32 roadmap
+## ESP32 integration
 
 To do:
 
@@ -342,10 +340,40 @@ To do:
 - [ ] WebUI metrics
 - [ ] MQTT status export
 - [ ] RTK base gateway mode
+- [ ] ESP32 UART adapter
+- [ ] ESP32 WiFi/Ethernet adapter
 
 ---
 
-## Documentation roadmap
+## Future vendors
+
+### Quectel
+
+To do:
+
+- [ ] Audit local Quectel docs
+- [ ] Add PQTM/PAIR framing
+- [ ] Add basic fix/status parser
+- [ ] Add RTK status mapping
+- [ ] Add jamming/interference mapping if documented
+- [ ] Add receiver profile
+- [ ] Add session foundation
+- [ ] Quectel config engine
+
+### Septentrio
+
+To do:
+
+- [ ] Audit SBF protocol docs
+- [ ] Add SBF framing
+- [ ] Add PVT/status parser
+- [ ] Add satellite/RF parser
+- [ ] Add receiver profile
+- [ ] Add session foundation
+
+---
+
+## Documentation
 
 Implemented:
 
@@ -372,7 +400,7 @@ To do:
 
 ---
 
-## Quality / CI roadmap
+## CI / quality
 
 Implemented:
 
