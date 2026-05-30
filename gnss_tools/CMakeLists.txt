@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_tools
+  src/config_apply.cpp
   src/config_plan.cpp
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
@@ -79,6 +80,17 @@ target_link_libraries(
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(
+    gnss_config_apply
+    src/gnss_config_apply.cpp
+  )
+  target_link_libraries(
+    gnss_config_apply
+    PRIVATE
+      universal_gnss_tools
+      universal_gnss_transport
+  )
+
   add_executable(
     gnss_serial_monitor
     src/gnss_serial_monitor.cpp
@@ -173,4 +185,18 @@ if(BUILD_TESTING)
       universal_gnss_tools
   )
   add_test(NAME gnss_tools_test_config_plan COMMAND gnss_tools_test_config_plan)
+
+  add_executable(
+    gnss_tools_test_config_apply
+    tests/test_config_apply.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_config_apply
+    PRIVATE
+      universal_gnss_tools
+      universal_gnss_driver
+      universal_gnss_protocols
+      universal_gnss_transport
+  )
+  add_test(NAME gnss_tools_test_config_apply COMMAND gnss_tools_test_config_apply)
 endif()

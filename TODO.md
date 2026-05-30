@@ -32,6 +32,7 @@ Implemented:
   - gnss_replay
   - gnss_profile_preview
   - gnss_config_plan
+  - gnss_config_apply
 - Synthetic/sanitized testdata corpus
 - Portable CMake/CTest workflow
 
@@ -281,6 +282,7 @@ Implemented:
 - [x] gnss_replay
 - [x] gnss_profile_preview
 - [x] gnss_config_plan
+- [x] gnss_config_apply
 - [x] testdata corpus
 
 To do:

@@ -236,6 +236,67 @@ JSON output includes:
 - a `summary` object
 - an ordered `commands` array
 
+### `gnss_config_apply`
+
+`gnss_config_apply` is the first guarded live receiver-config CLI.
+
+It reuses:
+
+- the offline config-plan/profile-builder path
+- `ReceiverConfigApplication`
+- `ReceiverCommandTransactionEngine`
+- `PosixSerialTransport`
+- the existing u-blox and Unicore response routers
+
+Current behavior:
+
+- defaults to dry-run mode and never touches serial unless `--execute` is set
+- requires `--confirm-runtime` before sending runtime-only command plans
+- requires `--confirm-persistent` before sending persistent command plans
+- executes one command at a time over a Linux serial port
+- waits synchronously for one matching response at a time
+- supports a simple per-command `--timeout-ms` loop without threads
+- stops on the first rejected command, dispatch failure, read failure, or timeout
+
+Current scope:
+
+- `ublox` profiles: `rover`, `diagnostics`, `base`
+- `unicore` profiles: `rover`, `diagnostics`
+- Linux POSIX serial only
+
+Current non-goals:
+
+- daemon mode
+- ROS 2 services
+- NTRIP integration
+- background retry scheduling
+- interactive prompts
+- factory-reset profile execution
+
+Examples:
+
+```text
+gnss_config_apply ublox rover --port /dev/ttyACM0 --baud 921600
+gnss_config_apply ublox rover --port /dev/ttyACM0 --baud 921600 --execute --confirm-runtime
+gnss_config_apply unicore diagnostics --port /dev/ttyUSB0 --baud 921600 --execute --confirm-runtime
+gnss_config_apply ublox rover --persistent --port /dev/ttyACM0 --baud 921600 --execute --confirm-persistent
+```
+
+Text output includes:
+
+- dry-run vs execute-requested status
+- runtime/persistent confirmation requirements
+- the command sequence to be applied
+- command progress and the final execution summary
+
+JSON output includes:
+
+- profile metadata
+- safety status
+- the planned command sequence
+- progress messages
+- a final execution summary
+
 ### `gnss_serial_monitor`
 
 `gnss_serial_monitor` is the first live hardware-facing CLI.
@@ -287,6 +348,8 @@ The tools stay compact on purpose.
 - `gnss_serial_monitor` prints compact live updates instead of a file timeline
 - `gnss_profile_preview` is preview-only and never touches receiver I/O
 - `gnss_config_plan` is dry-run only and never performs command dispatch
+- `gnss_config_apply` is guarded and remains dry-run unless `--execute` plus the
+  required confirmation flags are present
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
 - most tools are currently offline and file/stdin oriented only
@@ -301,6 +364,7 @@ Still intentionally deferred:
 - live playback timing
 - live config execution CLIs
 - a real `gnss_config_plan --execute` path
+- background config daemons
 - ROS 2 bag or topic output
 - RTCM payload semantic decode
 - MSM satellite/signal views
