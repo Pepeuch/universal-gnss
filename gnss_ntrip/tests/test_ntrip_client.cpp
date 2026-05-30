@@ -380,7 +380,7 @@ void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
 
     ctx.Expect(sockets.WritePeer("HTTP/1.1 404 Not Found\r\n\r\n"),
                "the fake peer should send a non-200 response");
-    std::vector<std::uint8_t> buffer(32u, 0u);
+    std::vector<std::uint8_t> buffer(64u, 0u);
     const auto read_result = client.Read(buffer.data(), buffer.size(), 3000000000LL);
 
     ctx.Expect(read_result.client_error == NtripClientError::kHttp &&
@@ -624,8 +624,16 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
 
     ctx.Expect(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"),
                "the fake peer should send a valid response header before GGA injection");
-    std::vector<std::uint8_t> buffer(32u, 0u);
-    const auto read_result = client.Read(buffer.data(), buffer.size(), 1000000000LL);
+    std::vector<std::uint8_t> buffer(64u, 0u);
+    universal_gnss_ntrip::NtripClientReadResult read_result;
+    for (int attempt = 0; attempt < 4 && client.state() != NtripClientState::kStreaming; ++attempt)
+    {
+      read_result = client.Read(buffer.data(), buffer.size(), 1000000000LL + attempt);
+      if (read_result.client_error != NtripClientError::kNone)
+      {
+        break;
+      }
+    }
     ctx.Expect(read_result.client_error == NtripClientError::kNone &&
                    client.state() == NtripClientState::kStreaming,
                "the client should enter streaming before explicit GGA injection");

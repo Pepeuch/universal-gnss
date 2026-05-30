@@ -191,7 +191,10 @@ Current policy behavior:
 - enable or disable reconnect scheduling
 - schedule the first retry after `initial_delay_ms`
 - apply deterministic exponential backoff with `multiplier`
+- expose `NextDelay(...)` so callers can inspect the next deterministic delay without starting a loop
 - cap the retry delay at `max_delay_ms`
+- carry an `exhausted` flag in reconnect state once `max_attempts` has been reached
+- keep `jitter_enabled` in the policy model, but leave jitter disabled and deterministic for now
 - optionally stop scheduling after `max_attempts`
 - optionally reset backoff state after a successful connect
 
@@ -203,6 +206,10 @@ What this does not do yet:
 
 That split is intentional so the same policy can be reused later by CLI tools,
 ROS 2 nodes, ESP32 targets, and dashboard integrations.
+
+`NtripClient` already exposes `reconnect_state()` and updates it on retry-worthy
+failures and successful connections, but it still leaves all actual retry timing
+and `Connect()` calls to the outer application.
 
 ## Metrics Model
 

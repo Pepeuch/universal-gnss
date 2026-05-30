@@ -76,6 +76,7 @@ NtripReconnectDecision BuildDecision(const NtripReconnectPolicy& policy,
       policy.ShouldReconnect(state, now_timestamp_ns),
       state.attempt_count,
       state.current_delay_ms,
+      state.exhausted,
       state.next_attempt_time_ns};
 }
 
@@ -92,14 +93,25 @@ NtripReconnectDecision NtripReconnectPolicy::OnFailure(
 {
   state.last_failure_time_ns = now_timestamp_ns;
 
-  if (!enabled || !CanAttempt(state))
+  if (!enabled)
   {
+    state.exhausted = false;
     state.next_attempt_time_ns.reset();
     return BuildDecision(*this, state, false, now_timestamp_ns);
   }
 
-  state.current_delay_ms = ComputeNextDelayMs(*this, state);
+  if (!CanAttempt(state))
+  {
+    state.exhausted =
+        max_attempts.has_value() && state.attempt_count >= *max_attempts;
+    state.next_attempt_time_ns.reset();
+    return BuildDecision(*this, state, false, now_timestamp_ns);
+  }
+
+  state.current_delay_ms = NextDelay(state);
   ++state.attempt_count;
+  state.exhausted =
+      max_attempts.has_value() && state.attempt_count >= *max_attempts;
   state.next_attempt_time_ns = ComputeNextAttemptTimeNs(now_timestamp_ns, state.current_delay_ms);
   return BuildDecision(*this, state, true, now_timestamp_ns);
 }
@@ -115,6 +127,7 @@ void NtripReconnectPolicy::OnSuccess(NtripReconnectState& state,
   }
 
   state.last_success_time_ns = now_timestamp_ns;
+  state.exhausted = false;
   state.next_attempt_time_ns.reset();
 }
 
@@ -130,7 +143,13 @@ bool NtripReconnectPolicy::ShouldReconnect(
 bool NtripReconnectPolicy::CanAttempt(const NtripReconnectState& state) const
 {
   return enabled &&
+         !state.exhausted &&
          (!max_attempts.has_value() || state.attempt_count < *max_attempts);
+}
+
+std::uint32_t NtripReconnectPolicy::NextDelay(const NtripReconnectState& state) const
+{
+  return ComputeNextDelayMs(*this, state);
 }
 
 }  // namespace universal_gnss_ntrip

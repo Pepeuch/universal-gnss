@@ -399,7 +399,27 @@ NtripGgaSendResult NtripClient::MaybeSendGga(const universal_gnss::GnssRuntimeSt
                                   metrics_.last_error);
   }
 
-  return RunGgaInjector(state, now_timestamp_ns);
+  if (gga_injection_policy_.source_position_requirement ==
+          GgaSourcePositionRequirement::kRequirePositionFix &&
+      !state.fix_valid)
+  {
+    return NtripGgaSendResult{
+        NtripGgaSendStatus::kSkippedPositionRequired,
+        NtripClientError::kNone,
+        std::nullopt,
+        std::nullopt};
+  }
+
+  if (!ShouldInjectGga(gga_injection_policy_, state.fix_valid, now_timestamp_ns))
+  {
+    return NtripGgaSendResult{
+        NtripGgaSendStatus::kSkippedInterval,
+        NtripClientError::kNone,
+        std::nullopt,
+        std::nullopt};
+  }
+
+  return SendGga(state, now_timestamp_ns);
 }
 
 NtripGgaSendResult NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,

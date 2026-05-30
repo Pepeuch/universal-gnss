@@ -120,7 +120,7 @@ Implemented:
 To do:
 
 - [x] Implement NTRIP connection state
-- [x] reconnect/backoff policy model
+- [x] reconnect/backoff policy/state model
 - [x] Feed RTCM frames into metrics
 - [ ] Keep TLS optional/deferred
 - [ ] Keep ROS2/ESP32 adapters separate

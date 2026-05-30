@@ -50,7 +50,8 @@ void TestFirstFailureSchedulesInitialDelay(TestContext& ctx)
              "the first reconnect failure should schedule a retry");
   ctx.Expect(decision.attempt_count == 1u &&
                  state.attempt_count == 1u &&
-                 state.current_delay_ms == 1000u,
+                 state.current_delay_ms == 1000u &&
+                 !state.exhausted,
              "the first scheduled retry should use the initial reconnect delay");
   ctx.Expect(state.last_failure_time_ns == 1000000000LL &&
                  state.next_attempt_time_ns == 2000000000LL,
@@ -68,10 +69,14 @@ void TestExponentialBackoffAndMaxDelay(TestContext& ctx)
   policy.multiplier = 3.0;
 
   universal_gnss_ntrip::NtripReconnectState state;
+  ctx.Expect(policy.NextDelay(state) == 100u,
+             "NextDelay should return the initial delay before any reconnect failures");
   policy.OnFailure(state, 0LL);
   ctx.Expect(state.current_delay_ms == 100u,
              "the first reconnect delay should use the configured initial delay");
 
+  ctx.Expect(policy.NextDelay(state) == 250u,
+             "NextDelay should apply the configured multiplier and delay cap");
   policy.OnFailure(state, 100000000LL);
   ctx.Expect(state.current_delay_ms == 250u,
              "the second reconnect delay should grow and respect the configured cap");
@@ -99,6 +104,7 @@ void TestMaxAttemptsStopsScheduling(TestContext& ctx)
   ctx.Expect(!third.scheduled &&
                  !third.can_attempt &&
                  state.attempt_count == 2u &&
+                 state.exhausted &&
                  !state.next_attempt_time_ns.has_value(),
              "max_attempts should stop scheduling additional reconnect retries");
 }
@@ -159,8 +165,25 @@ void TestDisabledPolicyNeverReconnects(TestContext& ctx)
                  !policy.ShouldReconnect(state, 2000000000LL),
              "disabled reconnect policies should never schedule automatic retries");
   ctx.Expect(state.attempt_count == 0u &&
+                 !state.exhausted &&
                  !state.next_attempt_time_ns.has_value(),
              "disabled reconnect policies should leave the reconnect schedule empty");
+}
+
+void TestJitterFlagIsDeterministicForNow(TestContext& ctx)
+{
+  universal_gnss_ntrip::NtripReconnectPolicy policy;
+  policy.initial_delay_ms = 200u;
+  policy.max_delay_ms = 1000u;
+  policy.multiplier = 2.0;
+  policy.jitter_enabled = true;
+
+  universal_gnss_ntrip::NtripReconnectState state;
+  const auto first = policy.OnFailure(state, 1000000000LL);
+  const auto second_delay = policy.NextDelay(state);
+
+  ctx.Expect(first.current_delay_ms == 200u && second_delay == 400u,
+             "jitter_enabled should remain deterministic and leave delay math unchanged for now");
 }
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
@@ -316,7 +339,8 @@ void TestNtripClientReconnectStateOnFailure(TestContext& ctx)
              "invalid NTRIP responses should fail the client");
   ctx.Expect(client.metrics().reconnect_count == 1u &&
                  reconnect_state.attempt_count == 1u &&
-                 reconnect_state.current_delay_ms == 1000u,
+                 reconnect_state.current_delay_ms == 1000u &&
+                 !reconnect_state.exhausted,
              "retry-worthy client failures should increment reconnect metrics and record the first delay");
   ctx.Expect(reconnect_state.last_failure_time_ns == 3000000000LL &&
                  reconnect_state.next_attempt_time_ns == 4000000000LL,
@@ -337,6 +361,7 @@ int main()
   TestSuccessResetBehavior(ctx);
   TestSuccessKeepsStateWhenResetDisabled(ctx);
   TestDisabledPolicyNeverReconnects(ctx);
+  TestJitterFlagIsDeterministicForNow(ctx);
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
   TestNtripClientReconnectStateOnFailure(ctx);
