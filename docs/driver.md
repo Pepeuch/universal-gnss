@@ -82,6 +82,10 @@ output.
 - survey-in
 - base mode
 - rover mode
+- constellation configuration
+- CFG-VALSET configuration
+- signal-group configuration
+- ASCII command configuration
 
 These are receiver-level claims, not protocol parser claims.
 
@@ -481,6 +485,56 @@ They are not yet:
 - live config transactions
 - guarantees that every profile maps to one vendor command
 
+### Receiver driver abstraction
+
+`receiver_driver.*` adds the first portable high-level receiver-driver
+interface above vendor sessions and profile builders.
+
+Current role:
+
+- expose receiver vendor and family identity
+- expose receiver capabilities and supported config profiles
+- expose current normalized runtime state
+- accept byte/string input and forward it into the wrapped vendor session
+- build prepared `ReceiverCommand` sequences for supported high-level profiles
+
+Current concrete drivers:
+
+- `UbloxDriver`
+- `UnicoreDriver`
+
+Current policy:
+
+- one driver instance wraps one vendor-session implementation
+- the driver owns no serial port or transport lifecycle
+- the driver does not auto-detect hardware or reconnect
+- the driver does not execute config commands by itself
+- profile generation remains offline and returns prepared command lists only
+
+Current vendor coverage:
+
+- `UbloxDriver`
+  - family: `F9/F10`
+  - profiles: rover, diagnostics, base
+  - runtime state: delegated to `UbloxSession`
+  - capabilities: RTK, RF monitoring, constellation configuration,
+    CFG-VALSET, base mode, rover mode, PPS
+- `UnicoreDriver`
+  - family: `UM98x`
+  - profiles: rover, diagnostics
+  - runtime state: delegated to `UnicoreSession`
+  - capabilities: RTK, heading, dual antenna, signal-group configuration,
+    ASCII command configuration, rover mode, PPS
+
+Still deferred:
+
+- receiver discovery
+- live transport ownership
+- auto-connect lifecycle
+- command execution ownership
+- ROS 2 integration
+- NTRIP integration
+
 ### Stream detection
 
 `stream_detector.*` provides lightweight byte-stream classification into likely
@@ -716,11 +770,12 @@ streams:
 
 The following driver-layer work is intentionally deferred:
 
-- receiver config commands
-- UBX `CFG-*`
-- ACK / NAK handling
+- receiver discovery
+- live transport ownership
+- command execution ownership inside drivers
+- live config transactions
+- multi-command scheduling
 - Quectel config messages
-- Unicore config messages
 - binary `N4` Unicore session routing
 - auto-detection state machines
 - correction injection paths

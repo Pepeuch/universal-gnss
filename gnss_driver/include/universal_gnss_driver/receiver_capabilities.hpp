@@ -20,6 +20,10 @@ enum class ReceiverFeature : ReceiverFeatureFlags
   kSurveyIn = 1u << 5,
   kBaseMode = 1u << 6,
   kRoverMode = 1u << 7,
+  kConstellationConfig = 1u << 8,
+  kCfgValset = 1u << 9,
+  kSignalGroups = 1u << 10,
+  kAsciiCommandConfig = 1u << 11,
 };
 
 static_assert(

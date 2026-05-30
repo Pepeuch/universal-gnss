@@ -1,0 +1,269 @@
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "universal_gnss/gnss_types.hpp"
+#include "universal_gnss_driver/receiver_capabilities.hpp"
+#include "universal_gnss_driver/receiver_driver.hpp"
+#include "universal_gnss_driver/ublox_driver.hpp"
+#include "universal_gnss_driver/unicore_driver.hpp"
+#include "universal_gnss_protocols/ubx_checksum.hpp"
+
+namespace
+{
+
+using universal_gnss::GnssFixType;
+using universal_gnss::GnssRtkMode;
+using universal_gnss_driver::ReceiverCommandSafetyLevel;
+using universal_gnss_driver::ReceiverConfigProfileKind;
+using universal_gnss_driver::ReceiverDriver;
+using universal_gnss_driver::ReceiverDriverProfileBuildStatus;
+using universal_gnss_driver::ReceiverFeature;
+using universal_gnss_driver::ReceiverProtocol;
+using universal_gnss_driver::ReceiverVendor;
+using universal_gnss_driver::UbloxDriver;
+using universal_gnss_driver::UnicoreDriver;
+
+struct TestContext
+{
+  int failures{0};
+
+  void Expect(const bool condition, const std::string& message)
+  {
+    if (!condition)
+    {
+      ++failures;
+      std::cerr << "FAILED: " << message << '\n';
+    }
+  }
+};
+
+void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+{
+  payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
+}
+
+void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+{
+  payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
+  payload[offset + 2u] = static_cast<std::uint8_t>((value >> 16u) & 0xFFu);
+  payload[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xFFu);
+}
+
+void WriteLeI4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::int32_t value)
+{
+  WriteLeU4(payload, offset, static_cast<std::uint32_t>(value));
+}
+
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
+                                        const std::uint8_t message_id,
+                                        const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {
+      0xB5u,
+      0x62u,
+      class_id,
+      message_id,
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0xFFu),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const auto checksum =
+      universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
+  bytes.push_back(checksum.ck_a);
+  bytes.push_back(checksum.ck_b);
+  return bytes;
+}
+
+std::vector<std::uint8_t> MakeNavPvtPayload()
+{
+  std::vector<std::uint8_t> payload(92u, 0u);
+  WriteLeU4(payload, 0u, 345000u);
+  WriteLeU2(payload, 4u, 2025u);
+  payload[6u] = 5u;
+  payload[7u] = 28u;
+  payload[8u] = 12u;
+  payload[9u] = 34u;
+  payload[10u] = 56u;
+  payload[11u] = 0x07u;
+
+  payload[20u] = 3u;
+  payload[21u] = static_cast<std::uint8_t>(0x01u | (1u << 5));
+  payload[23u] = 18u;
+
+  WriteLeI4(payload, 24u, 231234567);
+  WriteLeI4(payload, 28u, 485678901);
+  WriteLeI4(payload, 32u, 123450);
+  WriteLeI4(payload, 36u, 120000);
+  WriteLeU4(payload, 40u, 250u);
+  WriteLeU4(payload, 44u, 500u);
+  WriteLeI4(payload, 84u, 12345678);
+  return payload;
+}
+
+constexpr std::string_view kBestNavLine =
+    "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+    "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+    "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+
+void TestDriverFamilyAndCapabilities(TestContext& ctx)
+{
+  UbloxDriver ublox;
+  UnicoreDriver unicore;
+
+  const ReceiverDriver& ublox_driver = ublox;
+  const ReceiverDriver& unicore_driver = unicore;
+
+  ctx.Expect(ublox_driver.vendor() == ReceiverVendor::kUblox &&
+                 ublox_driver.family() == "F9/F10",
+             "u-blox driver should expose the expected vendor and family");
+  ctx.Expect(unicore_driver.vendor() == ReceiverVendor::kUnicore &&
+                 unicore_driver.family() == "UM98x",
+             "Unicore driver should expose the expected vendor and family");
+
+  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
+                 ublox_driver.capabilities(), ReceiverProtocol::kUbx) &&
+                 universal_gnss_driver::SupportsOutputProtocol(
+                     ublox_driver.capabilities(), ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     ublox_driver.capabilities(), ReceiverFeature::kRtk) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     ublox_driver.capabilities(), ReceiverFeature::kRfMonitoring) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     ublox_driver.capabilities(), ReceiverFeature::kConstellationConfig) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     ublox_driver.capabilities(), ReceiverFeature::kCfgValset),
+             "u-blox driver should advertise RTK, RF monitoring, constellation config, and CFG-VALSET support");
+
+  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
+                 unicore_driver.capabilities(), ReceiverProtocol::kUnicoreAscii) &&
+                 universal_gnss_driver::SupportsOutputProtocol(
+                     unicore_driver.capabilities(), ReceiverProtocol::kUnicoreBinary) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore_driver.capabilities(), ReceiverFeature::kRtk) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
+             "Unicore driver should advertise RTK, signal-group config, and ASCII command config support");
+}
+
+void TestSupportedProfilesAndGeneration(TestContext& ctx)
+{
+  UbloxDriver ublox;
+  UnicoreDriver unicore;
+
+  const ReceiverDriver& ublox_driver = ublox;
+  const ReceiverDriver& unicore_driver = unicore;
+
+  ctx.Expect(ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kRover) &&
+                 ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kDiagnosticsOutput) &&
+                 ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kBase),
+             "u-blox driver should report rover, diagnostics, and base profile support");
+  ctx.Expect(unicore_driver.SupportsProfile(ReceiverConfigProfileKind::kRover) &&
+                 unicore_driver.SupportsProfile(ReceiverConfigProfileKind::kDiagnosticsOutput) &&
+                 !unicore_driver.SupportsProfile(ReceiverConfigProfileKind::kBase),
+             "Unicore driver should report rover/diagnostics support without base support");
+
+  const auto ublox_rover = ublox_driver.BuildRoverProfile();
+  const auto ublox_diag =
+      ublox_driver.BuildDiagnosticsProfile(ReceiverCommandSafetyLevel::kPersistent);
+  const auto ublox_base = ublox_driver.BuildBaseProfile();
+  ctx.Expect(ublox_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 ublox_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
+                 ublox_rover.commands.size() == 9u,
+             "u-blox rover driver profile should delegate to the existing rover builder");
+  ctx.Expect(ublox_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 ublox_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
+                 ublox_diag.commands.size() == 10u &&
+                 !ublox_diag.commands.empty() &&
+                 ublox_diag.commands.front().safety_level ==
+                     ReceiverCommandSafetyLevel::kPersistent,
+             "persistent u-blox diagnostics driver profiles should preserve persistent command safety");
+  ctx.Expect(ublox_base.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 ublox_base.profile_kind == ReceiverConfigProfileKind::kBase &&
+                 ublox_base.commands.size() == 8u,
+             "u-blox base driver profile should expose the existing base builder");
+
+  const auto unicore_rover = unicore_driver.BuildRoverProfile();
+  const auto unicore_diag = unicore_driver.BuildDiagnosticsProfile();
+  const auto unicore_base = unicore_driver.BuildBaseProfile();
+  ctx.Expect(unicore_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 unicore_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
+                 unicore_rover.commands.size() == 10u,
+             "Unicore rover driver profile should delegate to the existing rover builder");
+  ctx.Expect(unicore_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 unicore_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
+                 unicore_diag.commands.size() == 11u,
+             "Unicore diagnostics driver profile should delegate to the existing diagnostics builder");
+  ctx.Expect(unicore_base.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
+                 unicore_base.profile_kind == ReceiverConfigProfileKind::kBase,
+             "Unicore drivers should report base profile generation as unsupported");
+}
+
+void TestRuntimeStateAccess(TestContext& ctx)
+{
+  UbloxDriver ublox;
+  UnicoreDriver unicore;
+
+  ReceiverDriver& ublox_driver = ublox;
+  ReceiverDriver& unicore_driver = unicore;
+
+  ctx.Expect(!ublox_driver.current_state().fix_valid &&
+                 ublox_driver.current_state().fix_type == GnssFixType::kUnknown,
+             "u-blox driver should expose the default empty runtime state before input");
+  ctx.Expect(!unicore_driver.current_state().fix_valid &&
+                 unicore_driver.current_state().fix_type == GnssFixType::kUnknown,
+             "Unicore driver should expose the default empty runtime state before input");
+
+  ublox_driver.FeedBytes(BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()), 1000);
+  unicore_driver.FeedString(kBestNavLine, 2000);
+
+  ctx.Expect(ublox_driver.current_state().fix_valid &&
+                 ublox_driver.current_state().fix_type == GnssFixType::kFix &&
+                 ublox_driver.current_state().timestamp_ns == std::optional<std::int64_t>(1000),
+             "u-blox driver should surface runtime state from the underlying session");
+  ctx.Expect(unicore_driver.current_state().fix_valid &&
+                 unicore_driver.current_state().fix_type == GnssFixType::kRtkFloat &&
+                 unicore_driver.current_state().rtk_mode ==
+                     std::optional<universal_gnss::GnssRtkMode>(GnssRtkMode::kFloat) &&
+                 unicore_driver.current_state().timestamp_ns == std::optional<std::int64_t>(2000),
+             "Unicore driver should surface runtime state from the underlying session");
+
+  ublox_driver.Reset();
+  unicore_driver.Reset();
+
+  ctx.Expect(!ublox_driver.current_state().fix_valid &&
+                 ublox_driver.current_state().fix_type == GnssFixType::kUnknown &&
+                 !unicore_driver.current_state().fix_valid &&
+                 unicore_driver.current_state().fix_type == GnssFixType::kUnknown,
+             "resetting drivers should clear the runtime state back to defaults");
+}
+
+}  // namespace
+
+int main()
+{
+  TestContext ctx;
+
+  TestDriverFamilyAndCapabilities(ctx);
+  TestSupportedProfilesAndGeneration(ctx);
+  TestRuntimeStateAccess(ctx);
+
+  if (ctx.failures != 0)
+  {
+    std::cerr << ctx.failures << " test(s) failed\n";
+    return EXIT_FAILURE;
+  }
+
+  std::cout << "All gnss_driver receiver driver tests passed\n";
+  return EXIT_SUCCESS;
+}

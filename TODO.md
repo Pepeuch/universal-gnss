@@ -23,6 +23,9 @@ Implemented:
 - UBX ACK/NAK parser + response mapper
 - u-blox response router foundation
 - Unicore response router foundation
+- Receiver driver abstraction
+- u-blox driver
+- Unicore driver
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - ROS2 adapter foundation
@@ -56,6 +59,9 @@ Implemented:
 - [x] Add portable receiver config application foundation
 - [x] Add u-blox response router foundation
 - [x] Add Unicore response router foundation
+- [x] Add receiver driver abstraction
+- [x] Add u-blox driver
+- [x] Add Unicore driver
 
 ### 2. Runtime diagnostics model
 
@@ -204,6 +210,9 @@ Implemented:
 - [x] UnicoreSession
 - [x] Generic receiver session router
 - [x] ReceiverSession byte-source runner
+- [x] Receiver driver abstraction
+- [x] u-blox driver
+- [x] Unicore driver
 
 To do:
 
