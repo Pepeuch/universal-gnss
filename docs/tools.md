@@ -3,7 +3,8 @@
 This document describes the current standalone inspection tools in
 `gnss_tools`.
 
-These tools are intentionally offline and file/stdin oriented.
+Most of these tools are intentionally offline and file/stdin oriented.
+`gnss_serial_monitor` is the current live serial-only exception.
 
 Current non-goals:
 
@@ -129,6 +130,59 @@ gnss_replay --summary file.bin
 gnss_replay --json file.bin
 ```
 
+### `gnss_profile_preview`
+
+`gnss_profile_preview` is an offline receiver-config inspection CLI.
+
+It reuses:
+
+- the portable `ReceiverCommand` model
+- the existing u-blox config profile builder
+- the existing Unicore config profile builder
+- lightweight command preview formatting helpers
+
+Current behavior:
+
+- generates prepared `ReceiverCommand` sequences without sending them
+- supports `ublox` profiles: `rover`, `diagnostics`, `base`
+- supports `unicore` profiles: `rover`, `diagnostics`
+- prints compact human-readable command previews by default
+- can emit JSON for scripting and review
+- can apply offline overrides like `--persistent`, `--baud`, and `--rate-hz`
+
+Current non-goals:
+
+- serial access
+- command dispatch
+- transaction engine execution
+- receiver communication
+- live configuration workflows
+
+Examples:
+
+```text
+gnss_profile_preview ublox rover
+gnss_profile_preview ublox diagnostics --json
+gnss_profile_preview ublox base --persistent --rate-hz 1
+gnss_profile_preview unicore rover
+gnss_profile_preview unicore diagnostics --persistent --rate-hz 5
+```
+
+Text output includes:
+
+- profile metadata and requested overrides
+- one command at a time with kind, safety level, payload kind, payload size, and description
+- raw text commands for ASCII-based profiles
+- raw binary hex only when `--verbose` is enabled
+- a summary with total, runtime, persistent, and factory-reset command counts
+
+JSON output includes:
+
+- top-level profile metadata and preview status
+- the generated command list
+- per-command descriptions and optional text/hex detail
+- the same summary counts as text mode
+
 ### `gnss_serial_monitor`
 
 `gnss_serial_monitor` is the first live hardware-facing CLI.
@@ -178,6 +232,7 @@ The tools stay compact on purpose.
 - text mode is optimized for quick terminal inspection
 - `--summary` suppresses the per-item timeline
 - `gnss_serial_monitor` prints compact live updates instead of a file timeline
+- `gnss_profile_preview` is preview-only and never touches receiver I/O
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
 - most tools are currently offline and file/stdin oriented only
@@ -190,6 +245,7 @@ Still intentionally deferred:
 - socket readers
 - NTRIP client inspection
 - live playback timing
+- live config execution CLIs
 - ROS 2 bag or topic output
 - RTCM payload semantic decode
 - MSM satellite/signal views

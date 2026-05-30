@@ -30,6 +30,7 @@ Implemented:
   - rtcm_inspect
   - gnss_inspect
   - gnss_replay
+  - gnss_profile_preview
 - Synthetic/sanitized testdata corpus
 - Portable CMake/CTest workflow
 
@@ -277,6 +278,7 @@ Implemented:
 - [x] rtcm_inspect
 - [x] gnss_inspect
 - [x] gnss_replay
+- [x] gnss_profile_preview
 - [x] testdata corpus
 
 To do:
