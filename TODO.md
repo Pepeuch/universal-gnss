@@ -18,6 +18,7 @@ Implemented:
 - Receiver command/config profile model
 - Receiver command dispatcher foundation
 - Receiver command transaction/response foundation
+- Receiver command transaction engine foundation
 - UBX ACK/NAK parser + response mapper
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
@@ -45,6 +46,7 @@ Implemented:
 - [x] Define portable receiver command/config profile model
 - [x] Add portable receiver command dispatcher
 - [x] Add portable receiver command transaction/response model
+- [x] Add portable receiver command transaction engine foundation
 
 ### 2. Runtime diagnostics model
 
@@ -200,9 +202,10 @@ To do:
 - [x] Receiver config command model
 - [x] Receiver command dispatcher
 - [x] Receiver command transaction/response model
+- [x] Receiver command transaction engine foundation
 - [x] u-blox config profile builder
 - [x] u-blox ACK/NAK parser + response mapper
-- [ ] u-blox transaction engine
+- [ ] u-blox live transaction integration
 - [x] Unicore config profile builder
 - [ ] Unicore response/transaction engine
 - [ ] Quectel config engine

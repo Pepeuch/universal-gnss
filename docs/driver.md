@@ -152,8 +152,8 @@ Current policy:
 
 - runtime commands can be sent without extra confirmation
 - persistent and factory-reset commands are rejected unless explicitly confirmed
-- no ACK/NAK handling exists yet
-- no retry or timeout orchestration exists yet
+- no ACK/NAK handling exists inside the dispatcher
+- no retry or timeout orchestration exists inside the dispatcher
 - this layer writes prepared bytes only; it does not generate vendor payloads
 
 Current dispatcher metrics include:
@@ -210,6 +210,36 @@ Current policy:
 - dispatch safety remains owned by `ReceiverCommand` + `ReceiverCommandDispatcher`
 - vendor-specific live config flows remain deferred
 
+### Receiver command transaction engine
+
+`receiver_command_transaction_engine.*` is the first small coordination layer
+that ties together:
+
+- `ReceiverCommandDispatcher`
+- `ReceiverCommandTransaction`
+- externally supplied `ReceiverCommandResponse` values
+
+Current role:
+
+- create transaction ids for prepared commands
+- dispatch commands synchronously through the existing dispatcher
+- keep one active transaction slot at a time
+- expose the current transaction plus the last completed transaction
+- accept externally supplied responses and apply them to the active transaction
+- support manual timeout checks and manual retry requests
+- expose lightweight transaction-engine metrics
+
+Current policy:
+
+- only one active transaction is supported at a time
+- responses must be supplied by the caller after protocol parsing/mapping
+- no protocol parsing happens inside the engine
+- no automatic serial read loop exists
+- no background timeout or retry thread exists
+- no multi-command queue exists
+- timeouts stay in the active slot so the caller can retry or reset explicitly
+- live receiver-configuration orchestration remains deferred
+
 ### u-blox ACK/NAK response mapping
 
 `ubx_command_response_mapper.*` is the first narrow bridge from parsed UBX
@@ -231,7 +261,7 @@ Current policy:
 - this bridge does not own transaction state transitions
 - this bridge does not run retries or timeout logic
 - this bridge only inspects already-prepared UBX command frames
-- live transaction orchestration remains deferred
+- live parser/transport integration remains deferred
 
 ### u-blox config profile builder
 
@@ -267,7 +297,7 @@ Current policy:
 Still deferred:
 
 - live ACK/NAK transaction handling
-- transaction/retry orchestration
+- automatic transaction/retry orchestration
 - survey-in orchestration
 - full base-station setup
 - live serial/TCP configuration flows
