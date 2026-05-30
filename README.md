@@ -126,3 +126,16 @@ request-format policy, and deferred networking work.
 ## License
 
 This project is licensed under LGPLv3.
+
+## Support the project
+
+If Universal GNSS helps your projects and you would like to support development:
+
+☕ Buy me a coffee:
+https://buymeacoffee.com/x8ndjtgsrwg
+
+Your support helps fund:
+- GNSS hardware (u-blox, Unicore, Quectel, etc.)
+- RTK testing
+- CI infrastructure
+- Documentation and tooling
