@@ -70,6 +70,17 @@ if(BUILD_TESTING)
   add_test(NAME gnss_protocols_test_ubx_cfg_builder COMMAND gnss_protocols_test_ubx_cfg_builder)
 
   add_executable(
+    gnss_protocols_test_ubx_ack
+    tests/test_ubx_ack.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_ack
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_ack COMMAND gnss_protocols_test_ubx_ack)
+
+  add_executable(
     gnss_protocols_test_ubx_nav_status
     tests/test_ubx_nav_status.cpp
   )

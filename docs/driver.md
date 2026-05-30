@@ -204,11 +204,34 @@ Current helpers:
 
 Current policy:
 
-- this layer does not parse ACK/NAK yet
+- this layer does not parse ACK/NAK by itself
 - this layer does not run timers or a retry loop
 - this layer does not dispatch bytes by itself
 - dispatch safety remains owned by `ReceiverCommand` + `ReceiverCommandDispatcher`
 - vendor-specific live config flows remain deferred
+
+### u-blox ACK/NAK response mapping
+
+`ubx_command_response_mapper.*` is the first narrow bridge from parsed UBX
+ACK/NAK records into the generic driver-side response model.
+
+Current role:
+
+- accept parsed `UbxAckRecord` values from `gnss_protocols`
+- map `ACK-ACK` into `ReceiverCommandResponseKind::kAck`
+- map `ACK-NAK` into `ReceiverCommandResponseKind::kNak`
+- preserve response timestamps
+- expose the target UBX class/id in response text for lightweight diagnostics
+- verify whether an ACK/NAK target matches the expected outbound UBX command
+  header
+
+Current policy:
+
+- this bridge does not read from a serial stream
+- this bridge does not own transaction state transitions
+- this bridge does not run retries or timeout logic
+- this bridge only inspects already-prepared UBX command frames
+- live transaction orchestration remains deferred
 
 ### u-blox config profile builder
 
@@ -243,7 +266,7 @@ Current policy:
 
 Still deferred:
 
-- ACK/NAK handling
+- live ACK/NAK transaction handling
 - transaction/retry orchestration
 - survey-in orchestration
 - full base-station setup

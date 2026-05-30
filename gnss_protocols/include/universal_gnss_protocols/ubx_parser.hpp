@@ -8,6 +8,8 @@
 namespace universal_gnss_protocols
 {
 
+ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame);
+
 ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame);
 
 ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame);

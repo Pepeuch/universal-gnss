@@ -29,6 +29,20 @@ enum class UbxCarrierSolutionStatus : std::uint8_t
 
 using UbxNavStatusFixType = UbxNavPvtFixType;
 
+enum class UbxAckMessageKind : std::uint8_t
+{
+  kNak = 0x00u,
+  kAck = 0x01u,
+};
+
+struct UbxAckRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  UbxAckMessageKind kind{UbxAckMessageKind::kNak};
+  std::uint8_t target_class_id{0};
+  std::uint8_t target_message_id{0};
+};
+
 struct UbxNavStatusRecord
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};

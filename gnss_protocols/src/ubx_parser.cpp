@@ -10,11 +10,15 @@ namespace
 {
 
 constexpr std::uint8_t kUbxNavClass = 0x01u;
+constexpr std::uint8_t kUbxAckClass = 0x05u;
 constexpr std::uint8_t kUbxMonClass = 0x0Au;
+constexpr std::uint8_t kUbxAckNakId = 0x00u;
+constexpr std::uint8_t kUbxAckAckId = 0x01u;
 constexpr std::uint8_t kUbxNavStatusId = 0x03u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
 constexpr std::uint8_t kUbxMonRfId = 0x38u;
+constexpr std::size_t kUbxAckPayloadSize = 2u;
 constexpr std::size_t kUbxNavStatusPayloadSize = 16u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
@@ -124,6 +128,31 @@ UbxMonRfJammingState DecodeMonRfJammingState(std::uint8_t flags)
 }
 
 }  // namespace
+
+ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxAckClass ||
+      (frame.message_id != kUbxAckNakId && frame.message_id != kUbxAckAckId))
+  {
+    return ParserResult<UbxAckRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxAckRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxAckPayloadSize)
+  {
+    return ParserResult<UbxAckRecord>::InvalidData();
+  }
+
+  UbxAckRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.kind = frame.message_id == kUbxAckAckId ? UbxAckMessageKind::kAck
+                                                 : UbxAckMessageKind::kNak;
+  record.target_class_id = frame.payload[0u];
+  record.target_message_id = frame.payload[1u];
+  return ParserResult<UbxAckRecord>::RecordReady(std::move(record));
+}
 
 ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame)
 {

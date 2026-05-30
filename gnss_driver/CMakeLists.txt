@@ -5,6 +5,7 @@ add_library(
   src/receiver_session.cpp
   src/receiver_session_runner.cpp
   src/stream_detector.cpp
+  src/ubx_command_response_mapper.cpp
   src/ublox_config_profile_builder.cpp
   src/ublox_session.cpp
   src/unicore_config_profile_builder.cpp
@@ -125,6 +126,20 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_driver_test_receiver_command_transaction
     COMMAND gnss_driver_test_receiver_command_transaction
+  )
+
+  add_executable(
+    gnss_driver_test_ubx_command_response_mapper
+    tests/test_ubx_command_response_mapper.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_ubx_command_response_mapper
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_ubx_command_response_mapper
+    COMMAND gnss_driver_test_ubx_command_response_mapper
   )
 
   add_executable(

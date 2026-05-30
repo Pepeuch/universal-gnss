@@ -18,6 +18,7 @@ Implemented:
 - Receiver command/config profile model
 - Receiver command dispatcher foundation
 - Receiver command transaction/response foundation
+- UBX ACK/NAK parser + response mapper
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - ROS2 adapter foundation
@@ -105,6 +106,7 @@ Implemented:
 - [x] CFG-VALGET payload builder
 - [x] CFG-VALSET payload builder
 - [x] config profile command builder
+- [x] ACK-ACK / ACK-NAK parser
 
 To do:
 
@@ -112,7 +114,6 @@ To do:
 - [ ] MON-HW / MON-HW2 if useful
 - [ ] MON-SPAN
 - [ ] RXM-RTCM
-- [ ] ACK/NAK
 - [ ] survey-in support
 - [ ] live configuration transactions
 
@@ -200,7 +201,8 @@ To do:
 - [x] Receiver command dispatcher
 - [x] Receiver command transaction/response model
 - [x] u-blox config profile builder
-- [ ] u-blox ACK/NAK + transaction engine
+- [x] u-blox ACK/NAK parser + response mapper
+- [ ] u-blox transaction engine
 - [x] Unicore config profile builder
 - [ ] Unicore response/transaction engine
 - [ ] Quectel config engine
