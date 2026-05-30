@@ -45,6 +45,7 @@ Implemented:
   - gnss_profile_preview
   - gnss_config_plan
   - gnss_config_apply
+  - gnss_ntrip_monitor
 - Synthetic/sanitized testdata corpus
 - Portable CMake/CTest workflow
 
@@ -300,6 +301,7 @@ Implemented:
 - [x] gnss_profile_preview
 - [x] gnss_config_plan
 - [x] gnss_config_apply
+- [x] gnss_ntrip_monitor
 - [x] testdata corpus
 
 To do:

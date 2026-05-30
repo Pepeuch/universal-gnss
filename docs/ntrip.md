@@ -13,6 +13,7 @@ Today this layer is intentionally small. It provides:
 - reconnect/backoff policy types
 - connection and RTCM-flow metrics models
 - a first synchronous TCP-backed live client foundation
+- a first live NTRIP monitor CLI in `gnss_tools`
 
 ## Purpose
 
@@ -240,6 +241,38 @@ Current non-goals:
 - redirects
 - automatic periodic GGA sending
 - multi-caster orchestration
+
+## Monitor CLI
+
+`gnss_tools/gnss_ntrip_monitor` is the first practical live consumer of the
+current NTRIP foundation.
+
+Current scope:
+
+- plain TCP only
+- synchronous foreground execution
+- one caster / one mountpoint
+- optional manual latitude / longitude input for GGA injection
+- RTCM correction-health summary through the portable monitor
+
+Current non-goals:
+
+- TLS
+- reconnect loops
+- sourcetable parsing
+- automatic position sources
+- ROS 2 or GUI ownership
+
+Typical uses:
+
+- confirm a caster responds with a valid NTRIP header
+- confirm RTCM payload bytes are actually flowing
+- confirm base-position and MSM messages appear in the stream
+- test NEAR-style mounts with explicit latitude / longitude input
+
+The CLI is intentionally a thin synchronous harness over `NtripClient`, so it
+can validate live caster behavior now while staying reusable for later ROS 2,
+GUI, and embedded integrations.
 
 ## Future Uses
 

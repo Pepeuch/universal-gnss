@@ -49,6 +49,7 @@ Current implemented layers:
   - request and auth header generation
   - GGA injection policy types
   - connection metrics models
+  - synchronous live client foundation and caster-monitor support
 - `gnss_tools`
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
@@ -57,6 +58,7 @@ Current implemented layers:
   - `gnss_config_plan` CLI for dry-run receiver config application planning
   - `gnss_config_apply` CLI for guarded live receiver config application
   - `gnss_serial_monitor` CLI for live Linux serial monitoring
+  - `gnss_ntrip_monitor` CLI for live NTRIP caster testing
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
   - `GnssStatus` message
@@ -114,8 +116,8 @@ merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs,
-profile preview, config-plan, and guarded config-apply usage examples, runtime
-replay usage examples, and the live Linux serial monitor.
+profile preview, config-plan, guarded config-apply usage examples, runtime
+replay usage examples, and the live serial / NTRIP monitors.
 
 See [docs/transport.md](docs/transport.md) for the current portable byte-stream
 abstraction layer and memory transport behavior.

@@ -4,12 +4,11 @@ This document describes the current standalone inspection tools in
 `gnss_tools`.
 
 Most of these tools are intentionally offline and file/stdin oriented.
-`gnss_serial_monitor` is the current live serial-only exception.
+`gnss_serial_monitor` and `gnss_ntrip_monitor` are the current live exceptions.
 
 Current non-goals:
 
-- TCP/UDP ingestion
-- NTRIP client behavior
+- TCP/UDP ingestion beyond the dedicated live monitors
 - ROS 2 output
 - replay timing
 - full protocol semantic decoding beyond what `gnss_protocols` already exposes
@@ -339,6 +338,58 @@ gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor unicore
 gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor auto --max-bytes 200000
 ```
 
+### `gnss_ntrip_monitor`
+
+`gnss_ntrip_monitor` is the first live caster-facing CLI.
+
+It reuses:
+
+- `NtripConfig` and the existing NTRIP request builder
+- the synchronous `NtripClient`
+- the portable GGA generator and GGA injection policy
+- the RTCM correction monitor
+- the portable diagnostics / health-summary model
+
+Current behavior:
+
+- connects to a single caster over plain TCP
+- validates `ICY 200 OK`, `HTTP/1.0 200`, and `HTTP/1.1 200`
+- optionally sends an initial GGA when `--lat` and `--lon` are provided
+- optionally keeps checking `MaybeSendGga(...)` when `--gga-interval` is set
+- monitors streamed RTCM activity and correction health through the existing client foundation
+- prints live status lines by default and a final text or JSON summary
+- stops on `--max-bytes`, `--max-seconds`, disconnect, or read / protocol failure
+
+Current non-goals:
+
+- TLS
+- reconnect loops
+- multi-caster support
+- ROS 2 nodes
+- GUI integration
+- automatic position sourcing
+
+Examples:
+
+```text
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint MOUNT
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint NEAR --user user --password pass
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint NEAR --lat 48.0 --lon 2.0 --gga-interval 5
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint NEAR --max-seconds 30
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint NEAR --summary
+gnss_ntrip_monitor --host caster.example.org --port 2101 --mountpoint NEAR --json
+```
+
+Summary output includes:
+
+- bytes received and bytes sent
+- RTCM frames seen, valid, and invalid
+- per-message-type counts
+- MSM constellation counts
+- base-position and `1230`-bias presence flags
+- correction-health severity and availability flags
+- optional GGA send counters
+
 ## Output Philosophy
 
 The tools stay compact on purpose.
@@ -346,6 +397,7 @@ The tools stay compact on purpose.
 - text mode is optimized for quick terminal inspection
 - `--summary` suppresses the per-item timeline
 - `gnss_serial_monitor` prints compact live updates instead of a file timeline
+- `gnss_ntrip_monitor` prints compact live status instead of becoming a daemon
 - `gnss_profile_preview` is preview-only and never touches receiver I/O
 - `gnss_config_plan` is dry-run only and never performs command dispatch
 - `gnss_config_apply` is guarded and remains dry-run unless `--execute` plus the
@@ -360,7 +412,6 @@ Still intentionally deferred:
 
 - richer live stream readers
 - socket readers
-- NTRIP client inspection
 - live playback timing
 - live config execution CLIs
 - a real `gnss_config_plan --execute` path

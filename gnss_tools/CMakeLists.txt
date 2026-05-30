@@ -5,6 +5,7 @@ add_library(
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
   src/gnss_replay.cpp
+  src/ntrip_monitor.cpp
   src/profile_preview.cpp
   src/runtime_state_format.cpp
 )
@@ -19,6 +20,7 @@ target_link_libraries(
   universal_gnss_tools
   PUBLIC
     universal_gnss_driver
+    universal_gnss_ntrip
     universal_gnss_protocols
 )
 
@@ -101,6 +103,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       universal_gnss_driver
       universal_gnss_tools
       universal_gnss_transport
+  )
+
+  add_executable(
+    gnss_ntrip_monitor
+    src/gnss_ntrip_monitor.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_monitor
+    PRIVATE
+      universal_gnss_ntrip
+      universal_gnss_tools
   )
 endif()
 
@@ -199,4 +212,15 @@ if(BUILD_TESTING)
       universal_gnss_transport
   )
   add_test(NAME gnss_tools_test_config_apply COMMAND gnss_tools_test_config_apply)
+
+  add_executable(
+    gnss_tools_test_ntrip_monitor
+    tests/test_ntrip_monitor.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_ntrip_monitor
+    PRIVATE
+      universal_gnss_tools
+  )
+  add_test(NAME gnss_tools_test_ntrip_monitor COMMAND gnss_tools_test_ntrip_monitor)
 endif()
