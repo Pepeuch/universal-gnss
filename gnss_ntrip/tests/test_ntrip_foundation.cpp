@@ -116,6 +116,13 @@ void TestGgaPolicyDefaults(TestContext& ctx)
                      universal_gnss_ntrip::GgaSourcePositionRequirement::kRequirePositionFix &&
                  !default_policy.last_sent_timestamp_ns.has_value(),
              "default GGA policy should stay disabled and require a runtime position when enabled");
+  ctx.Expect(config.reconnect_policy.enabled &&
+                 config.reconnect_policy.initial_delay_ms == 1000u &&
+                 config.reconnect_policy.max_delay_ms == 30000u &&
+                 config.reconnect_policy.multiplier == 2.0 &&
+                 !config.reconnect_policy.max_attempts.has_value() &&
+                 config.reconnect_policy.reset_after_success,
+             "default reconnect policy should expose a portable retry foundation with conservative defaults");
   ctx.Expect(!universal_gnss_ntrip::ShouldInjectGga(
                  default_policy,
                  true,

@@ -33,6 +33,7 @@ Implemented:
 - Unicore driver
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
+- NTRIP reconnect/backoff policy foundation
 - TCP-backed NTRIP client foundation
 - ROS2 adapter foundation
 - Tools:
@@ -111,6 +112,7 @@ Implemented:
 To do:
 
 - [x] Implement NTRIP connection state
+- [x] reconnect/backoff policy model
 - [x] Feed RTCM frames into metrics
 - [ ] Keep TLS optional/deferred
 - [ ] Keep ROS2/ESP32 adapters separate
@@ -130,9 +132,9 @@ To do:
 - [ ] Session auto-detection
 - [ ] transport binding
 - [ ] Implement reconnect/backoff loop
-- [ ] reconnect/backoff
+- [x] reconnect/backoff
 - [ ] reconnect/session lifecycle
-- [ ] reconnect policies
+- [x] reconnect policies
 - [ ] timeout policies
 
 ### Health monitoring

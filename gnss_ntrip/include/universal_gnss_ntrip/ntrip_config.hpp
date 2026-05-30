@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+#include "universal_gnss_ntrip/ntrip_reconnect_policy.hpp"
+
 namespace universal_gnss_ntrip
 {
 
@@ -10,13 +12,6 @@ enum class NtripVersion : std::uint8_t
 {
   kV1 = 1,
   kV2 = 2,
-};
-
-struct NtripReconnectBackoff
-{
-  std::uint32_t initial_delay_ms{1000u};
-  std::uint32_t max_delay_ms{30000u};
-  float multiplier{2.0f};
 };
 
 inline constexpr const char* kDefaultNtripUserAgent = "universal-gnss";
@@ -32,7 +27,7 @@ struct NtripConfig
   NtripVersion version{NtripVersion::kV2};
   bool send_gga{false};
   std::uint32_t gga_interval_s{10u};
-  NtripReconnectBackoff reconnect_backoff{};
+  NtripReconnectPolicy reconnect_policy{};
 };
 
 }  // namespace universal_gnss_ntrip

@@ -69,6 +69,7 @@ public:
 
   NtripClientState state() const;
   bool IsConnected() const;
+  const NtripReconnectState& reconnect_state() const;
 
   const NtripRequest& request() const;
   const std::string& response_header() const;
@@ -78,9 +79,13 @@ public:
 private:
   NtripClientError ConnectWithTransport(
       const universal_gnss_transport::TcpClientConfig& transport_config);
-  NtripClientError FailWith(NtripClientError error);
+  NtripClientError FailWith(
+      NtripClientError error,
+      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   void ResetSessionState();
   void ResetSessionMetrics();
+  void RecordReconnectFailure(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
+  void RecordReconnectSuccess(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
 
   NtripClientError HandleResponseBytes(
       const std::uint8_t* data,
@@ -99,6 +104,7 @@ private:
   std::string response_buffer_{};
   std::string response_header_{};
   NtripConnectionMetrics metrics_{};
+  NtripReconnectState reconnect_state_{};
 
   universal_gnss_protocols::RtcmFrameFramer rtcm_framer_{};
   universal_gnss_protocols::RtcmCorrectionMonitor correction_monitor_{};

@@ -2,6 +2,7 @@ add_library(
   universal_gnss_ntrip
   src/ntrip_request.cpp
   src/ntrip_client.cpp
+  src/ntrip_reconnect_policy.cpp
 )
 
 target_include_directories(
@@ -41,4 +42,18 @@ if(BUILD_TESTING)
       universal_gnss_ntrip
   )
   add_test(NAME gnss_ntrip_test_ntrip_client COMMAND gnss_ntrip_test_ntrip_client)
+
+  add_executable(
+    gnss_ntrip_test_ntrip_reconnect_policy
+    tests/test_ntrip_reconnect_policy.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_ntrip_reconnect_policy
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(
+    NAME gnss_ntrip_test_ntrip_reconnect_policy
+    COMMAND gnss_ntrip_test_ntrip_reconnect_policy
+  )
 endif()

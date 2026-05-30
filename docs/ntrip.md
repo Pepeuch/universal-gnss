@@ -8,6 +8,7 @@ Today this layer is intentionally small. It provides:
 - request/header generation
 - basic authentication helpers
 - GGA injection policy types
+- reconnect/backoff policy types
 - connection and RTCM-flow metrics models
 - a first synchronous TCP-backed live client foundation
 
@@ -23,6 +24,7 @@ Current responsibilities:
 - open a synchronous TCP connection through `gnss_transport`
 - validate the initial NTRIP response header
 - model whether periodic GGA injection is enabled
+- model reconnect/backoff decisions without owning a reconnect loop
 - track correction-stream metrics independently from ROS 2 or any network stack
 - feed incoming correction bytes into the existing RTCM framer and correction monitor
 
@@ -74,7 +76,7 @@ runtime orchestration.
 - `version`
 - `send_gga`
 - `gga_interval_s`
-- simple reconnect backoff settings
+- `reconnect_policy`
 
 The default user agent is currently `universal-gnss`.
 
@@ -137,6 +139,29 @@ That separation is deliberate: the policy can be shared later by ROS 2, ESP32,
 BlueOS, RTK base, or LoRa-facing components without coupling them to one
 transport stack.
 
+## Reconnect Policy Model
+
+`NtripReconnectPolicy` and `NtripReconnectState` provide the portable reconnect
+foundation for future live clients.
+
+Current policy behavior:
+
+- enable or disable reconnect scheduling
+- schedule the first retry after `initial_delay_ms`
+- apply deterministic exponential backoff with `multiplier`
+- cap the retry delay at `max_delay_ms`
+- optionally stop scheduling after `max_attempts`
+- optionally reset backoff state after a successful connect
+
+What this does not do yet:
+
+- run a reconnect loop
+- own timers or background work
+- decide when an application should actually call `Connect()`
+
+That split is intentional so the same policy can be reused later by CLI tools,
+ROS 2 nodes, ESP32 targets, and dashboard integrations.
+
 ## Metrics Model
 
 `NtripConnectionMetrics` currently tracks:
@@ -151,7 +176,7 @@ transport stack.
 - last RTCM message type
 - optional correction age field
 - connected / disconnected state
-- reconnect count
+- reconnect count for scheduled retry attempts
 - last error enum
 
 The current model is compatible with the existing RTCM parser/tooling:
@@ -183,11 +208,13 @@ Current behavior:
 - strip the HTTP/NTRIP response header from streamed output
 - feed streamed payload bytes into `RtcmFrameFramer` and `RtcmCorrectionMonitor`
 - expose portable correction health through the existing diagnostics model
+- expose reconnect state for external retry orchestration
+- update reconnect metrics/state on retry-worthy failures without starting a reconnect loop
 
 Current non-goals:
 
 - TLS
-- reconnect or backoff
+- reconnect loop or background timers
 - sourcetable parsing
 - chunked transfer support
 - redirects
@@ -198,6 +225,7 @@ Current non-goals:
 
 This foundation is intended to support later:
 
+- CLI retry orchestration
 - ROS 2 NTRIP nodes
 - ESP32 transport adapters
 - BlueOS correction bridges
@@ -209,7 +237,7 @@ This foundation is intended to support later:
 Still intentionally deferred:
 
 - TLS
-- reconnect state machine
+- reconnect loop or state machine
 - multi-caster orchestration
 - RTCM forwarding to serial or sockets
 - sourcetable handling

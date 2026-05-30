@@ -72,6 +72,17 @@ bool IsRecognizedNtripStatusLine(const std::string_view status_line)
          StartsWith(status_line, "HTTP/1.1 ");
 }
 
+bool ShouldTrackReconnectFailure(const NtripClientState state, const NtripClientError error)
+{
+  if (state == NtripClientState::kDisconnected || state == NtripClientState::kFailed)
+  {
+    return false;
+  }
+
+  return error != NtripClientError::kNone &&
+         error != NtripClientError::kConfiguration;
+}
+
 NtripClientError ParseNtripResponseStatus(const std::string_view header)
 {
   const std::string_view status_line = ExtractStatusLine(header);
@@ -160,16 +171,9 @@ NtripClientError NtripClient::Connect()
 
 NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
 {
-  const bool has_prior_session = state_ != NtripClientState::kDisconnected ||
-                                 metrics_.bytes_received > 0u ||
-                                 metrics_.bytes_sent > 0u;
-  const std::uint32_t reconnect_count =
-      metrics_.reconnect_count + (has_prior_session ? 1u : 0u);
-
   transport_.Close();
   ResetSessionState();
   ResetSessionMetrics();
-  metrics_.reconnect_count = reconnect_count;
 
   state_ = NtripClientState::kConnecting;
   const auto adopt_error = transport_.AdoptConnectedSocket(fd, tcp_config_);
@@ -181,6 +185,7 @@ NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
   state_ = NtripClientState::kConnected;
   MarkConnected(metrics_);
   ClearLastError(metrics_);
+  RecordReconnectSuccess(std::nullopt);
   return NtripClientError::kNone;
 }
 
@@ -296,11 +301,11 @@ NtripClientReadResult NtripClient::Read(
     if (read_result.status == universal_gnss_transport::TransportStatus::kEndOfStream ||
         read_result.status == universal_gnss_transport::TransportStatus::kClosed)
     {
-      result.client_error = FailWith(NtripClientError::kDisconnected);
+      result.client_error = FailWith(NtripClientError::kDisconnected, timestamp_ns);
       return result;
     }
 
-    result.client_error = FailWith(MapTransportError(read_result.error));
+    result.client_error = FailWith(MapTransportError(read_result.error), timestamp_ns);
     return result;
   }
 
@@ -324,7 +329,7 @@ NtripClientReadResult NtripClient::Read(
   result.bytes_read = payload_bytes_written;
   if (result.client_error != NtripClientError::kNone)
   {
-    FailWith(result.client_error);
+    FailWith(result.client_error, timestamp_ns);
   }
 
   return result;
@@ -398,6 +403,11 @@ bool NtripClient::IsConnected() const
          state_ == NtripClientState::kStreaming;
 }
 
+const NtripReconnectState& NtripClient::reconnect_state() const
+{
+  return reconnect_state_;
+}
+
 const NtripRequest& NtripClient::request() const
 {
   return request_;
@@ -421,16 +431,9 @@ const universal_gnss_protocols::RtcmCorrectionMonitor& NtripClient::correction_m
 NtripClientError NtripClient::ConnectWithTransport(
     const universal_gnss_transport::TcpClientConfig& transport_config)
 {
-  const bool has_prior_session = state_ != NtripClientState::kDisconnected ||
-                                 metrics_.bytes_received > 0u ||
-                                 metrics_.bytes_sent > 0u;
-  const std::uint32_t reconnect_count =
-      metrics_.reconnect_count + (has_prior_session ? 1u : 0u);
-
   transport_.Close();
   ResetSessionState();
   ResetSessionMetrics();
-  metrics_.reconnect_count = reconnect_count;
 
   if (transport_config.host.empty() || transport_config.port == 0u)
   {
@@ -447,11 +450,19 @@ NtripClientError NtripClient::ConnectWithTransport(
   state_ = NtripClientState::kConnected;
   MarkConnected(metrics_);
   ClearLastError(metrics_);
+  RecordReconnectSuccess(std::nullopt);
   return NtripClientError::kNone;
 }
 
-NtripClientError NtripClient::FailWith(const NtripClientError error)
+NtripClientError NtripClient::FailWith(
+    const NtripClientError error,
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
+  if (ShouldTrackReconnectFailure(state_, error))
+  {
+    RecordReconnectFailure(timestamp_ns);
+  }
+
   transport_.Close();
   state_ = NtripClientState::kFailed;
   MarkDisconnected(metrics_, error);
@@ -472,6 +483,36 @@ void NtripClient::ResetSessionMetrics()
   const std::uint32_t reconnect_count = metrics_.reconnect_count;
   metrics_ = NtripConnectionMetrics{};
   metrics_.reconnect_count = reconnect_count;
+}
+
+void NtripClient::RecordReconnectFailure(
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+{
+  const auto decision =
+      config_.reconnect_policy.OnFailure(reconnect_state_, timestamp_ns.value_or(0));
+  if (decision.scheduled)
+  {
+    NoteReconnect(metrics_);
+  }
+}
+
+void NtripClient::RecordReconnectSuccess(
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+{
+  if (!timestamp_ns.has_value())
+  {
+    if (config_.reconnect_policy.reset_after_success)
+    {
+      reconnect_state_.Reset();
+    }
+    else
+    {
+      reconnect_state_.next_attempt_time_ns.reset();
+    }
+    return;
+  }
+
+  config_.reconnect_policy.OnSuccess(reconnect_state_, timestamp_ns.value_or(0));
 }
 
 NtripClientError NtripClient::HandleResponseBytes(
