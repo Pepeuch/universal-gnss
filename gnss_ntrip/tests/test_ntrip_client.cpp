@@ -589,6 +589,158 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
   }
 }
 
+void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
+{
+  {
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+
+    const auto inject_result = client.MaybeInjectGga(MakeRuntimeState(), 1000000000LL);
+    ctx.Expect(inject_result.status == NtripGgaSendStatus::kSkippedNotStreaming &&
+                   inject_result.skipped() &&
+                   client.gga_metrics().attempts == 0u &&
+                   client.metrics().gga_sent_count == 0u,
+               "MaybeInjectGga should no-op cleanly before the client reaches the streaming state");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for streaming-only GGA injection test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    config.gga_interval_s = 5u;
+    NtripClient client(config);
+    universal_gnss_transport::TcpClientConfig tcp_config;
+    tcp_config.read_timeout_ms = 50u;
+    client.set_tcp_config(tcp_config);
+
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before explicit GGA injection");
+    ctx.Expect(client.SendRequest() == NtripClientError::kNone,
+               "sending the request should succeed before explicit GGA injection");
+    sockets.ReadPeerExact(client.request().request_text.size());
+
+    ctx.Expect(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"),
+               "the fake peer should send a valid response header before GGA injection");
+    std::vector<std::uint8_t> buffer(32u, 0u);
+    const auto read_result = client.Read(buffer.data(), buffer.size(), 1000000000LL);
+    ctx.Expect(read_result.client_error == NtripClientError::kNone &&
+                   client.state() == NtripClientState::kStreaming,
+               "the client should enter streaming before explicit GGA injection");
+
+    const std::uint64_t bytes_sent_before = client.metrics().bytes_sent;
+    const auto expected_sentence =
+        universal_gnss_ntrip::GenerateGgaFromRuntimeState(MakeRuntimeState()).sentence;
+    const auto first_inject = client.MaybeInjectGga(MakeRuntimeState(), 2000000000LL);
+    ctx.Expect(first_inject.status == NtripGgaSendStatus::kSent &&
+                   client.gga_metrics().attempts == 1u &&
+                   client.gga_metrics().sentences_built == 1u &&
+                   client.gga_metrics().sentences_sent == 1u &&
+                   client.metrics().gga_sent_count == 1u &&
+                   client.metrics().bytes_sent == bytes_sent_before + expected_sentence.size() &&
+                   client.gga_injection_policy().last_sent_timestamp_ns ==
+                       std::optional<std::int64_t>(2000000000LL),
+               "MaybeInjectGga should send once streaming, update injector metrics, and reflect bytes in the client metrics");
+
+    const auto peer_bytes = sockets.ReadPeerExact(expected_sentence.size());
+    const std::string peer_text(peer_bytes.begin(), peer_bytes.end());
+    ctx.Expect(peer_text == expected_sentence,
+               "MaybeInjectGga should write the exact generated GGA sentence to the transport");
+
+    const auto gated_inject = client.MaybeInjectGga(MakeRuntimeState(), 4000000000LL);
+    ctx.Expect(gated_inject.status == NtripGgaSendStatus::kSkippedInterval &&
+                   client.gga_metrics().attempts == 2u &&
+                   client.gga_metrics().skipped_interval == 1u &&
+                   client.metrics().gga_sent_count == 1u,
+               "MaybeInjectGga should gate repeated sends with the configured interval");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for missing-position explicit GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
+                   client.SendRequest() == NtripClientError::kNone,
+               "setup should succeed before missing-position explicit GGA test");
+    sockets.ReadPeerExact(client.request().request_text.size());
+    ctx.Expect(sockets.WritePeer("ICY 200 OK\r\n\r\n"),
+               "the fake peer should send a valid response header");
+    std::vector<std::uint8_t> buffer(16u, 0u);
+    client.Read(buffer.data(), buffer.size(), 1000000000LL);
+
+    auto missing_position = MakeRuntimeState();
+    missing_position.longitude_deg.reset();
+    const auto result = client.MaybeInjectGga(missing_position, 2000000000LL);
+    ctx.Expect(result.status == NtripGgaSendStatus::kSkippedMissingPosition &&
+                   client.gga_metrics().skipped_missing_position == 1u &&
+                   client.metrics().gga_sent_count == 0u,
+               "MaybeInjectGga should skip cleanly when coordinates are missing");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for required-fix explicit GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
+                   client.SendRequest() == NtripClientError::kNone,
+               "setup should succeed before required-fix explicit GGA test");
+    sockets.ReadPeerExact(client.request().request_text.size());
+    ctx.Expect(sockets.WritePeer("ICY 200 OK\r\n\r\n"),
+               "the fake peer should send a valid response header");
+    std::vector<std::uint8_t> buffer(16u, 0u);
+    client.Read(buffer.data(), buffer.size(), 1000000000LL);
+
+    auto no_fix_state = MakeRuntimeState();
+    no_fix_state.fix_valid = false;
+    no_fix_state.fix_type = GnssFixType::kNoFix;
+    const auto result = client.MaybeInjectGga(no_fix_state, 2000000000LL);
+    ctx.Expect(result.status == NtripGgaSendStatus::kSkippedPositionRequired &&
+                   client.gga_metrics().skipped_position_required == 1u &&
+                   client.metrics().gga_sent_count == 0u,
+               "MaybeInjectGga should skip when the configured policy requires a valid fix");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for write-failure explicit GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
+                   client.SendRequest() == NtripClientError::kNone,
+               "setup should succeed before explicit GGA write-failure test");
+    sockets.ReadPeerExact(client.request().request_text.size());
+    ctx.Expect(sockets.WritePeer("ICY 200 OK\r\n\r\n"),
+               "the fake peer should send a valid response header");
+    std::vector<std::uint8_t> buffer(16u, 0u);
+    client.Read(buffer.data(), buffer.size(), 1000000000LL);
+
+    const auto previous_handler = std::signal(SIGPIPE, SIG_IGN);
+    sockets.ClosePeer();
+    const auto result = client.MaybeInjectGga(MakeRuntimeState(), 2000000000LL);
+    std::signal(SIGPIPE, previous_handler);
+
+    ctx.Expect(result.status == NtripGgaSendStatus::kError &&
+                   result.client_error == NtripClientError::kDisconnected &&
+                   result.send_error ==
+                       std::optional<NtripGgaSendError>(NtripGgaSendError::kWriteFailure) &&
+                   client.gga_metrics().write_errors == 1u &&
+                   client.metrics().gga_send_errors == 1u &&
+                   !client.gga_injection_policy().last_sent_timestamp_ns.has_value() &&
+                   client.state() == NtripClientState::kFailed,
+               "explicit GGA write failures should update both injector and client metrics without advancing last-sent time");
+  }
+}
+
 }  // namespace
 
 int main()
@@ -599,6 +751,7 @@ int main()
   TestSplitHttpResponseAndDisconnect(ctx);
   TestInvalidResponsesAndConnectFailure(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
+  TestExplicitStreamingOnlyGgaInjection(ctx);
 
   if (ctx.failures != 0)
   {

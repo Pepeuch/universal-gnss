@@ -151,8 +151,10 @@ use the older generator naming.
 
 - `SendGga(...)` for explicit synchronous GGA writes
 - `MaybeSendGga(...)` for policy-gated GGA writes
+- `MaybeInjectGga(...)` for explicit-call streaming-only GGA injection through the reusable injector
 - policy tracking through `GgaInjectionPolicy::last_sent_timestamp_ns`
 - GGA send metrics and last-error tracking
+- `gga_metrics()` for injector-specific attempt / skip / write-error detail
 
 `gga_injector.*` now also provides a small reusable explicit-call helper that:
 
@@ -164,6 +166,10 @@ use the older generator naming.
 
 This helper intentionally does not own any timer, thread, or autonomous loop.
 The caller still owns scheduling and decides when to call it.
+
+`NtripClient::MaybeInjectGga(...)` is the thin integration point on top of that
+helper. It only injects once the client is already streaming, and the caller
+still owns all scheduling decisions.
 
 What it does not do yet:
 

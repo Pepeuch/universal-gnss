@@ -183,7 +183,9 @@ bool NtripGgaSendResult::skipped() const
 {
   return status == NtripGgaSendStatus::kSkippedDisabled ||
          status == NtripGgaSendStatus::kSkippedInterval ||
-         status == NtripGgaSendStatus::kSkippedPositionRequired;
+         status == NtripGgaSendStatus::kSkippedPositionRequired ||
+         status == NtripGgaSendStatus::kSkippedMissingPosition ||
+         status == NtripGgaSendStatus::kSkippedNotStreaming;
 }
 
 bool NtripGgaSendResult::ok() const
@@ -193,7 +195,8 @@ bool NtripGgaSendResult::ok() const
 
 NtripClient::NtripClient(NtripConfig config)
     : config_(std::move(config)),
-      gga_injection_policy_(BuildGgaInjectionPolicy(config_))
+      gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
+      gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
 {
 }
 
@@ -201,7 +204,8 @@ NtripClient::NtripClient(NtripConfig config,
                          universal_gnss_transport::TcpClientConfig tcp_config)
     : config_(std::move(config)),
       tcp_config_(std::move(tcp_config)),
-      gga_injection_policy_(BuildGgaInjectionPolicy(config_))
+      gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
+      gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
 {
 }
 
@@ -209,6 +213,9 @@ void NtripClient::set_config(NtripConfig config)
 {
   config_ = std::move(config);
   gga_injection_policy_ = BuildGgaInjectionPolicy(config_);
+  gga_injector_.set_config(GgaInjectorConfig{
+      gga_injection_policy_,
+      gga_injector_.config().sentence_builder_options});
 }
 
 const NtripConfig& NtripClient::config() const
@@ -379,27 +386,41 @@ NtripGgaSendResult NtripClient::MaybeSendGga(const universal_gnss::GnssRuntimeSt
         std::nullopt};
   }
 
-  if (gga_injection_policy_.source_position_requirement ==
-          GgaSourcePositionRequirement::kRequirePositionFix &&
-      !state.fix_valid)
+  if (!transport_.IsOpen() || state_ == NtripClientState::kDisconnected)
+  {
+    const NtripClientError client_error =
+        FailWith(NtripClientError::kDisconnected, now_timestamp_ns);
+    return MakeGgaSendErrorResult(NtripGgaSendError::kDisconnected, client_error);
+  }
+
+  if (state_ == NtripClientState::kFailed)
+  {
+    return MakeGgaSendErrorResult(MapClientErrorToGgaSendError(metrics_.last_error),
+                                  metrics_.last_error);
+  }
+
+  return RunGgaInjector(state, now_timestamp_ns);
+}
+
+NtripGgaSendResult NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,
+                                               const universal_gnss::GnssTimestampNs now_timestamp_ns)
+{
+  if (state_ == NtripClientState::kFailed)
+  {
+    return MakeGgaSendErrorResult(MapClientErrorToGgaSendError(metrics_.last_error),
+                                  metrics_.last_error);
+  }
+
+  if (!transport_.IsOpen() || state_ != NtripClientState::kStreaming)
   {
     return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedPositionRequired,
+        NtripGgaSendStatus::kSkippedNotStreaming,
         NtripClientError::kNone,
         std::nullopt,
         std::nullopt};
   }
 
-  if (!ShouldInjectGga(gga_injection_policy_, state.fix_valid, now_timestamp_ns))
-  {
-    return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedInterval,
-        NtripClientError::kNone,
-        std::nullopt,
-        std::nullopt};
-  }
-
-  return SendGga(state, now_timestamp_ns);
+  return RunGgaInjector(state, now_timestamp_ns);
 }
 
 NtripClientReadResult NtripClient::Read(
@@ -573,6 +594,11 @@ const GgaInjectionPolicy& NtripClient::gga_injection_policy() const
   return gga_injection_policy_;
 }
 
+const GgaInjectorMetrics& NtripClient::gga_metrics() const
+{
+  return gga_injector_.metrics();
+}
+
 const NtripRequest& NtripClient::request() const
 {
   return request_;
@@ -648,6 +674,9 @@ void NtripClient::ResetSessionMetrics()
   const std::uint32_t reconnect_count = metrics_.reconnect_count;
   metrics_ = NtripConnectionMetrics{};
   metrics_.reconnect_count = reconnect_count;
+  gga_injector_ = GgaInjector(GgaInjectorConfig{
+      gga_injection_policy_,
+      gga_injector_.config().sentence_builder_options});
 }
 
 NtripGgaSendResult NtripClient::MakeGgaSendErrorResult(
@@ -661,6 +690,82 @@ NtripGgaSendResult NtripClient::MakeGgaSendErrorResult(
       client_error,
       error,
       generation_error};
+}
+
+NtripGgaSendResult NtripClient::RunGgaInjector(
+    const universal_gnss::GnssRuntimeState& state,
+    const universal_gnss::GnssTimestampNs now_timestamp_ns)
+{
+  gga_injector_.set_config(GgaInjectorConfig{
+      gga_injection_policy_,
+      gga_injector_.config().sentence_builder_options});
+
+  const std::uint64_t bytes_written_before = transport_.metrics().bytes_written;
+  const auto injection_result = gga_injector_.MaybeInject(transport_, state, now_timestamp_ns);
+  const std::uint64_t bytes_written_after = transport_.metrics().bytes_written;
+  if (bytes_written_after > bytes_written_before)
+  {
+    NoteSentBytes(metrics_, static_cast<std::size_t>(bytes_written_after - bytes_written_before));
+  }
+
+  gga_injection_policy_ = gga_injector_.policy();
+
+  switch (injection_result.status)
+  {
+    case GgaInjectionStatus::kSent:
+      NoteGgaSent(metrics_, now_timestamp_ns);
+      return NtripGgaSendResult{
+          NtripGgaSendStatus::kSent,
+          NtripClientError::kNone,
+          std::nullopt,
+          std::nullopt};
+
+    case GgaInjectionStatus::kSkippedDisabled:
+      return NtripGgaSendResult{
+          NtripGgaSendStatus::kSkippedDisabled,
+          NtripClientError::kNone,
+          std::nullopt,
+          std::nullopt};
+
+    case GgaInjectionStatus::kSkippedInterval:
+      return NtripGgaSendResult{
+          NtripGgaSendStatus::kSkippedInterval,
+          NtripClientError::kNone,
+          std::nullopt,
+          std::nullopt};
+
+    case GgaInjectionStatus::kSkippedMissingPosition:
+      return NtripGgaSendResult{
+          NtripGgaSendStatus::kSkippedMissingPosition,
+          NtripClientError::kNone,
+          std::nullopt,
+          std::nullopt};
+
+    case GgaInjectionStatus::kSkippedPositionRequired:
+      return NtripGgaSendResult{
+          NtripGgaSendStatus::kSkippedPositionRequired,
+          NtripClientError::kNone,
+          std::nullopt,
+          std::nullopt};
+
+    case GgaInjectionStatus::kBuildError:
+      return MakeGgaSendErrorResult(NtripGgaSendError::kGenerationFailed,
+                                    NtripClientError::kNone,
+                                    injection_result.build_error);
+
+    case GgaInjectionStatus::kWriteError:
+    {
+      const auto write_error =
+          injection_result.write_error.value_or(universal_gnss_transport::TransportError::kWriteFailure);
+      const NtripClientError client_error = FailWith(MapTransportError(write_error),
+                                                     now_timestamp_ns);
+      return MakeGgaSendErrorResult(MapTransportErrorToGgaSendError(write_error),
+                                    client_error);
+    }
+  }
+
+  return MakeGgaSendErrorResult(NtripGgaSendError::kWriteFailure,
+                                NtripClientError::kUnknown);
 }
 
 void NtripClient::RecordReconnectFailure(

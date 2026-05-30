@@ -114,6 +114,7 @@ Implemented:
 - [x] GGA sentence generation
 - [x] configurable GGA talker / UTC formatting
 - [x] explicit-call GGA injector helper
+- [x] explicit-call `NtripClient` GGA injector integration
 - [x] metrics model
 
 To do:

@@ -8,6 +8,7 @@
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_ntrip/gga_generator.hpp"
+#include "universal_gnss_ntrip/gga_injector.hpp"
 #include "universal_gnss_ntrip/gga_injection_policy.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
 #include "universal_gnss_ntrip/ntrip_metrics.hpp"
@@ -46,7 +47,9 @@ enum class NtripGgaSendStatus : std::uint8_t
   kSkippedDisabled = 1,
   kSkippedInterval = 2,
   kSkippedPositionRequired = 3,
-  kError = 4,
+  kSkippedMissingPosition = 4,
+  kSkippedNotStreaming = 5,
+  kError = 6,
 };
 
 struct NtripGgaSendResult
@@ -83,6 +86,8 @@ public:
                              universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripGgaSendResult MaybeSendGga(const universal_gnss::GnssRuntimeState& state,
                                   universal_gnss::GnssTimestampNs now_timestamp_ns);
+  NtripGgaSendResult MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,
+                                    universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripClientReadResult Read(
       std::uint8_t* destination,
       std::size_t capacity,
@@ -99,6 +104,7 @@ public:
   bool IsConnected() const;
   const NtripReconnectState& reconnect_state() const;
   const GgaInjectionPolicy& gga_injection_policy() const;
+  const GgaInjectorMetrics& gga_metrics() const;
 
   const NtripRequest& request() const;
   const std::string& response_header() const;
@@ -117,6 +123,8 @@ private:
       NtripGgaSendError error,
       NtripClientError client_error = NtripClientError::kNone,
       std::optional<GgaGenerationError> generation_error = std::nullopt);
+  NtripGgaSendResult RunGgaInjector(const universal_gnss::GnssRuntimeState& state,
+                                    universal_gnss::GnssTimestampNs now_timestamp_ns);
   void RecordReconnectFailure(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
   void RecordReconnectSuccess(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
 
@@ -139,6 +147,7 @@ private:
   NtripConnectionMetrics metrics_{};
   NtripReconnectState reconnect_state_{};
   GgaInjectionPolicy gga_injection_policy_{};
+  GgaInjector gga_injector_{};
 
   universal_gnss_protocols::RtcmFrameFramer rtcm_framer_{};
   universal_gnss_protocols::RtcmCorrectionMonitor correction_monitor_{};
