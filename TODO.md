@@ -34,6 +34,7 @@ Implemented:
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - Portable NMEA GGA generator foundation
+- Explicit NTRIP GGA injection support
 - NTRIP reconnect/backoff policy foundation
 - TCP-backed NTRIP client foundation
 - ROS2 adapter foundation
@@ -123,7 +124,7 @@ To do:
 - [x] RTCM frame extraction from stream
 - [ ] correction age estimation
 - [ ] automatic periodic GGA sending
-- [ ] NTRIP client GGA integration
+- [x] NTRIP client GGA integration
 - [ ] multi-caster support
 - [ ] local caster / base mode support
 

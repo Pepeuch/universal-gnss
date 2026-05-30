@@ -158,6 +158,10 @@ void TestMetricsModel(TestContext& ctx)
                  metrics.rtcm_frames_seen == 0u &&
                  metrics.rtcm_frames_received == 0u &&
                  metrics.invalid_rtcm_frames == 0u &&
+                 metrics.gga_sent_count == 0u &&
+                 metrics.gga_send_errors == 0u &&
+                 !metrics.last_gga_sent_timestamp_ns.has_value() &&
+                 !metrics.last_gga_error.has_value() &&
                  !metrics.connected &&
                  !metrics.request_sent &&
                  !metrics.response_received &&
@@ -172,6 +176,10 @@ void TestMetricsModel(TestContext& ctx)
   universal_gnss_ntrip::MarkResponseReceived(metrics);
   universal_gnss_ntrip::NoteRtcmFrame(metrics, 1005u, true);
   universal_gnss_ntrip::NoteRtcmFrame(metrics, std::nullopt, false);
+  universal_gnss_ntrip::NoteGgaSent(metrics, 123456789LL);
+  universal_gnss_ntrip::NoteGgaSendError(
+      metrics,
+      universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed);
   universal_gnss_ntrip::NoteReconnect(metrics);
   universal_gnss_ntrip::MarkDisconnected(
       metrics,
@@ -182,18 +190,27 @@ void TestMetricsModel(TestContext& ctx)
                  metrics.rtcm_frames_seen == 2u &&
                  metrics.rtcm_frames_received == 1u &&
                  metrics.invalid_rtcm_frames == 1u &&
+                 metrics.gga_sent_count == 1u &&
+                 metrics.gga_send_errors == 1u &&
+                 metrics.last_gga_sent_timestamp_ns == std::optional<std::int64_t>(123456789LL) &&
+                 metrics.last_gga_error ==
+                     std::optional<universal_gnss_ntrip::NtripGgaSendError>(
+                         universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed) &&
                  metrics.last_rtcm_message_type == 1005u &&
                  metrics.request_sent &&
                  metrics.response_received,
-             "metrics helpers should track request/response state and RTCM frame counts");
+             "metrics helpers should track request/response state, RTCM frame counts, and GGA activity");
   ctx.Expect(!metrics.connected &&
                  metrics.reconnect_count == 1u &&
                  metrics.last_error == universal_gnss_ntrip::NtripClientError::kTimeout,
              "metrics helpers should track reconnects and the last disconnect reason");
 
   universal_gnss_ntrip::ClearLastError(metrics);
+  universal_gnss_ntrip::ClearLastGgaError(metrics);
   ctx.Expect(metrics.last_error == universal_gnss_ntrip::NtripClientError::kNone,
              "metrics should allow clearing the last error");
+  ctx.Expect(!metrics.last_gga_error.has_value(),
+             "metrics should allow clearing the last GGA error");
 }
 
 }  // namespace

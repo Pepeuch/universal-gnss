@@ -1,3 +1,4 @@
+#include <csignal>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -13,19 +14,31 @@
 #include <unistd.h>
 
 #include "universal_gnss/gnss_diagnostic.hpp"
+#include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_ntrip/ntrip_client.hpp"
+#include "universal_gnss_ntrip/gga_generator.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
+#include "universal_gnss_protocols/nmea_framer.hpp"
+#include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 
 namespace
 {
 
 using universal_gnss::GnssDiagnosticSeverity;
+using universal_gnss::GnssFixType;
 using universal_gnss_ntrip::NtripClient;
 using universal_gnss_ntrip::NtripClientError;
+using universal_gnss_ntrip::NtripGgaSendError;
+using universal_gnss_ntrip::NtripGgaSendStatus;
 using universal_gnss_ntrip::NtripClientState;
 using universal_gnss_ntrip::NtripConfig;
 using universal_gnss_ntrip::NtripVersion;
+using universal_gnss_protocols::ChecksumStatus;
+using universal_gnss_protocols::NmeaGgaFixQuality;
+using universal_gnss_protocols::NmeaSentence;
+using universal_gnss_protocols::NmeaSentenceFramer;
+using universal_gnss_protocols::ParserStatus;
 
 struct TestContext
 {
@@ -194,6 +207,37 @@ NtripConfig MakeConfig()
   config.user_agent = "universal-gnss-test";
   config.version = NtripVersion::kV2;
   return config;
+}
+
+universal_gnss::GnssRuntimeState MakeRuntimeState()
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = true;
+  state.fix_type = GnssFixType::kFix;
+  state.latitude_deg = 48.1173;
+  state.longitude_deg = 11.5166667;
+  state.altitude_m = 545.4;
+  state.hdop = 0.9f;
+  state.satellites_used = 8u;
+  return state;
+}
+
+NmeaSentence FrameNmeaSentence(const std::string& text)
+{
+  NmeaSentenceFramer framer;
+  universal_gnss_protocols::ParserResult<NmeaSentence> result;
+  for (const char ch : text)
+  {
+    result = framer.PushByte(static_cast<std::uint8_t>(ch));
+  }
+
+  if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
+  {
+    std::cerr << "FAILED: test setup could not frame generated GGA bytes\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  return *result.record;
 }
 
 void TestRequestAndStreamingFlow(TestContext& ctx)
@@ -389,6 +433,162 @@ void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
   }
 }
 
+void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
+{
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for explicit GGA send test");
+
+    NtripClient client(MakeConfig());
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before sending GGA");
+
+    const auto expected_sentence =
+        universal_gnss_ntrip::GenerateGgaFromRuntimeState(MakeRuntimeState()).sentence;
+    const auto send_result = client.SendGga(MakeRuntimeState(), 123456789LL);
+    ctx.Expect(send_result.status == NtripGgaSendStatus::kSent && send_result.sent(),
+               "SendGga should synchronously write a generated GGA sentence");
+
+    const auto peer_bytes = sockets.ReadPeerExact(expected_sentence.size());
+    const std::string peer_text(peer_bytes.begin(), peer_bytes.end());
+    ctx.Expect(peer_text == expected_sentence,
+               "SendGga should write the exact generated GGA sentence to the transport");
+
+    const auto framed = FrameNmeaSentence(peer_text);
+    const auto parsed = universal_gnss_protocols::ParseNmeaGga(framed);
+    ctx.Expect(framed.checksum_status == ChecksumStatus::kValid &&
+                   parsed.status == ParserStatus::kRecordReady &&
+                   parsed.record.has_value() &&
+                   parsed.record->fix_quality == NmeaGgaFixQuality::kGpsFix,
+               "SendGga should emit a valid checksum-protected GGA sentence");
+    ctx.Expect(client.metrics().gga_sent_count == 1u &&
+                   client.metrics().gga_send_errors == 0u &&
+                   client.metrics().last_gga_sent_timestamp_ns ==
+                       std::optional<std::int64_t>(123456789LL) &&
+                   !client.metrics().last_gga_error.has_value() &&
+                   client.gga_injection_policy().last_sent_timestamp_ns ==
+                       std::optional<std::int64_t>(123456789LL),
+               "successful GGA sends should update metrics and the injection policy timestamp");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for disabled-policy GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = false;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before disabled-policy GGA test");
+
+    const auto maybe_result = client.MaybeSendGga(MakeRuntimeState(), 1000000000LL);
+    ctx.Expect(maybe_result.status == NtripGgaSendStatus::kSkippedDisabled &&
+                   maybe_result.skipped() &&
+                   client.metrics().gga_sent_count == 0u &&
+                   client.metrics().bytes_sent == 0u,
+               "MaybeSendGga should no-op cleanly when the policy is disabled");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for GGA interval test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    config.gga_interval_s = 5u;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before interval-based GGA sends");
+
+    const auto expected_sentence =
+        universal_gnss_ntrip::GenerateGgaFromRuntimeState(MakeRuntimeState()).sentence;
+    const auto first_send = client.MaybeSendGga(MakeRuntimeState(), 1000000000LL);
+    ctx.Expect(first_send.status == NtripGgaSendStatus::kSent,
+               "MaybeSendGga should send the first eligible GGA sentence");
+    sockets.ReadPeerExact(expected_sentence.size());
+
+    const auto second_send = client.MaybeSendGga(MakeRuntimeState(), 4000000000LL);
+    ctx.Expect(second_send.status == NtripGgaSendStatus::kSkippedInterval &&
+                   client.metrics().gga_sent_count == 1u &&
+                   client.metrics().last_gga_sent_timestamp_ns ==
+                       std::optional<std::int64_t>(1000000000LL),
+               "MaybeSendGga should suppress GGA writes until the interval elapses");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for fix-required GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before position-required GGA test");
+
+    auto no_fix_state = MakeRuntimeState();
+    no_fix_state.fix_valid = false;
+    no_fix_state.fix_type = GnssFixType::kNoFix;
+
+    const auto maybe_result = client.MaybeSendGga(no_fix_state, 1000000000LL);
+    ctx.Expect(maybe_result.status == NtripGgaSendStatus::kSkippedPositionRequired &&
+                   client.metrics().gga_sent_count == 0u &&
+                   client.metrics().gga_send_errors == 0u,
+               "MaybeSendGga should no-op when the policy requires a position fix and none exists");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for invalid-state GGA test");
+
+    NtripConfig config = MakeConfig();
+    config.send_gga = true;
+    NtripClient client(config);
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before invalid-state GGA test");
+
+    auto invalid_state = MakeRuntimeState();
+    invalid_state.longitude_deg.reset();
+
+    const auto send_result = client.MaybeSendGga(invalid_state, 1000000000LL);
+    ctx.Expect(send_result.status == NtripGgaSendStatus::kError &&
+                   send_result.send_error ==
+                       std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
+                   send_result.generation_error ==
+                       std::optional<universal_gnss_ntrip::GgaGenerationError>(
+                           universal_gnss_ntrip::GgaGenerationError::kMissingLongitude) &&
+                   client.metrics().gga_send_errors == 1u &&
+                   client.metrics().last_gga_error ==
+                       std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
+                   client.state() == NtripClientState::kConnected,
+               "invalid runtime state should increment GGA error metrics without crashing the client");
+  }
+
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for GGA write-failure test");
+
+    NtripClient client(MakeConfig());
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "adopting a connected socket should succeed before write-failure GGA test");
+
+    const auto previous_handler = std::signal(SIGPIPE, SIG_IGN);
+    sockets.ClosePeer();
+    const auto send_result = client.SendGga(MakeRuntimeState(), 2000000000LL);
+    std::signal(SIGPIPE, previous_handler);
+
+    ctx.Expect(send_result.status == NtripGgaSendStatus::kError &&
+                   send_result.client_error == NtripClientError::kDisconnected &&
+                   send_result.send_error ==
+                       std::optional<NtripGgaSendError>(NtripGgaSendError::kWriteFailure) &&
+                   client.metrics().gga_send_errors == 1u &&
+                   client.metrics().last_gga_error ==
+                       std::optional<NtripGgaSendError>(NtripGgaSendError::kWriteFailure) &&
+                   client.state() == NtripClientState::kFailed &&
+                   client.metrics().last_error == NtripClientError::kDisconnected,
+               "transport write failures should update GGA metrics and move the client into a failed state");
+  }
+}
+
 }  // namespace
 
 int main()
@@ -398,6 +598,7 @@ int main()
   TestRequestAndStreamingFlow(ctx);
   TestSplitHttpResponseAndDisconnect(ctx);
   TestInvalidResponsesAndConnectFailure(ctx);
+  TestExplicitAndPolicyDrivenGgaSending(ctx);
 
   if (ctx.failures != 0)
   {

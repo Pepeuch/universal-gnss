@@ -9,6 +9,7 @@ Today this layer is intentionally small. It provides:
 - basic authentication helpers
 - GGA injection policy types
 - portable GGA sentence generation
+- explicit synchronous GGA injection support
 - reconnect/backoff policy types
 - connection and RTCM-flow metrics models
 - a first synchronous TCP-backed live client foundation
@@ -26,6 +27,7 @@ Current responsibilities:
 - validate the initial NTRIP response header
 - model whether periodic GGA injection is enabled
 - generate a portable NMEA GGA sentence from `GnssRuntimeState`
+- send GGA explicitly through `NtripClient` without owning a timer loop
 - model reconnect/backoff decisions without owning a reconnect loop
 - track correction-stream metrics independently from ROS 2 or any network stack
 - feed incoming correction bytes into the existing RTCM framer and correction monitor
@@ -139,11 +141,18 @@ The current GGA support is policy plus portable sentence generation.
 - altitude, satellites-used, and HDOP fields when available
 - deterministic NMEA checksum generation
 
+`NtripClient` currently provides:
+
+- `SendGga(...)` for explicit synchronous GGA writes
+- `MaybeSendGga(...)` for policy-gated GGA writes
+- policy tracking through `GgaInjectionPolicy::last_sent_timestamp_ns`
+- GGA send metrics and last-error tracking
+
 What it does not do yet:
 
-- send anything automatically
+- schedule GGA sending automatically
 - own periodic timing or scheduling
-- integrate with `NtripClient`
+- integrate with ROS 2 timers or GUI workflows
 
 That separation is deliberate: the policy can be shared later by ROS 2, ESP32,
 BlueOS, RTK base, or LoRa-facing components without coupling them to one
@@ -218,6 +227,7 @@ Current behavior:
 - strip the HTTP/NTRIP response header from streamed output
 - feed streamed payload bytes into `RtcmFrameFramer` and `RtcmCorrectionMonitor`
 - expose portable correction health through the existing diagnostics model
+- support explicit synchronous GGA writes from runtime state
 - expose reconnect state for external retry orchestration
 - update reconnect metrics/state on retry-worthy failures without starting a reconnect loop
 
@@ -229,7 +239,6 @@ Current non-goals:
 - chunked transfer support
 - redirects
 - automatic periodic GGA sending
-- `NtripClient` GGA injection
 - multi-caster orchestration
 
 ## Future Uses
@@ -253,6 +262,6 @@ Still intentionally deferred:
 - RTCM forwarding to serial or sockets
 - sourcetable handling
 - automatic periodic GGA sending
-- `NtripClient` GGA integration
+- ROS 2 / GUI-driven GGA scheduling
 - ROS 2 nodes
 - ESP32-specific networking code

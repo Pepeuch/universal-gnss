@@ -6,6 +6,9 @@
 #include <string>
 
 #include "universal_gnss/gnss_health.hpp"
+#include "universal_gnss/gnss_runtime_state.hpp"
+#include "universal_gnss_ntrip/gga_generator.hpp"
+#include "universal_gnss_ntrip/gga_injection_policy.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
 #include "universal_gnss_ntrip/ntrip_metrics.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
@@ -37,6 +40,27 @@ struct NtripClientReadResult
   NtripClientError client_error{NtripClientError::kNone};
 };
 
+enum class NtripGgaSendStatus : std::uint8_t
+{
+  kSent = 0,
+  kSkippedDisabled = 1,
+  kSkippedInterval = 2,
+  kSkippedPositionRequired = 3,
+  kError = 4,
+};
+
+struct NtripGgaSendResult
+{
+  NtripGgaSendStatus status{NtripGgaSendStatus::kError};
+  NtripClientError client_error{NtripClientError::kNone};
+  std::optional<NtripGgaSendError> send_error{};
+  std::optional<GgaGenerationError> generation_error{};
+
+  bool sent() const;
+  bool skipped() const;
+  bool ok() const;
+};
+
 class NtripClient
 {
 public:
@@ -55,6 +79,10 @@ public:
   void Disconnect(NtripClientError error = NtripClientError::kNone);
 
   NtripClientError SendRequest();
+  NtripGgaSendResult SendGga(const universal_gnss::GnssRuntimeState& state,
+                             universal_gnss::GnssTimestampNs now_timestamp_ns);
+  NtripGgaSendResult MaybeSendGga(const universal_gnss::GnssRuntimeState& state,
+                                  universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripClientReadResult Read(
       std::uint8_t* destination,
       std::size_t capacity,
@@ -70,6 +98,7 @@ public:
   NtripClientState state() const;
   bool IsConnected() const;
   const NtripReconnectState& reconnect_state() const;
+  const GgaInjectionPolicy& gga_injection_policy() const;
 
   const NtripRequest& request() const;
   const std::string& response_header() const;
@@ -84,6 +113,10 @@ private:
       std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   void ResetSessionState();
   void ResetSessionMetrics();
+  NtripGgaSendResult MakeGgaSendErrorResult(
+      NtripGgaSendError error,
+      NtripClientError client_error = NtripClientError::kNone,
+      std::optional<GgaGenerationError> generation_error = std::nullopt);
   void RecordReconnectFailure(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
   void RecordReconnectSuccess(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
 
@@ -105,6 +138,7 @@ private:
   std::string response_header_{};
   NtripConnectionMetrics metrics_{};
   NtripReconnectState reconnect_state_{};
+  GgaInjectionPolicy gga_injection_policy_{};
 
   universal_gnss_protocols::RtcmFrameFramer rtcm_framer_{};
   universal_gnss_protocols::RtcmCorrectionMonitor correction_monitor_{};

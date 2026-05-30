@@ -33,4 +33,10 @@ universal_gnss_protocols::NmeaGgaFixQuality MapRuntimeStateToGgaFixQuality(
 
 GgaGenerationResult BuildNmeaGgaSentence(const universal_gnss::GnssRuntimeState& state);
 
+inline GgaGenerationResult GenerateGgaFromRuntimeState(
+    const universal_gnss::GnssRuntimeState& state)
+{
+  return BuildNmeaGgaSentence(state);
+}
+
 }  // namespace universal_gnss_ntrip

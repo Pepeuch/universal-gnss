@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <optional>
 
+#include "universal_gnss/gnss_types.hpp"
+
 namespace universal_gnss_ntrip
 {
 
@@ -19,6 +21,14 @@ enum class NtripClientError : std::uint8_t
   kUnknown = 7,
 };
 
+enum class NtripGgaSendError : std::uint8_t
+{
+  kGenerationFailed = 1,
+  kDisconnected = 2,
+  kTimeout = 3,
+  kWriteFailure = 4,
+};
+
 struct NtripConnectionMetrics
 {
   std::uint64_t bytes_received{0u};
@@ -26,8 +36,12 @@ struct NtripConnectionMetrics
   std::uint64_t rtcm_frames_seen{0u};
   std::uint64_t rtcm_frames_received{0u};
   std::uint64_t invalid_rtcm_frames{0u};
+  std::uint64_t gga_sent_count{0u};
+  std::uint64_t gga_send_errors{0u};
   std::optional<std::uint16_t> last_rtcm_message_type{};
   std::optional<float> last_correction_age_s{};
+  std::optional<universal_gnss::GnssTimestampNs> last_gga_sent_timestamp_ns{};
+  std::optional<NtripGgaSendError> last_gga_error{};
   bool connected{false};
   bool request_sent{false};
   bool response_received{false};
@@ -88,9 +102,28 @@ inline void NoteReconnect(NtripConnectionMetrics& metrics)
   ++metrics.reconnect_count;
 }
 
+inline void NoteGgaSent(NtripConnectionMetrics& metrics,
+                        const universal_gnss::GnssTimestampNs timestamp_ns)
+{
+  ++metrics.gga_sent_count;
+  metrics.last_gga_sent_timestamp_ns = timestamp_ns;
+  metrics.last_gga_error.reset();
+}
+
+inline void NoteGgaSendError(NtripConnectionMetrics& metrics, const NtripGgaSendError error)
+{
+  ++metrics.gga_send_errors;
+  metrics.last_gga_error = error;
+}
+
 inline void ClearLastError(NtripConnectionMetrics& metrics)
 {
   metrics.last_error = NtripClientError::kNone;
+}
+
+inline void ClearLastGgaError(NtripConnectionMetrics& metrics)
+{
+  metrics.last_gga_error.reset();
 }
 
 }  // namespace universal_gnss_ntrip
