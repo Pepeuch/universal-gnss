@@ -1,17 +1,25 @@
 # Unicore Config Profiles
 
 This document describes the current portable command-generation layer for
-Unicore receivers.
+Unicore receivers and the first conservative response-routing layer that sits
+beside it.
 
-Today this layer generates prepared text `ReceiverCommand` values only.
+Today the builder generates prepared text `ReceiverCommand` values only.
+Response handling is intentionally limited to a separate conservative router.
 
-It does not:
+The builder itself does not:
 
 - open serial or TCP transports
 - send commands
-- parse command responses
 - implement retries
 - manage survey-in or base-station orchestration
+
+The current router does not:
+
+- implement a full command/result grammar
+- own any serial transport
+- implement retries or timers
+- orchestrate live profile application
 
 ## Purpose
 
@@ -22,6 +30,8 @@ Current implementation lives in:
 
 - `gnss_driver/include/universal_gnss_driver/unicore_config_profile_builder.hpp`
 - `gnss_driver/src/unicore_config_profile_builder.cpp`
+- `gnss_driver/include/universal_gnss_driver/unicore_response_router.hpp`
+- `gnss_driver/src/unicore_response_router.cpp`
 
 ## Reference Inputs
 
@@ -125,12 +135,34 @@ This means:
 - the existing `ReceiverCommandDispatcher` rejects those commands until
   `explicit_safety_confirmation` is set
 
+## Conservative response routing
+
+`unicore_response_router.*` currently recognizes only the smallest response set
+that is both documented locally and already reused in practical scripts:
+
+- positive:
+  - `<OK`
+  - `$command,...,response: OK*`
+  - `#VERSIONA,...`
+- negative:
+  - `unsupported command`
+  - `PARSING FAILED`
+  - `GRAMMAR ERROR`
+  - `response can't found device`
+
+These lines map into the generic driver response model as `text_ok` or
+`text_error`. Normal telemetry such as `BESTNAVA`, `PVTSLNA`, `RTKSTATUSA`,
+`RTCMSTATUSA`, and `SATSINFOA` is ignored by the router.
+
+This is intentionally conservative and does not attempt to infer undocumented
+success/failure semantics.
+
 ## Deferred Work
 
 Still intentionally deferred:
 
 - live command transport
-- response parsing / OK / error handling
+- full response parsing / command-result grammar beyond the conservative router
 - retry and timeout state machines
 - `MODE BASE` orchestration
 - survey-in orchestration

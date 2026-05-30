@@ -266,6 +266,42 @@ Current policy:
 - future wiring to `ReceiverCommandTransactionEngine` remains explicit and
   caller-driven
 
+### Unicore response router
+
+`unicore_response_router.*` is the equivalent narrow bridge for conservative
+Unicore text command responses.
+
+Current role:
+
+- accept already-separated ASCII lines or caller-supplied byte chunks
+- recognize only a small documented/practical success set:
+  - `<OK`
+  - `$command,...,response: OK*`
+  - `#VERSIONA,...`
+- recognize only a small explicit failure set already used in the local
+  validator/config scripts:
+  - `unsupported command`
+  - `PARSING FAILED`
+  - `GRAMMAR ERROR`
+  - `response can't found device`
+- map success to `ReceiverCommandResponseKind::kTextOk`
+- map failure to `ReceiverCommandResponseKind::kTextError`
+- ignore normal Unicore telemetry such as `BESTNAVA`, `PVTSLNA`,
+  `RTKSTATUSA`, `RTCMSTATUSA`, and `SATSINFOA`
+- queue routed responses so a caller can peek/pop them synchronously
+- expose lightweight routing metrics
+
+Current policy:
+
+- response mapping is intentionally conservative
+- no full Unicore command/result grammar exists yet
+- this router does not own a serial source
+- this router does not dispatch commands
+- this router does not own a transaction engine
+- this router does not run retries, timers, or scheduling
+- future wiring to `ReceiverCommandTransactionEngine` remains explicit and
+  caller-driven
+
 ### u-blox ACK/NAK response mapping
 
 `ubx_command_response_mapper.*` is the first narrow bridge from parsed UBX
@@ -372,7 +408,7 @@ Current policy:
 What this does not do:
 
 - serial writes
-- response parsing
+- full Unicore response/result parsing
 - retries
 - survey-in/base orchestration
 - binary N4 configuration
