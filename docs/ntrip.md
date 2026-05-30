@@ -134,13 +134,18 @@ The current GGA support is policy plus portable sentence generation.
 - whether a runtime position fix is required before sending
 - optional `last_sent_timestamp_ns`
 
-`BuildNmeaGgaSentence(...)` currently provides:
+`gga_sentence_builder.*` and `BuildNmeaGgaSentence(...)` currently provide:
 
-- portable `$GPGGA` sentence generation from `GnssRuntimeState`
+- portable `$GPGGA` / `$GNGGA` sentence generation from `GnssRuntimeState`
+- configurable talker selection with `GPGGA` as the default
+- optional externally supplied UTC time, defaulting to `000000.00`
 - latitude / longitude formatting with NMEA hemisphere fields
 - fix-quality mapping from normalized runtime fix state
 - altitude, satellites-used, and HDOP fields when available
 - deterministic NMEA checksum generation
+
+`gga_generator.hpp` remains as a compatibility include for callers that already
+use the older generator naming.
 
 `NtripClient` currently provides:
 

@@ -33,7 +33,7 @@ Implemented:
 - Unicore driver
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
-- Portable NMEA GGA generator foundation
+- Portable NMEA GGA sentence builder foundation
 - Explicit NTRIP GGA injection support
 - NTRIP reconnect/backoff policy foundation
 - TCP-backed NTRIP client foundation
@@ -111,6 +111,7 @@ Implemented:
 - [x] Basic Auth
 - [x] GGA injection policy model
 - [x] GGA sentence generation
+- [x] configurable GGA talker / UTC formatting
 - [x] metrics model
 
 To do:

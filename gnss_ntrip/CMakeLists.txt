@@ -1,6 +1,7 @@
 add_library(
   universal_gnss_ntrip
   src/gga_generator.cpp
+  src/gga_sentence_builder.cpp
   src/ntrip_request.cpp
   src/ntrip_client.cpp
   src/ntrip_reconnect_policy.cpp
@@ -68,4 +69,18 @@ if(BUILD_TESTING)
       universal_gnss_ntrip
   )
   add_test(NAME gnss_ntrip_test_gga_generator COMMAND gnss_ntrip_test_gga_generator)
+
+  add_executable(
+    gnss_ntrip_test_gga_sentence_builder
+    tests/test_gga_sentence_builder.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_gga_sentence_builder
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(
+    NAME gnss_ntrip_test_gga_sentence_builder
+    COMMAND gnss_ntrip_test_gga_sentence_builder
+  )
 endif()
