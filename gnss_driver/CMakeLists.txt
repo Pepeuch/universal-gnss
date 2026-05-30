@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_driver
+  src/receiver_config_application.cpp
   src/receiver_command_dispatcher.cpp
   src/receiver_command_transaction_engine.cpp
   src/receiver_profiles.cpp
@@ -143,6 +144,20 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_driver_test_receiver_command_transaction_engine
     COMMAND gnss_driver_test_receiver_command_transaction_engine
+  )
+
+  add_executable(
+    gnss_driver_test_receiver_config_application
+    tests/test_receiver_config_application.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_config_application
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_config_application
+    COMMAND gnss_driver_test_receiver_config_application
   )
 
   add_executable(

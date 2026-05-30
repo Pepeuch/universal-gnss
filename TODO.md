@@ -19,6 +19,7 @@ Implemented:
 - Receiver command dispatcher foundation
 - Receiver command transaction/response foundation
 - Receiver command transaction engine foundation
+- Receiver config application foundation
 - UBX ACK/NAK parser + response mapper
 - u-blox response router foundation
 - Unicore response router foundation
@@ -49,6 +50,7 @@ Implemented:
 - [x] Add portable receiver command dispatcher
 - [x] Add portable receiver command transaction/response model
 - [x] Add portable receiver command transaction engine foundation
+- [x] Add portable receiver config application foundation
 - [x] Add u-blox response router foundation
 - [x] Add Unicore response router foundation
 
@@ -207,6 +209,7 @@ To do:
 - [x] Receiver command dispatcher
 - [x] Receiver command transaction/response model
 - [x] Receiver command transaction engine foundation
+- [x] Receiver config application foundation
 - [x] u-blox config profile builder
 - [x] u-blox ACK/NAK parser + response mapper
 - [x] u-blox response router

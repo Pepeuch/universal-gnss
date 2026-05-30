@@ -240,6 +240,44 @@ Current policy:
 - timeouts stay in the active slot so the caller can retry or reset explicitly
 - live receiver-configuration orchestration remains deferred
 
+### Receiver config application
+
+`receiver_config_application.*` is the next thin orchestration layer above the
+transaction engine for prepared command/profile sequences.
+
+Current role:
+
+- accept a prepared list of `ReceiverCommand` values
+- dispatch one command at a time through `ReceiverCommandTransactionEngine`
+- keep a single active command/transaction at a time
+- advance the internal command index after `ack` / `text_ok`
+- optionally advance past `nak` / `text_error` when `continue_on_error=true`
+- support manual timeout checks plus retry dispatch through the underlying
+  transaction engine
+- expose current command index, current command, state, and lightweight
+  application metrics
+
+Current state model:
+
+- `idle`
+- `running`
+- `waiting_for_response`
+- `completed`
+- `failed`
+
+Current policy:
+
+- this layer is externally driven
+- responses must come from outside the application
+- vendor routers such as `UbloxResponseRouter` and `UnicoreResponseRouter`
+  are expected to supply `ReceiverCommandResponse` values
+- no protocol parsing happens inside the application
+- no serial read loop or parser ownership exists here
+- no threading, async I/O, or background timers exist here
+- one command is active at a time
+- caller-driven `Step()` dispatches the next prepared command after the prior
+  command has finished
+
 ### u-blox response router
 
 `ublox_response_router.*` is the small bridge between parsed UBX frames and the
