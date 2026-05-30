@@ -9,6 +9,7 @@ Implemented:
 - Runtime aggregation layer
 - Portable diagnostics/event model
 - Portable health summary foundation
+- RTCM correction monitor foundation
 - NMEA parser: GGA, RMC, GSA, GSV
 - UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF
 - Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
@@ -61,16 +62,16 @@ Implemented:
 - [x] CRC24Q
 - [x] message type extraction
 - [x] MSM constellation classification
+- [x] Track RTCM frame rate
+- [x] Track message type rates
+- [x] Track last-seen timestamps
+- [x] Track base position messages 1005/1006
+- [x] Track MSM constellation availability
+- [x] message rate monitor
 
 To do:
 
-- [ ] Track RTCM frame rate
-- [ ] Track message type rates
-- [ ] Track last-seen timestamps
-- [ ] Track base position messages 1005/1006
-- [ ] Track MSM constellation availability
 - [ ] Prepare LoRa filtering policy
-- [ ] message rate monitor
 - [ ] basic 1005/1006 base position decode
 - [ ] 1230 GLONASS bias decode
 - [ ] MSM signal/satellite summary
@@ -137,8 +138,8 @@ To do:
 
 - [x] Add session health summary
 - [ ] Add parser health counters
-- [ ] Add correction stream health
-- [ ] RTCM health monitor
+- [x] Add correction stream health
+- [x] RTCM health monitor
 - [ ] health monitoring
 
 ---

@@ -2,6 +2,7 @@ add_library(
   universal_gnss_protocols
   src/nmea_checksum.cpp
   src/nmea_parser.cpp
+  src/rtcm_correction_monitor.cpp
   src/rtcm_crc24q.cpp
   src/rtcm_parser.cpp
   src/ubx_checksum.cpp
@@ -57,6 +58,20 @@ if(BUILD_TESTING)
       universal_gnss_protocols
   )
   add_test(NAME gnss_protocols_test_rtcm_parser COMMAND gnss_protocols_test_rtcm_parser)
+
+  add_executable(
+    gnss_protocols_test_rtcm_correction_monitor
+    tests/test_rtcm_correction_monitor.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_rtcm_correction_monitor
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(
+    NAME gnss_protocols_test_rtcm_correction_monitor
+    COMMAND gnss_protocols_test_rtcm_correction_monitor
+  )
 
   add_executable(
     gnss_protocols_test_ubx_cfg_builder

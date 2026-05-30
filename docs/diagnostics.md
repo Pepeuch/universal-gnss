@@ -61,6 +61,20 @@ This model is intended to be reused by:
 - NTRIP and RTCM work emitting correction health and stale-data events
 - offline tools surfacing reusable health summaries without ROS 2
 
+The first protocol-side consumer is the RTCM correction monitor in
+`gnss_protocols`. It uses these portable events to report correction-stream
+health as:
+
+- `kOk` when recent RTCM correction activity is present
+- `kWarning` when RTCM correction activity is stale
+- `kError` when required correction content has not been observed
+- `kUnknown` when correction freshness cannot be judged because timestamps are
+  unavailable
+
+That RTCM monitor only tracks activity, message presence, and timing. It does
+not add full RTCM payload decode, LoRa policy, ROS 2 adapters, or GUI-specific
+presentation concerns.
+
 ## Deferred integrations
 
 The following remain intentionally out of scope for this layer:

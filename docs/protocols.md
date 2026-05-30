@@ -199,6 +199,16 @@ Current RTCM classifications:
   - BeiDou `112x`
   - NavIC `113x`
 
+Current RTCM monitor support:
+
+- reusable correction-stream activity monitor in `gnss_protocols`
+- total / valid / invalid frame counters
+- per-message-type counts, last-seen timestamps, and simple windowed rates
+- MSM constellation counts, last-seen timestamps, and simple windowed rates
+- presence tracking for base-position messages `1005` / `1006`
+- presence tracking for GLONASS bias message `1230`
+- portable correction-health summaries for later NTRIP / ROS 2 / GUI reuse
+
 What RTCM does not do yet:
 
 - payload semantic decoding
@@ -206,6 +216,12 @@ What RTCM does not do yet:
 - station metadata decode
 - correction-age estimation
 - runtime-state mapping
+- LoRa filtering
+
+The RTCM correction monitor still does not perform full payload decode. It
+tracks correction-stream activity and health around already-classified RTCM
+frames, and is intended to feed later NTRIP clients, ROS 2 diagnostics, and
+GUI/dashboard work without introducing transport or middleware coupling here.
 
 ### Unicore ASCII
 
