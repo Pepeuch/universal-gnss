@@ -10,6 +10,8 @@ Implemented:
 - Portable diagnostics/event model
 - Portable health summary foundation
 - RTCM correction monitor foundation
+- POSIX serial transport
+- TCP client transport
 - NMEA parser: GGA, RMC, GSA, GSV
 - UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF
 - Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
@@ -86,12 +88,12 @@ Implemented:
 - [x] Memory transport
 - [x] Ring buffer
 - [x] transport metrics
+- [x] Add portable TCP abstraction or adapter
+- [x] POSIX serial transport
+- [x] TCP client transport
 
 To do:
 
-- [ ] Add portable TCP abstraction or adapter
-- [ ] POSIX serial transport
-- [ ] TCP client transport
 - [ ] UDP transport
 - [ ] TLS adapter
 

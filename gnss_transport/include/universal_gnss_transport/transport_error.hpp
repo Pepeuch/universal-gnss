@@ -11,10 +11,12 @@ enum class TransportError : std::uint8_t
   kClosed = 1,
   kInvalidArgument = 2,
   kOverflow = 3,
-  kReadFailure = 4,
-  kWriteFailure = 5,
-  kUnsupported = 6,
-  kUnknown = 7,
+  kConnectFailure = 4,
+  kTimeout = 5,
+  kReadFailure = 6,
+  kWriteFailure = 7,
+  kUnsupported = 8,
+  kUnknown = 9,
 };
 
 }  // namespace universal_gnss_transport

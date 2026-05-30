@@ -2,7 +2,8 @@
 
 This document describes the purpose and current scope of `gnss_transport`.
 
-Today `gnss_transport` is a portable abstraction foundation only.
+Today `gnss_transport` provides a small portable abstraction layer plus a couple
+of concrete synchronous byte-stream adapters.
 
 It currently provides:
 
@@ -11,13 +12,8 @@ It currently provides:
 - transport metrics helpers
 - in-memory test transports
 - a Linux-only POSIX serial adapter
+- a Linux-only synchronous TCP client adapter
 - a small fixed-capacity ring buffer helper
-
-It does not yet provide any OS or network transport implementation.
-
-Exception:
-
-- Linux now has a minimal POSIX serial adapter for local byte-stream I/O
 
 ## Purpose
 
@@ -105,6 +101,8 @@ No async semantics are modeled yet.
 - overflow
 - read failure
 - write failure
+- connect failure
+- timeout
 
 These are transport-level categories, not protocol-level parse errors.
 
@@ -175,6 +173,37 @@ Current policy:
 - allow optional nonblocking or read-timeout configuration
 - use pseudo-terminal tests so no real GNSS hardware is required
 
+## TCP Client Transport
+
+`tcp_client_transport.*` adds the first generic network byte stream in the
+project.
+
+Current scope:
+
+- Linux-first synchronous `ByteDuplex`
+- connect to a host and port
+- blocking or nonblocking operation
+- optional connect, read, and write timeouts
+- optional `TCP_NODELAY`
+- explicit close
+- transport metrics and error surfacing
+
+Current non-goals:
+
+- TLS
+- reconnect or backoff
+- NTRIP HTTP request logic
+- UDP transport
+- async I/O
+
+Current policy:
+
+- keep the transport layer generic, with no NTRIP behavior embedded here
+- allow future NTRIP live work to consume this `ByteDuplex`
+- use local adopted connected sockets in tests so validation stays
+  hardware-independent and internet-independent
+- keep reconnect, session policy, and higher-level diagnostics above transport
+
 ## Ring Buffer Helper
 
 `ring_buffer.hpp` currently provides a small fixed-capacity byte FIFO.
@@ -198,7 +227,7 @@ It only moves them.
 Examples:
 
 - a future serial adapter would implement `ByteDuplex`
-- a future TCP NTRIP socket would likely provide a `ByteSource` or `ByteDuplex`
+- a future NTRIP live client can consume the generic TCP `ByteDuplex`
 - `gnss_protocols` would consume the resulting bytes for framing and parsing
 - `gnss_driver` would stay above transport and below application logic
 - `receiver_session_runner.*` is the current synchronous bridge from a
@@ -236,7 +265,7 @@ PosixSerialTransport
 
 Still intentionally deferred:
 
-- TCP / UDP sockets
+- UDP sockets
 - TLS
 - async I/O
 - reconnect loops
