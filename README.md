@@ -54,6 +54,7 @@ Current implemented layers:
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
   - `gnss_replay` CLI for semantic offline runtime replay
   - `gnss_profile_preview` CLI for offline receiver command/profile review
+  - `gnss_config_plan` CLI for dry-run receiver config application planning
   - `gnss_serial_monitor` CLI for live Linux serial monitoring
 - `gnss_ros2`
   - ROS 2 package `universal_gnss_ros2`
@@ -112,8 +113,8 @@ merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs,
-profile preview usage examples, runtime replay usage examples, and the live
-Linux serial monitor.
+profile preview and config-plan usage examples, runtime replay usage examples,
+and the live Linux serial monitor.
 
 See [docs/transport.md](docs/transport.md) for the current portable byte-stream
 abstraction layer and memory transport behavior.

@@ -183,6 +183,59 @@ JSON output includes:
 - per-command descriptions and optional text/hex detail
 - the same summary counts as text mode
 
+### `gnss_config_plan`
+
+`gnss_config_plan` is a dry-run receiver-config application planner.
+
+It reuses:
+
+- the portable `ReceiverCommand` model
+- the existing u-blox and Unicore config profile builders
+- the offline profile preview/build path
+- the same command safety rules used by the driver dispatcher
+
+Current behavior:
+
+- builds the same prepared command sequences that a future live config flow would use
+- reports receiver family, profile name, dry-run status, and command counts
+- highlights whether explicit safety confirmation would be required before dispatch
+- marks persistent and factory-reset commands clearly in the sequence
+- supports `ublox` profiles: `rover`, `diagnostics`, `base`
+- supports `unicore` profiles: `rover`, `diagnostics`
+- emits either compact text output or JSON
+
+Current non-goals:
+
+- command execution
+- serial access
+- transaction engine execution
+- ACK/NAK handling
+- receiver communication
+
+Examples:
+
+```text
+gnss_config_plan ublox rover
+gnss_config_plan unicore diagnostics
+gnss_config_plan ublox rover --persistent
+gnss_config_plan ublox rover --rate-hz 5 --baud 921600
+gnss_config_plan unicore rover --json
+```
+
+Text output includes:
+
+- receiver family and profile metadata
+- dry-run status
+- runtime / persistent / factory-reset command counts
+- whether explicit safety confirmation would be required
+- the planned command sequence in application order
+
+JSON output includes:
+
+- a `profile` object
+- a `summary` object
+- an ordered `commands` array
+
 ### `gnss_serial_monitor`
 
 `gnss_serial_monitor` is the first live hardware-facing CLI.
@@ -233,6 +286,7 @@ The tools stay compact on purpose.
 - `--summary` suppresses the per-item timeline
 - `gnss_serial_monitor` prints compact live updates instead of a file timeline
 - `gnss_profile_preview` is preview-only and never touches receiver I/O
+- `gnss_config_plan` is dry-run only and never performs command dispatch
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
 - most tools are currently offline and file/stdin oriented only
@@ -246,6 +300,7 @@ Still intentionally deferred:
 - NTRIP client inspection
 - live playback timing
 - live config execution CLIs
+- a real `gnss_config_plan --execute` path
 - ROS 2 bag or topic output
 - RTCM payload semantic decode
 - MSM satellite/signal views

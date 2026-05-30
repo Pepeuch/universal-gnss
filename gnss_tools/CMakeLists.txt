@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_tools
+  src/config_plan.cpp
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
   src/gnss_replay.cpp
@@ -62,6 +63,17 @@ add_executable(
 
 target_link_libraries(
   gnss_profile_preview
+  PRIVATE
+    universal_gnss_tools
+)
+
+add_executable(
+  gnss_config_plan
+  src/gnss_config_plan.cpp
+)
+
+target_link_libraries(
+  gnss_config_plan
   PRIVATE
     universal_gnss_tools
 )
@@ -150,4 +162,15 @@ if(BUILD_TESTING)
       universal_gnss_tools
   )
   add_test(NAME gnss_tools_test_profile_preview COMMAND gnss_tools_test_profile_preview)
+
+  add_executable(
+    gnss_tools_test_config_plan
+    tests/test_config_plan.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_config_plan
+    PRIVATE
+      universal_gnss_tools
+  )
+  add_test(NAME gnss_tools_test_config_plan COMMAND gnss_tools_test_config_plan)
 endif()
