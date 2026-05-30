@@ -114,6 +114,20 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    gnss_driver_test_receiver_command_transaction
+    tests/test_receiver_command_transaction.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_command_transaction
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_command_transaction
+    COMMAND gnss_driver_test_receiver_command_transaction
+  )
+
+  add_executable(
     gnss_driver_test_ublox_config_profile_builder
     tests/test_ublox_config_profile_builder.cpp
   )

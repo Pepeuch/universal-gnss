@@ -153,7 +153,7 @@ Current policy:
 - runtime commands can be sent without extra confirmation
 - persistent and factory-reset commands are rejected unless explicitly confirmed
 - no ACK/NAK handling exists yet
-- no retry or timeout state machine exists yet
+- no retry or timeout orchestration exists yet
 - this layer writes prepared bytes only; it does not generate vendor payloads
 
 Current dispatcher metrics include:
@@ -164,6 +164,51 @@ Current dispatcher metrics include:
 - invalid-command rejections
 - bytes written
 - write errors
+
+### Receiver command responses and transactions
+
+`receiver_command_response.hpp` and `receiver_command_transaction.hpp` add the
+first portable response/result state model on top of prepared
+`ReceiverCommand` values.
+
+Current model coverage:
+
+- transaction id
+- embedded command
+- transaction state:
+  - `pending`
+  - `sent`
+  - `acknowledged`
+  - `rejected`
+  - `timed_out`
+  - `failed`
+- concrete response kind:
+  - `none`
+  - `ack`
+  - `nak`
+  - `text_ok`
+  - `text_error`
+  - `timeout`
+- optional created / sent / completed timestamps
+- send attempt count
+- retry budget taken from the command retry policy
+
+Current helpers:
+
+- `mark_sent()`
+- `mark_ack()`
+- `mark_nak()`
+- `mark_timeout()`
+- `can_retry()`
+- `reset_for_retry()`
+
+Current policy:
+
+- this layer does not parse ACK/NAK yet
+- this layer does not run timers or a retry loop
+- this layer does not dispatch bytes by itself
+- dispatch safety remains owned by `ReceiverCommand` + `ReceiverCommandDispatcher`
+- vendor-specific live config flows remain deferred
 
 ### u-blox config profile builder
 
