@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_ntrip
+  src/gga_generator.cpp
   src/ntrip_request.cpp
   src/ntrip_client.cpp
   src/ntrip_reconnect_policy.cpp
@@ -56,4 +57,15 @@ if(BUILD_TESTING)
     NAME gnss_ntrip_test_ntrip_reconnect_policy
     COMMAND gnss_ntrip_test_ntrip_reconnect_policy
   )
+
+  add_executable(
+    gnss_ntrip_test_gga_generator
+    tests/test_gga_generator.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_gga_generator
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(NAME gnss_ntrip_test_gga_generator COMMAND gnss_ntrip_test_gga_generator)
 endif()

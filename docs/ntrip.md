@@ -8,6 +8,7 @@ Today this layer is intentionally small. It provides:
 - request/header generation
 - basic authentication helpers
 - GGA injection policy types
+- portable GGA sentence generation
 - reconnect/backoff policy types
 - connection and RTCM-flow metrics models
 - a first synchronous TCP-backed live client foundation
@@ -24,6 +25,7 @@ Current responsibilities:
 - open a synchronous TCP connection through `gnss_transport`
 - validate the initial NTRIP response header
 - model whether periodic GGA injection is enabled
+- generate a portable NMEA GGA sentence from `GnssRuntimeState`
 - model reconnect/backoff decisions without owning a reconnect loop
 - track correction-stream metrics independently from ROS 2 or any network stack
 - feed incoming correction bytes into the existing RTCM framer and correction monitor
@@ -120,7 +122,7 @@ exists.
 
 ## GGA Injection Policy
 
-The current GGA support is policy-only.
+The current GGA support is policy plus portable sentence generation.
 
 `GgaInjectionPolicy` currently models:
 
@@ -129,11 +131,19 @@ The current GGA support is policy-only.
 - whether a runtime position fix is required before sending
 - optional `last_sent_timestamp_ns`
 
+`BuildNmeaGgaSentence(...)` currently provides:
+
+- portable `$GPGGA` sentence generation from `GnssRuntimeState`
+- latitude / longitude formatting with NMEA hemisphere fields
+- fix-quality mapping from normalized runtime fix state
+- altitude, satellites-used, and HDOP fields when available
+- deterministic NMEA checksum generation
+
 What it does not do yet:
 
-- generate a real NMEA GGA sentence
-- read coordinates from `GnssRuntimeState`
-- decide on socket write timing
+- send anything automatically
+- own periodic timing or scheduling
+- integrate with `NtripClient`
 
 That separation is deliberate: the policy can be shared later by ROS 2, ESP32,
 BlueOS, RTK base, or LoRa-facing components without coupling them to one
@@ -218,7 +228,8 @@ Current non-goals:
 - sourcetable parsing
 - chunked transfer support
 - redirects
-- automatic GGA sentence generation
+- automatic periodic GGA sending
+- `NtripClient` GGA injection
 - multi-caster orchestration
 
 ## Future Uses
@@ -241,6 +252,7 @@ Still intentionally deferred:
 - multi-caster orchestration
 - RTCM forwarding to serial or sockets
 - sourcetable handling
-- live GGA sentence generation
+- automatic periodic GGA sending
+- `NtripClient` GGA integration
 - ROS 2 nodes
 - ESP32-specific networking code

@@ -33,6 +33,7 @@ Implemented:
 - Unicore driver
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
+- Portable NMEA GGA generator foundation
 - NTRIP reconnect/backoff policy foundation
 - TCP-backed NTRIP client foundation
 - ROS2 adapter foundation
@@ -107,6 +108,7 @@ Implemented:
 - [x] request builder
 - [x] Basic Auth
 - [x] GGA injection policy model
+- [x] GGA sentence generation
 - [x] metrics model
 
 To do:
@@ -120,7 +122,8 @@ To do:
 - [ ] sourcetable support
 - [x] RTCM frame extraction from stream
 - [ ] correction age estimation
-- [ ] GGA sentence generation
+- [ ] automatic periodic GGA sending
+- [ ] NTRIP client GGA integration
 - [ ] multi-caster support
 - [ ] local caster / base mode support
 
