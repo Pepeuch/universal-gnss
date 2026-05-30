@@ -240,6 +240,32 @@ Current policy:
 - timeouts stay in the active slot so the caller can retry or reset explicitly
 - live receiver-configuration orchestration remains deferred
 
+### u-blox response router
+
+`ublox_response_router.*` is the small bridge between parsed UBX frames and the
+generic transaction-response surface.
+
+Current role:
+
+- accept framed `UbxFrame` values from `gnss_protocols`
+- reuse `ParseUbxAck()` to recognize `ACK-ACK` / `ACK-NAK`
+- reuse the existing UBX response mapper to produce `ReceiverCommandResponse`
+  values
+- ignore non-response UBX traffic such as `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`,
+  and `MON-RF`
+- queue routed responses so a caller can peek/pop them synchronously
+- expose lightweight routing metrics
+
+Current policy:
+
+- this router does not own a serial source
+- this router does not dispatch commands
+- this router does not own a transaction engine
+- this router does not parse protocols other than UBX
+- this router does not run retries, timers, or scheduling
+- future wiring to `ReceiverCommandTransactionEngine` remains explicit and
+  caller-driven
+
 ### u-blox ACK/NAK response mapping
 
 `ubx_command_response_mapper.*` is the first narrow bridge from parsed UBX

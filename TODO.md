@@ -20,6 +20,7 @@ Implemented:
 - Receiver command transaction/response foundation
 - Receiver command transaction engine foundation
 - UBX ACK/NAK parser + response mapper
+- u-blox response router foundation
 - Transport abstraction foundation
 - NTRIP request/config/metrics foundation
 - ROS2 adapter foundation
@@ -47,6 +48,7 @@ Implemented:
 - [x] Add portable receiver command dispatcher
 - [x] Add portable receiver command transaction/response model
 - [x] Add portable receiver command transaction engine foundation
+- [x] Add u-blox response router foundation
 
 ### 2. Runtime diagnostics model
 
@@ -205,6 +207,7 @@ To do:
 - [x] Receiver command transaction engine foundation
 - [x] u-blox config profile builder
 - [x] u-blox ACK/NAK parser + response mapper
+- [x] u-blox response router
 - [ ] u-blox live transaction integration
 - [x] Unicore config profile builder
 - [ ] Unicore response/transaction engine

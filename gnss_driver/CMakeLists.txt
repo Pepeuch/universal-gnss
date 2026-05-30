@@ -7,6 +7,7 @@ add_library(
   src/receiver_session_runner.cpp
   src/stream_detector.cpp
   src/ubx_command_response_mapper.cpp
+  src/ublox_response_router.cpp
   src/ublox_config_profile_builder.cpp
   src/ublox_session.cpp
   src/unicore_config_profile_builder.cpp
@@ -155,6 +156,20 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_driver_test_ubx_command_response_mapper
     COMMAND gnss_driver_test_ubx_command_response_mapper
+  )
+
+  add_executable(
+    gnss_driver_test_ublox_response_router
+    tests/test_ublox_response_router.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_ublox_response_router
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_ublox_response_router
+    COMMAND gnss_driver_test_ublox_response_router
   )
 
   add_executable(
