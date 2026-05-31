@@ -134,4 +134,15 @@ struct NmeaVtgRecord
   std::optional<char> mode_indicator{};
 };
 
+struct NmeaZdaRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::optional<NmeaUtcTime> utc_time{};
+  std::uint8_t day{0};
+  std::uint8_t month{0};
+  std::uint16_t year{0};
+  std::optional<std::int8_t> local_zone_hours{};
+  std::optional<std::int8_t> local_zone_minutes{};
+};
+
 }  // namespace universal_gnss_protocols

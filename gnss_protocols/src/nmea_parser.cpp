@@ -102,6 +102,28 @@ bool TryParseUnsigned(std::string_view text, unsigned int& value)
   return true;
 }
 
+bool TryParseSigned(std::string_view text, int& value)
+{
+  if (text.empty())
+  {
+    return false;
+  }
+
+  std::string buffer(text);
+  char* end = nullptr;
+  errno = 0;
+  const long parsed = std::strtol(buffer.c_str(), &end, 10);
+  if (errno != 0 || end == nullptr || *end != '\0' ||
+      parsed < static_cast<long>(std::numeric_limits<int>::min()) ||
+      parsed > static_cast<long>(std::numeric_limits<int>::max()))
+  {
+    return false;
+  }
+
+  value = static_cast<int>(parsed);
+  return true;
+}
+
 OptionalFieldStatus ParseOptionalFloat(std::string_view text, std::optional<float>& value)
 {
   value.reset();
@@ -308,6 +330,11 @@ ParserResult<NmeaVtgRecord> InvalidVtg()
   return ParserResult<NmeaVtgRecord>::InvalidData();
 }
 
+ParserResult<NmeaZdaRecord> InvalidZda()
+{
+  return ParserResult<NmeaZdaRecord>::InvalidData();
+}
+
 OptionalFieldStatus ParseOptionalPositiveFloat(std::string_view text, std::optional<float>& value)
 {
   const OptionalFieldStatus status = ParseOptionalFloat(text, value);
@@ -336,6 +363,26 @@ OptionalFieldStatus ParseOptionalUnsigned8(std::string_view text, std::optional<
   }
 
   value = static_cast<std::uint8_t>(parsed);
+  return OptionalFieldStatus::kValue;
+}
+
+OptionalFieldStatus ParseOptionalSigned8(std::string_view text, std::optional<std::int8_t>& value)
+{
+  value.reset();
+  if (text.empty())
+  {
+    return OptionalFieldStatus::kMissing;
+  }
+
+  int parsed = 0;
+  if (!TryParseSigned(text, parsed) ||
+      parsed < static_cast<int>(std::numeric_limits<std::int8_t>::min()) ||
+      parsed > static_cast<int>(std::numeric_limits<std::int8_t>::max()))
+  {
+    return OptionalFieldStatus::kInvalid;
+  }
+
+  value = static_cast<std::int8_t>(parsed);
   return OptionalFieldStatus::kValue;
 }
 
@@ -444,6 +491,11 @@ bool IsNmeaGst(const NmeaSentence& sentence)
 bool IsNmeaVtg(const NmeaSentence& sentence)
 {
   return IsNmeaSentenceType(sentence, "VTG");
+}
+
+bool IsNmeaZda(const NmeaSentence& sentence)
+{
+  return IsNmeaSentenceType(sentence, "ZDA");
 }
 
 std::optional<double> ParseNmeaDegreesMinutes(std::string_view field, std::size_t degree_digits)
@@ -978,6 +1030,84 @@ ParserResult<NmeaVtgRecord> ParseNmeaVtg(const NmeaSentence& sentence)
   }
 
   return ParserResult<NmeaVtgRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<NmeaZdaRecord> ParseNmeaZda(const NmeaSentence& sentence)
+{
+  if (!IsNmeaZda(sentence))
+  {
+    return ParserResult<NmeaZdaRecord>::Skipped();
+  }
+  if (sentence.checksum_status != ChecksumStatus::kValid)
+  {
+    return InvalidZda();
+  }
+
+  std::array<std::string_view, 12> fields{};
+  std::size_t field_count = 0;
+  if (!TokenizeCsv(sentence.payload_text, fields, field_count) || field_count < 5u)
+  {
+    return InvalidZda();
+  }
+
+  NmeaZdaRecord record;
+  record.timestamp_ns = sentence.timestamp_ns;
+
+  if (ParseOptionalUtcTime(fields[1], record.utc_time) != OptionalFieldStatus::kValue)
+  {
+    return InvalidZda();
+  }
+
+  unsigned int day = 0;
+  unsigned int month = 0;
+  unsigned int year = 0;
+  if (!TryParseUnsigned(fields[2], day) || !TryParseUnsigned(fields[3], month) ||
+      !TryParseUnsigned(fields[4], year) || day == 0u || day > 31u || month == 0u ||
+      month > 12u || year < 1000u || year > 9999u)
+  {
+    return InvalidZda();
+  }
+
+  record.day = static_cast<std::uint8_t>(day);
+  record.month = static_cast<std::uint8_t>(month);
+  record.year = static_cast<std::uint16_t>(year);
+
+  if (field_count > 5u || field_count > 6u)
+  {
+    const OptionalFieldStatus hours_status =
+        field_count > 5u ? ParseOptionalSigned8(fields[5], record.local_zone_hours)
+                         : OptionalFieldStatus::kMissing;
+    const OptionalFieldStatus minutes_status =
+        field_count > 6u ? ParseOptionalSigned8(fields[6], record.local_zone_minutes)
+                         : OptionalFieldStatus::kMissing;
+
+    if (hours_status == OptionalFieldStatus::kInvalid ||
+        minutes_status == OptionalFieldStatus::kInvalid)
+    {
+      return InvalidZda();
+    }
+
+    const bool any_zone_field_present =
+        hours_status == OptionalFieldStatus::kValue || minutes_status == OptionalFieldStatus::kValue;
+    if (any_zone_field_present &&
+        (hours_status != OptionalFieldStatus::kValue || minutes_status != OptionalFieldStatus::kValue))
+    {
+      return InvalidZda();
+    }
+
+    if (record.local_zone_hours.has_value() &&
+        (*record.local_zone_hours < -13 || *record.local_zone_hours > 13))
+    {
+      return InvalidZda();
+    }
+    if (record.local_zone_minutes.has_value() &&
+        (*record.local_zone_minutes < 0 || *record.local_zone_minutes > 59))
+    {
+      return InvalidZda();
+    }
+  }
+
+  return ParserResult<NmeaZdaRecord>::RecordReady(std::move(record));
 }
 
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record)

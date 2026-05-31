@@ -578,6 +578,77 @@ void TestMalformedVtgRejected(TestContext& ctx)
              "VTG should reject malformed numeric fields");
 }
 
+void TestValidZdaParsing(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPZDA,201530.00,04,07,2002,02,30"),
+      891);
+  const auto result = universal_gnss_protocols::ParseNmeaZda(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid ZDA should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(891),
+             "ZDA should preserve the framing timestamp");
+  ExpectUtcTime(ctx, record.utc_time, 20u, 15u, 30.0, "ZDA utc time");
+  ctx.Expect(record.day == 4u && record.month == 7u && record.year == 2002u,
+             "ZDA should decode the UTC calendar date");
+  ctx.Expect(record.local_zone_hours == std::optional<std::int8_t>(2) &&
+                 record.local_zone_minutes == std::optional<std::int8_t>(30),
+             "ZDA should decode the local zone offset");
+}
+
+void TestZdaMissingLocalZoneIsTolerated(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPZDA,172809.456,12,07,1996,,"),
+      892);
+  const auto result = universal_gnss_protocols::ParseNmeaZda(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "ZDA should tolerate missing local zone fields");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ExpectUtcTime(ctx, result.record->utc_time, 17u, 28u, 9.456, "ZDA utc time");
+  ctx.Expect(result.record->day == 12u && result.record->month == 7u &&
+                 result.record->year == 1996u,
+             "ZDA should still decode the UTC date when local zone is missing");
+  ctx.Expect(!result.record->local_zone_hours.has_value() &&
+                 !result.record->local_zone_minutes.has_value(),
+             "missing local zone fields should stay unset");
+}
+
+void TestMalformedZdaRejected(TestContext& ctx)
+{
+  const NmeaSentence checksum_sentence =
+      FrameSentence("$GPZDA,201530.00,04,07,2002,02,30*00\r\n");
+  ctx.Expect(checksum_sentence.checksum_status == ChecksumStatus::kInvalid,
+             "test setup should produce an invalid ZDA checksum");
+  ctx.Expect(universal_gnss_protocols::ParseNmeaZda(checksum_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "ZDA semantic parsing should reject invalid checksums");
+
+  const NmeaSentence invalid_date_sentence =
+      FrameSentence(MakeSentence("GPZDA,201530.00,32,07,2002,02,30"));
+  ctx.Expect(universal_gnss_protocols::ParseNmeaZda(invalid_date_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "ZDA should reject invalid calendar dates");
+
+  const NmeaSentence malformed_numeric_sentence =
+      FrameSentence(MakeSentence("GPZDA,201530.00,04,07,20xx,02,30"));
+  ctx.Expect(universal_gnss_protocols::ParseNmeaZda(malformed_numeric_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "ZDA should reject malformed numeric fields");
+}
+
 void TestGstMissingOptionalFields(TestContext& ctx)
 {
   const NmeaSentence sentence = FrameSentence(
@@ -792,14 +863,17 @@ int main()
   TestValidGsvParsing(ctx);
   TestValidGstParsing(ctx);
   TestValidVtgParsing(ctx);
+  TestValidZdaParsing(ctx);
   TestPartialGsvSatelliteBlockHandling(ctx);
   TestMalformedDopRejected(ctx);
   TestMissingOptionalGsaFields(ctx);
   TestGsvMissingOptionalFields(ctx);
   TestGstMissingOptionalFields(ctx);
   TestVtgMissingOptionalFields(ctx);
+  TestZdaMissingLocalZoneIsTolerated(ctx);
   TestMalformedGstRejected(ctx);
   TestMalformedVtgRejected(ctx);
+  TestMalformedZdaRejected(ctx);
   TestGsaAndGsvRuntimeMapping(ctx);
   TestGstRuntimeMapping(ctx);
   TestNmeaPartialStatesCanBeAggregated(ctx);

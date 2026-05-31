@@ -16,6 +16,7 @@ bool IsNmeaSentenceType(const NmeaSentence& sentence, std::string_view sentence_
 
 bool IsNmeaGst(const NmeaSentence& sentence);
 bool IsNmeaVtg(const NmeaSentence& sentence);
+bool IsNmeaZda(const NmeaSentence& sentence);
 
 std::optional<double> ParseNmeaDegreesMinutes(std::string_view field, std::size_t degree_digits);
 
@@ -34,6 +35,8 @@ ParserResult<NmeaGsvRecord> ParseNmeaGsv(const NmeaSentence& sentence);
 ParserResult<NmeaGstRecord> ParseNmeaGst(const NmeaSentence& sentence);
 
 ParserResult<NmeaVtgRecord> ParseNmeaVtg(const NmeaSentence& sentence);
+
+ParserResult<NmeaZdaRecord> ParseNmeaZda(const NmeaSentence& sentence);
 
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record);
 
