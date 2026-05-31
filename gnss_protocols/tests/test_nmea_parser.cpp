@@ -503,6 +503,81 @@ void TestValidGstParsing(TestContext& ctx)
              "GST should decode altitude standard deviation");
 }
 
+void TestValidVtgParsing(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"),
+      889);
+  const auto result = universal_gnss_protocols::ParseNmeaVtg(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid VTG should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(889),
+             "VTG should preserve the framing timestamp");
+  ctx.Expect(record.true_course_deg.has_value() && NearlyEqual(*record.true_course_deg, 54.7),
+             "VTG should decode true course");
+  ctx.Expect(record.magnetic_course_deg.has_value() &&
+                 NearlyEqual(*record.magnetic_course_deg, 34.4),
+             "VTG should decode magnetic course");
+  ctx.Expect(record.speed_knots.has_value() && NearlyEqual(*record.speed_knots, 5.5),
+             "VTG should decode speed in knots");
+  ctx.Expect(record.speed_kmh.has_value() && NearlyEqual(*record.speed_kmh, 10.2),
+             "VTG should decode speed in km/h");
+  ctx.Expect(record.mode_indicator == std::optional<char>('A'),
+             "VTG should decode the mode indicator when present");
+}
+
+void TestVtgMissingOptionalFields(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPVTG,054.7,T,,M,005.5,N,010.2,K"), 890);
+  const auto result = universal_gnss_protocols::ParseNmeaVtg(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "VTG should tolerate missing optional magnetic course and mode fields");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(result.record->true_course_deg.has_value() &&
+                 NearlyEqual(*result.record->true_course_deg, 54.7),
+             "VTG should still decode true course");
+  ctx.Expect(!result.record->magnetic_course_deg.has_value(),
+             "missing VTG magnetic course should stay unset");
+  ctx.Expect(result.record->speed_knots.has_value() &&
+                 NearlyEqual(*result.record->speed_knots, 5.5),
+             "VTG should still decode knots when magnetic course is missing");
+  ctx.Expect(result.record->speed_kmh.has_value() &&
+                 NearlyEqual(*result.record->speed_kmh, 10.2),
+             "VTG should still decode km/h when mode is absent");
+  ctx.Expect(!result.record->mode_indicator.has_value(),
+             "missing VTG mode indicator should stay unset");
+}
+
+void TestMalformedVtgRejected(TestContext& ctx)
+{
+  const NmeaSentence checksum_sentence =
+      FrameSentence("$GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A*00\r\n");
+  ctx.Expect(checksum_sentence.checksum_status == ChecksumStatus::kInvalid,
+             "test setup should produce an invalid VTG checksum");
+  ctx.Expect(universal_gnss_protocols::ParseNmeaVtg(checksum_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "VTG semantic parsing should reject invalid checksums");
+
+  const NmeaSentence numeric_sentence =
+      FrameSentence(MakeSentence("GPVTG,abc,T,034.4,M,005.5,N,010.2,K,A"));
+  ctx.Expect(universal_gnss_protocols::ParseNmeaVtg(numeric_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "VTG should reject malformed numeric fields");
+}
+
 void TestGstMissingOptionalFields(TestContext& ctx)
 {
   const NmeaSentence sentence = FrameSentence(
@@ -716,12 +791,15 @@ int main()
   TestValidGsaParsing(ctx);
   TestValidGsvParsing(ctx);
   TestValidGstParsing(ctx);
+  TestValidVtgParsing(ctx);
   TestPartialGsvSatelliteBlockHandling(ctx);
   TestMalformedDopRejected(ctx);
   TestMissingOptionalGsaFields(ctx);
   TestGsvMissingOptionalFields(ctx);
   TestGstMissingOptionalFields(ctx);
+  TestVtgMissingOptionalFields(ctx);
   TestMalformedGstRejected(ctx);
+  TestMalformedVtgRejected(ctx);
   TestGsaAndGsvRuntimeMapping(ctx);
   TestGstRuntimeMapping(ctx);
   TestNmeaPartialStatesCanBeAggregated(ctx);

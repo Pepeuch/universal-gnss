@@ -112,6 +112,7 @@ Implemented semantic messages:
 - `GSA`
 - `GSV`
 - `GST`
+- `VTG`
 
 Implemented behaviors:
 
@@ -127,14 +128,18 @@ Current NMEA notes:
 - `GSA` contributes DOP and active-satellite information
 - `GSV` contributes satellites-in-view and per-sentence CN0 summaries
 - `GST` contributes conservative horizontal/vertical accuracy only
+- `VTG` currently contributes semantic course/speed parsing only
 - `GST` accuracy now flows through the NMEA session/replay routing paths that
   already consume `GGA` / `RMC` / `GSA` / `GSV`
+- `VTG` is not projected into `GnssRuntimeState` yet because the core does not
+  yet define a generic speed/course field contract
 
 What NMEA does not do yet:
 
 - `GSA` / `GSV` multi-sentence aggregation
 - persistent satellite tracking across epochs
-- `VTG`, `ZDA`, proprietary vendor sentences, or NMEA state fusion
+- `VTG` runtime projection
+- `ZDA`, proprietary vendor sentences, or NMEA state fusion
 
 ### UBX
 

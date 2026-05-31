@@ -124,4 +124,14 @@ struct NmeaGstRecord
   std::optional<float> altitude_std_dev_m{};
 };
 
+struct NmeaVtgRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::optional<float> true_course_deg{};
+  std::optional<float> magnetic_course_deg{};
+  std::optional<float> speed_knots{};
+  std::optional<float> speed_kmh{};
+  std::optional<char> mode_indicator{};
+};
+
 }  // namespace universal_gnss_protocols

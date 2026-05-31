@@ -303,6 +303,11 @@ ParserResult<NmeaGstRecord> InvalidGst()
   return ParserResult<NmeaGstRecord>::InvalidData();
 }
 
+ParserResult<NmeaVtgRecord> InvalidVtg()
+{
+  return ParserResult<NmeaVtgRecord>::InvalidData();
+}
+
 OptionalFieldStatus ParseOptionalPositiveFloat(std::string_view text, std::optional<float>& value)
 {
   const OptionalFieldStatus status = ParseOptionalFloat(text, value);
@@ -373,6 +378,34 @@ bool HasAnySatelliteBlockValue(const std::array<std::string_view, 4>& fields)
   return false;
 }
 
+bool ParseOptionalModeIndicator(std::string_view text, std::optional<char>& value)
+{
+  value.reset();
+  if (text.empty())
+  {
+    return true;
+  }
+  if (text.size() != 1u)
+  {
+    return false;
+  }
+
+  const char mode = text.front();
+  switch (mode)
+  {
+    case 'A':
+    case 'D':
+    case 'E':
+    case 'M':
+    case 'N':
+    case 'S':
+      value = mode;
+      return true;
+    default:
+      return false;
+  }
+}
+
 void UpdateFixDimensionInState(NmeaFixDimension fix_dimension,
                                universal_gnss::GnssRuntimeState& state)
 {
@@ -406,6 +439,11 @@ bool IsNmeaSentenceType(const NmeaSentence& sentence, std::string_view sentence_
 bool IsNmeaGst(const NmeaSentence& sentence)
 {
   return IsNmeaSentenceType(sentence, "GST");
+}
+
+bool IsNmeaVtg(const NmeaSentence& sentence)
+{
+  return IsNmeaSentenceType(sentence, "VTG");
 }
 
 std::optional<double> ParseNmeaDegreesMinutes(std::string_view field, std::size_t degree_digits)
@@ -861,6 +899,85 @@ ParserResult<NmeaGstRecord> ParseNmeaGst(const NmeaSentence& sentence)
   }
 
   return ParserResult<NmeaGstRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<NmeaVtgRecord> ParseNmeaVtg(const NmeaSentence& sentence)
+{
+  if (!IsNmeaVtg(sentence))
+  {
+    return ParserResult<NmeaVtgRecord>::Skipped();
+  }
+  if (sentence.checksum_status != ChecksumStatus::kValid)
+  {
+    return InvalidVtg();
+  }
+
+  std::array<std::string_view, 16> fields{};
+  std::size_t field_count = 0;
+  if (!TokenizeCsv(sentence.payload_text, fields, field_count) || field_count < 1u)
+  {
+    return InvalidVtg();
+  }
+
+  NmeaVtgRecord record;
+  record.timestamp_ns = sentence.timestamp_ns;
+
+  if (field_count > 1u &&
+      ParseOptionalFloat(fields[1], record.true_course_deg) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidVtg();
+  }
+  if (record.true_course_deg.has_value() &&
+      (*record.true_course_deg < 0.0f || *record.true_course_deg >= 360.0f))
+  {
+    return InvalidVtg();
+  }
+  if (field_count > 2u && !fields[2].empty() && fields[2] != "T")
+  {
+    return InvalidVtg();
+  }
+
+  if (field_count > 3u &&
+      ParseOptionalFloat(fields[3], record.magnetic_course_deg) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidVtg();
+  }
+  if (record.magnetic_course_deg.has_value() &&
+      (*record.magnetic_course_deg < 0.0f || *record.magnetic_course_deg >= 360.0f))
+  {
+    return InvalidVtg();
+  }
+  if (field_count > 4u && !fields[4].empty() && fields[4] != "M")
+  {
+    return InvalidVtg();
+  }
+
+  if (field_count > 5u &&
+      ParseOptionalPositiveFloat(fields[5], record.speed_knots) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidVtg();
+  }
+  if (field_count > 6u && !fields[6].empty() && fields[6] != "N")
+  {
+    return InvalidVtg();
+  }
+
+  if (field_count > 7u &&
+      ParseOptionalPositiveFloat(fields[7], record.speed_kmh) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidVtg();
+  }
+  if (field_count > 8u && !fields[8].empty() && fields[8] != "K")
+  {
+    return InvalidVtg();
+  }
+
+  if (field_count > 9u && !ParseOptionalModeIndicator(fields[9], record.mode_indicator))
+  {
+    return InvalidVtg();
+  }
+
+  return ParserResult<NmeaVtgRecord>::RecordReady(std::move(record));
 }
 
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record)
