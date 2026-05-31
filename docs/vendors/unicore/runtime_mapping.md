@@ -19,6 +19,10 @@ Current parsed Unicore ASCII messages:
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
 - `SATSINFOA`
+- `JAMSTATUSA`
+- `FREQJAMSTATUSA`
+- `HWSTATUSA`
+- `AGCA`
 
 Not implemented yet:
 
@@ -41,6 +45,13 @@ coherent portable runtime state
 
 Each Unicore message can contribute only part of the runtime view. The
 aggregator is responsible for merging those pieces.
+
+Some Unicore messages are diagnostics-only rather than direct runtime-state
+producers:
+
+- `JAMSTATUSA` and `FREQJAMSTATUSA` also emit portable receiver diagnostics
+- `HWSTATUSA` emits a conservative portable hardware diagnostic
+- `AGCA` is currently parsed semantically only
 
 The first portable consumer of these mappings now exists in
 `gnss_driver::UnicoreSession`:
@@ -179,6 +190,115 @@ Current conservative rules:
 - no RTK, correction-age, or RF state is inferred from signal-strength data
 - no constellation-specific aggregate fields are projected into core yet
 
+## JAMSTATUSA
+
+`JAMSTATUSA` is the current coarse Unicore jamming-status message.
+
+Current semantic coverage:
+
+- documented position type
+- documented `CWRatio`
+- documented `CWFlag`
+
+Current runtime mappings:
+
+- `CWFlag == 0` -> `interference_detected = false`,
+  `jamming_detected = false`
+- `CWFlag == 1` or `2` -> `interference_detected = true`,
+  `jamming_detected = true`
+- undocumented `CWFlag` values leave the runtime value unset
+
+Current diagnostic behavior:
+
+- `CWFlag == 0` -> portable receiver diagnostic `kOk`
+- `CWFlag == 1` -> portable receiver diagnostic `kWarning`
+- `CWFlag == 2` -> portable receiver diagnostic `kError`
+
+Conservative rules:
+
+- no fix, RTK, accuracy, or correction state is inferred
+- `CWRatio` is preserved semantically, but no portable threshold is inferred
+  from it alone
+
+## FREQJAMSTATUSA
+
+`FREQJAMSTATUSA` is the current per-frequency Unicore jamming-status message.
+
+Current semantic coverage:
+
+- documented position type
+- `L1CWRatio`, `L1CWFlag`
+- `L2CWRatio`, `L2CWFlag`
+- `L5CWRatio`, `L5CWFlag`
+
+Current runtime mappings:
+
+- if any documented band reports jamming, `interference_detected` and
+  `jamming_detected` become `true`
+- if all documented bands explicitly report no jamming, both booleans become
+  `false`
+- if all band states are unknown, capability may exist but the value stays
+  unset
+
+Current diagnostic behavior:
+
+- any strong-jam band -> portable receiver diagnostic `kError`
+- any jam band with no strong-jam band -> `kWarning`
+- all known bands clear -> `kOk`
+
+Conservative rules:
+
+- no RTK, fix, or correction semantics are inferred from per-band RF status
+- no constellation-specific RF aggregate fields are projected into core yet
+
+## HWSTATUSA
+
+`HWSTATUSA` is the current coarse Unicore hardware-status message.
+
+Current semantic coverage:
+
+- `DC09`, `DC10`, `DC18`
+- documented `Clockflag`
+- documented `ClockDrift`
+- documented `hwFlag`
+- documented `PLL_LOCK`
+
+Current runtime behavior:
+
+- no direct `GnssRuntimeState` projection yet
+
+Current diagnostic behavior:
+
+- `Clockflag == 0` -> portable receiver diagnostic `kWarning`
+- `Clockflag == 1` -> portable receiver diagnostic `kOk`
+
+Conservative rules:
+
+- voltage rails, `hwFlag`, and `PLL_LOCK` are preserved semantically only
+- no universal fault threshold is inferred from those fields yet
+
+## AGCA
+
+`AGCA` is the current automatic-gain-control telemetry message.
+
+Current semantic coverage:
+
+- `ANT1L1`, `ANT1L2`, `ANT1L5`
+- `ANT2L1`, `ANT2L2`, `ANT2L5`
+- `-1` is treated as the documented invalid-channel sentinel
+
+Current runtime behavior:
+
+- no direct `GnssRuntimeState` projection yet
+
+Reason:
+
+- the vendor manual explicitly says AGC values vary with hardware
+- generic open-circuit or interference thresholds would therefore be
+  non-portable
+- `AGCA` is kept as semantic telemetry for future tooling, not a universal
+  runtime fault source yet
+
 ## Position-Type Mapping
 
 Current generic mapping rules:
@@ -215,6 +335,8 @@ Examples:
 - `BESTNAVA` can refresh coordinates, accuracy, and correction age
 - `RTKSTATUSA` can refresh RTK mode and dual-antenna state
 - `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
+- `JAMSTATUSA` and `FREQJAMSTATUSA` can refresh portable
+  jamming/interference booleans
 - `RTCMSTATUSA` can be retained as a semantic record without touching the core
   runtime state
 
@@ -242,4 +364,5 @@ Still intentionally deferred:
 - NTRIP injection
 - persistent satellite tracking
 - richer correction-session metrics
+- AGC threshold interpretation beyond documented safe semantics
 - ROS 2 nodes

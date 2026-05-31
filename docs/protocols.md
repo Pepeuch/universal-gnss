@@ -258,6 +258,10 @@ Implemented semantic messages:
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
 - `SATSINFOA`
+- `JAMSTATUSA`
+- `FREQJAMSTATUSA`
+- `HWSTATUSA`
+- `AGCA`
 
 Implemented behaviors:
 
@@ -274,6 +278,12 @@ Current Unicore notes:
 - `RTKSTATUSA` complements position messages with RTK-mode and dual-antenna
   status
 - `SATSINFOA` provides tracked-satellite counts and CN0 summaries
+- `JAMSTATUSA` and `FREQJAMSTATUSA` provide documented Unicore-side
+  interference / jamming state
+- `HWSTATUSA` provides conservative hardware diagnostics from documented clock
+  validity only
+- `AGCA` is parsed semantically, but stays out of the portable runtime because
+  AGC thresholds are explicitly hardware-dependent in the vendor manual
 - `RTCMSTATUSA` is parsed semantically but does not project into runtime state
   yet
 
@@ -284,7 +294,7 @@ What Unicore does not do yet:
 
 - binary `N4`
 - receiver configuration commands
-- Mowgli-style diagnostics projection
+- AGC threshold interpretation beyond documented safe semantics
 - constellation-specific aggregate statistics
 
 ## Runtime Mapping Coverage
@@ -309,7 +319,7 @@ satellites_visible       NMEA GSV, UBX NAV-SAT
 satellites_tracked       Unicore PVTSLNA, Unicore BESTNAVA, Unicore SATSINFOA
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
 heading                  UBX NAV-PVT, Unicore PVTSLNA
-interference / jamming   UBX MON-RF
+interference / jamming   UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA
 correction_age           Unicore PVTSLNA, Unicore BESTNAVA
 dual antenna state       Unicore RTKSTATUSA
 ```
@@ -341,6 +351,9 @@ Examples:
   RTK mode, or position
 - Unicore `PVTSLNA` and `BESTNAVA` can set RTK mode only from documented
   position-type enums, not from indirect heuristics
+- Unicore `JAMSTATUSA` and `FREQJAMSTATUSA` only map documented jamming state;
+  they do not imply fix, RTK, or correction quality
+- Unicore `HWSTATUSA` emits conservative receiver diagnostics only
 - RTCM currently does not modify runtime state at all
 
 ## Current Guarantees

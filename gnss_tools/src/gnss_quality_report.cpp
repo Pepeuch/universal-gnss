@@ -18,6 +18,8 @@
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
+#include "universal_gnss_protocols/unicore_parser.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_protocols/ubx_parser.hpp"
 #include "universal_gnss_tools/gnss_replay.hpp"
@@ -43,6 +45,8 @@ using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::ProtocolType;
 using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmConstellation;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
 using universal_gnss_protocols::UbxRxmRtcmMessageUse;
@@ -242,6 +246,27 @@ std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
   }
 
   const auto parsed = universal_gnss_protocols::ParseUbxRxmRtcm(*probe.record);
+  if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+  {
+    return std::nullopt;
+  }
+
+  return parsed.record;
+}
+
+template <typename RecordT, typename ParseFn>
+std::optional<RecordT> ParseUnicoreRecordAtOffset(const std::vector<std::uint8_t>& bytes,
+                                                  const std::size_t byte_offset,
+                                                  ParseFn&& parse_fn)
+{
+  UnicoreFrameFramer framer;
+  const auto probe = ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, byte_offset);
+  if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+  {
+    return std::nullopt;
+  }
+
+  const auto parsed = std::forward<ParseFn>(parse_fn)(*probe.record);
   if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
   {
     return std::nullopt;
@@ -524,6 +549,46 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
       {
         correction_monitor.ObserveInvalidFrame();
       }
+      continue;
+    }
+
+    if (item.protocol == ProtocolType::kUnicore)
+    {
+      if (const auto jam_status =
+              ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreJamStatusRecord>(
+                  bytes,
+                  item.byte_offset,
+                  universal_gnss_protocols::ParseUnicoreJamStatus);
+          jam_status.has_value())
+      {
+        report.diagnostics.push_back(
+            universal_gnss_protocols::UnicoreJamStatusToDiagnosticEvent(*jam_status));
+        continue;
+      }
+
+      if (const auto freq_jam_status =
+              ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreFreqJamStatusRecord>(
+                  bytes,
+                  item.byte_offset,
+                  universal_gnss_protocols::ParseUnicoreFreqJamStatus);
+          freq_jam_status.has_value())
+      {
+        report.diagnostics.push_back(
+            universal_gnss_protocols::UnicoreFreqJamStatusToDiagnosticEvent(*freq_jam_status));
+        continue;
+      }
+
+      if (const auto hw_status =
+              ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreHwStatusRecord>(
+                  bytes,
+                  item.byte_offset,
+                  universal_gnss_protocols::ParseUnicoreHwStatus);
+          hw_status.has_value())
+      {
+        report.diagnostics.push_back(
+            universal_gnss_protocols::UnicoreHwStatusToDiagnosticEvent(*hw_status));
+      }
+
       continue;
     }
 

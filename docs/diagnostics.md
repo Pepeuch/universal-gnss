@@ -90,6 +90,23 @@ This complements the stream-side RTCM monitor:
 
 It still does not imply RTK float/fixed state or position quality by itself.
 
+The first Unicore receiver-health consumers now live in the Unicore ASCII
+semantic layer:
+
+- `JAMSTATUSA` emits a portable receiver event for the documented coarse
+  jamming state
+- `FREQJAMSTATUSA` emits a portable receiver event for documented per-band
+  jamming state
+- `HWSTATUSA` emits a portable receiver event only from the documented
+  clock-validity flag
+
+Those Unicore events are intentionally conservative:
+
+- they do not infer fix, RTK, position, or correction quality
+- they do not project vendor-specific hardware fields into `gnss_core`
+- they complement the runtime-state booleans for jamming/interference rather
+  than replacing them
+
 The first live network-side consumer is the TCP-backed NTRIP client in
 `gnss_ntrip`. It reuses the same RTCM correction monitor while streaming bytes
 from a caster, so:

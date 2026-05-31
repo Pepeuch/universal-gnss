@@ -13,6 +13,9 @@ using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss_protocols::ParseUnicoreBestNav;
+using universal_gnss_protocols::ParseUnicoreFreqJamStatus;
+using universal_gnss_protocols::ParseUnicoreHwStatus;
+using universal_gnss_protocols::ParseUnicoreJamStatus;
 using universal_gnss_protocols::ParseUnicorePvtsln;
 using universal_gnss_protocols::ParseUnicoreRtkStatus;
 using universal_gnss_protocols::ParseUnicoreRtcmStatus;
@@ -261,6 +264,114 @@ void TestSatsInfoParsingAndRuntimeMapping(TestContext& ctx)
              "SATSINFOA should not invent RTK, correction, or RF capabilities");
 }
 
+void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
+{
+  const std::string jam_line =
+      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
+  const auto jam_result = ParseUnicoreJamStatus(BuildAsciiFrame(jam_line, 7777));
+  ctx.Expect(jam_result.status == ParserStatus::kRecordReady && jam_result.record.has_value(),
+             "valid JAMSTATUSA line should parse successfully");
+  if (jam_result.record.has_value())
+  {
+    const auto& record = *jam_result.record;
+    ctx.Expect(record.position_type == universal_gnss_protocols::UnicorePositionType::kSingle &&
+                   record.cw_ratio == 120u &&
+                   record.cw_state ==
+                       universal_gnss_protocols::UnicoreJammingState::kStrongJamming,
+               "JAMSTATUSA should parse the documented position type and CW jamming fields");
+
+    const auto state = universal_gnss_protocols::UnicoreJamStatusToRuntimeState(record);
+    ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kInterferenceState) &&
+                   universal_gnss::HasCapability(state, GnssCapability::kJammingState) &&
+                   universal_gnss::HasValueAvailable(state, GnssCapability::kInterferenceState) &&
+                   universal_gnss::HasValueAvailable(state, GnssCapability::kJammingState) &&
+                   state.interference_detected == std::optional<bool>(true) &&
+                   state.jamming_detected == std::optional<bool>(true),
+               "JAMSTATUSA runtime mapping should conservatively expose interference and jamming");
+    ctx.Expect(state.fix_type == GnssFixType::kUnknown &&
+                   !state.latitude_deg.has_value() &&
+                   !state.horizontal_accuracy_m.has_value(),
+               "JAMSTATUSA should not invent fix, position, or accuracy state");
+
+    const auto event = universal_gnss_protocols::UnicoreJamStatusToDiagnosticEvent(record);
+    ctx.Expect(event.severity == universal_gnss::GnssDiagnosticSeverity::kError &&
+                   event.code == "unicore_jam_status.strong",
+               "JAMSTATUSA diagnostic mapping should treat strong jamming as an error");
+  }
+
+  const std::string freq_jam_line =
+      "#FREQJAMSTATUSA,97,GPS,FINE,2164,559464000,0,0,18,8;SINGLE,255,2,0,0,12,1,0,0*b0cdc7de\r\n";
+  const auto freq_jam_result = ParseUnicoreFreqJamStatus(BuildAsciiFrame(freq_jam_line, 7778));
+  ctx.Expect(freq_jam_result.status == ParserStatus::kRecordReady &&
+                 freq_jam_result.record.has_value(),
+             "valid FREQJAMSTATUSA line should parse successfully");
+  if (freq_jam_result.record.has_value())
+  {
+    const auto& record = *freq_jam_result.record;
+    ctx.Expect(record.l1.cw_ratio == 255u &&
+                   record.l1.cw_state ==
+                       universal_gnss_protocols::UnicoreJammingState::kStrongJamming &&
+                   record.l2.cw_state ==
+                       universal_gnss_protocols::UnicoreJammingState::kNone &&
+                   record.l5.cw_state ==
+                       universal_gnss_protocols::UnicoreJammingState::kJamming,
+               "FREQJAMSTATUSA should parse documented per-frequency jamming fields");
+
+    const auto state = universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(record);
+    ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kInterferenceState) &&
+                   universal_gnss::HasValueAvailable(state, GnssCapability::kJammingState) &&
+                   state.interference_detected == std::optional<bool>(true) &&
+                   state.jamming_detected == std::optional<bool>(true),
+               "FREQJAMSTATUSA runtime mapping should set interference/jamming when any band is jammed");
+
+    const auto event = universal_gnss_protocols::UnicoreFreqJamStatusToDiagnosticEvent(record);
+    ctx.Expect(event.severity == universal_gnss::GnssDiagnosticSeverity::kError &&
+                   event.code == "unicore_freq_jam_status.strong" &&
+                   event.message.find("L1") != std::string::npos,
+               "FREQJAMSTATUSA diagnostics should surface strong per-band jamming");
+  }
+
+  const std::string hw_status_line =
+      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,0,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+  const auto hw_status_result = ParseUnicoreHwStatus(BuildAsciiFrame(hw_status_line, 7779));
+  ctx.Expect(hw_status_result.status == ParserStatus::kRecordReady &&
+                 hw_status_result.record.has_value(),
+             "valid HWSTATUSA line should parse successfully");
+  if (hw_status_result.record.has_value())
+  {
+    const auto& record = *hw_status_result.record;
+    ctx.Expect(record.dc09_v == 0.92f &&
+                   record.dc10_v == 1.02f &&
+                   record.dc18_v == 0.908f &&
+                   !record.clock_drift_valid &&
+                   record.hw_flag == 0x00u &&
+                   record.pll_lock == 0x0377u,
+               "HWSTATUSA should parse documented voltage, clock, and hardware fields");
+
+    const auto event = universal_gnss_protocols::UnicoreHwStatusToDiagnosticEvent(record);
+    ctx.Expect(event.severity == universal_gnss::GnssDiagnosticSeverity::kWarning &&
+                   event.code == "unicore_hw_status.clock_invalid",
+               "HWSTATUSA should conservatively warn only on invalid documented clock status");
+  }
+
+  const std::string agc_line =
+      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1*634f1e4b\r\n";
+  const auto agc_result = universal_gnss_protocols::ParseUnicoreAgc(BuildAsciiFrame(agc_line, 7780));
+  ctx.Expect(agc_result.status == ParserStatus::kRecordReady && agc_result.record.has_value(),
+             "valid AGCA line should parse successfully");
+  if (agc_result.record.has_value())
+  {
+    const auto& record = *agc_result.record;
+    ctx.Expect(record.ant1_l1 == std::optional<std::int16_t>(44) &&
+                   record.ant1_l2 == std::optional<std::int16_t>(46) &&
+                   record.ant1_l5 == std::optional<std::int16_t>(63) &&
+                   record.ant2_l1 == std::optional<std::int16_t>(41) &&
+                   record.ant2_l2 == std::optional<std::int16_t>(1) &&
+                   record.ant2_l5 == std::optional<std::int16_t>(0),
+               "AGCA should preserve documented per-antenna AGC register values");
+  }
+}
+
 void TestMalformedAndMissingFields(TestContext& ctx)
 {
   const std::string malformed_bestnav =
@@ -309,6 +420,18 @@ void TestMalformedAndMissingFields(TestContext& ctx)
                    !universal_gnss::HasValueAvailable(state, GnssCapability::kMaxCn0),
                "empty SATSINFOA should keep tracked count but leave CN0 values unset");
   }
+
+  const std::string malformed_jam =
+      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,not_a_ratio,2,0,0*e31418ea\r\n";
+  const auto malformed_jam_result = ParseUnicoreJamStatus(BuildAsciiFrame(malformed_jam));
+  ctx.Expect(malformed_jam_result.status == ParserStatus::kInvalidData,
+             "JAMSTATUSA should reject malformed numeric essentials");
+
+  const std::string malformed_hw =
+      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,2,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+  const auto malformed_hw_result = ParseUnicoreHwStatus(BuildAsciiFrame(malformed_hw));
+  ctx.Expect(malformed_hw_result.status == ParserStatus::kInvalidData,
+             "HWSTATUSA should reject unsupported clock validity values");
 }
 
 }  // namespace
@@ -321,6 +444,7 @@ int main()
   TestBestNavParsingAndMapping(ctx);
   TestRtkStatusAndRtcmStatusParsing(ctx);
   TestSatsInfoParsingAndRuntimeMapping(ctx);
+  TestRfAndHardwareParsingAndMapping(ctx);
   TestMalformedAndMissingFields(ctx);
 
   if (ctx.failures != 0)

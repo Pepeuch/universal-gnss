@@ -505,6 +505,17 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
   {
     return universal_gnss_protocols::UnicoreSatsInfoToRuntimeState(*satsinfo.record);
   }
+  if (const auto jamstatus = universal_gnss_protocols::ParseUnicoreJamStatus(frame);
+      jamstatus.status == ParserStatus::kRecordReady && jamstatus.record.has_value())
+  {
+    return universal_gnss_protocols::UnicoreJamStatusToRuntimeState(*jamstatus.record);
+  }
+  if (const auto freqjamstatus = universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame);
+      freqjamstatus.status == ParserStatus::kRecordReady &&
+      freqjamstatus.record.has_value())
+  {
+    return universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(*freqjamstatus.record);
+  }
 
   return std::nullopt;
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
@@ -18,6 +19,14 @@ ParserResult<UnicoreRtcmStatusRecord> ParseUnicoreRtcmStatus(const UnicoreFrame&
 
 ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& frame);
 
+ParserResult<UnicoreJamStatusRecord> ParseUnicoreJamStatus(const UnicoreFrame& frame);
+
+ParserResult<UnicoreFreqJamStatusRecord> ParseUnicoreFreqJamStatus(const UnicoreFrame& frame);
+
+ParserResult<UnicoreHwStatusRecord> ParseUnicoreHwStatus(const UnicoreFrame& frame);
+
+ParserResult<UnicoreAgcRecord> ParseUnicoreAgc(const UnicoreFrame& frame);
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestNavRecord& record);
@@ -30,5 +39,20 @@ universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
 
 universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(
     const UnicoreSatsInfoRecord& record);
+
+universal_gnss::GnssRuntimeState UnicoreJamStatusToRuntimeState(
+    const UnicoreJamStatusRecord& record);
+
+universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
+    const UnicoreFreqJamStatusRecord& record);
+
+universal_gnss::GnssDiagnosticEvent UnicoreJamStatusToDiagnosticEvent(
+    const UnicoreJamStatusRecord& record);
+
+universal_gnss::GnssDiagnosticEvent UnicoreFreqJamStatusToDiagnosticEvent(
+    const UnicoreFreqJamStatusRecord& record);
+
+universal_gnss::GnssDiagnosticEvent UnicoreHwStatusToDiagnosticEvent(
+    const UnicoreHwStatusRecord& record);
 
 }  // namespace universal_gnss_protocols

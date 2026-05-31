@@ -226,6 +226,10 @@ Implemented:
 - [x] RTKSTATUSA
 - [x] RTCMSTATUSA
 - [x] SATSINFOA
+- [x] JAMSTATUSA
+- [x] FREQJAMSTATUSA
+- [x] HWSTATUSA
+- [x] AGCA
 - [x] text config profile builder
 
 To do:
@@ -233,9 +237,8 @@ To do:
 - [ ] binary N4 framing
 - [ ] binary BESTNAV/PVTSLN equivalents
 - [ ] BESTSATA if useful
-- [ ] RF/jamming messages
-- [ ] hardware status messages
 - [ ] raw observation support
+- [ ] AGC threshold interpretation if a safe generic policy emerges
 
 ---
 

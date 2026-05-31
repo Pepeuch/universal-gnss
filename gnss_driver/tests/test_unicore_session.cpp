@@ -55,6 +55,12 @@ constexpr const char* kSatsInfoLine =
     "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
     "5,225,14,1,50,0,1*abcdef12\r\n";
 
+constexpr const char* kJamStatusLine =
+    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
+
+constexpr const char* kHwStatusLine =
+    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+
 void TestBestNavUpdatesRuntimeState(TestContext& ctx)
 {
   UnicoreSession session;
@@ -129,6 +135,23 @@ void TestSatsInfoUpdatesTrackedAndCn0(TestContext& ctx)
              "SATSINFOA should update CN0 summaries");
 }
 
+void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedString(kJamStatusLine, 6666);
+
+  const auto& state = session.current_state();
+  ctx.Expect(HasCapability(state, GnssCapability::kInterferenceState) &&
+                 HasCapability(state, GnssCapability::kJammingState) &&
+                 HasValueAvailable(state, GnssCapability::kInterferenceState) &&
+                 HasValueAvailable(state, GnssCapability::kJammingState) &&
+                 state.interference_detected == std::optional<bool>(true) &&
+                 state.jamming_detected == std::optional<bool>(true),
+             "JAMSTATUSA should update the portable interference and jamming state");
+  ctx.Expect(!state.latitude_deg.has_value() && state.fix_type == GnssFixType::kUnknown,
+             "JAMSTATUSA should not invent position or fix state");
+}
+
 void TestUnknownAndMalformedRecords(TestContext& ctx)
 {
   UnicoreSession session;
@@ -160,6 +183,23 @@ void TestPartialChunksAcrossFeeds(TestContext& ctx)
              "split BESTNAVA input should parse after the final chunk arrives");
   ctx.Expect(session.current_state().timestamp_ns == std::optional<std::int64_t>(7000),
              "split input should preserve the first-byte timestamp of the framed record");
+}
+
+void TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedString(kHwStatusLine, 9000);
+  session.FeedString(
+      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1*634f1e4b\r\n",
+      9001);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.records_parsed == 2u && metrics.runtime_updates == 0u &&
+                 metrics.unknown_records == 0u && metrics.records_rejected == 0u,
+             "HWSTATUSA and AGCA should be treated as known parsed telemetry even without runtime updates");
+  ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
+                 !session.current_state().timestamp_ns.has_value(),
+             "HWSTATUSA and AGCA should not modify the aggregated runtime state");
 }
 
 void TestFinalizeAndReset(TestContext& ctx)
@@ -194,8 +234,10 @@ int main()
   TestPvtslnUpdatesHeading(ctx);
   TestRtkStatusUpdatesDualAntenna(ctx);
   TestSatsInfoUpdatesTrackedAndCn0(ctx);
+  TestJammingStatusUpdatesRuntimeState(ctx);
   TestUnknownAndMalformedRecords(ctx);
   TestPartialChunksAcrossFeeds(ctx);
+  TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(ctx);
   TestFinalizeAndReset(ctx);
 
   if (ctx.failures != 0)

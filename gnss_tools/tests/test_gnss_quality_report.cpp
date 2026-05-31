@@ -137,6 +137,11 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildUnicoreLine(const std::string& line)
+{
+  return std::vector<std::uint8_t>(line.begin(), line.end());
+}
+
 void TestReportFromNmeaLog(TestContext& ctx)
 {
   const auto bytes = universal_gnss_tools::test::ReadBinaryFile("nmea/basic_fix.nmea");
@@ -234,6 +239,45 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
              "quality report should preserve the RXM-RTCM CRC-failed diagnostic event");
 }
 
+void TestUnicoreRfDiagnostics(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildUnicoreLine(
+                    "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+                    "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+                    "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+                    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+  Append(bytes, BuildUnicoreLine(
+                    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n"));
+  Append(bytes, BuildUnicoreLine(
+                    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,0,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n"));
+
+  const auto report = universal_gnss_tools::BuildGnssQualityReportBytes(bytes);
+
+  ctx.Expect(report.final_state.interference_detected == std::optional<bool>(true) &&
+                 report.final_state.jamming_detected == std::optional<bool>(true),
+             "quality report should preserve Unicore runtime jamming state");
+  ctx.Expect(report.summary.warning_count >= 1u && report.summary.error_count >= 1u,
+             "Unicore jamming and hardware diagnostics should surface warning and error counts");
+
+  bool saw_strong_jam = false;
+  bool saw_hw_warning = false;
+  for (const auto& event : report.diagnostics)
+  {
+    if (event.code == "unicore_jam_status.strong")
+    {
+      saw_strong_jam = true;
+    }
+    if (event.code == "unicore_hw_status.clock_invalid")
+    {
+      saw_hw_warning = true;
+    }
+  }
+
+  ctx.Expect(saw_strong_jam && saw_hw_warning,
+             "quality report should preserve Unicore RF and hardware diagnostic events");
+}
+
 }  // namespace
 
 int main()
@@ -243,6 +287,7 @@ int main()
   TestReportFromNmeaLog(ctx);
   TestReportFromMixedLog(ctx);
   TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(ctx);
+  TestUnicoreRfDiagnostics(ctx);
 
   if (ctx.failures != 0)
   {

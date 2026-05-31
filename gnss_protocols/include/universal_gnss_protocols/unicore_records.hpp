@@ -65,6 +65,14 @@ enum class UnicoreDualAntennaStatus : std::uint8_t
   kNotConfigured = 4,
 };
 
+enum class UnicoreJammingState : std::uint8_t
+{
+  kUnknown = 0,
+  kNone = 1,
+  kJamming = 2,
+  kStrongJamming = 3,
+};
+
 struct UnicoreAsciiHeader
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};
@@ -184,6 +192,57 @@ struct UnicoreSatsInfoRecord
   std::uint8_t frequency_flag{0};
   std::uint16_t parsed_satellite_count{0};
   std::array<UnicoreSatsInfoSatellite, kMaxUnicoreSatsInfoSatellites> satellites{};
+};
+
+struct UnicoreJamStatusRecord
+{
+  UnicoreAsciiHeader header{};
+
+  UnicorePositionType position_type{UnicorePositionType::kUnknown};
+  std::uint8_t cw_ratio{0};
+  UnicoreJammingState cw_state{UnicoreJammingState::kUnknown};
+};
+
+struct UnicoreFreqJamBandStatus
+{
+  std::uint8_t cw_ratio{0};
+  UnicoreJammingState cw_state{UnicoreJammingState::kUnknown};
+};
+
+struct UnicoreFreqJamStatusRecord
+{
+  UnicoreAsciiHeader header{};
+
+  UnicorePositionType position_type{UnicorePositionType::kUnknown};
+  UnicoreFreqJamBandStatus l1{};
+  UnicoreFreqJamBandStatus l2{};
+  UnicoreFreqJamBandStatus l5{};
+};
+
+struct UnicoreHwStatusRecord
+{
+  UnicoreAsciiHeader header{};
+
+  std::int32_t reserved_counter{0};
+  float dc09_v{0.0f};
+  float dc10_v{0.0f};
+  float dc18_v{0.0f};
+  bool clock_drift_valid{false};
+  float clock_drift_mps{0.0f};
+  std::uint8_t hw_flag{0};
+  std::uint16_t pll_lock{0};
+};
+
+struct UnicoreAgcRecord
+{
+  UnicoreAsciiHeader header{};
+
+  std::optional<std::int16_t> ant1_l1{};
+  std::optional<std::int16_t> ant1_l2{};
+  std::optional<std::int16_t> ant1_l5{};
+  std::optional<std::int16_t> ant2_l1{};
+  std::optional<std::int16_t> ant2_l2{};
+  std::optional<std::int16_t> ant2_l5{};
 };
 
 }  // namespace universal_gnss_protocols

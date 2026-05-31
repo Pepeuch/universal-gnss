@@ -38,10 +38,26 @@ bool ParseAndMergeRecord(const UnicoreFrame& frame,
   return false;
 }
 
+template <typename ParseFn>
+void ParseRecordOnly(const UnicoreFrame& frame,
+                     ParseFn&& parse_fn,
+                     UnicoreSessionMetrics& metrics)
+{
+  const auto parsed = std::forward<ParseFn>(parse_fn)(frame);
+  if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+  {
+    ++metrics.records_rejected;
+    return;
+  }
+
+  ++metrics.records_parsed;
+}
+
 bool IsSupportedRecordName(const std::string_view name)
 {
   return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" ||
-         name == "RTCMSTATUSA" || name == "SATSINFOA";
+         name == "RTCMSTATUSA" || name == "SATSINFOA" || name == "JAMSTATUSA" ||
+         name == "FREQJAMSTATUSA" || name == "HWSTATUSA" || name == "AGCA";
 }
 
 }  // namespace
@@ -196,12 +212,46 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
     return;
   }
 
-  ParseAndMergeRecord(
-      frame,
-      universal_gnss_protocols::ParseUnicoreSatsInfo,
-      universal_gnss_protocols::UnicoreSatsInfoToRuntimeState,
-      aggregator_,
-      metrics_);
+  if (frame.message_name == "SATSINFOA")
+  {
+    ParseAndMergeRecord(
+        frame,
+        universal_gnss_protocols::ParseUnicoreSatsInfo,
+        universal_gnss_protocols::UnicoreSatsInfoToRuntimeState,
+        aggregator_,
+        metrics_);
+    return;
+  }
+
+  if (frame.message_name == "JAMSTATUSA")
+  {
+    ParseAndMergeRecord(
+        frame,
+        universal_gnss_protocols::ParseUnicoreJamStatus,
+        universal_gnss_protocols::UnicoreJamStatusToRuntimeState,
+        aggregator_,
+        metrics_);
+    return;
+  }
+
+  if (frame.message_name == "FREQJAMSTATUSA")
+  {
+    ParseAndMergeRecord(
+        frame,
+        universal_gnss_protocols::ParseUnicoreFreqJamStatus,
+        universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState,
+        aggregator_,
+        metrics_);
+    return;
+  }
+
+  if (frame.message_name == "HWSTATUSA")
+  {
+    ParseRecordOnly(frame, universal_gnss_protocols::ParseUnicoreHwStatus, metrics_);
+    return;
+  }
+
+  ParseRecordOnly(frame, universal_gnss_protocols::ParseUnicoreAgc, metrics_);
 }
 
 }  // namespace universal_gnss_driver

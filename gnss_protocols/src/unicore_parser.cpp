@@ -99,6 +99,28 @@ bool TryParseUnsigned(std::string_view text, unsigned int& value)
   return true;
 }
 
+bool TryParseUnsignedAutoBase(std::string_view text, unsigned int& value)
+{
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return false;
+  }
+
+  std::string buffer(text);
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long parsed = std::strtoul(buffer.c_str(), &end, 0);
+  if (errno != 0 || end == nullptr || *end != '\0' ||
+      parsed > std::numeric_limits<unsigned int>::max())
+  {
+    return false;
+  }
+
+  value = static_cast<unsigned int>(parsed);
+  return true;
+}
+
 bool TryParseSigned(std::string_view text, int& value)
 {
   text = TrimField(text);
@@ -258,6 +280,36 @@ OptionalFieldStatus ParseOptionalBoolEquals(std::string_view text,
   return OptionalFieldStatus::kValue;
 }
 
+OptionalFieldStatus ParseOptionalAgcRegister(std::string_view text,
+                                             std::optional<std::int16_t>& value)
+{
+  value.reset();
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return OptionalFieldStatus::kMissing;
+  }
+
+  int parsed = 0;
+  if (!TryParseSigned(text, parsed))
+  {
+    return OptionalFieldStatus::kInvalid;
+  }
+
+  if (parsed == -1)
+  {
+    return OptionalFieldStatus::kMissing;
+  }
+
+  if (parsed < 0 || parsed > 255)
+  {
+    return OptionalFieldStatus::kInvalid;
+  }
+
+  value = static_cast<std::int16_t>(parsed);
+  return OptionalFieldStatus::kValue;
+}
+
 UnicoreTimeReference ParseTimeReference(std::string_view text)
 {
   text = TrimField(text);
@@ -411,6 +463,21 @@ UnicoreDualAntennaStatus ParseDualAntennaStatus(std::string_view text)
       return UnicoreDualAntennaStatus::kNotConfigured;
     default:
       return UnicoreDualAntennaStatus::kUnknown;
+  }
+}
+
+UnicoreJammingState ParseJammingState(const unsigned int raw_value)
+{
+  switch (raw_value)
+  {
+    case 0u:
+      return UnicoreJammingState::kNone;
+    case 1u:
+      return UnicoreJammingState::kJamming;
+    case 2u:
+      return UnicoreJammingState::kStrongJamming;
+    default:
+      return UnicoreJammingState::kUnknown;
   }
 }
 
@@ -727,6 +794,74 @@ void SetDualAntennaState(universal_gnss::GnssRuntimeState& state,
     default:
       break;
   }
+}
+
+void ApplyJammingState(universal_gnss::GnssRuntimeState& state,
+                       const UnicoreJammingState status)
+{
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kJammingState);
+
+  switch (status)
+  {
+    case UnicoreJammingState::kNone:
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kInterferenceState,
+                                       state.interference_detected,
+                                       false);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kJammingState,
+                                       state.jamming_detected,
+                                       false);
+      break;
+    case UnicoreJammingState::kJamming:
+    case UnicoreJammingState::kStrongJamming:
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kInterferenceState,
+                                       state.interference_detected,
+                                       true);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kJammingState,
+                                       state.jamming_detected,
+                                       true);
+      break;
+    case UnicoreJammingState::kUnknown:
+    default:
+      break;
+  }
+}
+
+const char* DescribeJammingState(const UnicoreJammingState state)
+{
+  switch (state)
+  {
+    case UnicoreJammingState::kNone:
+      return "no jamming";
+    case UnicoreJammingState::kJamming:
+      return "jamming detected";
+    case UnicoreJammingState::kStrongJamming:
+      return "strong jamming detected";
+    case UnicoreJammingState::kUnknown:
+    default:
+      return "jamming state unknown";
+  }
+}
+
+universal_gnss::GnssDiagnosticEvent BuildReceiverDiagnostic(
+    const universal_gnss::GnssDiagnosticSeverity severity,
+    const std::string& code,
+    const std::string& message,
+    const std::optional<ProtocolTimestampNs> timestamp_ns,
+    const char* source)
+{
+  universal_gnss::GnssDiagnosticEvent event;
+  event.severity = severity;
+  event.category = universal_gnss::GnssDiagnosticCategory::kReceiver;
+  event.code = code;
+  event.message = message;
+  event.timestamp_ns = timestamp_ns;
+  event.source = std::string(source);
+  return event;
 }
 
 }  // namespace
@@ -1082,6 +1217,161 @@ ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& fra
   return ParserResult<UnicoreSatsInfoRecord>::RecordReady(record);
 }
 
+ParserResult<UnicoreJamStatusRecord> ParseUnicoreJamStatus(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "JAMSTATUSA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreJamStatusRecord>();
+  }
+
+  std::array<std::string_view, 8u> fields{};
+  std::size_t field_count = 0u;
+  if (!TokenizeBody(parsed->body, fields, field_count) || field_count < 5u)
+  {
+    return InvalidResult<UnicoreJamStatusRecord>();
+  }
+
+  unsigned int cw_ratio = 0u;
+  unsigned int cw_flag = 0u;
+  if (!TryParseUnsigned(fields[1], cw_ratio) || !TryParseUnsigned(fields[2], cw_flag) ||
+      cw_ratio > std::numeric_limits<std::uint8_t>::max())
+  {
+    return InvalidResult<UnicoreJamStatusRecord>();
+  }
+
+  UnicoreJamStatusRecord record;
+  record.header = parsed->header;
+  record.position_type = ParsePositionType(fields[0]);
+  record.cw_ratio = static_cast<std::uint8_t>(cw_ratio);
+  record.cw_state = ParseJammingState(cw_flag);
+  return ParserResult<UnicoreJamStatusRecord>::RecordReady(record);
+}
+
+ParserResult<UnicoreFreqJamStatusRecord> ParseUnicoreFreqJamStatus(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "FREQJAMSTATUSA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreFreqJamStatusRecord>();
+  }
+
+  std::array<std::string_view, 12u> fields{};
+  std::size_t field_count = 0u;
+  if (!TokenizeBody(parsed->body, fields, field_count) || field_count < 9u)
+  {
+    return InvalidResult<UnicoreFreqJamStatusRecord>();
+  }
+
+  unsigned int l1_ratio = 0u;
+  unsigned int l1_flag = 0u;
+  unsigned int l2_ratio = 0u;
+  unsigned int l2_flag = 0u;
+  unsigned int l5_ratio = 0u;
+  unsigned int l5_flag = 0u;
+  if (!TryParseUnsigned(fields[1], l1_ratio) || !TryParseUnsigned(fields[2], l1_flag) ||
+      !TryParseUnsigned(fields[3], l2_ratio) || !TryParseUnsigned(fields[4], l2_flag) ||
+      !TryParseUnsigned(fields[5], l5_ratio) || !TryParseUnsigned(fields[6], l5_flag) ||
+      l1_ratio > std::numeric_limits<std::uint8_t>::max() ||
+      l2_ratio > std::numeric_limits<std::uint8_t>::max() ||
+      l5_ratio > std::numeric_limits<std::uint8_t>::max())
+  {
+    return InvalidResult<UnicoreFreqJamStatusRecord>();
+  }
+
+  UnicoreFreqJamStatusRecord record;
+  record.header = parsed->header;
+  record.position_type = ParsePositionType(fields[0]);
+  record.l1.cw_ratio = static_cast<std::uint8_t>(l1_ratio);
+  record.l1.cw_state = ParseJammingState(l1_flag);
+  record.l2.cw_ratio = static_cast<std::uint8_t>(l2_ratio);
+  record.l2.cw_state = ParseJammingState(l2_flag);
+  record.l5.cw_ratio = static_cast<std::uint8_t>(l5_ratio);
+  record.l5.cw_state = ParseJammingState(l5_flag);
+  return ParserResult<UnicoreFreqJamStatusRecord>::RecordReady(record);
+}
+
+ParserResult<UnicoreHwStatusRecord> ParseUnicoreHwStatus(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "HWSTATUSA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreHwStatusRecord>();
+  }
+
+  std::array<std::string_view, 16u> fields{};
+  std::size_t field_count = 0u;
+  if (!TokenizeBody(parsed->body, fields, field_count) || field_count < 12u)
+  {
+    return InvalidResult<UnicoreHwStatusRecord>();
+  }
+
+  int reserved_counter = 0;
+  double dc09_v = 0.0;
+  double dc10_v = 0.0;
+  double dc18_v = 0.0;
+  unsigned int clock_flag = 0u;
+  double clock_drift_mps = 0.0;
+  unsigned int hw_flag = 0u;
+  unsigned int pll_lock = 0u;
+  if (!TryParseSigned(fields[0], reserved_counter) ||
+      !TryParseDouble(fields[1], dc09_v) ||
+      !TryParseDouble(fields[2], dc10_v) ||
+      !TryParseDouble(fields[3], dc18_v) ||
+      !TryParseUnsigned(fields[4], clock_flag) ||
+      !TryParseDouble(fields[5], clock_drift_mps) ||
+      !TryParseUnsignedAutoBase(fields[7], hw_flag) ||
+      !TryParseUnsignedAutoBase(fields[9], pll_lock) ||
+      clock_flag > 1u ||
+      hw_flag > std::numeric_limits<std::uint8_t>::max() ||
+      pll_lock > std::numeric_limits<std::uint16_t>::max())
+  {
+    return InvalidResult<UnicoreHwStatusRecord>();
+  }
+
+  UnicoreHwStatusRecord record;
+  record.header = parsed->header;
+  record.reserved_counter = static_cast<std::int32_t>(reserved_counter);
+  record.dc09_v = static_cast<float>(dc09_v);
+  record.dc10_v = static_cast<float>(dc10_v);
+  record.dc18_v = static_cast<float>(dc18_v);
+  record.clock_drift_valid = (clock_flag == 1u);
+  record.clock_drift_mps = static_cast<float>(clock_drift_mps);
+  record.hw_flag = static_cast<std::uint8_t>(hw_flag);
+  record.pll_lock = static_cast<std::uint16_t>(pll_lock);
+  return ParserResult<UnicoreHwStatusRecord>::RecordReady(record);
+}
+
+ParserResult<UnicoreAgcRecord> ParseUnicoreAgc(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "AGCA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreAgcRecord>();
+  }
+
+  std::array<std::string_view, 12u> fields{};
+  std::size_t field_count = 0u;
+  if (!TokenizeBody(parsed->body, fields, field_count) || field_count < 10u)
+  {
+    return InvalidResult<UnicoreAgcRecord>();
+  }
+
+  UnicoreAgcRecord record;
+  record.header = parsed->header;
+  if (ParseOptionalAgcRegister(fields[0], record.ant1_l1) == OptionalFieldStatus::kInvalid ||
+      ParseOptionalAgcRegister(fields[1], record.ant1_l2) == OptionalFieldStatus::kInvalid ||
+      ParseOptionalAgcRegister(fields[2], record.ant1_l5) == OptionalFieldStatus::kInvalid ||
+      ParseOptionalAgcRegister(fields[5], record.ant2_l1) == OptionalFieldStatus::kInvalid ||
+      ParseOptionalAgcRegister(fields[6], record.ant2_l2) == OptionalFieldStatus::kInvalid ||
+      ParseOptionalAgcRegister(fields[7], record.ant2_l5) == OptionalFieldStatus::kInvalid)
+  {
+    return InvalidResult<UnicoreAgcRecord>();
+  }
+
+  return ParserResult<UnicoreAgcRecord>::RecordReady(record);
+}
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
@@ -1223,6 +1513,179 @@ universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(const UnicoreSats
 
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
+}
+
+universal_gnss::GnssRuntimeState UnicoreJamStatusToRuntimeState(
+    const UnicoreJamStatusRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+  ApplyJammingState(state, record.cw_state);
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
+    const UnicoreFreqJamStatusRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+
+  UnicoreJammingState aggregate = UnicoreJammingState::kUnknown;
+  const std::array<UnicoreJammingState, 3u> states{
+      record.l1.cw_state,
+      record.l2.cw_state,
+      record.l5.cw_state,
+  };
+  for (const auto state_value : states)
+  {
+    if (state_value == UnicoreJammingState::kStrongJamming)
+    {
+      aggregate = state_value;
+      break;
+    }
+    if (state_value == UnicoreJammingState::kJamming)
+    {
+      aggregate = state_value;
+      continue;
+    }
+    if (state_value == UnicoreJammingState::kNone &&
+        aggregate == UnicoreJammingState::kUnknown)
+    {
+      aggregate = state_value;
+    }
+  }
+
+  ApplyJammingState(state, aggregate);
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssDiagnosticEvent UnicoreJamStatusToDiagnosticEvent(
+    const UnicoreJamStatusRecord& record)
+{
+  using universal_gnss::GnssDiagnosticSeverity;
+
+  switch (record.cw_state)
+  {
+    case UnicoreJammingState::kNone:
+      return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                     "unicore_jam_status.clear",
+                                     "Unicore receiver reports no jamming detected",
+                                     record.header.timestamp_ns,
+                                     "unicore/JAMSTATUSA");
+    case UnicoreJammingState::kJamming:
+      return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                     "unicore_jam_status.detected",
+                                     "Unicore receiver reports jamming detected",
+                                     record.header.timestamp_ns,
+                                     "unicore/JAMSTATUSA");
+    case UnicoreJammingState::kStrongJamming:
+      return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
+                                     "unicore_jam_status.strong",
+                                     "Unicore receiver reports strong jamming detected",
+                                     record.header.timestamp_ns,
+                                     "unicore/JAMSTATUSA");
+    case UnicoreJammingState::kUnknown:
+    default:
+      return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kUnknown,
+                                     "unicore_jam_status.unknown",
+                                     "Unicore receiver reports an unknown jamming state",
+                                     record.header.timestamp_ns,
+                                     "unicore/JAMSTATUSA");
+  }
+}
+
+universal_gnss::GnssDiagnosticEvent UnicoreFreqJamStatusToDiagnosticEvent(
+    const UnicoreFreqJamStatusRecord& record)
+{
+  using universal_gnss::GnssDiagnosticSeverity;
+
+  const std::array<std::pair<const char*, UnicoreJammingState>, 3u> bands{{
+      {"L1", record.l1.cw_state},
+      {"L2", record.l2.cw_state},
+      {"L5", record.l5.cw_state},
+  }};
+
+  bool any_known = false;
+  bool any_jam = false;
+  bool any_strong = false;
+  std::string affected_bands;
+  for (const auto& band : bands)
+  {
+    if (band.second == UnicoreJammingState::kUnknown)
+    {
+      continue;
+    }
+
+    any_known = true;
+    if (band.second == UnicoreJammingState::kJamming ||
+        band.second == UnicoreJammingState::kStrongJamming)
+    {
+      if (!affected_bands.empty())
+      {
+        affected_bands += ", ";
+      }
+      affected_bands += band.first;
+      any_jam = true;
+      if (band.second == UnicoreJammingState::kStrongJamming)
+      {
+        any_strong = true;
+      }
+    }
+  }
+
+  if (!any_known)
+  {
+    return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kUnknown,
+                                   "unicore_freq_jam_status.unknown",
+                                   "Unicore receiver reports unknown per-frequency jamming state",
+                                   record.header.timestamp_ns,
+                                   "unicore/FREQJAMSTATUSA");
+  }
+  if (any_strong)
+  {
+    return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
+                                   "unicore_freq_jam_status.strong",
+                                   "Unicore receiver reports strong jamming on " + affected_bands,
+                                   record.header.timestamp_ns,
+                                   "unicore/FREQJAMSTATUSA");
+  }
+  if (any_jam)
+  {
+    return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                   "unicore_freq_jam_status.detected",
+                                   "Unicore receiver reports jamming on " + affected_bands,
+                                   record.header.timestamp_ns,
+                                   "unicore/FREQJAMSTATUSA");
+  }
+
+  return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                 "unicore_freq_jam_status.clear",
+                                 "Unicore receiver reports no per-frequency jamming detected",
+                                 record.header.timestamp_ns,
+                                 "unicore/FREQJAMSTATUSA");
+}
+
+universal_gnss::GnssDiagnosticEvent UnicoreHwStatusToDiagnosticEvent(
+    const UnicoreHwStatusRecord& record)
+{
+  using universal_gnss::GnssDiagnosticSeverity;
+
+  if (!record.clock_drift_valid)
+  {
+    return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                   "unicore_hw_status.clock_invalid",
+                                   "Unicore hardware status reports invalid clock-drift data",
+                                   record.header.timestamp_ns,
+                                   "unicore/HWSTATUSA");
+  }
+
+  return BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                 "unicore_hw_status.ok",
+                                 "Unicore hardware status reports valid clock-drift data",
+                                 record.header.timestamp_ns,
+                                 "unicore/HWSTATUSA");
 }
 
 }  // namespace universal_gnss_protocols
