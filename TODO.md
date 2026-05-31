@@ -43,6 +43,7 @@ Implemented:
   - rtcm_inspect
   - gnss_inspect
   - gnss_replay
+  - gnss_quality_report
   - gnss_profile_preview
   - gnss_config_plan
   - gnss_config_apply
@@ -154,6 +155,7 @@ To do:
 - [ ] Add parser health counters
 - [x] Add correction stream health
 - [x] RTCM health monitor
+- [x] offline GNSS quality report tool
 - [ ] health monitoring
 
 ---

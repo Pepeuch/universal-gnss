@@ -5,6 +5,7 @@ add_library(
   src/rtcm_inspector.cpp
   src/gnss_stream_inspector.cpp
   src/gnss_replay.cpp
+  src/gnss_quality_report.cpp
   src/ntrip_monitor.cpp
   src/profile_preview.cpp
   src/runtime_state_format.cpp
@@ -55,6 +56,17 @@ add_executable(
 
 target_link_libraries(
   gnss_replay
+  PRIVATE
+    universal_gnss_tools
+)
+
+add_executable(
+  gnss_quality_report
+  src/gnss_quality_report_cli.cpp
+)
+
+target_link_libraries(
+  gnss_quality_report
   PRIVATE
     universal_gnss_tools
 )
@@ -176,6 +188,22 @@ if(BUILD_TESTING)
       TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
   )
   add_test(NAME gnss_tools_test_gnss_replay COMMAND gnss_tools_test_gnss_replay)
+
+  add_executable(
+    gnss_tools_test_gnss_quality_report
+    tests/test_gnss_quality_report.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_gnss_quality_report
+    PRIVATE
+      universal_gnss_tools
+  )
+  target_compile_definitions(
+    gnss_tools_test_gnss_quality_report
+    PRIVATE
+      TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
+  )
+  add_test(NAME gnss_tools_test_gnss_quality_report COMMAND gnss_tools_test_gnss_quality_report)
 
   add_executable(
     gnss_tools_test_profile_preview

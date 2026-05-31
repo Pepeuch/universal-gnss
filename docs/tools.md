@@ -131,6 +131,56 @@ gnss_replay --summary file.bin
 gnss_replay --json file.bin
 ```
 
+### `gnss_quality_report`
+
+`gnss_quality_report` is an offline GNSS quality summarizer built on top of the
+existing replay, RTCM monitor, and diagnostic foundations.
+
+It reuses:
+
+- `gnss_replay`-style normalized runtime reconstruction
+- the RTCM correction monitor
+- existing RTCM message classification
+- existing UBX `RXM-RTCM` receiver-side correction diagnostics
+- the portable diagnostics model
+
+Current behavior:
+
+- reads an offline GNSS log from a file or stdin
+- reconstructs the final normalized runtime state
+- reports final fix / RTK state, accuracy, DOP, satellite counts, and CN0
+- reports RTCM frame counts and message-type activity
+- reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
+  present
+- emits either readable text output or compact JSON
+
+Current non-goals:
+
+- live serial monitoring
+- ROS 2 output
+- GUI visualization
+- advanced scoring or charting
+
+Examples:
+
+```text
+gnss_quality_report log.bin
+gnss_quality_report --summary log.bin
+gnss_quality_report --json log.bin
+```
+
+The current quality levels are intentionally simple:
+
+- `unknown`
+- `poor`
+- `usable`
+- `good`
+- `rtk_float`
+- `rtk_fixed`
+
+They are based conservatively on the final normalized runtime state plus any
+portable diagnostics already available from the parsed log.
+
 ### `gnss_profile_preview`
 
 `gnss_profile_preview` is an offline receiver-config inspection CLI.
