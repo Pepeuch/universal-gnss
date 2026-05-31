@@ -18,12 +18,14 @@ constexpr std::uint8_t kUbxAckNakId = 0x00u;
 constexpr std::uint8_t kUbxAckAckId = 0x01u;
 constexpr std::uint8_t kUbxRxmRtcmId = 0x32u;
 constexpr std::uint8_t kUbxNavStatusId = 0x03u;
+constexpr std::uint8_t kUbxNavDopId = 0x04u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
 constexpr std::uint8_t kUbxMonRfId = 0x38u;
 constexpr std::size_t kUbxAckPayloadSize = 2u;
 constexpr std::size_t kUbxRxmRtcmPayloadSize = 8u;
 constexpr std::size_t kUbxNavStatusPayloadSize = 16u;
+constexpr std::size_t kUbxNavDopPayloadSize = 18u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
 constexpr std::size_t kUbxNavSatBlockSize = 12u;
@@ -90,6 +92,11 @@ double ScaleMillimetersToMetersDouble(std::int32_t millimeters)
 float ScaleHeading1e5ToDegrees(std::int32_t scaled_heading)
 {
   return static_cast<float>(scaled_heading) * 1e-5f;
+}
+
+float ScaleDop1e2ToUnit(std::uint16_t scaled_dop)
+{
+  return static_cast<float>(scaled_dop) * 0.01f;
 }
 
 UbxCarrierSolutionStatus DecodeCarrierSolution(std::uint8_t flags)
@@ -314,6 +321,34 @@ ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame)
   record.heading_vehicle_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 84u));
 
   return ParserResult<UbxNavPvtRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<UbxNavDopRecord> ParseUbxNavDop(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxNavClass || frame.message_id != kUbxNavDopId)
+  {
+    return ParserResult<UbxNavDopRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxNavDopRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxNavDopPayloadSize)
+  {
+    return ParserResult<UbxNavDopRecord>::InvalidData();
+  }
+
+  UbxNavDopRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.i_tow_ms = ReadLeU4(frame.payload, 0u);
+  record.g_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 4u));
+  record.p_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 6u));
+  record.t_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 8u));
+  record.v_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 10u));
+  record.h_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 12u));
+  record.n_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 14u));
+  record.e_dop = ScaleDop1e2ToUnit(ReadLeU2(frame.payload, 16u));
+  return ParserResult<UbxNavDopRecord>::RecordReady(std::move(record));
 }
 
 ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame)
@@ -660,6 +695,21 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
     universal_gnss::SetOptionalValue(
         state, universal_gnss::GnssCapability::kHeading, state.heading_deg, record.heading_vehicle_deg);
   }
+
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UbxNavDopToRuntimeState(const UbxNavDopRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVdop);
+  universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kHdop, state.hdop, record.h_dop);
+  universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kVdop, state.vdop, record.v_dop);
 
   return state;
 }

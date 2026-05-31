@@ -203,6 +203,20 @@ std::vector<std::uint8_t> MakeNavSatPayload()
   return payload;
 }
 
+std::vector<std::uint8_t> MakeNavDopPayload()
+{
+  std::vector<std::uint8_t> payload(18u, 0u);
+  WriteLeU4(payload, 0u, 654321u);
+  WriteLeU2(payload, 4u, 145u);
+  WriteLeU2(payload, 6u, 123u);
+  WriteLeU2(payload, 8u, 99u);
+  WriteLeU2(payload, 10u, 87u);
+  WriteLeU2(payload, 12u, 65u);
+  WriteLeU2(payload, 14u, 111u);
+  WriteLeU2(payload, 16u, 109u);
+  return payload;
+}
+
 std::vector<std::uint8_t> MakeNavStatusPayload()
 {
   std::vector<std::uint8_t> payload(16u, 0u);
@@ -306,6 +320,27 @@ void TestMonRfInterferenceAndJammingUpdates(TestContext& ctx)
                  state.interference_detected == std::optional<bool>(true) &&
                  state.jamming_detected == std::optional<bool>(true),
              "MON-RF should update interference and jamming state");
+}
+
+void TestNavDopUpdatesHdopAndVdop(TestContext& ctx)
+{
+  UbloxSession session;
+  session.FeedBytes(BuildUbxFrame(0x01u, 0x04u, MakeNavDopPayload()), 4545);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(4545) &&
+                 HasCapability(state, GnssCapability::kHdop) &&
+                 HasCapability(state, GnssCapability::kVdop) &&
+                 HasValueAvailable(state, GnssCapability::kHdop) &&
+                 HasValueAvailable(state, GnssCapability::kVdop) &&
+                 state.hdop.has_value() && NearlyEqual(*state.hdop, 0.65) &&
+                 state.vdop.has_value() && NearlyEqual(*state.vdop, 0.87),
+             "NAV-DOP should update HDOP and VDOP conservatively");
+  ctx.Expect(!state.fix_valid &&
+                 state.fix_type == GnssFixType::kUnknown &&
+                 !state.latitude_deg.has_value() &&
+                 !state.satellites_visible.has_value(),
+             "NAV-DOP should not invent fix, position, or satellite state");
 }
 
 void TestNmeaGstAccuracyUpdates(TestContext& ctx)
@@ -437,6 +472,7 @@ int main()
   TestNavSatCn0AndSatelliteUpdates(ctx);
   TestNavStatusRtkUpdates(ctx);
   TestMonRfInterferenceAndJammingUpdates(ctx);
+  TestNavDopUpdatesHdopAndVdop(ctx);
   TestNmeaGstAccuracyUpdates(ctx);
   TestMixedStreamRouting(ctx);
   TestUnknownAndMalformedFrameCounting(ctx);

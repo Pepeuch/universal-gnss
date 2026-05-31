@@ -192,6 +192,20 @@ std::vector<std::uint8_t> MakeNavSatPayload()
   return payload;
 }
 
+std::vector<std::uint8_t> MakeNavDopPayload()
+{
+  std::vector<std::uint8_t> payload(18u, 0u);
+  WriteLeU4(payload, 0u, 654321u);
+  WriteLeU2(payload, 4u, 145u);
+  WriteLeU2(payload, 6u, 123u);
+  WriteLeU2(payload, 8u, 99u);
+  WriteLeU2(payload, 10u, 87u);
+  WriteLeU2(payload, 12u, 65u);
+  WriteLeU2(payload, 14u, 111u);
+  WriteLeU2(payload, 16u, 109u);
+  return payload;
+}
+
 std::vector<std::uint8_t> BuildUnicoreLine(const std::string& line)
 {
   return std::vector<std::uint8_t>(line.begin(), line.end());
@@ -288,6 +302,34 @@ void TestReplayNmeaGstOnlyDoesNotInventFixOrPosition(TestContext& ctx)
   ctx.Expect(final_state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
                  final_state.vertical_accuracy_m == std::optional<float>(1.1f),
              "GST-only replay should still preserve accuracy information");
+}
+
+void TestReplayUbxNavDopEnrichesDopOnly(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()));
+  Append(bytes, BuildUbxFrame(0x01u, 0x04u, MakeNavDopPayload()));
+
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.recognized_records == 2u &&
+                 result.summary.runtime_updates == 2u &&
+                 result.summary.counts_by_protocol.at("ubx") == 2u &&
+                 result.summary.counts_by_ubx_message.at("01:04") == 1u,
+             "replay should recognize NAV-DOP as a UBX runtime update");
+  ctx.Expect(final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kFix &&
+                 final_state.latitude_deg.has_value() &&
+                 std::fabs(*final_state.latitude_deg - 48.5678901) < 1e-6 &&
+                 final_state.longitude_deg.has_value() &&
+                 std::fabs(*final_state.longitude_deg - 23.1234567) < 1e-6,
+             "NAV-DOP replay should preserve existing fix and position from NAV-PVT");
+  ctx.Expect(final_state.hdop.has_value() &&
+                 std::fabs(*final_state.hdop - 0.65f) < 1e-6f &&
+                 final_state.vdop.has_value() &&
+                 std::fabs(*final_state.vdop - 0.87f) < 1e-6f,
+             "NAV-DOP replay should enrich the final state with receiver-native DOP");
 }
 
 void TestReplayMergesMixedRuntimeState(TestContext& ctx)
@@ -452,6 +494,7 @@ int main()
 
   TestReplayNmeaGstEnrichesAccuracy(ctx);
   TestReplayNmeaGstOnlyDoesNotInventFixOrPosition(ctx);
+  TestReplayUbxNavDopEnrichesDopOnly(ctx);
   TestReplayMergesMixedRuntimeState(ctx);
   TestReplaySummaryOnlyAndFormatting(ctx);
   TestReplayStreamInput(ctx);

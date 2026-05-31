@@ -132,6 +132,20 @@ struct UbxNavPvtRecord
   float heading_accuracy_deg{0.0f};
 };
 
+struct UbxNavDopRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+
+  std::uint32_t i_tow_ms{0};
+  float g_dop{0.0f};
+  float p_dop{0.0f};
+  float t_dop{0.0f};
+  float v_dop{0.0f};
+  float h_dop{0.0f};
+  float n_dop{0.0f};
+  float e_dop{0.0f};
+};
+
 enum class UbxNavSatHealth : std::uint8_t
 {
   kUnknown = 0,

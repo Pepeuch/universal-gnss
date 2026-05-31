@@ -11,6 +11,7 @@ messages, driver logic, or receiver configuration are added.
 Current UBX semantic coverage:
 
 - `NAV-PVT`
+- `NAV-DOP`
 - `NAV-SAT`
 - `NAV-STATUS`
 - `MON-RF`
@@ -78,6 +79,8 @@ This means:
 - `NAV-STATUS` can contribute fix and RTK-status metadata without coordinates
 - `NAV-PVT` can contribute coordinates and accuracy without erasing other
   fields
+- `NAV-DOP` can contribute receiver-native `hdop` / `vdop` without changing
+  fix, RTK, or position state
 - `NAV-SAT` can contribute visibility and CN0 without changing fix state
 - `MON-RF` can contribute jamming/interference without touching position fields
 - `RXM-RTCM` can contribute receiver-side RTCM acceptance diagnostics without
@@ -180,6 +183,50 @@ What `NAV-SAT` does not do yet:
 - signal-level history
 - fix-quality inference
 - RTK inference
+
+### NAV-DOP
+
+`NAV-DOP` is currently the UBX source for receiver-native dilution-of-precision
+values.
+
+Parsed fields:
+
+- `iTOW`
+- `gDOP`
+- `pDOP`
+- `tDOP`
+- `vDOP`
+- `hDOP`
+- `nDOP`
+- `eDOP`
+
+Mapped fields:
+
+- `hdop`
+- `vdop`
+
+Current mapping details:
+
+- all DOP values are scaled from the documented `0.01` UBX units into human
+  units
+- only `hDOP` and `vDOP` are projected into the portable runtime model today
+- `pDOP`, `gDOP`, `tDOP`, `nDOP`, and `eDOP` remain available in the semantic
+  record only
+
+What `NAV-DOP` intentionally does not do:
+
+- no fix mapping
+- no RTK mapping
+- no position mapping
+- no accuracy mapping
+- no satellite count mapping
+- no CN0 mapping
+
+How `NAV-DOP` complements NMEA `GSA`:
+
+- both can populate normalized `hdop` / `vdop`
+- `NAV-DOP` is the receiver-native u-blox source when UBX output is available
+- `NAV-DOP` still does not imply a valid navigation solution on its own
 
 ### NAV-STATUS
 
@@ -370,6 +417,7 @@ This means a typical UBX merge can look like:
 ```text
 NAV-STATUS -> fix metadata + optional RTK mode
 NAV-PVT    -> coordinates + altitude + accuracy + satellites_used + RTK mode
+NAV-DOP    -> hdop + vdop
 NAV-SAT    -> satellites_visible + satellites_used + CN0 summary
 MON-RF     -> interference/jamming booleans
 RXM-RTCM   -> receiver-side correction diagnostics only
@@ -386,6 +434,7 @@ The following UBX areas are intentionally deferred:
 
 - `CFG-*` messages
 - `MON-SPAN`
+- `NAV-DOP` downstream consumers beyond normalized `hdop` / `vdop`
 - richer RF severity models
 - spoofing-state projection
 - persistent satellite tracking

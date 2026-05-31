@@ -147,6 +147,7 @@ Implemented semantic messages:
 - `RXM-RTCM`
 - `NAV-STATUS`
 - `NAV-PVT`
+- `NAV-DOP`
 - `NAV-SAT`
 - `MON-RF`
 
@@ -174,6 +175,7 @@ Current UBX notes:
   carrier-solution status when valid
 - `NAV-PVT` is the main source for normalized fix, position, accuracy, and RTK
   mode
+- `NAV-DOP` provides receiver-native `hdop` / `vdop` only
 - `NAV-SAT` provides satellites visible / used and CN0 summaries
 - `MON-RF` provides documented RF-interference / jamming state only
 - `RXM-RTCM` maps into portable correction diagnostics only; it does not
@@ -290,8 +292,8 @@ latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unico
 altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
 horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
 vertical accuracy        NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
-hdop                     NMEA GGA, NMEA GSA, Unicore PVTSLNA
-vdop                     NMEA GSA
+hdop                     NMEA GGA, NMEA GSA, UBX NAV-DOP, Unicore PVTSLNA
+vdop                     NMEA GSA, UBX NAV-DOP
 satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore BESTNAVA
 satellites_visible       NMEA GSV, UBX NAV-SAT
 satellites_tracked       Unicore PVTSLNA, Unicore BESTNAVA, Unicore SATSINFOA
@@ -325,6 +327,8 @@ Examples:
   longitude_std_dev_m)` as a conservative single-value summary
 - UBX `NAV-PVT` can set normalized RTK mode from documented carrier-solution
   bits
+- UBX `NAV-DOP` can set `hdop` / `vdop`, but it does not imply fix validity,
+  RTK mode, or position
 - Unicore `PVTSLNA` and `BESTNAVA` can set RTK mode only from documented
   position-type enums, not from indirect heuristics
 - RTCM currently does not modify runtime state at all

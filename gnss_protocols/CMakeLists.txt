@@ -129,6 +129,17 @@ if(BUILD_TESTING)
   add_test(NAME gnss_protocols_test_ubx_nav_pvt COMMAND gnss_protocols_test_ubx_nav_pvt)
 
   add_executable(
+    gnss_protocols_test_ubx_nav_dop
+    tests/test_ubx_nav_dop.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_nav_dop
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_nav_dop COMMAND gnss_protocols_test_ubx_nav_dop)
+
+  add_executable(
     gnss_protocols_test_ubx_nav_sat
     tests/test_ubx_nav_sat.cpp
   )
