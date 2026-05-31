@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace universal_gnss_protocols
 {
@@ -10,15 +11,18 @@ namespace
 {
 
 constexpr std::uint8_t kUbxNavClass = 0x01u;
+constexpr std::uint8_t kUbxRxmClass = 0x02u;
 constexpr std::uint8_t kUbxAckClass = 0x05u;
 constexpr std::uint8_t kUbxMonClass = 0x0Au;
 constexpr std::uint8_t kUbxAckNakId = 0x00u;
 constexpr std::uint8_t kUbxAckAckId = 0x01u;
+constexpr std::uint8_t kUbxRxmRtcmId = 0x32u;
 constexpr std::uint8_t kUbxNavStatusId = 0x03u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
 constexpr std::uint8_t kUbxMonRfId = 0x38u;
 constexpr std::size_t kUbxAckPayloadSize = 2u;
+constexpr std::size_t kUbxRxmRtcmPayloadSize = 8u;
 constexpr std::size_t kUbxNavStatusPayloadSize = 16u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
@@ -35,6 +39,8 @@ constexpr std::uint8_t kDiffSolnBit = 1u << 1;
 constexpr std::uint8_t kHeadVehValidBit = 1u << 5;
 constexpr std::uint8_t kCarrSolnValidBit = 1u << 1;
 constexpr std::uint8_t kCarrSolnMask = 0xC0u;
+constexpr std::uint8_t kRxmRtcmCrcFailedBit = 1u << 0;
+constexpr std::uint8_t kRxmRtcmMsgUsedMask = 0x06u;
 
 constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
 constexpr std::uint32_t kNavSatQualityMask = 0x00000007u;
@@ -127,6 +133,34 @@ UbxMonRfJammingState DecodeMonRfJammingState(std::uint8_t flags)
   }
 }
 
+UbxRxmRtcmMessageUse DecodeRxmRtcmMessageUse(const std::uint8_t flags)
+{
+  switch ((flags & kRxmRtcmMsgUsedMask) >> 1)
+  {
+    case 1u:
+      return UbxRxmRtcmMessageUse::kNotUsed;
+    case 2u:
+      return UbxRxmRtcmMessageUse::kUsed;
+    default:
+      return UbxRxmRtcmMessageUse::kUnknown;
+  }
+}
+
+std::string FormatRtcmTypeMessage(const std::uint16_t message_type)
+{
+  return "RTCM " + std::to_string(message_type);
+}
+
+std::string FormatRtcmTypeAndStationMessage(const UbxRxmRtcmRecord& record)
+{
+  std::string message = FormatRtcmTypeMessage(record.message_type);
+  if (record.ref_station_id != 0xFFFFu)
+  {
+    message += " from ref station " + std::to_string(record.ref_station_id);
+  }
+  return message;
+}
+
 }  // namespace
 
 ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame)
@@ -152,6 +186,40 @@ ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame)
   record.target_class_id = frame.payload[0u];
   record.target_message_id = frame.payload[1u];
   return ParserResult<UbxAckRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<UbxRxmRtcmRecord> ParseUbxRxmRtcm(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxRxmClass || frame.message_id != kUbxRxmRtcmId)
+  {
+    return ParserResult<UbxRxmRtcmRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxRxmRtcmRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxRxmRtcmPayloadSize)
+  {
+    return ParserResult<UbxRxmRtcmRecord>::InvalidData();
+  }
+  if (frame.payload[0u] != 0x02u)
+  {
+    return ParserResult<UbxRxmRtcmRecord>::InvalidData();
+  }
+
+  UbxRxmRtcmRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.version = frame.payload[0u];
+  record.flags = frame.payload[1u];
+  record.crc_failed = (record.flags & kRxmRtcmCrcFailedBit) != 0u;
+  record.crc_ok = !record.crc_failed;
+  record.message_use = DecodeRxmRtcmMessageUse(record.flags);
+  record.message_used = record.message_use == UbxRxmRtcmMessageUse::kUsed;
+  record.message_use_known = record.message_use != UbxRxmRtcmMessageUse::kUnknown;
+  record.sub_type = ReadLeU2(frame.payload, 2u);
+  record.ref_station_id = ReadLeU2(frame.payload, 4u);
+  record.message_type = ReadLeU2(frame.payload, 6u);
+  return ParserResult<UbxRxmRtcmRecord>::RecordReady(std::move(record));
 }
 
 ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame)
@@ -368,6 +436,56 @@ ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame)
   }
 
   return ParserResult<UbxMonRfRecord>::RecordReady(std::move(record));
+}
+
+universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
+    const UbxRxmRtcmRecord& record)
+{
+  using universal_gnss::GnssDiagnosticCategory;
+  using universal_gnss::GnssDiagnosticEvent;
+  using universal_gnss::GnssDiagnosticSeverity;
+
+  GnssDiagnosticEvent event;
+  event.category = GnssDiagnosticCategory::kCorrection;
+  event.timestamp_ns = record.timestamp_ns;
+  event.source = std::string("ubx.rxm_rtcm");
+
+  if (record.crc_failed)
+  {
+    event.severity = GnssDiagnosticSeverity::kWarning;
+    event.code = "ubx_rxm_rtcm.crc_failed";
+    event.message =
+        FormatRtcmTypeAndStationMessage(record) +
+        " failed receiver-side CRC validation";
+    return event;
+  }
+
+  if (record.message_use == UbxRxmRtcmMessageUse::kUsed)
+  {
+    event.severity = GnssDiagnosticSeverity::kOk;
+    event.code = "ubx_rxm_rtcm.accepted";
+    event.message =
+        FormatRtcmTypeAndStationMessage(record) +
+        " was accepted by the receiver";
+    return event;
+  }
+
+  if (record.message_use == UbxRxmRtcmMessageUse::kNotUsed)
+  {
+    event.severity = GnssDiagnosticSeverity::kWarning;
+    event.code = "ubx_rxm_rtcm.not_used";
+    event.message =
+        FormatRtcmTypeAndStationMessage(record) +
+        " was received but not used by the receiver";
+    return event;
+  }
+
+  event.severity = GnssDiagnosticSeverity::kInfo;
+  event.code = "ubx_rxm_rtcm.usage_unknown";
+  event.message =
+      FormatRtcmTypeAndStationMessage(record) +
+      " was parsed by the receiver but usage is unknown";
+  return event;
 }
 
 universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record)

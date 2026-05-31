@@ -13,7 +13,7 @@ Implemented:
 - POSIX serial transport
 - TCP client transport
 - NMEA parser: GGA, RMC, GSA, GSV
-- UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF
+- UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF, RXM-RTCM
 - Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
 - RTCM3 framing, CRC24Q, message type extraction
 - Driver abstraction foundation
@@ -186,6 +186,7 @@ Implemented:
 - [x] NAV-SAT
 - [x] NAV-STATUS
 - [x] MON-RF
+- [x] RXM-RTCM
 - [x] CFG-VALGET payload builder
 - [x] CFG-VALSET payload builder
 - [x] config profile command builder
@@ -196,7 +197,6 @@ To do:
 - [ ] NAV-DOP
 - [ ] MON-HW / MON-HW2 if useful
 - [ ] MON-SPAN
-- [ ] RXM-RTCM
 - [ ] survey-in support
 
 ### Unicore

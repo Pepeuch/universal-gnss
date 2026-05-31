@@ -140,6 +140,7 @@ Implemented semantic messages:
 - `CFG-VALGET` payload builders
 - `ACK-ACK`
 - `ACK-NAK`
+- `RXM-RTCM`
 - `NAV-STATUS`
 - `NAV-PVT`
 - `NAV-SAT`
@@ -160,12 +161,19 @@ Current UBX notes:
 - `CFG-VALGET` builders currently generate version `0x00` poll requests only
 - `ACK-ACK` / `ACK-NAK` parsing currently decodes only the target message
   class/id; it does not manage transactions or retries
+- `RXM-RTCM` provides receiver-side RTCM input status:
+  - RTCM message type
+  - reference station id when present
+  - receiver-side CRC-failed flag
+  - used / not-used / unknown handling state
 - `NAV-STATUS` provides fix-status metadata, differential-solution state, and
   carrier-solution status when valid
 - `NAV-PVT` is the main source for normalized fix, position, accuracy, and RTK
   mode
 - `NAV-SAT` provides satellites visible / used and CN0 summaries
 - `MON-RF` provides documented RF-interference / jamming state only
+- `RXM-RTCM` maps into portable correction diagnostics only; it does not
+  project into `GnssRuntimeState`
 
 See [docs/vendors/ublox/runtime_mapping.md](vendors/ublox/runtime_mapping.md)
 for the current message-by-message UBX runtime mapping contract.
@@ -174,6 +182,8 @@ What UBX does not do yet:
 
 - `CFG-*` transaction execution
 - live `ACK/NAK` transaction handling
+- richer receiver-side correction acceptance tracking beyond the current
+  per-message status helper
 - `MON-SPAN`
 - richer RF diagnostics or spoofing classification
 

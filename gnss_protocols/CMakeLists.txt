@@ -107,6 +107,17 @@ if(BUILD_TESTING)
   add_test(NAME gnss_protocols_test_ubx_nav_status COMMAND gnss_protocols_test_ubx_nav_status)
 
   add_executable(
+    gnss_protocols_test_ubx_rxm_rtcm
+    tests/test_ubx_rxm_rtcm.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_rxm_rtcm
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_rxm_rtcm COMMAND gnss_protocols_test_ubx_rxm_rtcm)
+
+  add_executable(
     gnss_protocols_test_ubx_nav_pvt
     tests/test_ubx_nav_pvt.cpp
   )

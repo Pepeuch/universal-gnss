@@ -75,6 +75,21 @@ That RTCM monitor only tracks activity, message presence, and timing. It does
 not add full RTCM payload decode, LoRa policy, ROS 2 adapters, or GUI-specific
 presentation concerns.
 
+The next receiver-side correction consumer is the `UBX-RXM-RTCM` helper in the
+UBX semantic layer. It emits portable correction events describing whether a
+specific RTCM message:
+
+- was accepted by the receiver
+- was received but not used
+- failed receiver-side CRC validation
+
+This complements the stream-side RTCM monitor:
+
+- the RTCM monitor sees correction traffic on the wire
+- `RXM-RTCM` sees whether the receiver actually ingested that traffic
+
+It still does not imply RTK float/fixed state or position quality by itself.
+
 The first live network-side consumer is the TCP-backed NTRIP client in
 `gnss_ntrip`. It reuses the same RTCM correction monitor while streaming bytes
 from a caster, so:

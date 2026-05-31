@@ -43,6 +43,29 @@ struct UbxAckRecord
   std::uint8_t target_message_id{0};
 };
 
+enum class UbxRxmRtcmMessageUse : std::uint8_t
+{
+  kUnknown = 0,
+  kNotUsed = 1,
+  kUsed = 2,
+};
+
+struct UbxRxmRtcmRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+
+  std::uint8_t version{0};
+  std::uint8_t flags{0};
+  bool crc_failed{false};
+  bool crc_ok{false};
+  UbxRxmRtcmMessageUse message_use{UbxRxmRtcmMessageUse::kUnknown};
+  bool message_used{false};
+  bool message_use_known{false};
+  std::uint16_t sub_type{0};
+  std::uint16_t ref_station_id{0xFFFFu};
+  std::uint16_t message_type{0};
+};
+
 struct UbxNavStatusRecord
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};

@@ -14,6 +14,7 @@ Current UBX semantic coverage:
 - `NAV-SAT`
 - `NAV-STATUS`
 - `MON-RF`
+- `RXM-RTCM`
 
 Current non-goals:
 
@@ -79,6 +80,8 @@ This means:
   fields
 - `NAV-SAT` can contribute visibility and CN0 without changing fix state
 - `MON-RF` can contribute jamming/interference without touching position fields
+- `RXM-RTCM` can contribute receiver-side RTCM acceptance diagnostics without
+  touching runtime fix or position fields
 
 ## Message Mapping
 
@@ -287,12 +290,55 @@ Fields parsed but not projected into the core yet:
 Those remain in the semantic record for future vendor-aware tooling or a later
 portable RF model.
 
+### RXM-RTCM
+
+`RXM-RTCM` is treated as a receiver-side correction-status message, not as a
+runtime-state source.
+
+Parsed fields:
+
+- `version`
+- `flags`
+- `crcFailed`
+- `msgUsed`
+- `subType`
+- `refStation`
+- `msgType`
+
+Current mapping behavior:
+
+- `RXM-RTCM` maps into portable correction diagnostic events
+- `crcFailed == 1` maps to a correction warning
+- `msgUsed == used` maps to a correction `kOk` event
+- `msgUsed == not used` maps to a correction warning
+- `msgUsed == unknown` maps to a correction info event
+
+Why it stays out of `GnssRuntimeState`:
+
+- it does not provide a generic fix state
+- it does not prove RTK float/fixed by itself
+- it reports whether the receiver ingested an RTCM message, not whether the
+  normalized solution quality improved
+
+How it complements the RTCM correction monitor:
+
+- the RTCM correction monitor answers: "did RTCM frames arrive on the stream?"
+- `RXM-RTCM` answers: "did the receiver parse and use that RTCM frame?"
+
+What `RXM-RTCM` intentionally does not do:
+
+- no RTK-mode inference
+- no position or accuracy mapping
+- no correction-age mapping
+- no receiver-configuration or forwarding logic
+
 ## Conservative Rules
 
 The current UBX mapping follows these guardrails:
 
 - no RTK mode without documented carrier-solution fields
 - no correction age from `NAV-PVT`, `NAV-STATUS`, `NAV-SAT`, or `MON-RF`
+- no RTK inference from `RXM-RTCM` alone
 - no RF state from `NAV-PVT`, `NAV-STATUS`, or `NAV-SAT`
 - no accuracy from `NAV-STATUS`
 - no vendor-specific public fields in `GnssRuntimeState`
@@ -326,6 +372,7 @@ NAV-STATUS -> fix metadata + optional RTK mode
 NAV-PVT    -> coordinates + altitude + accuracy + satellites_used + RTK mode
 NAV-SAT    -> satellites_visible + satellites_used + CN0 summary
 MON-RF     -> interference/jamming booleans
+RXM-RTCM   -> receiver-side correction diagnostics only
 ```
 
 After aggregation, the coherent runtime state may contain fields from all four
