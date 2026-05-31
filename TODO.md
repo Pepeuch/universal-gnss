@@ -12,7 +12,7 @@ Implemented:
 - RTCM correction monitor foundation
 - POSIX serial transport
 - TCP client transport
-- NMEA parser: GGA, RMC, GSA, GSV
+- NMEA parser: GGA, RMC, GSA, GSV, GST
 - UBX parser: NAV-PVT, NAV-SAT, NAV-STATUS, MON-RF, RXM-RTCM
 - Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
 - RTCM3 framing, CRC24Q, message type extraction
@@ -168,12 +168,12 @@ Implemented:
 - [x] RMC
 - [x] GSA
 - [x] GSV
+- [x] GST
 
 To do:
 
 - [ ] VTG
 - [ ] ZDA
-- [ ] GST
 - [ ] proprietary NMEA extensions
 - [ ] multi-sentence GSV aggregation
 - [ ] persistent satellite tracking

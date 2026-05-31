@@ -111,4 +111,17 @@ struct NmeaGsvRecord
   std::size_t satellite_count{0};
 };
 
+struct NmeaGstRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::optional<NmeaUtcTime> utc_time{};
+  std::optional<float> rms_range_residual_m{};
+  std::optional<float> semi_major_std_dev_m{};
+  std::optional<float> semi_minor_std_dev_m{};
+  std::optional<float> orientation_deg{};
+  std::optional<float> latitude_std_dev_m{};
+  std::optional<float> longitude_std_dev_m{};
+  std::optional<float> altitude_std_dev_m{};
+};
+
 }  // namespace universal_gnss_protocols

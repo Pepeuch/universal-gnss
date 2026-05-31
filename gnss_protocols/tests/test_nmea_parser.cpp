@@ -463,6 +463,87 @@ void TestGsvMissingOptionalFields(TestContext& ctx)
              "present CN0 should still parse");
 }
 
+void TestValidGstParsing(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
+      777);
+  const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid GST should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(777),
+             "GST should preserve the framing timestamp");
+  ExpectUtcTime(ctx, record.utc_time, 12u, 35u, 19.0, "GST utc time");
+  ctx.Expect(record.rms_range_residual_m.has_value() &&
+                 NearlyEqual(*record.rms_range_residual_m, 1.2),
+             "GST should decode RMS range residual");
+  ctx.Expect(record.semi_major_std_dev_m.has_value() &&
+                 NearlyEqual(*record.semi_major_std_dev_m, 0.8),
+             "GST should decode semi-major standard deviation");
+  ctx.Expect(record.semi_minor_std_dev_m.has_value() &&
+                 NearlyEqual(*record.semi_minor_std_dev_m, 0.7),
+             "GST should decode semi-minor standard deviation");
+  ctx.Expect(record.orientation_deg.has_value() && NearlyEqual(*record.orientation_deg, 45.0),
+             "GST should decode ellipse orientation");
+  ctx.Expect(record.latitude_std_dev_m.has_value() &&
+                 NearlyEqual(*record.latitude_std_dev_m, 0.5),
+             "GST should decode latitude standard deviation");
+  ctx.Expect(record.longitude_std_dev_m.has_value() &&
+                 NearlyEqual(*record.longitude_std_dev_m, 0.6),
+             "GST should decode longitude standard deviation");
+  ctx.Expect(record.altitude_std_dev_m.has_value() &&
+                 NearlyEqual(*record.altitude_std_dev_m, 1.1),
+             "GST should decode altitude standard deviation");
+}
+
+void TestGstMissingOptionalFields(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGST,123520.00,,,,,,,"));
+  const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
+
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "GST should tolerate missing optional accuracy fields");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  ExpectUtcTime(ctx, result.record->utc_time, 12u, 35u, 20.0, "GST utc time");
+  ctx.Expect(!result.record->rms_range_residual_m.has_value() &&
+                 !result.record->semi_major_std_dev_m.has_value() &&
+                 !result.record->semi_minor_std_dev_m.has_value() &&
+                 !result.record->orientation_deg.has_value() &&
+                 !result.record->latitude_std_dev_m.has_value() &&
+                 !result.record->longitude_std_dev_m.has_value() &&
+                 !result.record->altitude_std_dev_m.has_value(),
+             "missing GST optional fields should stay unset");
+}
+
+void TestMalformedGstRejected(TestContext& ctx)
+{
+  const NmeaSentence checksum_sentence =
+      FrameSentence("$GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1*00\r\n");
+  ctx.Expect(checksum_sentence.checksum_status == ChecksumStatus::kInvalid,
+             "test setup should produce an invalid GST checksum");
+  ctx.Expect(universal_gnss_protocols::ParseNmeaGst(checksum_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "GST semantic parsing should reject invalid checksums");
+
+  const NmeaSentence numeric_sentence = FrameSentence(
+      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,abc,1.1"));
+  ctx.Expect(universal_gnss_protocols::ParseNmeaGst(numeric_sentence).status ==
+                 ParserStatus::kInvalidData,
+             "GST should reject malformed numeric fields");
+}
+
 void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
 {
   const NmeaSentence gsa_sentence = FrameSentence(
@@ -517,6 +598,55 @@ void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
              "GSV runtime merge should compute max CN0 from valid satellites in the sentence");
   ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kRtkMode),
              "GSV runtime merge should not invent RTK capability");
+}
+
+void TestGstRuntimeMapping(TestContext& ctx)
+{
+  const NmeaSentence sentence = FrameSentence(
+      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
+      888);
+  const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
+  ctx.Expect(result.record.has_value(), "runtime mapping test requires a parsed GST record");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto state = universal_gnss_protocols::NmeaGstToRuntimeState(*result.record);
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(888),
+             "GST runtime mapping should preserve the sample timestamp");
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kVerticalAccuracy),
+             "GST runtime mapping should advertise accuracy capabilities");
+  ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kVerticalAccuracy),
+             "GST runtime mapping should expose derived accuracy values when present");
+  ctx.Expect(state.horizontal_accuracy_m.has_value() &&
+                 NearlyEqual(*state.horizontal_accuracy_m, 0.6),
+             "GST runtime mapping should conservatively use the worst horizontal axis");
+  ctx.Expect(state.vertical_accuracy_m.has_value() &&
+                 NearlyEqual(*state.vertical_accuracy_m, 1.1),
+             "GST runtime mapping should expose altitude standard deviation as vertical accuracy");
+  ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kUnknown,
+             "GST runtime mapping should not invent fix validity");
+  ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kRtkMode) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kSatellitesUsed) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kMeanCn0),
+             "GST runtime mapping should not invent RTK, satellite, or CN0 capabilities");
+
+  universal_gnss::GnssRuntimeState merged_state;
+  merged_state.latitude_deg = 48.1173;
+  merged_state.longitude_deg = 11.5166667;
+  merged_state.fix_valid = true;
+  merged_state.fix_type = GnssFixType::kFix;
+  universal_gnss_protocols::MergeNmeaGstIntoRuntimeState(*result.record, merged_state);
+
+  ctx.Expect(merged_state.latitude_deg.has_value() && NearlyEqual(*merged_state.latitude_deg, 48.1173) &&
+                 merged_state.longitude_deg.has_value() &&
+                 NearlyEqual(*merged_state.longitude_deg, 11.5166667),
+             "GST runtime merge should not overwrite position");
+  ctx.Expect(merged_state.fix_valid && merged_state.fix_type == GnssFixType::kFix,
+             "GST runtime merge should not overwrite fix state");
 }
 
 void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
@@ -585,11 +715,15 @@ int main()
   TestRuntimeMappingBehavior(ctx);
   TestValidGsaParsing(ctx);
   TestValidGsvParsing(ctx);
+  TestValidGstParsing(ctx);
   TestPartialGsvSatelliteBlockHandling(ctx);
   TestMalformedDopRejected(ctx);
   TestMissingOptionalGsaFields(ctx);
   TestGsvMissingOptionalFields(ctx);
+  TestGstMissingOptionalFields(ctx);
+  TestMalformedGstRejected(ctx);
   TestGsaAndGsvRuntimeMapping(ctx);
+  TestGstRuntimeMapping(ctx);
   TestNmeaPartialStatesCanBeAggregated(ctx);
 
   if (ctx.failures != 0)

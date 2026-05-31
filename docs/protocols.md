@@ -111,6 +111,7 @@ Implemented semantic messages:
 - `RMC`
 - `GSA`
 - `GSV`
+- `GST`
 
 Implemented behaviors:
 
@@ -125,6 +126,7 @@ Current NMEA notes:
 - `RMC` currently contributes fix validity and coordinates
 - `GSA` contributes DOP and active-satellite information
 - `GSV` contributes satellites-in-view and per-sentence CN0 summaries
+- `GST` contributes conservative horizontal/vertical accuracy only
 
 What NMEA does not do yet:
 
@@ -284,8 +286,8 @@ fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA,
 rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore RTKSTATUSA
 latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
 altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
-horizontal accuracy      UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
-vertical accuracy        UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
+vertical accuracy        NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA
 hdop                     NMEA GGA, NMEA GSA, Unicore PVTSLNA
 vdop                     NMEA GSA
 satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore BESTNAVA
@@ -314,6 +316,11 @@ Examples:
 
 - NMEA `GGA` can set a generic fix and coordinates, but it does not claim RTK
   fixed
+- NMEA `GST` can set horizontal and vertical accuracy, but it does not imply
+  fix validity, RTK mode, satellite counts, or covariance orientation in the
+  portable runtime model
+- `GST` horizontal accuracy currently uses `max(latitude_std_dev_m,
+  longitude_std_dev_m)` as a conservative single-value summary
 - UBX `NAV-PVT` can set normalized RTK mode from documented carrier-solution
   bits
 - Unicore `PVTSLNA` and `BESTNAVA` can set RTK mode only from documented

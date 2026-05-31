@@ -14,6 +14,8 @@ namespace universal_gnss_protocols
 
 bool IsNmeaSentenceType(const NmeaSentence& sentence, std::string_view sentence_type);
 
+bool IsNmeaGst(const NmeaSentence& sentence);
+
 std::optional<double> ParseNmeaDegreesMinutes(std::string_view field, std::size_t degree_digits);
 
 std::optional<double> ParseNmeaLatitude(std::string_view field, std::string_view hemisphere);
@@ -28,16 +30,23 @@ ParserResult<NmeaGsaRecord> ParseNmeaGsa(const NmeaSentence& sentence);
 
 ParserResult<NmeaGsvRecord> ParseNmeaGsv(const NmeaSentence& sentence);
 
+ParserResult<NmeaGstRecord> ParseNmeaGst(const NmeaSentence& sentence);
+
 universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& record);
 
 universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& record);
 
 universal_gnss::GnssRuntimeState NmeaGsaToRuntimeState(const NmeaGsaRecord& record);
 
+universal_gnss::GnssRuntimeState NmeaGstToRuntimeState(const NmeaGstRecord& record);
+
 void MergeNmeaGsaIntoRuntimeState(const NmeaGsaRecord& record,
                                   universal_gnss::GnssRuntimeState& state);
 
 void MergeNmeaGsvIntoRuntimeState(const NmeaGsvRecord& record,
+                                  universal_gnss::GnssRuntimeState& state);
+
+void MergeNmeaGstIntoRuntimeState(const NmeaGstRecord& record,
                                   universal_gnss::GnssRuntimeState& state);
 
 }  // namespace universal_gnss_protocols
