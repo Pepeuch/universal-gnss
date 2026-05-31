@@ -223,6 +223,14 @@ std::string BuildStateTextSummary(const GnssRuntimeState& state)
   {
     output << " alt=" << FormatDouble(*state.altitude_m, 2);
   }
+  if (state.horizontal_accuracy_m.has_value())
+  {
+    output << " h_acc=" << FormatFloat(*state.horizontal_accuracy_m, 2);
+  }
+  if (state.vertical_accuracy_m.has_value())
+  {
+    output << " v_acc=" << FormatFloat(*state.vertical_accuracy_m, 2);
+  }
   if (state.satellites_used.has_value())
   {
     output << " used=" << *state.satellites_used;
@@ -410,6 +418,11 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromNmea(const std::vector<std
     GnssRuntimeState update;
     universal_gnss_protocols::MergeNmeaGsvIntoRuntimeState(*gsv.record, update);
     return update;
+  }
+  if (const auto gst = universal_gnss_protocols::ParseNmeaGst(sentence);
+      gst.status == ParserStatus::kRecordReady && gst.record.has_value())
+  {
+    return universal_gnss_protocols::NmeaGstToRuntimeState(*gst.record);
   }
 
   return std::nullopt;

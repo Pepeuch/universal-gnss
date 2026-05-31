@@ -127,6 +127,8 @@ Current NMEA notes:
 - `GSA` contributes DOP and active-satellite information
 - `GSV` contributes satellites-in-view and per-sentence CN0 summaries
 - `GST` contributes conservative horizontal/vertical accuracy only
+- `GST` accuracy now flows through the NMEA session/replay routing paths that
+  already consume `GGA` / `RMC` / `GSA` / `GSV`
 
 What NMEA does not do yet:
 

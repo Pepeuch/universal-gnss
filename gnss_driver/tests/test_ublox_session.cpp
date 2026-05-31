@@ -308,6 +308,40 @@ void TestMonRfInterferenceAndJammingUpdates(TestContext& ctx)
              "MON-RF should update interference and jamming state");
 }
 
+void TestNmeaGstAccuracyUpdates(TestContext& ctx)
+{
+  UbloxSession session;
+  session.FeedBytes(BuildNmeaSentence(
+                        "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+                    5000);
+  session.FeedBytes(BuildNmeaSentence(
+                        "GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
+                    5001);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.nmea_sentences_seen == 2u &&
+                 metrics.frames_parsed == 2u &&
+                 metrics.runtime_updates == 2u,
+             "GGA plus GST should count as two parsed runtime updates");
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
+             "GST should not disturb the existing NMEA fix state");
+  ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 48.1173) &&
+                 state.longitude_deg.has_value() &&
+                 NearlyEqual(*state.longitude_deg, 11.5166667) &&
+                 state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 545.4),
+             "GST should not overwrite position from GGA");
+  ctx.Expect(HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
+                 HasCapability(state, GnssCapability::kVerticalAccuracy) &&
+                 HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
+                 HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
+                 state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 state.vertical_accuracy_m == std::optional<float>(1.1f),
+             "GST should enrich the session state with conservative accuracy fields");
+  ctx.Expect(!HasCapability(state, GnssCapability::kRtkMode),
+             "GST should not invent RTK capability in the session state");
+}
+
 void TestMixedStreamRouting(TestContext& ctx)
 {
   std::vector<std::uint8_t> stream = {0x00u, 0x7Fu};
@@ -403,6 +437,7 @@ int main()
   TestNavSatCn0AndSatelliteUpdates(ctx);
   TestNavStatusRtkUpdates(ctx);
   TestMonRfInterferenceAndJammingUpdates(ctx);
+  TestNmeaGstAccuracyUpdates(ctx);
   TestMixedStreamRouting(ctx);
   TestUnknownAndMalformedFrameCounting(ctx);
   TestPartialChunksAcrossFeedCalls(ctx);

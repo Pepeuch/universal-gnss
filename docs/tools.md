@@ -103,6 +103,8 @@ Current replay behavior:
 - maps supported semantic GNSS messages into partial `GnssRuntimeState` updates
 - merges those updates into one coherent runtime state timeline
 - keeps RTCM as correction-stream metadata only for now
+- NMEA `GST` can enrich replayed runtime states with conservative horizontal /
+  vertical accuracy without changing fix or position
 
 The replay timeline shows, for each recognized record:
 

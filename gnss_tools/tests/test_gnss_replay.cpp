@@ -1,3 +1,4 @@
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -231,6 +232,64 @@ std::vector<std::uint8_t> BuildMixedReplayStream()
   return stream;
 }
 
+void TestReplayNmeaGstEnrichesAccuracy(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildNmeaSentence(
+                    "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
+  Append(bytes, BuildNmeaSentence(
+                    "GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"));
+
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.recognized_records == 2u &&
+                 result.summary.runtime_updates == 2u &&
+                 result.summary.counts_by_protocol.at("nmea") == 2u &&
+                 result.summary.counts_by_nmea_sentence_type.at("GGA") == 1u &&
+                 result.summary.counts_by_nmea_sentence_type.at("GST") == 1u,
+             "replay should recognize both GGA and GST as NMEA runtime updates");
+  ctx.Expect(final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kFix &&
+                 final_state.latitude_deg.has_value() && *final_state.latitude_deg == 48.1173 &&
+                 final_state.longitude_deg.has_value() &&
+                 std::fabs(*final_state.longitude_deg - 11.5166667) < 1e-6 &&
+                 final_state.altitude_m.has_value() &&
+                 std::fabs(*final_state.altitude_m - 545.4) < 1e-6,
+             "GST replay should preserve position and fix from GGA");
+  ctx.Expect(final_state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 final_state.vertical_accuracy_m == std::optional<float>(1.1f),
+             "GST replay should enrich the final state with conservative accuracy values");
+
+  const std::string text = universal_gnss_tools::FormatGnssReplayText(result);
+  ctx.Expect(text.find("id=GPGST") != std::string::npos &&
+                 text.find("h_acc=0.60") != std::string::npos &&
+                 text.find("v_acc=1.10") != std::string::npos,
+             "replay text output should surface GST accuracy updates");
+}
+
+void TestReplayNmeaGstOnlyDoesNotInventFixOrPosition(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildNmeaSentence(
+                    "GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"));
+
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.recognized_records == 1u &&
+                 result.summary.runtime_updates == 1u,
+             "GST-only replay should still report one recognized runtime update");
+  ctx.Expect(!final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kUnknown &&
+                 !final_state.latitude_deg.has_value() &&
+                 !final_state.longitude_deg.has_value(),
+             "GST-only replay should not invent fix or position");
+  ctx.Expect(final_state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 final_state.vertical_accuracy_m == std::optional<float>(1.1f),
+             "GST-only replay should still preserve accuracy information");
+}
+
 void TestReplayMergesMixedRuntimeState(TestContext& ctx)
 {
   const auto bytes = BuildMixedReplayStream();
@@ -369,16 +428,35 @@ void TestFileBackedReplay(TestContext& ctx)
              "file-backed replay should merge satellite counts across protocols");
 }
 
+void TestFileBackedBasicNmeaReplayIncludesGstAccuracy(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("nmea/basic_fix.nmea");
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 5u &&
+                 result.summary.counts_by_nmea_sentence_type.at("GST") == 1u,
+             "file-backed basic NMEA replay should include the synthetic GST sentence");
+  ctx.Expect(final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kFix &&
+                 final_state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 final_state.vertical_accuracy_m == std::optional<float>(1.1f),
+             "file-backed basic NMEA replay should carry GST accuracy into the final state");
+}
+
 }  // namespace
 
 int main()
 {
   TestContext ctx;
 
+  TestReplayNmeaGstEnrichesAccuracy(ctx);
+  TestReplayNmeaGstOnlyDoesNotInventFixOrPosition(ctx);
   TestReplayMergesMixedRuntimeState(ctx);
   TestReplaySummaryOnlyAndFormatting(ctx);
   TestReplayStreamInput(ctx);
   TestFileBackedReplay(ctx);
+  TestFileBackedBasicNmeaReplayIncludesGstAccuracy(ctx);
 
   if (ctx.failures != 0)
   {

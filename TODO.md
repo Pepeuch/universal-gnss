@@ -334,6 +334,7 @@ To do:
 
 - [ ] ROS2 receiver node
 - [ ] ROS2 diagnostics adapter
+- [ ] ROS2 covariance projection from runtime accuracy fields
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [ ] launch examples

@@ -82,7 +82,8 @@ bool IsSupportedNmeaSentenceType(const NmeaSentence& sentence)
   return universal_gnss_protocols::IsNmeaSentenceType(sentence, "GGA") ||
          universal_gnss_protocols::IsNmeaSentenceType(sentence, "RMC") ||
          universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSA") ||
-         universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV");
+         universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV") ||
+         universal_gnss_protocols::IsNmeaGst(sentence);
 }
 
 template <typename FrameT, typename ParseFn, typename MapFn>
@@ -417,7 +418,29 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     return;
   }
 
-  const auto parsed = universal_gnss_protocols::ParseNmeaGsv(sentence);
+  if (universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV"))
+  {
+    const auto parsed = universal_gnss_protocols::ParseNmeaGsv(sentence);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.frames_rejected;
+      return;
+    }
+
+    ++metrics_.frames_parsed;
+    if (config_.enable_nmea_runtime_updates)
+    {
+      universal_gnss::GnssRuntimeState update;
+      universal_gnss_protocols::MergeNmeaGsvIntoRuntimeState(*parsed.record, update);
+      if (aggregator_.Merge(update))
+      {
+        ++metrics_.runtime_updates;
+      }
+    }
+    return;
+  }
+
+  const auto parsed = universal_gnss_protocols::ParseNmeaGst(sentence);
   if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
   {
     ++metrics_.frames_rejected;
@@ -425,14 +448,10 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
   }
 
   ++metrics_.frames_parsed;
-  if (config_.enable_nmea_runtime_updates)
+  if (config_.enable_nmea_runtime_updates &&
+      aggregator_.Merge(universal_gnss_protocols::NmeaGstToRuntimeState(*parsed.record)))
   {
-    universal_gnss::GnssRuntimeState update;
-    universal_gnss_protocols::MergeNmeaGsvIntoRuntimeState(*parsed.record, update);
-    if (aggregator_.Merge(update))
-    {
-      ++metrics_.runtime_updates;
-    }
+    ++metrics_.runtime_updates;
   }
 }
 
