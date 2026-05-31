@@ -44,6 +44,7 @@ Implemented:
   - gnss_inspect
   - gnss_replay
   - gnss_quality_report
+  - gnss_export
   - gnss_profile_preview
   - gnss_config_plan
   - gnss_config_apply
@@ -62,6 +63,19 @@ To do:
 - [x] Define portable diagnostics/event model
 - [x] Add severity levels
 - [ ] Keep ROS2 diagnostics as adapter-only
+
+### Offline export and analysis
+
+Implemented:
+
+- [x] JSONL runtime timeline export
+
+To do:
+
+- [ ] CSV export
+- [ ] schema versioning if needed
+- [ ] live stream export adapters
+- [ ] plotting / notebook helpers
 
 ### RTCM correction monitor
 

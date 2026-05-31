@@ -8,6 +8,7 @@ add_library(
   src/gnss_quality_report.cpp
   src/ntrip_monitor.cpp
   src/profile_preview.cpp
+  src/runtime_export.cpp
   src/runtime_state_format.cpp
 )
 
@@ -67,6 +68,17 @@ add_executable(
 
 target_link_libraries(
   gnss_quality_report
+  PRIVATE
+    universal_gnss_tools
+)
+
+add_executable(
+  gnss_export
+  src/gnss_export.cpp
+)
+
+target_link_libraries(
+  gnss_export
   PRIVATE
     universal_gnss_tools
 )
@@ -204,6 +216,22 @@ if(BUILD_TESTING)
       TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
   )
   add_test(NAME gnss_tools_test_gnss_quality_report COMMAND gnss_tools_test_gnss_quality_report)
+
+  add_executable(
+    gnss_tools_test_runtime_export
+    tests/test_runtime_export.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_runtime_export
+    PRIVATE
+      universal_gnss_tools
+  )
+  target_compile_definitions(
+    gnss_tools_test_runtime_export
+    PRIVATE
+      TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
+  )
+  add_test(NAME gnss_tools_test_runtime_export COMMAND gnss_tools_test_runtime_export)
 
   add_executable(
     gnss_tools_test_profile_preview

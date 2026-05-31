@@ -181,6 +181,74 @@ The current quality levels are intentionally simple:
 They are based conservatively on the final normalized runtime state plus any
 portable diagnostics already available from the parsed log.
 
+### `gnss_export`
+
+`gnss_export` is the structured offline runtime timeline exporter.
+
+It reuses:
+
+- `gnss_replay`-style normalized runtime reconstruction
+- the existing protocol-to-runtime mapping helpers
+- the existing `GnssRuntimeAggregator` timeline updates
+
+Current behavior:
+
+- reads an offline GNSS log from a file or stdin
+- emits one JSON object per runtime update, not one object per parsed frame
+- defaults to JSON Lines (`jsonl`) output
+- can write to stdout or an explicit output file
+- supports a stable key order intended for notebooks, graphing, future GUI
+  work, MQTT bridges, and API adapters
+
+Current JSONL schema includes:
+
+- `event_index`
+- `timestamp_ns`
+- `protocol`
+- `message`
+- `fix_valid`
+- `fix_type`
+- `rtk_mode`
+- `latitude_deg`
+- `longitude_deg`
+- `altitude_m`
+- `horizontal_accuracy_m`
+- `vertical_accuracy_m`
+- `hdop`
+- `vdop`
+- `satellites_used`
+- `satellites_tracked`
+- `satellites_visible`
+- `mean_cn0_dbhz`
+- `max_cn0_dbhz`
+- `correction_age_s`
+- `heading_deg`
+- `interference_detected`
+- `jamming_detected`
+
+Schema policy:
+
+- every runtime-update line uses the same keys
+- unavailable optional values are emitted as JSON `null`
+- `RTCM3` metadata-only frames are not exported as runtime samples
+
+Current non-goals:
+
+- CSV export
+- live streaming
+- MQTT / WebSocket export
+- ROS 2 bag export
+- plotting or schema negotiation
+
+Examples:
+
+```text
+gnss_export log.bin
+gnss_export --format jsonl log.bin
+gnss_export --output runtime.jsonl log.bin
+gnss_export --pretty log.bin
+```
+
 ### `gnss_profile_preview`
 
 `gnss_profile_preview` is an offline receiver-config inspection CLI.
