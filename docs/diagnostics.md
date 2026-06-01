@@ -3,8 +3,8 @@
 `gnss_core` now provides a small portable diagnostics and health-summary model.
 
 The intent is to give parsers, drivers, session logic, RTCM/NTRIP components,
-and offline tools one common way to describe health and issues before any ROS 2
-adapter exists.
+offline tools, and thin ROS 2 adapters one common way to describe health and
+issues without pushing ROS concerns into `gnss_core`.
 
 ## Scope
 
@@ -133,11 +133,15 @@ from a caster, so:
 
 The following remain intentionally out of scope for this layer:
 
-- ROS 2 `diagnostic_msgs` adapter
+- ROS 2 diagnostic publishers / nodes
 - Foxglove-specific mapping
 - persistent log storage
 - metrics/export backends
 
-ROS 2 diagnostics should be added later as an adapter that maps these portable
-core events into ROS-native types instead of pushing ROS concerns into
-`gnss_core`.
+A ROS 2 `diagnostic_msgs` mapping helper now lives in `gnss_ros2`, but it stays
+adapter-only:
+
+- it converts portable `GnssDiagnosticEvent` / `GnssHealthSummary` values into
+  ROS message types
+- it does not add node lifecycle, publisher ownership, or transport policy
+- it keeps ROS concerns out of `gnss_core`

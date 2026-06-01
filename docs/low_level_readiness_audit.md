@@ -166,7 +166,6 @@ Test conclusion:
 These remain intentionally deferred and do not block the ROS2 phase:
 
 - ROS2 receiver node
-- ROS2 diagnostics adapter
 - ROS2 NTRIP node
 - ROS2 replay node
 - GUI / dashboard work

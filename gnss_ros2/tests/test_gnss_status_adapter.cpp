@@ -115,6 +115,33 @@ TEST(GnssStatusAdapterTest, MapsOptionalFieldsToCapabilityAndValueFlags)
   EXPECT_EQ(msg.satellites_used, 9u);
 }
 
+TEST(GnssStatusAdapterTest, MapsNormalizedGenericFixForTwoDThreeDAndDgpsLikeSources)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = true;
+  state.fix_type = universal_gnss::GnssFixType::kFix;
+  state.latitude_deg = 48.0;
+  state.longitude_deg = 2.0;
+  state.altitude_m = 101.0;
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionAge);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kCorrectionAge, state.correction_age_s, 0.8f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kSatellitesUsed, state.satellites_used, 17u));
+
+  const auto msg = universal_gnss_ros2::ToGnssStatusMessage(state);
+
+  EXPECT_TRUE(msg.fix_valid);
+  EXPECT_EQ(msg.fix_type, Msg::FIX_TYPE_FIX);
+  EXPECT_EQ(msg.rtk_mode, Msg::RTK_MODE_UNKNOWN);
+  EXPECT_NE(msg.capability_flags & Msg::CAP_CORRECTION_AGE, 0u);
+  EXPECT_NE(msg.value_flags & Msg::CAP_CORRECTION_AGE, 0u);
+  EXPECT_FLOAT_EQ(msg.correction_age_s, 0.8f);
+  EXPECT_EQ(msg.satellites_used, 17u);
+}
+
 TEST(GnssStatusAdapterTest, MapsRicherRtkStateWithExpectedFields)
 {
   universal_gnss::GnssRuntimeState state;

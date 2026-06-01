@@ -7,8 +7,14 @@ Today the project contains two implemented layers:
 - `gnss_core`: a portable, ROS-independent runtime model
 - `gnss_ros2`: the ROS 2 package `universal_gnss_ros2`
 
-Parsers, receiver drivers, and NTRIP transport are intentionally not part of
-the current implementation yet.
+The low-level stack is now implemented in sibling packages:
+
+- `gnss_protocols`: NMEA, UBX/u-blox, Unicore, and RTCM parsing
+- `gnss_driver`: receiver sessions, drivers, command/config plumbing
+- `gnss_transport`: memory, POSIX serial, and TCP transport adapters
+- `gnss_ntrip`: NTRIP request/auth/client foundations
+
+Those layers are intentionally separate from `gnss_ros2`.
 
 ## Purpose
 
@@ -20,14 +26,16 @@ Current responsibilities:
 - expose a typed ROS 2 status message: `universal_gnss_ros2/msg/GnssStatus`
 - convert `universal_gnss::GnssRuntimeState` to `GnssStatus`
 - convert `universal_gnss::GnssRuntimeState` to `sensor_msgs/msg/NavSatFix`
+- convert portable `GnssHealthSummary` / `GnssDiagnosticEvent` values into
+  `diagnostic_msgs`
 
 Current non-responsibilities:
 
 - parsing NMEA, RTCM, UBX, Unicore, or any vendor protocol
 - receiver detection or configuration
-- diagnostics parsing
+- receiver-node lifecycle ownership
 - backend-specific fix inference
-- NTRIP transport
+- NTRIP transport ownership
 - application nodes or launch files
 
 ## Layer Split
@@ -38,7 +46,7 @@ The intended boundary is:
 typed vendor/parser output
         |
         v
-   gnss_driver / gnss_protocols   (not implemented yet)
+   gnss_protocols / gnss_driver / gnss_ntrip
         |
         v
  universal_gnss::GnssRuntimeState
@@ -46,6 +54,8 @@ typed vendor/parser output
         +--> universal_gnss_ros2/msg/GnssStatus
         |
         +--> sensor_msgs/msg/NavSatFix
+        |
+        +--> diagnostic_msgs/msg/DiagnosticArray
 ```
 
 `gnss_core` is ROS-independent on purpose:
@@ -60,6 +70,7 @@ typed vendor/parser output
 - timestamp conversion to `builtin_interfaces/Time`
 - `NavSatFix` status mapping
 - covariance projection policy
+- diagnostic-array projection policy
 
 ## Typed Runtime State Philosophy
 
@@ -201,10 +212,11 @@ Diagnostics parsing does not belong here because it would:
 - blur the line between normalization and transport
 - make the ROS layer own backend-specific logic
 
-That logic belongs later in:
+That parsing/normalization logic belongs in the low-level stack:
 
 - `gnss_protocols`: typed protocol parsing
 - `gnss_driver`: receiver-family normalization and runtime mapping
+- `gnss_ntrip`: correction transport and caster-facing behavior
 
 ## NavSatFix Adapter Policy
 
@@ -271,24 +283,25 @@ RTK truth does not come from `NavSatFix` alone.
 model. The authoritative model is `GnssRuntimeState`, and the richer ROS view is
 `GnssStatus`.
 
-## What Comes Later
+## Mapping Audit
 
-The following belong in later layers, not in `gnss_ros2`:
+The current field-by-field ROS projection contract lives in
+[docs/ros2_mapping.md](ros2_mapping.md).
 
-- `gnss_protocols`
-  - NMEA parsing
-  - RTCM parsing
-  - UBX parsing
-  - Unicore parsing
-- `gnss_driver`
-  - receiver detection
-  - configuration
-  - runtime-state mapping from parsed receiver telemetry
-  - backend capability declaration
-- `gnss_ntrip`
-  - NTRIP client
-  - RTCM relay
-  - correction freshness transport metrics
+That document records:
 
-When those layers arrive, they should produce or enrich typed
-`GnssRuntimeState`, and the ROS adapters should remain thin.
+- every `GnssRuntimeState` field and whether it reaches `GnssStatus`,
+  `NavSatFix`, or ROS diagnostics helpers
+- current intentional omissions such as semantic-only `VTG` / `ZDA`
+- distro-compatibility assumptions for Humble, Jazzy, and Kilted
+
+## What Comes Next
+
+The next ROS 2 phase is still higher-level integration, not more low-level
+feature work:
+
+- receiver node
+- NTRIP node
+- replay node
+- launch/examples
+- downstream integration surfaces such as `robot_localization` / Nav2

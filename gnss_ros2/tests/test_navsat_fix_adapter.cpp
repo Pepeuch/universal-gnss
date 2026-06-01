@@ -28,6 +28,23 @@ TEST(NavSatFixAdapterTest, DefaultUnknownStateMapsSafely)
   EXPECT_EQ(msg.position_covariance_type, NavSatFix::COVARIANCE_TYPE_UNKNOWN);
 }
 
+TEST(NavSatFixAdapterTest, ExplicitNoFixKeepsNoFixStatusEvenWithCoordinates)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = false;
+  state.fix_type = universal_gnss::GnssFixType::kNoFix;
+  state.latitude_deg = 48.123456;
+  state.longitude_deg = 2.345678;
+  state.altitude_m = 12.3;
+
+  const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
+
+  EXPECT_EQ(msg.status.status, NavSatStatus::STATUS_NO_FIX);
+  EXPECT_DOUBLE_EQ(msg.latitude, 48.123456);
+  EXPECT_DOUBLE_EQ(msg.longitude, 2.345678);
+  EXPECT_DOUBLE_EQ(msg.altitude, 12.3);
+}
+
 TEST(NavSatFixAdapterTest, MapsValidCoordinatesAndTimestamp)
 {
   universal_gnss::GnssRuntimeState state;
@@ -132,6 +149,59 @@ TEST(NavSatFixAdapterTest, MapsOnlyExplicitRtkFixedToGbasStatus)
 
   const auto float_msg = universal_gnss_ros2::ToNavSatFixMessage(float_state);
   EXPECT_EQ(float_msg.status.status, NavSatStatus::STATUS_FIX);
+}
+
+TEST(NavSatFixAdapterTest, DoesNotTrustRtkModeWithoutRuntimeValueFlag)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = true;
+  state.fix_type = universal_gnss::GnssFixType::kFix;
+  state.latitude_deg = 48.0;
+  state.longitude_deg = 2.0;
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
+  state.rtk_mode = universal_gnss::GnssRtkMode::kFixed;
+
+  const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
+
+  EXPECT_EQ(msg.status.status, NavSatStatus::STATUS_FIX);
+}
+
+TEST(NavSatFixAdapterTest, DoesNotTrustAccuracyFieldsWithoutRuntimeValueFlags)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = true;
+  state.fix_type = universal_gnss::GnssFixType::kFix;
+  state.latitude_deg = 48.0;
+  state.longitude_deg = 2.0;
+  state.altitude_m = 100.0;
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
+  state.horizontal_accuracy_m = 0.2f;
+  state.vertical_accuracy_m = 0.5f;
+
+  const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
+
+  EXPECT_EQ(msg.position_covariance_type, NavSatFix::COVARIANCE_TYPE_UNKNOWN);
+  EXPECT_DOUBLE_EQ(msg.position_covariance[0], 0.0);
+  EXPECT_DOUBLE_EQ(msg.position_covariance[4], 0.0);
+  EXPECT_DOUBLE_EQ(msg.position_covariance[8], 0.0);
+}
+
+TEST(NavSatFixAdapterTest, KeepsNormalizedGenericFixAsStatusFixEvenWithCorrectionAge)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.fix_valid = true;
+  state.fix_type = universal_gnss::GnssFixType::kFix;
+  state.latitude_deg = 48.0;
+  state.longitude_deg = 2.0;
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionAge);
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kCorrectionAge, state.correction_age_s, 0.7f));
+
+  const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
+
+  EXPECT_EQ(msg.status.status, NavSatStatus::STATUS_FIX);
+  EXPECT_EQ(msg.status.service, 0u);
 }
 
 TEST(NavSatFixAdapterTest, MissingOptionalFieldsRemainSafe)

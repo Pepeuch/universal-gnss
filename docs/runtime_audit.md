@@ -75,8 +75,9 @@ Current intentional model limits:
   - `NMEA VTG` remains semantic-only
 - no GNSS wall-clock / calendar-time contract yet
   - `NMEA ZDA` remains semantic-only
-- no portable receiver-diagnostics adapter in ROS 2 yet
-  - correction and hardware diagnostics stay in tools / diagnostics helpers
+- runtime state does not map directly to ROS diagnostics
+  - correction and hardware diagnostics flow through the portable
+    `GnssHealthSummary` / `GnssDiagnosticEvent` model instead
 
 Current export / adapter notes:
 
@@ -88,6 +89,8 @@ Current export / adapter notes:
 - ROS 2 visibility currently means:
   - `NavSatFix`: coordinates / altitude / conservative covariance only
   - `GnssStatus`: the broader normalized runtime surface
+  - `DiagnosticArray`: portable health / diagnostic summaries, not direct
+    `GnssRuntimeState` fields
 
 ## Session Notes
 
@@ -169,7 +172,6 @@ Legend:
 These remain intentionally deferred after the audit:
 
 - ROS 2 receiver node work
-- ROS 2 diagnostics adapter work
 - generic speed / course runtime contract for `VTG`
 - GNSS wall-clock / date runtime contract for `ZDA`
 - broader Unicore binary `N4` semantic decoding beyond `BESTNAVB` / `PVTSLNB`

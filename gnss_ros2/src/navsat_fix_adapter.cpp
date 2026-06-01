@@ -28,7 +28,8 @@ bool HasExplicitRtkFixed(const universal_gnss::GnssRuntimeState& state)
     return true;
   }
 
-  return state.rtk_mode.has_value() &&
+  return universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
+         state.rtk_mode.has_value() &&
          *state.rtk_mode == universal_gnss::GnssRtkMode::kFixed;
 }
 
@@ -42,7 +43,9 @@ void PopulateConservativeCovariance(const universal_gnss::GnssRuntimeState& stat
   // conservative diagonal approximation only when both standard-deviation-like
   // terms are present. If either term is missing, we leave covariance unknown
   // rather than inventing partial precision.
-  if (!state.horizontal_accuracy_m.has_value() || !state.vertical_accuracy_m.has_value())
+  if (!universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kHorizontalAccuracy) ||
+      !universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kVerticalAccuracy) ||
+      !state.horizontal_accuracy_m.has_value() || !state.vertical_accuracy_m.has_value())
   {
     message.position_covariance_type = NavSatFix::COVARIANCE_TYPE_UNKNOWN;
     return;

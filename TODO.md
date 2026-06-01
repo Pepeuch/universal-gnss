@@ -62,7 +62,6 @@ Implemented:
 Primary focus:
 
 - [ ] ROS2 receiver node
-- [ ] ROS2 diagnostics adapter
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [ ] ROS2 launch/examples
@@ -86,7 +85,7 @@ To do:
 
 - [x] Define portable diagnostics/event model
 - [x] Add severity levels
-- [ ] Keep ROS2 diagnostics as adapter-only
+- [x] Keep ROS2 diagnostics as adapter-only
 
 ### Offline export and analysis
 
@@ -377,12 +376,13 @@ Implemented:
 - [x] GnssStatus message
 - [x] GnssStatus adapter
 - [x] NavSatFix adapter
+- [x] diagnostic_msgs adapter helpers
+- [x] runtime-to-ROS2 mapping audit
+- [x] ROS2 covariance projection from runtime accuracy fields
 
 To do:
 
 - [ ] ROS2 receiver node
-- [ ] ROS2 diagnostics adapter
-- [ ] ROS2 covariance projection from runtime accuracy fields
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [ ] launch examples

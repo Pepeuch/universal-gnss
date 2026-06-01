@@ -96,14 +96,21 @@ Release verdict:
 
 ## v0.5 — ROS2 Integration
 
+Completed at the start of this phase:
+
+- `GnssStatus` runtime adapter
+- `NavSatFix` compatibility adapter
+- `diagnostic_msgs` mapping helpers
+- runtime-to-ROS2 mapping audit
+
 Next:
 
 - ROS2 receiver node
-- ROS2 diagnostics adapter
 - ROS2 NTRIP node
 - ROS2 replay node
 - launch examples
 - Humble/Jazzy validation
+- Kilted source-compatibility validation
 - Foxglove-friendly topic surface
 
 ## v0.6 — Minimal GUI / Dashboard
