@@ -161,6 +161,8 @@ Current behavior:
 - reports decoded RTCM `1005` / `1006` base-station ECEF position when present
 - reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
   present
+- reports portable receiver RF / hardware diagnostics when supported messages
+  such as `UBX-MON-HW`, `Unicore JAMSTATUSA`, or `Unicore HWSTATUSA` are present
 - emits either readable text output or compact JSON
 - inherits Unicore binary `BESTNAVB` / `PVTSLNB` support through the same replay
   path used by `gnss_replay`

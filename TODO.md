@@ -4,6 +4,7 @@
 
 Implemented:
 
+- Low-level GNSS foundation ready for ROS2 integration phase
 - Portable GNSS runtime core
 - Runtime capability/value flags
 - Runtime aggregation layer
@@ -53,6 +54,27 @@ Implemented:
   - gnss_ntrip_monitor
 - Synthetic/sanitized testdata corpus
 - Portable CMake/CTest workflow
+
+---
+
+## Next phase after v0.4
+
+Primary focus:
+
+- [ ] ROS2 receiver node
+- [ ] ROS2 diagnostics adapter
+- [ ] ROS2 NTRIP node
+- [ ] ROS2 replay node
+- [ ] ROS2 launch/examples
+- [ ] ROS2 CI coverage
+
+Keep deferred until after ROS2 stabilization:
+
+- [ ] GUI / dashboard
+- [ ] ESP32 integration
+- [ ] LoRa / gateway work
+- [ ] RTK base gateway workflows
+- [ ] future receiver vendors
 
 ---
 

@@ -2,11 +2,12 @@
 
 This document describes the purpose and current scope of `gnss_driver`.
 
-Today `gnss_driver` is only a portable abstraction foundation.
+Today `gnss_driver` is the portable receiver-integration layer for the current
+low-level stack.
 
 It does not yet contain:
 
-- live receiver configuration
+- autonomous live receiver configuration loops
 - correction injection
 - auto-detection loops
 - ROS 2 nodes
