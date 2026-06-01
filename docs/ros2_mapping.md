@@ -229,9 +229,9 @@ Current compatibility assumptions:
 
 Locally validated in this audit:
 
-- repository-side source audit only
-- no ROS 2 distribution was installed in the local environment used for this
-  pass, so Humble / Jazzy / Kilted package builds were not executed here
+- Kilted package build and test execution succeeded in the local MowgliNext
+  development image
+- Humble and Jazzy were not built locally in this pass
 
 Compatibility evidence used for the audit:
 
@@ -249,3 +249,53 @@ Practical recommendation:
 - keep `gnss_ros2` mapping helpers free of node/runtime logic
 - validate package builds in CI later against at least Humble and Jazzy
 - add Kilted to CI only when that matrix is already useful for the node phase
+
+## Local Kilted Validation Method
+
+The local host used for this audit did not provide `/opt/ros` directly, but a
+Kilted-capable MowgliNext development image was available locally.
+
+Validation method example:
+
+```bash
+docker run --rm \
+  -v <universal_gnss_repo>:/repo:ro \
+  <ros2_kilted_image> \
+  bash -lc '
+    source /opt/ros/kilted/setup.bash
+    rm -rf /tmp/universal_gnss_ros2_ws
+    mkdir -p /tmp/universal_gnss_ros2_ws/src
+    ln -s /repo/gnss_ros2 /tmp/universal_gnss_ros2_ws/src/gnss_ros2
+    ln -s /repo/gnss_core /tmp/universal_gnss_ros2_ws/src/gnss_core
+    cd /tmp/universal_gnss_ros2_ws
+    colcon build --packages-select universal_gnss_ros2 --event-handlers console_direct+
+    colcon test --packages-select universal_gnss_ros2 --event-handlers console_direct+
+    colcon test-result --verbose
+  '
+```
+
+Notes:
+
+- `<universal_gnss_repo>` should be replaced with the local Universal GNSS repository path.
+- `<ros2_kilted_image>` should be replaced with any ROS2 Kilted-capable container image.
+- The exact image and repository paths are environment-specific and intentionally omitted.
+
+Why this shape was used:
+
+- the Universal GNSS source tree stayed the only modified tree
+- `gnss_ros2` still needs sibling `gnss_core/include`
+- the container workspace was throwaway and did not modify MowgliNext
+
+Current local result:
+
+- `universal_gnss_ros2` built successfully on Kilted
+- adapter tests passed:
+  - `test_gnss_status_adapter`
+  - `test_navsat_fix_adapter`
+  - `test_diagnostic_adapter`
+
+Known follow-up compatibility gap:
+
+- Kilted emits deprecation warnings for `ament_target_dependencies()`
+- this does not block the current build, but a later ROS 2 cleanup pass should
+  modernize those link declarations before adding a CI distro matrix

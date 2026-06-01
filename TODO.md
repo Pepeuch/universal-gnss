@@ -379,6 +379,7 @@ Implemented:
 - [x] diagnostic_msgs adapter helpers
 - [x] runtime-to-ROS2 mapping audit
 - [x] ROS2 covariance projection from runtime accuracy fields
+- [x] Kilted local build/test validation
 
 To do:
 

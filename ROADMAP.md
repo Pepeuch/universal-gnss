@@ -102,6 +102,7 @@ Completed at the start of this phase:
 - `NavSatFix` compatibility adapter
 - `diagnostic_msgs` mapping helpers
 - runtime-to-ROS2 mapping audit
+- local Kilted package build/test validation
 
 Next:
 
@@ -110,7 +111,6 @@ Next:
 - ROS2 replay node
 - launch examples
 - Humble/Jazzy validation
-- Kilted source-compatibility validation
 - Foxglove-friendly topic surface
 
 ## v0.6 — Minimal GUI / Dashboard

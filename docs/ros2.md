@@ -295,6 +295,9 @@ That document records:
 - current intentional omissions such as semantic-only `VTG` / `ZDA`
 - distro-compatibility assumptions for Humble, Jazzy, and Kilted
 
+The same audit document also records the exact local Kilted build/test method
+used for `universal_gnss_ros2` validation in the MowgliNext development image.
+
 ## What Comes Next
 
 The next ROS 2 phase is still higher-level integration, not more low-level

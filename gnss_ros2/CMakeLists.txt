@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(universal_gnss_ros2 LANGUAGES CXX)
+project(universal_gnss_ros2 LANGUAGES C CXX)
 
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)

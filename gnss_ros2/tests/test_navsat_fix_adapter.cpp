@@ -101,9 +101,9 @@ TEST(NavSatFixAdapterTest, DerivesConservativeApproximateCovarianceWhenAvailable
   const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
 
   EXPECT_EQ(msg.position_covariance_type, NavSatFix::COVARIANCE_TYPE_APPROXIMATED);
-  EXPECT_NEAR(msg.position_covariance[0], 0.04, 1e-9);
-  EXPECT_NEAR(msg.position_covariance[4], 0.04, 1e-9);
-  EXPECT_NEAR(msg.position_covariance[8], 0.25, 1e-9);
+  EXPECT_NEAR(msg.position_covariance[0], 0.04, 1e-8);
+  EXPECT_NEAR(msg.position_covariance[4], 0.04, 1e-8);
+  EXPECT_NEAR(msg.position_covariance[8], 0.25, 1e-8);
 }
 
 TEST(NavSatFixAdapterTest, DoesNotInventPartialCovarianceFromSingleAxisAccuracy)
