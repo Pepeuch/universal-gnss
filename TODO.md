@@ -113,6 +113,7 @@ Implemented:
 - [x] `ReceiverNode`
 - [x] minimal receiver launch examples
 - [x] robot_localization example YAML and launch
+- [x] receiver node runtime validation and diagnostics hardening
 
 To do:
 

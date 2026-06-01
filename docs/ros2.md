@@ -362,6 +362,18 @@ Supported receiver families:
 - `publish_rate_hz`
 - `frame_id`
 
+Validation policy:
+
+- invalid enum or range values fail node construction with a clear ROS error
+- required transport-specific parameters must be present
+- startup configuration errors do not silently fall back to another mode
+
+Transport-open policy:
+
+- configuration mistakes fail fast at startup
+- runtime transport open/connect failures keep the node alive when possible and
+  surface through `diagnostics`
+
 ### Outputs
 
 Topics published by the skeleton node:
@@ -379,6 +391,26 @@ The minimal launch examples now installed with the package are:
 - `receiver_tcp.launch.py`
 
 They are intentionally parameter-forwarding wrappers around `receiver_node`.
+
+### Runtime behavior
+
+The node now follows a conservative runtime policy:
+
+- `status` and `diagnostics` are always publishable
+- `fix` is only published when the runtime state has a fresh, finite latitude
+  and longitude
+- stale or disconnected runtime state suppresses `fix` publication instead of
+  repeating old coordinates
+
+Diagnostic states surfaced by the node include:
+
+- startup parameter validation failure
+- serial/TCP transport open failure
+- no data received after startup grace period
+- stale transport activity
+- stale runtime state
+- terminal transport states such as EOF / closed / read error
+- portable jamming / interference state propagated from `GnssRuntimeState`
 
 ### Example invocation
 
@@ -450,6 +482,7 @@ This example is intentionally conservative:
 - no owned `robot_localization` integration package yet
 - no Nav2 integration yet
 - no receiver command/config ownership yet
+- no automatic reconnect loop yet
 - no retry/reconnect lifecycle node yet
 
 ## What Comes Next

@@ -145,3 +145,23 @@ adapter-only:
   ROS message types
 - it does not add node lifecycle, publisher ownership, or transport policy
 - it keeps ROS concerns out of `gnss_core`
+
+The first ROS 2 runtime consumer of that mapping is `universal_gnss_ros2`
+`ReceiverNode`. Its node-level diagnostics policy is intentionally thin and
+operational:
+
+- invalid startup parameters fail fast with ROS logging instead of silent
+  fallback
+- serial/TCP open failures keep the node alive when practical and surface as
+  transport diagnostics
+- lack of incoming bytes after startup becomes a node-level warning
+- stale runtime updates become node-level stale diagnostics
+- jamming / interference booleans already present in `GnssRuntimeState` are
+  forwarded into the portable health summary and then into
+  `diagnostic_msgs/DiagnosticArray`
+
+This still stops short of:
+
+- lifecycle-node health orchestration
+- automatic reconnect ownership
+- GUI-specific diagnostic presentation

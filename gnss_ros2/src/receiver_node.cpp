@@ -4,10 +4,12 @@
 #include <chrono>
 #include <cctype>
 #include <cstdint>
+#include <cmath>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,6 +55,8 @@ struct ReceiverNodeConfig
   double publish_rate_hz{10.0};
   std::string frame_id{"gnss"};
 };
+
+using SteadyClock = std::chrono::steady_clock;
 
 std::string ToLowerCopy(std::string value)
 {
@@ -104,6 +108,39 @@ universal_gnss::GnssDiagnosticEvent MakeEvent(universal_gnss::GnssDiagnosticSeve
   event.message = std::move(message);
   event.source = "receiver_node";
   return event;
+}
+
+void LogDiagnosticEvent(rclcpp::Node& node, const universal_gnss::GnssDiagnosticEvent& event)
+{
+  switch (event.severity)
+  {
+    case universal_gnss::GnssDiagnosticSeverity::kError:
+      RCLCPP_ERROR(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+      break;
+    case universal_gnss::GnssDiagnosticSeverity::kWarning:
+    case universal_gnss::GnssDiagnosticSeverity::kStale:
+      RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+      break;
+    case universal_gnss::GnssDiagnosticSeverity::kInfo:
+      RCLCPP_INFO(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+      break;
+    case universal_gnss::GnssDiagnosticSeverity::kOk:
+      RCLCPP_INFO(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+      break;
+    case universal_gnss::GnssDiagnosticSeverity::kUnknown:
+    default:
+      RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+      break;
+  }
+}
+
+[[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node,
+                                        const std::string& parameter_name,
+                                        const std::string& message)
+{
+  const std::string full_message = "Invalid parameter '" + parameter_name + "': " + message;
+  RCLCPP_ERROR(node.get_logger(), "%s", full_message.c_str());
+  throw std::invalid_argument(full_message);
 }
 
 std::chrono::nanoseconds ComputePublishPeriod(double publish_rate_hz)
@@ -162,8 +199,7 @@ std::string BuildHardwareId(const ReceiverNodeConfig& config, const bool using_i
   return stream.str();
 }
 
-ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node,
-                                          std::vector<universal_gnss::GnssDiagnosticEvent>& events)
+ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_injected_source)
 {
   ReceiverNodeConfig config;
 
@@ -195,12 +231,8 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node,
   }
   else
   {
-    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
-                               "receiver_family_invalid",
-                               "Unsupported receiver_family parameter, falling back to auto"));
-    config.receiver_family_name = "auto";
-    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kAutoDetect;
+    ThrowInvalidParameter(
+        node, "receiver_family", "expected one of: auto, nmea, ublox, unicore");
   }
 
   if (config.transport_name == "serial")
@@ -213,47 +245,48 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node,
   }
   else
   {
-    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
-                               "transport_invalid",
-                               "Unsupported transport parameter, falling back to serial"));
-    config.transport_name = "serial";
-    config.transport_kind = ReceiverTransportKind::kSerial;
+    ThrowInvalidParameter(node, "transport", "expected one of: serial, tcp");
   }
 
-  if (serial_baud <= 0)
+  if (serial_baud <= 0 || serial_baud > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
   {
-    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
-                               "serial_baud_invalid",
-                               "serial_baud must be positive, falling back to 115200"));
-    config.serial_baud = 115200u;
+    ThrowInvalidParameter(node, "serial_baud", "must be in the 1..4294967295 range");
   }
-  else
+  config.serial_baud = static_cast<std::uint32_t>(serial_baud);
+
+  if (!std::isfinite(config.publish_rate_hz) || !(config.publish_rate_hz > 0.0))
   {
-    config.serial_baud = static_cast<std::uint32_t>(serial_baud);
+    ThrowInvalidParameter(node, "publish_rate_hz", "must be finite and strictly positive");
   }
 
-  if (tcp_port < 0 || tcp_port > static_cast<std::int64_t>(std::numeric_limits<std::uint16_t>::max()))
+  if (config.frame_id.empty())
   {
-    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
-                               "tcp_port_invalid",
-                               "tcp_port must be in the 0..65535 range, falling back to 0"));
-    config.tcp_port = 0u;
+    ThrowInvalidParameter(node, "frame_id", "must not be empty");
   }
-  else
+
+  if (!using_injected_source && config.transport_kind == ReceiverTransportKind::kSerial &&
+      config.serial_device.empty())
   {
+    ThrowInvalidParameter(node, "serial_device", "must be set when transport=serial");
+  }
+
+  if (config.transport_kind == ReceiverTransportKind::kTcp)
+  {
+    if (tcp_port <= 0 ||
+        tcp_port > static_cast<std::int64_t>(std::numeric_limits<std::uint16_t>::max()))
+    {
+      ThrowInvalidParameter(node, "tcp_port", "must be in the 1..65535 range when transport=tcp");
+    }
     config.tcp_port = static_cast<std::uint16_t>(tcp_port);
-  }
 
-  if (!(config.publish_rate_hz > 0.0))
+    if (!using_injected_source && config.tcp_host.empty())
+    {
+      ThrowInvalidParameter(node, "tcp_host", "must be set when transport=tcp");
+    }
+  }
+  else
   {
-    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
-                               "publish_rate_invalid",
-                               "publish_rate_hz must be positive, falling back to 10 Hz"));
-    config.publish_rate_hz = 10.0;
+    config.tcp_port = 0u;
   }
 
   return config;
@@ -346,12 +379,15 @@ std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
 
 struct ReceiverNode::Impl
 {
+  static constexpr std::chrono::seconds kStaleTimeout{3};
+
   explicit Impl(ReceiverNode& owner,
                 std::unique_ptr<universal_gnss_transport::ByteSource> injected_source)
       : owner_(owner)
   {
     startup_events_.reserve(8u);
-    config_ = LoadReceiverNodeConfig(owner_, startup_events_);
+    const bool using_injected_source = injected_source != nullptr;
+    config_ = LoadReceiverNodeConfig(owner_, using_injected_source);
     hardware_id_ = BuildHardwareId(config_, injected_source != nullptr);
 
     session_ = std::make_unique<universal_gnss_driver::ReceiverSession>(config_.session);
@@ -374,6 +410,11 @@ struct ReceiverNode::Impl
       transport_source_ = CreateTransportSource(config_, startup_events_);
       transport_configured_ = transport_source_ != nullptr;
       transport_ready_ = transport_source_ != nullptr;
+    }
+
+    for (const auto& event : startup_events_)
+    {
+      LogDiagnosticEvent(owner_, event);
     }
 
     if (transport_source_ != nullptr)
@@ -404,7 +445,35 @@ struct ReceiverNode::Impl
       return false;
     }
 
-    return runner_->StepOnce();
+    const std::size_t bytes_before = runner_->metrics().bytes_read;
+    const std::size_t runtime_updates_before = session_->metrics().runtime_updates;
+    const bool advanced = runner_->StepOnce();
+    const auto now = SteadyClock::now();
+    const auto& runner_metrics = runner_->metrics();
+
+    if (runner_metrics.bytes_read > bytes_before)
+    {
+      last_transport_activity_time_ = now;
+    }
+
+    if (session_->metrics().runtime_updates > runtime_updates_before)
+    {
+      last_runtime_update_time_ = now;
+    }
+
+    if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kOk)
+    {
+      transport_ready_ = transport_source_ != nullptr && transport_source_->IsOpen();
+      last_logged_terminal_status_.reset();
+      last_logged_transport_error_ = universal_gnss_transport::TransportError::kNone;
+    }
+    else if (universal_gnss_transport::IsTransportTerminal(runner_metrics.last_status))
+    {
+      transport_ready_ = false;
+      LogTransportTerminalTransition(runner_metrics.last_status, runner_metrics.last_error);
+    }
+
+    return advanced;
   }
 
   universal_gnss::GnssHealthSummary BuildHealthSummary() const
@@ -449,7 +518,8 @@ struct ReceiverNode::Impl
             "transport_read_error",
             "Receiver transport reported read errors"));
       }
-      if (runner_metrics.eof_seen)
+      if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kEndOfStream ||
+          runner_metrics.eof_seen)
       {
         summary.transport_healthy = false;
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
@@ -457,6 +527,46 @@ struct ReceiverNode::Impl
                                    "transport_eof",
                                    "Receiver transport reached end of stream"));
       }
+      if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kClosed)
+      {
+        summary.transport_healthy = false;
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                   universal_gnss::GnssDiagnosticCategory::kTransport,
+                                   "transport_closed",
+                                   "Receiver transport is closed"));
+      }
+    }
+
+    const auto now = SteadyClock::now();
+    if (transport_source_ != nullptr && transport_source_->IsOpen())
+    {
+      if (!last_transport_activity_time_.has_value())
+      {
+        if (now - startup_time_ >= kStaleTimeout)
+        {
+          summary.transport_healthy = false;
+          summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                     universal_gnss::GnssDiagnosticCategory::kTiming,
+                                     "no_data_received",
+                                     "No GNSS data has been received yet"));
+        }
+      }
+      else if (now - *last_transport_activity_time_ >= kStaleTimeout)
+      {
+        summary.transport_healthy = false;
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                   universal_gnss::GnssDiagnosticCategory::kTiming,
+                                   "transport_data_stale",
+                                   "GNSS transport has not produced data recently"));
+      }
+    }
+
+    if (last_runtime_update_time_.has_value() && now - *last_runtime_update_time_ >= kStaleTimeout)
+    {
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                 universal_gnss::GnssDiagnosticCategory::kRuntime,
+                                 "runtime_state_stale",
+                                 "GNSS runtime state has not been updated recently"));
     }
 
     if (session_metrics.malformed_records > 0u)
@@ -493,9 +603,6 @@ struct ReceiverNode::Impl
   {
     const auto& state = session_->current_state();
 
-    last_fix_message_ = ToNavSatFixMessage(state);
-    last_fix_message_->header.frame_id = config_.frame_id;
-
     last_status_message_ = ToGnssStatusMessage(state);
 
     auto summary = BuildHealthSummary();
@@ -508,7 +615,17 @@ struct ReceiverNode::Impl
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;
 
-    fix_publisher_->publish(*last_fix_message_);
+    if (CanPublishFixMessage(state))
+    {
+      last_fix_message_ = ToNavSatFixMessage(state);
+      last_fix_message_->header.frame_id = config_.frame_id;
+      fix_publisher_->publish(*last_fix_message_);
+    }
+    else
+    {
+      last_fix_message_.reset();
+    }
+
     status_publisher_->publish(*last_status_message_);
     diagnostics_publisher_->publish(*last_diagnostics_message_);
   }
@@ -517,6 +634,53 @@ struct ReceiverNode::Impl
   {
     return fix_publisher_ != nullptr && status_publisher_ != nullptr &&
            diagnostics_publisher_ != nullptr;
+  }
+
+  bool HasFreshRuntimeState() const
+  {
+    return last_runtime_update_time_.has_value() &&
+           (SteadyClock::now() - *last_runtime_update_time_ < kStaleTimeout);
+  }
+
+  bool CanPublishFixMessage(const universal_gnss::GnssRuntimeState& state) const
+  {
+    if (!transport_ready_ || !HasFreshRuntimeState() || !state.latitude_deg.has_value() ||
+        !state.longitude_deg.has_value())
+    {
+      return false;
+    }
+
+    return std::isfinite(*state.latitude_deg) && std::isfinite(*state.longitude_deg);
+  }
+
+  void LogTransportTerminalTransition(const universal_gnss_transport::TransportStatus status,
+                                      const universal_gnss_transport::TransportError error)
+  {
+    if (last_logged_terminal_status_.has_value() && *last_logged_terminal_status_ == status &&
+        last_logged_transport_error_ == error)
+    {
+      return;
+    }
+
+    last_logged_terminal_status_ = status;
+    last_logged_transport_error_ = error;
+
+    switch (status)
+    {
+      case universal_gnss_transport::TransportStatus::kEndOfStream:
+        RCLCPP_WARN(owner_.get_logger(), "GNSS transport reached end of stream");
+        break;
+      case universal_gnss_transport::TransportStatus::kClosed:
+        RCLCPP_WARN(owner_.get_logger(), "GNSS transport closed");
+        break;
+      case universal_gnss_transport::TransportStatus::kError:
+        RCLCPP_ERROR(
+            owner_.get_logger(), "GNSS transport read error: %s", ToString(error));
+        break;
+      case universal_gnss_transport::TransportStatus::kOk:
+      default:
+        break;
+    }
   }
 
   ReceiverNode& owner_;
@@ -533,6 +697,12 @@ struct ReceiverNode::Impl
   std::optional<sensor_msgs::msg::NavSatFix> last_fix_message_{};
   std::optional<universal_gnss_ros2::msg::GnssStatus> last_status_message_{};
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
+  SteadyClock::time_point startup_time_{SteadyClock::now()};
+  std::optional<SteadyClock::time_point> last_transport_activity_time_{};
+  std::optional<SteadyClock::time_point> last_runtime_update_time_{};
+  std::optional<universal_gnss_transport::TransportStatus> last_logged_terminal_status_{};
+  universal_gnss_transport::TransportError last_logged_transport_error_{
+      universal_gnss_transport::TransportError::kNone};
   bool transport_configured_{false};
   bool transport_ready_{false};
   bool using_injected_source_{false};
