@@ -39,6 +39,27 @@ Validation baseline for this audit:
 For the detailed per-message routing matrix, see
 [docs/runtime_audit.md](runtime_audit.md).
 
+```mermaid
+flowchart LR
+
+    NMEA["NMEA"]
+    UBX["UBX"]
+    UNI["Unicore"]
+    RTCM["RTCM3"]
+
+    NMEA --> RT["GnssRuntimeState"]
+    UBX --> RT
+    UNI --> RT
+    RTCM --> RT
+
+    RT --> REP["Replay"]
+    RT --> QR["Quality Report"]
+    RT --> EXP["JSON Export"]
+    RT --> ROS["ROS2 Adapters"]
+
+    style RT fill:#d4f4dd,stroke:#2e7d32,stroke-width:3px
+```
+
 ## A. Protocol Readiness
 
 | Area | Status | Notes |

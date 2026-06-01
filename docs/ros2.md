@@ -42,20 +42,33 @@ Current non-responsibilities:
 
 The intended boundary is:
 
-```text
-typed vendor/parser output
-        |
-        v
-   gnss_protocols / gnss_driver / gnss_ntrip
-        |
-        v
- universal_gnss::GnssRuntimeState
-        |
-        +--> universal_gnss_ros2/msg/GnssStatus
-        |
-        +--> sensor_msgs/msg/NavSatFix
-        |
-        +--> diagnostic_msgs/msg/DiagnosticArray
+```mermaid
+flowchart TB
+
+    subgraph LowLevel["Low-Level Foundation"]
+        P["Protocols<br/>NMEA / UBX / Unicore / RTCM3"]
+        S["Sessions & Drivers<br/>Nmea / Ublox / Unicore"]
+        T["Transport & NTRIP<br/>Serial / TCP / RTCM / GGA"]
+    end
+
+    P --> R["GnssRuntimeState"]
+    S --> R
+    T --> R
+
+    R --> GS["GnssStatus.msg"]
+    R --> NF["sensor_msgs/NavSatFix"]
+
+    R --> GH["GnssHealthSummary"]
+    GH --> DA["diagnostic_msgs/DiagnosticArray"]
+
+    GS --> RN["ROS2 Receiver Node"]
+    NF --> RN
+    DA --> RN
+
+    RN --> RL["robot_localization"]
+    RL --> NAV["Nav2"]
+
+    style R fill:#d4f4dd,stroke:#2e7d32,stroke-width:3px
 ```
 
 `gnss_core` is ROS-independent on purpose:

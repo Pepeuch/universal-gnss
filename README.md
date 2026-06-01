@@ -82,16 +82,17 @@ Planned layers:
 
 The intended flow is:
 
-```text
-protocol parser / driver / transport
-                |
-                v
-  universal_gnss::GnssRuntimeState
-                |
-        +-------+-------+
-        |               |
-        v               v
-   GnssStatus.msg   sensor_msgs/NavSatFix
+```mermaid
+flowchart TB
+
+    P["GNSS Receivers"]
+    R["Universal GNSS"]
+    ROS["ROS2 Messages"]
+    APP["Applications"]
+
+    P --> R
+    R --> ROS
+    ROS --> APP
 ```
 
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts and the
