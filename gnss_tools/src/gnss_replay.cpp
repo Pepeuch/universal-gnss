@@ -15,6 +15,7 @@
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
@@ -38,6 +39,8 @@ using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::ProtocolType;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
@@ -472,54 +475,90 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
     const std::vector<std::uint8_t>& bytes,
     const std::size_t byte_offset)
 {
-  UnicoreFrameFramer framer;
-  const auto probe = ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, byte_offset);
-  if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+  if (byte_offset >= bytes.size())
   {
     return std::nullopt;
   }
 
-  const UnicoreFrame& frame = *probe.record;
-  if (const auto pvtsln = universal_gnss_protocols::ParseUnicorePvtsln(frame);
-      pvtsln.status == ParserStatus::kRecordReady && pvtsln.record.has_value())
+  const std::uint8_t byte = bytes[byte_offset];
+  if (byte == '#' || byte == '%')
   {
-    return universal_gnss_protocols::UnicorePvtslnToRuntimeState(*pvtsln.record);
+    UnicoreFrameFramer framer;
+    const auto probe =
+        ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, byte_offset);
+    if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+    {
+      return std::nullopt;
+    }
+
+    const UnicoreFrame& frame = *probe.record;
+    if (const auto pvtsln = universal_gnss_protocols::ParseUnicorePvtsln(frame);
+        pvtsln.status == ParserStatus::kRecordReady && pvtsln.record.has_value())
+    {
+      return universal_gnss_protocols::UnicorePvtslnToRuntimeState(*pvtsln.record);
+    }
+    if (const auto bestnav = universal_gnss_protocols::ParseUnicoreBestNav(frame);
+        bestnav.status == ParserStatus::kRecordReady && bestnav.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreBestNavToRuntimeState(*bestnav.record);
+    }
+    if (const auto rtkstatus = universal_gnss_protocols::ParseUnicoreRtkStatus(frame);
+        rtkstatus.status == ParserStatus::kRecordReady && rtkstatus.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreRtkStatusToRuntimeState(*rtkstatus.record);
+    }
+    if (const auto rtcmstatus = universal_gnss_protocols::ParseUnicoreRtcmStatus(frame);
+        rtcmstatus.status == ParserStatus::kRecordReady && rtcmstatus.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreRtcmStatusToRuntimeState(*rtcmstatus.record);
+    }
+    if (const auto bestsat = universal_gnss_protocols::ParseUnicoreBestSat(frame);
+        bestsat.status == ParserStatus::kRecordReady && bestsat.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreBestSatToRuntimeState(*bestsat.record);
+    }
+    if (const auto satsinfo = universal_gnss_protocols::ParseUnicoreSatsInfo(frame);
+        satsinfo.status == ParserStatus::kRecordReady && satsinfo.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreSatsInfoToRuntimeState(*satsinfo.record);
+    }
+    if (const auto jamstatus = universal_gnss_protocols::ParseUnicoreJamStatus(frame);
+        jamstatus.status == ParserStatus::kRecordReady && jamstatus.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreJamStatusToRuntimeState(*jamstatus.record);
+    }
+    if (const auto freqjamstatus = universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame);
+        freqjamstatus.status == ParserStatus::kRecordReady &&
+        freqjamstatus.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(
+          *freqjamstatus.record);
+    }
+
+    return std::nullopt;
   }
-  if (const auto bestnav = universal_gnss_protocols::ParseUnicoreBestNav(frame);
-      bestnav.status == ParserStatus::kRecordReady && bestnav.record.has_value())
+
+  if (byte == universal_gnss_protocols::kUnicoreBinarySync1)
   {
-    return universal_gnss_protocols::UnicoreBestNavToRuntimeState(*bestnav.record);
-  }
-  if (const auto rtkstatus = universal_gnss_protocols::ParseUnicoreRtkStatus(frame);
-      rtkstatus.status == ParserStatus::kRecordReady && rtkstatus.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreRtkStatusToRuntimeState(*rtkstatus.record);
-  }
-  if (const auto rtcmstatus = universal_gnss_protocols::ParseUnicoreRtcmStatus(frame);
-      rtcmstatus.status == ParserStatus::kRecordReady && rtcmstatus.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreRtcmStatusToRuntimeState(*rtcmstatus.record);
-  }
-  if (const auto bestsat = universal_gnss_protocols::ParseUnicoreBestSat(frame);
-      bestsat.status == ParserStatus::kRecordReady && bestsat.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreBestSatToRuntimeState(*bestsat.record);
-  }
-  if (const auto satsinfo = universal_gnss_protocols::ParseUnicoreSatsInfo(frame);
-      satsinfo.status == ParserStatus::kRecordReady && satsinfo.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreSatsInfoToRuntimeState(*satsinfo.record);
-  }
-  if (const auto jamstatus = universal_gnss_protocols::ParseUnicoreJamStatus(frame);
-      jamstatus.status == ParserStatus::kRecordReady && jamstatus.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreJamStatusToRuntimeState(*jamstatus.record);
-  }
-  if (const auto freqjamstatus = universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame);
-      freqjamstatus.status == ParserStatus::kRecordReady &&
-      freqjamstatus.record.has_value())
-  {
-    return universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(*freqjamstatus.record);
+    UnicoreBinaryFrameFramer framer;
+    const auto probe = ProbeAtOffset<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
+        framer, bytes, byte_offset);
+    if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+    {
+      return std::nullopt;
+    }
+
+    const UnicoreBinaryFrame& frame = *probe.record;
+    if (const auto bestnav = universal_gnss_protocols::ParseUnicoreBestNavB(frame);
+        bestnav.status == ParserStatus::kRecordReady && bestnav.record.has_value())
+    {
+      return universal_gnss_protocols::UnicoreBestNavBToRuntimeState(*bestnav.record);
+    }
+    if (const auto pvtsln = universal_gnss_protocols::ParseUnicorePvtslnB(frame);
+        pvtsln.status == ParserStatus::kRecordReady && pvtsln.record.has_value())
+    {
+      return universal_gnss_protocols::UnicorePvtslnBToRuntimeState(*pvtsln.record);
+    }
   }
 
   return std::nullopt;

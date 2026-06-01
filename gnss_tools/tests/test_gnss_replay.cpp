@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -9,6 +10,7 @@
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/gnss_replay.hpp"
 #include "testdata_utils.hpp"
@@ -131,6 +133,77 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+}
+
+void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+void WriteLittleEndian32(std::vector<std::uint8_t>& bytes,
+                         const std::size_t offset,
+                         const std::uint32_t value)
+{
+  bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+}
+
+void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const float value)
+{
+  std::uint32_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  WriteLittleEndian32(bytes, offset, raw);
+}
+
+void WriteLittleEndianFloat64(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const double value)
+{
+  std::uint64_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  bytes[offset] = static_cast<std::uint8_t>(raw & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((raw >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((raw >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((raw >> 24) & 0xFFu);
+  bytes[offset + 4u] = static_cast<std::uint8_t>((raw >> 32) & 0xFFu);
+  bytes[offset + 5u] = static_cast<std::uint8_t>((raw >> 40) & 0xFFu);
+  bytes[offset + 6u] = static_cast<std::uint8_t>((raw >> 48) & 0xFFu);
+  bytes[offset + 7u] = static_cast<std::uint8_t>((raw >> 56) & 0xFFu);
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id,
+                                                  const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {0xAAu, 0x44u, 0xB5u, 97u};
+  AppendLittleEndian16(frame, message_id);
+  AppendLittleEndian16(frame, static_cast<std::uint16_t>(payload.size()));
+  frame.push_back(0u);
+  frame.push_back(1u);
+  AppendLittleEndian16(frame, 2190u);
+  AppendLittleEndian32(frame, 364536000u);
+  AppendLittleEndian32(frame, 18u);
+  frame.push_back(0u);
+  frame.push_back(13u);
+  AppendLittleEndian16(frame, 0u);
+  frame.insert(frame.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
+  AppendLittleEndian32(frame, crc);
+  return frame;
+}
+
 std::vector<std::uint8_t> MakeNavPvtPayload()
 {
   std::vector<std::uint8_t> payload(92u, 0u);
@@ -209,6 +282,58 @@ std::vector<std::uint8_t> MakeNavDopPayload()
 std::vector<std::uint8_t> BuildUnicoreLine(const std::string& line)
 {
   return std::vector<std::uint8_t>(line.begin(), line.end());
+}
+
+std::vector<std::uint8_t> MakeBestNavBinaryPayload()
+{
+  std::vector<std::uint8_t> payload(120u, 0u);
+  WriteLittleEndian32(payload, 0u, 0u);
+  WriteLittleEndian32(payload, 4u, 34u);
+  WriteLittleEndianFloat64(payload, 8u, 40.0789588272);
+  WriteLittleEndianFloat64(payload, 16u, 116.2365102982);
+  WriteLittleEndianFloat64(payload, 24u, 65.8312);
+  WriteLittleEndianFloat32(payload, 40u, 1.2221f);
+  WriteLittleEndianFloat32(payload, 44u, 1.1053f);
+  WriteLittleEndianFloat32(payload, 48u, 2.1970f);
+  WriteLittleEndianFloat32(payload, 56u, 0.4f);
+  payload[64u] = 50u;
+  payload[65u] = 28u;
+  return payload;
+}
+
+std::vector<std::uint8_t> MakePvtslnBinaryPayload()
+{
+  std::vector<std::uint8_t> payload(224u, 0u);
+  WriteLittleEndian32(payload, 0u, 50u);
+  WriteLittleEndianFloat32(payload, 4u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 8u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 16u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 24u, 0.2000f);
+  WriteLittleEndianFloat32(payload, 28u, 0.1500f);
+  WriteLittleEndianFloat32(payload, 32u, 0.1800f);
+  WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  payload[68u] = 46u;
+  payload[69u] = 28u;
+  WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  return payload;
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryReplayStream()
+{
+  std::vector<std::uint8_t> stream;
+  Append(stream, BuildUnicoreBinaryFrame(2118u, MakeBestNavBinaryPayload()));
+  Append(stream, BuildUnicoreBinaryFrame(1021u, MakePvtslnBinaryPayload()));
+  Append(stream, BuildUnicoreLine(
+                     "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
+                     "3,2,0,0,0,63,"
+                     "2,302,51,0,45,0,2,0,42,9,2,"
+                     "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
+                     "5,225,14,1,50,0,1*abcdef12\r\n"));
+  Append(stream, BuildUnicoreLine(
+                     "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n"));
+  return stream;
 }
 
 std::vector<std::uint8_t> BuildMixedReplayStream()
@@ -393,6 +518,49 @@ void TestReplayUnicoreBestSatEnrichesSatelliteCountsOnly(TestContext& ctx)
              "BESTSATA replay should enrich only tracked and used counts, not visibility or CN0");
 }
 
+void TestReplayUnicoreBinaryAndAsciiRouting(TestContext& ctx)
+{
+  const auto bytes = BuildUnicoreBinaryReplayStream();
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.recognized_records == 4u &&
+                 result.summary.runtime_updates == 4u &&
+                 result.summary.counts_by_protocol.at("unicore") == 4u &&
+                 result.summary.counts_by_unicore_message.at("BESTNAVB") == 1u &&
+                 result.summary.counts_by_unicore_message.at("PVTSLNB") == 1u &&
+                 result.summary.counts_by_unicore_message.at("SATSINFOA") == 1u &&
+                 result.summary.counts_by_unicore_message.at("JAMSTATUSA") == 1u,
+             "replay should route both Unicore binary and ASCII runtime updates");
+  ctx.Expect(final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kRtkFixed &&
+                 final_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
+                                             universal_gnss::GnssRtkMode::kFixed) &&
+                 final_state.latitude_deg.has_value() &&
+                 std::fabs(*final_state.latitude_deg - 40.07898130522) < 1e-6 &&
+                 final_state.longitude_deg.has_value() &&
+                 std::fabs(*final_state.longitude_deg - 116.23663134427) < 1e-6 &&
+                 final_state.altitude_m.has_value() &&
+                 std::fabs(*final_state.altitude_m - 60.5060) < 1e-4,
+             "binary replay should preserve the routed Unicore position and RTK state");
+  ctx.Expect(final_state.horizontal_accuracy_m.has_value() &&
+                 std::fabs(*final_state.horizontal_accuracy_m - 0.18f) < 1e-6f &&
+                 final_state.vertical_accuracy_m.has_value() &&
+                 std::fabs(*final_state.vertical_accuracy_m - 0.2f) < 1e-6f &&
+                 final_state.hdop.has_value() &&
+                 std::fabs(*final_state.hdop - 0.684f) < 1e-6f &&
+                 final_state.satellites_used == std::optional<std::uint16_t>(28u) &&
+                 final_state.satellites_tracked == std::optional<std::uint16_t>(3u) &&
+                 final_state.mean_cn0_db_hz == std::optional<float>(46.0f) &&
+                 final_state.max_cn0_db_hz == std::optional<float>(50.0f) &&
+                 final_state.correction_age_s == std::optional<float>(0.9f) &&
+                 final_state.heading_deg.has_value() &&
+                 std::fabs(*final_state.heading_deg - 182.25) < 1e-6 &&
+                 final_state.interference_detected == std::optional<bool>(true) &&
+                 final_state.jamming_detected == std::optional<bool>(true),
+             "mixed Unicore replay should expose accuracy, DOP, satellites, CN0, heading, and RF state");
+}
+
 void TestReplayMergesMixedRuntimeState(TestContext& ctx)
 {
   const auto bytes = BuildMixedReplayStream();
@@ -558,6 +726,7 @@ int main()
   TestReplayUbxNavDopEnrichesDopOnly(ctx);
   TestReplayUnicoreJammingEnrichesRfStateOnly(ctx);
   TestReplayUnicoreBestSatEnrichesSatelliteCountsOnly(ctx);
+  TestReplayUnicoreBinaryAndAsciiRouting(ctx);
   TestReplayMergesMixedRuntimeState(ctx);
   TestReplaySummaryOnlyAndFormatting(ctx);
   TestReplayStreamInput(ctx);

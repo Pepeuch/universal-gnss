@@ -6,6 +6,7 @@
 
 #include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
@@ -16,6 +17,8 @@ namespace
 {
 
 using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
@@ -76,6 +79,11 @@ std::vector<std::uint8_t> ToByteVector(const std::vector<ReceiverSession::Buffer
 bool IsSupportedUnicoreCandidate(const UnicoreFrame& frame)
 {
   return frame.sync_char != '$' && !frame.message_name.empty();
+}
+
+bool IsSupportedUnicoreBinaryCandidate(const UnicoreBinaryFrame& frame)
+{
+  return frame.checksum_status == universal_gnss_protocols::ChecksumStatus::kValid;
 }
 
 }  // namespace
@@ -288,6 +296,11 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
     SelectSession(ReceiverSessionKind::kUnicore);
     return;
   }
+  if (earliest_detection.protocol == DetectedStreamProtocol::kUnicoreBinary)
+  {
+    SelectSession(ReceiverSessionKind::kUnicore);
+    return;
+  }
 
   UbxFrameFramer ubx_framer(config_.ublox.max_ubx_frame_length_bytes);
   const auto ubx_candidate = DetectVendorCandidate<UbxFrameFramer, UbxFrame>(
@@ -305,7 +318,17 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
       ReceiverSessionKind::kUnicore,
       IsSupportedUnicoreCandidate);
 
-  if (ubx_candidate.has_value() == unicore_candidate.has_value())
+  UnicoreBinaryFrameFramer unicore_binary_framer(config_.unicore.max_binary_frame_length_bytes);
+  const auto unicore_binary_candidate =
+      DetectVendorCandidate<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
+          unicore_binary_framer,
+          pending_auto_detect_bytes_,
+          ReceiverSessionKind::kUnicore,
+          IsSupportedUnicoreBinaryCandidate);
+
+  const bool has_unicore_candidate =
+      unicore_candidate.has_value() || unicore_binary_candidate.has_value();
+  if (ubx_candidate.has_value() == has_unicore_candidate)
   {
     return;
   }
@@ -349,7 +372,8 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   {
     const auto& child = unicore_session_.metrics();
     metrics_.runtime_updates = child.runtime_updates;
-    metrics_.malformed_records = child.malformed_lines + child.records_rejected;
+    metrics_.malformed_records =
+        child.malformed_lines + child.malformed_frames + child.records_rejected;
     metrics_.unknown_records = child.unknown_records;
     return;
   }

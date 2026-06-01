@@ -15,6 +15,7 @@
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
@@ -31,14 +32,16 @@ using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserResult;
     using universal_gnss_protocols::ParserStatus;
     using universal_gnss_protocols::ProtocolType;
-    using universal_gnss_protocols::RtcmConstellation;
-    using universal_gnss_protocols::RtcmFrame;
-    using universal_gnss_protocols::RtcmFrameFramer;
-    using universal_gnss_protocols::RtcmMessageInfo;
-    using universal_gnss_protocols::UnicoreFrame;
-    using universal_gnss_protocols::UnicoreFrameFramer;
-    using universal_gnss_protocols::UbxFrame;
-    using universal_gnss_protocols::UbxFrameFramer;
+using universal_gnss_protocols::RtcmConstellation;
+using universal_gnss_protocols::RtcmFrame;
+using universal_gnss_protocols::RtcmFrameFramer;
+using universal_gnss_protocols::RtcmMessageInfo;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
+using universal_gnss_protocols::UbxFrame;
+using universal_gnss_protocols::UbxFrameFramer;
 
 template <typename RecordT>
 struct ProbeResult
@@ -203,6 +206,34 @@ GnssStreamInspectionItem MakeUnicoreItem(const UnicoreFrame& frame,
   item.checksum_status = frame.checksum_status;
   item.identity = frame.message_name;
   item.classification = frame.message_name;
+  return item;
+}
+
+std::string DescribeUnicoreBinaryMessage(const std::uint16_t message_id)
+{
+  switch (message_id)
+  {
+    case 1021u:
+      return "PVTSLNB";
+    case 2118u:
+      return "BESTNAVB";
+    default:
+      return "BINARY:" + std::to_string(message_id);
+  }
+}
+
+GnssStreamInspectionItem MakeUnicoreBinaryItem(const UnicoreBinaryFrame& frame,
+                                               const std::size_t byte_offset,
+                                               const std::size_t item_index)
+{
+  GnssStreamInspectionItem item;
+  item.item_index = item_index;
+  item.byte_offset = byte_offset;
+  item.length_bytes = frame.raw_bytes.size();
+  item.protocol = ProtocolType::kUnicore;
+  item.checksum_status = frame.checksum_status;
+  item.identity = DescribeUnicoreBinaryMessage(frame.message_id);
+  item.classification = "binary";
   return item;
 }
 
@@ -441,6 +472,50 @@ bool ConsumeRtcmAtOffset(const std::vector<std::uint8_t>& bytes,
   return true;
 }
 
+bool ConsumeUnicoreBinaryAtOffset(const std::vector<std::uint8_t>& bytes,
+                                  const std::size_t start_offset,
+                                  const bool include_items,
+                                  GnssStreamInspectionResult& result,
+                                  std::size_t& next_offset,
+                                  bool& stop_scan,
+                                  bool& in_noise_span)
+{
+  UnicoreBinaryFrameFramer framer;
+  const ProbeResult<UnicoreBinaryFrame> probe =
+      ProbeAtOffset<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(framer, bytes, start_offset);
+
+  if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
+  {
+    EndNoiseSpan(in_noise_span);
+    const auto item = MakeUnicoreBinaryItem(
+        *probe.record,
+        start_offset,
+        result.summary.total_items_found + 1u);
+    AccumulateItem(item, include_items, result);
+    next_offset = start_offset + probe.record->raw_bytes.size();
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kTruncated)
+  {
+    ++result.summary.malformed_events;
+    ++result.summary.truncated_items;
+    EndNoiseSpan(in_noise_span);
+    next_offset = bytes.size();
+    stop_scan = true;
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kInvalidData || probe.status == ParserStatus::kOverflow)
+  {
+    ++result.summary.malformed_events;
+  }
+
+  AddNoiseBytes(1u, result.summary, in_noise_span);
+  next_offset = start_offset + 1u;
+  return true;
+}
+
 void AppendJsonFieldSeparator(std::ostringstream& output, bool& first_field)
 {
   if (!first_field)
@@ -573,6 +648,20 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
       continue;
     }
 
+    if (byte == universal_gnss_protocols::kUnicoreBinarySync1)
+    {
+      ConsumeUnicoreBinaryAtOffset(
+          bytes,
+          offset,
+          include_items,
+          result,
+          next_offset,
+          stop_scan,
+          in_noise_span);
+      offset = next_offset;
+      continue;
+    }
+
     if (byte == 0xD3u)
     {
       ConsumeRtcmAtOffset(
@@ -634,6 +723,10 @@ std::string DescribeUbxMessage(const std::uint8_t class_id, const std::uint8_t m
   {
     return "NAV-STATUS";
   }
+  if (class_id == 0x01u && message_id == 0x04u)
+  {
+    return "NAV-DOP";
+  }
   if (class_id == 0x01u && message_id == 0x07u)
   {
     return "NAV-PVT";
@@ -641,6 +734,18 @@ std::string DescribeUbxMessage(const std::uint8_t class_id, const std::uint8_t m
   if (class_id == 0x01u && message_id == 0x35u)
   {
     return "NAV-SAT";
+  }
+  if (class_id == 0x02u && message_id == 0x32u)
+  {
+    return "RXM-RTCM";
+  }
+  if (class_id == 0x05u && message_id == 0x00u)
+  {
+    return "ACK-NAK";
+  }
+  if (class_id == 0x05u && message_id == 0x01u)
+  {
+    return "ACK-ACK";
   }
   if (class_id == 0x0Au && message_id == 0x38u)
   {

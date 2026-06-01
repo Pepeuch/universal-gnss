@@ -1925,8 +1925,8 @@ universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
 universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
     const UnicoreRtcmStatusRecord& record)
 {
+  (void)record;
   universal_gnss::GnssRuntimeState state;
-  state.timestamp_ns = record.header.timestamp_ns;
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }

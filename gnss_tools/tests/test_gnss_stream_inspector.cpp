@@ -7,6 +7,7 @@
 
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/gnss_stream_inspector.hpp"
 #include "testdata_utils.hpp"
@@ -103,6 +104,47 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
 std::vector<std::uint8_t> BuildAsciiLine(const std::string& line)
 {
   return std::vector<std::uint8_t>(line.begin(), line.end());
+}
+
+void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+}
+
+void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id,
+                                                  const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {
+      universal_gnss_protocols::kUnicoreBinarySync1,
+      universal_gnss_protocols::kUnicoreBinarySync2,
+      universal_gnss_protocols::kUnicoreBinarySync3,
+      97u,
+  };
+  AppendLittleEndian16(frame, message_id);
+  AppendLittleEndian16(frame, static_cast<std::uint16_t>(payload.size()));
+  frame.push_back(0u);
+  frame.push_back(1u);
+  AppendLittleEndian16(frame, 2294u);
+  AppendLittleEndian32(frame, 472312000u);
+  AppendLittleEndian32(frame, 18u);
+  frame.push_back(0u);
+  frame.push_back(16u);
+  AppendLittleEndian16(frame, 0u);
+  frame.insert(frame.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
+  AppendLittleEndian32(frame, crc);
+  return frame;
 }
 
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
@@ -278,6 +320,22 @@ void TestUnicoreInspection(TestContext& ctx)
              "JSON output should include Unicore item and counters");
 }
 
+void TestUnicoreBinaryInspection(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes = {0x99u};
+  Append(bytes, BuildUnicoreBinaryFrame(2118u, std::vector<std::uint8_t>(120u, 0u)));
+
+  const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
+  ctx.Expect(result.summary.total_items_found == 1u &&
+                 result.summary.counts_by_protocol.at("unicore") == 1u &&
+                 result.summary.counts_by_unicore_message.at("BESTNAVB") == 1u,
+             "inspection should recognize Unicore binary messages");
+  ctx.Expect(result.items.size() == 1u &&
+                 result.items[0].protocol == universal_gnss_protocols::ProtocolType::kUnicore &&
+                 result.items[0].identity == "BESTNAVB",
+             "inspection should expose the Unicore binary message identity");
+}
+
 void TestFileBackedMixedInspection(TestContext& ctx)
 {
   const auto bytes = universal_gnss_tools::test::ReadBinaryFile(
@@ -321,6 +379,7 @@ int main()
   TestSummaryOnlyAndFormatting(ctx);
   TestStreamInput(ctx);
   TestUnicoreInspection(ctx);
+  TestUnicoreBinaryInspection(ctx);
   TestFileBackedMixedInspection(ctx);
 
   if (ctx.failures != 0)

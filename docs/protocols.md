@@ -38,7 +38,8 @@ Standalone inspection tools now live in `gnss_tools`.
   - prints per-frame summaries, aggregate counts, or simple JSON
 - `gnss_inspect`
   - reads mixed GNSS byte streams from a file or stdin
-  - recognizes NMEA, UBX, Unicore ASCII, RTCM3, and noise spans
+  - recognizes NMEA, UBX, Unicore ASCII, Unicore binary `N4`, RTCM3, and noise
+    spans
   - prints a compact timeline, aggregate counts, or simple JSON
 - `gnss_replay`
   - reads mixed GNSS byte streams from a file or stdin
@@ -281,6 +282,9 @@ Implemented behaviors:
 - fixed-layout semantic decode for the messages above
 - conservative `GnssRuntimeState` mapping helpers for position / RTK / heading /
   correction-age fields that are explicitly documented
+- current live/offline routing for `BESTNAVB` and `PVTSLNB` through
+  `UnicoreSession`, `ReceiverSession` auto-detect, `gnss_inspect`,
+  `gnss_replay`, `gnss_quality_report`, and `gnss_export`
 
 Current Unicore notes:
 
@@ -315,14 +319,20 @@ Current Unicore notes:
   AGC thresholds are explicitly hardware-dependent in the vendor manual
 - `RTCMSTATUSA` is parsed semantically but does not project into runtime state
   yet
-- `BESTNAVB` and `PVTSLNB` are currently available as binary semantic parsers
-  and runtime mapping helpers only; binary session/replay routing is still
-  deferred
-- ASCII remains the primary Unicore runtime source today; binary `N4` semantic
-  decode and session routing are still deferred
+- `BESTNAVB` and `PVTSLNB` now participate in the same conservative runtime
+  path as the ASCII Unicore position messages:
+  - structural detection in `gnss_inspect`
+  - runtime routing in `UnicoreSession`
+  - offline replay / quality-report / JSONL export visibility through
+    `gnss_replay`
+- ASCII remains the richest Unicore runtime source today because most binary
+  `N4` semantic messages beyond `BESTNAVB` / `PVTSLNB` are still deferred
 
 See [docs/vendors/unicore/runtime_mapping.md](vendors/unicore/runtime_mapping.md)
 for the current message-by-message Unicore runtime mapping contract.
+See [runtime_audit.md](runtime_audit.md) for the end-to-end routing audit across
+parsers, sessions, replay, quality reporting, JSONL export, and current ROS 2
+adapters.
 
 What Unicore does not do yet:
 

@@ -5,6 +5,7 @@
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
@@ -20,6 +21,8 @@ using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
@@ -130,6 +133,18 @@ StreamDetectionResult StreamDetector::Detect(const std::uint8_t* data, const std
         return frame.sync_char != '$' && !frame.message_name.empty();
       });
   MaybeSelectEarlierCandidate(unicore_candidate, best_result);
+
+  UnicoreBinaryFrameFramer unicore_binary_framer;
+  const auto unicore_binary_candidate =
+      DetectWithFramer<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
+          unicore_binary_framer,
+          data,
+          size,
+          DetectedStreamProtocol::kUnicoreBinary,
+          [](const UnicoreBinaryFrame& frame) {
+            return frame.checksum_status == ChecksumStatus::kValid;
+          });
+  MaybeSelectEarlierCandidate(unicore_binary_candidate, best_result);
 
   return best_result;
 }

@@ -49,6 +49,7 @@ contain:
 - NMEA
 - UBX
 - Unicore ASCII
+- Unicore binary `N4`
 - RTCM3
 - arbitrary noise bytes between frames
 
@@ -61,6 +62,7 @@ The tool scans a byte stream and emits a compact timeline of recognized items:
 - UBX class/id and a known message name when available, for example `01:07`
   and `NAV-PVT`
 - Unicore message name, for example `BESTNAVA`
+- Unicore binary message name when known, for example `BESTNAVB` or `PVTSLNB`
 - RTCM message type plus the current lightweight classification, for example
   `1005` and `station_arp`
 
@@ -99,12 +101,16 @@ It reuses:
 
 Current replay behavior:
 
-- recognizes mixed NMEA / UBX / Unicore / RTCM / noise streams
+- recognizes mixed NMEA / UBX / Unicore ASCII / Unicore binary `N4` / RTCM /
+  noise streams
 - maps supported semantic GNSS messages into partial `GnssRuntimeState` updates
 - merges those updates into one coherent runtime state timeline
 - keeps RTCM as correction-stream metadata only for now
 - NMEA `GST` can enrich replayed runtime states with conservative horizontal /
   vertical accuracy without changing fix or position
+- Unicore binary `BESTNAVB` and `PVTSLNB` now contribute the same conservative
+  runtime fields as their documented ASCII counterparts where those fields are
+  present
 
 The replay timeline shows, for each recognized record:
 
@@ -153,6 +159,8 @@ Current behavior:
 - reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
   present
 - emits either readable text output or compact JSON
+- inherits Unicore binary `BESTNAVB` / `PVTSLNB` support through the same replay
+  path used by `gnss_replay`
 
 Current non-goals:
 
@@ -199,6 +207,8 @@ Current behavior:
 - can write to stdout or an explicit output file
 - supports a stable key order intended for notebooks, graphing, future GUI
   work, MQTT bridges, and API adapters
+- inherits the same Unicore binary `BESTNAVB` / `PVTSLNB` runtime samples that
+  `gnss_replay` reconstructs
 
 Current JSONL schema includes:
 

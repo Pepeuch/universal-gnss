@@ -1,11 +1,15 @@
+#include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_driver/unicore_session.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
 namespace
 {
@@ -30,6 +34,11 @@ struct TestContext
     }
   }
 };
+
+bool NearlyEqual(const double lhs, const double rhs, const double tolerance = 1e-6)
+{
+  return std::fabs(lhs - rhs) <= tolerance;
+}
 
 constexpr const char* kBestNavLine =
     "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
@@ -62,8 +71,119 @@ constexpr const char* kBestSatLine =
 constexpr const char* kJamStatusLine =
     "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
 
+constexpr const char* kRtcmStatusLine =
+    "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+    "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+
 constexpr const char* kHwStatusLine =
     "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+
+void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+}
+
+void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+void WriteLittleEndian32(std::vector<std::uint8_t>& bytes,
+                         const std::size_t offset,
+                         const std::uint32_t value)
+{
+  bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+}
+
+void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const float value)
+{
+  std::uint32_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  WriteLittleEndian32(bytes, offset, raw);
+}
+
+void WriteLittleEndianFloat64(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const double value)
+{
+  std::uint64_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  bytes[offset] = static_cast<std::uint8_t>(raw & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((raw >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((raw >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((raw >> 24) & 0xFFu);
+  bytes[offset + 4u] = static_cast<std::uint8_t>((raw >> 32) & 0xFFu);
+  bytes[offset + 5u] = static_cast<std::uint8_t>((raw >> 40) & 0xFFu);
+  bytes[offset + 6u] = static_cast<std::uint8_t>((raw >> 48) & 0xFFu);
+  bytes[offset + 7u] = static_cast<std::uint8_t>((raw >> 56) & 0xFFu);
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id,
+                                                  const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {0xAAu, 0x44u, 0xB5u, 97u};
+  AppendLittleEndian16(frame, message_id);
+  AppendLittleEndian16(frame, static_cast<std::uint16_t>(payload.size()));
+  frame.push_back(0u);
+  frame.push_back(1u);
+  AppendLittleEndian16(frame, 2190u);
+  AppendLittleEndian32(frame, 364536000u);
+  AppendLittleEndian32(frame, 18u);
+  frame.push_back(0u);
+  frame.push_back(13u);
+  AppendLittleEndian16(frame, 0u);
+  frame.insert(frame.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
+  AppendLittleEndian32(frame, crc);
+  return frame;
+}
+
+std::vector<std::uint8_t> MakeBestNavBPayload()
+{
+  std::vector<std::uint8_t> payload(120u, 0u);
+  WriteLittleEndian32(payload, 0u, 0u);
+  WriteLittleEndian32(payload, 4u, 34u);
+  WriteLittleEndianFloat64(payload, 8u, 40.0789588272);
+  WriteLittleEndianFloat64(payload, 16u, 116.2365102982);
+  WriteLittleEndianFloat64(payload, 24u, 65.8312);
+  WriteLittleEndianFloat32(payload, 40u, 1.2221f);
+  WriteLittleEndianFloat32(payload, 44u, 1.1053f);
+  WriteLittleEndianFloat32(payload, 48u, 2.1970f);
+  WriteLittleEndianFloat32(payload, 56u, 0.4f);
+  payload[64u] = 50u;
+  payload[65u] = 28u;
+  return payload;
+}
+
+std::vector<std::uint8_t> MakePvtslnBPayload()
+{
+  std::vector<std::uint8_t> payload(224u, 0u);
+  WriteLittleEndian32(payload, 0u, 50u);
+  WriteLittleEndianFloat32(payload, 4u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 8u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 16u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 24u, 0.2000f);
+  WriteLittleEndianFloat32(payload, 28u, 0.1500f);
+  WriteLittleEndianFloat32(payload, 32u, 0.1800f);
+  WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  payload[68u] = 46u;
+  payload[69u] = 28u;
+  WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  return payload;
+}
 
 void TestBestNavUpdatesRuntimeState(TestContext& ctx)
 {
@@ -176,6 +296,21 @@ void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
              "JAMSTATUSA should not invent position or fix state");
 }
 
+void TestRtcmStatusParsesWithoutRuntimeUpdate(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedString(kRtcmStatusLine, 7777);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.ascii_records_seen == 1u &&
+                 metrics.records_parsed == 1u &&
+                 metrics.runtime_updates == 0u,
+             "RTCMSTATUSA should be parsed by the session without becoming a runtime update");
+  ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
+                 !session.current_state().timestamp_ns.has_value(),
+             "RTCMSTATUSA should stay out of the aggregated runtime state");
+}
+
 void TestUnknownAndMalformedRecords(TestContext& ctx)
 {
   UnicoreSession session;
@@ -226,6 +361,42 @@ void TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(TestContext& ctx
              "HWSTATUSA and AGCA should not modify the aggregated runtime state");
 }
 
+void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload()), 9100);
+  session.FeedBytes(BuildUnicoreBinaryFrame(1021u, MakePvtslnBPayload()), 9200);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.binary_frames_seen == 2u &&
+                 metrics.records_parsed == 2u && metrics.runtime_updates == 2u,
+             "BESTNAVB and PVTSLNB should route through the binary Unicore session path");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9200) &&
+                 state.fix_valid &&
+                 state.fix_type == GnssFixType::kRtkFixed &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
+             "PVTSLNB should update the final fix and RTK state");
+  ctx.Expect(state.latitude_deg.has_value() &&
+                 NearlyEqual(*state.latitude_deg, 40.07898130522) &&
+                 state.longitude_deg.has_value() &&
+                 NearlyEqual(*state.longitude_deg, 116.23663134427) &&
+                 state.altitude_m.has_value() &&
+                 NearlyEqual(*state.altitude_m, 60.5060, 1e-4),
+             "binary Unicore runtime routing should update coordinates and altitude");
+  ctx.Expect(state.horizontal_accuracy_m.has_value() &&
+                 std::fabs(*state.horizontal_accuracy_m - 0.18f) < 1e-6f &&
+                 state.vertical_accuracy_m.has_value() &&
+                 std::fabs(*state.vertical_accuracy_m - 0.2f) < 1e-6f &&
+                 state.correction_age_s.has_value() &&
+                 std::fabs(*state.correction_age_s - 0.9f) < 1e-6f &&
+                 state.heading_deg.has_value() &&
+                 NearlyEqual(*state.heading_deg, 182.25, 1e-6) &&
+                 state.hdop.has_value() &&
+                 std::fabs(*state.hdop - 0.684f) < 1e-6f,
+             "PVTSLNB should carry accuracy, correction age, heading, and HDOP");
+}
+
 void TestFinalizeAndReset(TestContext& ctx)
 {
   UnicoreSession session;
@@ -260,9 +431,11 @@ int main()
   TestSatsInfoUpdatesTrackedAndCn0(ctx);
   TestBestSatUpdatesTrackedAndUsedOnly(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
+  TestRtcmStatusParsesWithoutRuntimeUpdate(ctx);
   TestUnknownAndMalformedRecords(ctx);
   TestPartialChunksAcrossFeeds(ctx);
   TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(ctx);
+  TestBinaryBestNavAndPvtslnRouting(ctx);
   TestFinalizeAndReset(ctx);
 
   if (ctx.failures != 0)

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
 namespace universal_gnss_driver
@@ -15,6 +16,7 @@ namespace universal_gnss_driver
 struct UnicoreSessionConfig
 {
   std::size_t max_frame_length_bytes{2048u};
+  std::size_t max_binary_frame_length_bytes{65536u};
 };
 
 struct UnicoreSessionMetrics
@@ -22,11 +24,13 @@ struct UnicoreSessionMetrics
   std::size_t bytes_seen{0u};
   std::size_t lines_seen{0u};
   std::size_t ascii_records_seen{0u};
+  std::size_t binary_frames_seen{0u};
   std::size_t records_parsed{0u};
   std::size_t records_rejected{0u};
   std::size_t runtime_updates{0u};
   std::size_t unknown_records{0u};
   std::size_t malformed_lines{0u};
+  std::size_t malformed_frames{0u};
 };
 
 class UnicoreSession
@@ -58,10 +62,15 @@ private:
   void HandleFramerResult(
       const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>&
           result);
+  void HandleBinaryFramerResult(
+      const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreBinaryFrame>&
+          result);
   void HandleFrame(const universal_gnss_protocols::UnicoreFrame& frame);
+  void HandleBinaryFrame(const universal_gnss_protocols::UnicoreBinaryFrame& frame);
 
   UnicoreSessionConfig config_{};
   universal_gnss_protocols::UnicoreFrameFramer framer_;
+  universal_gnss_protocols::UnicoreBinaryFrameFramer binary_framer_;
   universal_gnss::GnssRuntimeAggregator aggregator_{};
   UnicoreSessionMetrics metrics_{};
 };

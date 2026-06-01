@@ -9,6 +9,7 @@
 #include "universal_gnss_driver/receiver_profiles.hpp"
 #include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 
 namespace
@@ -80,6 +81,47 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
   return bytes;
+}
+
+void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+}
+
+void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id,
+                                                  const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {
+      universal_gnss_protocols::kUnicoreBinarySync1,
+      universal_gnss_protocols::kUnicoreBinarySync2,
+      universal_gnss_protocols::kUnicoreBinarySync3,
+      97u,
+  };
+  AppendLittleEndian16(frame, message_id);
+  AppendLittleEndian16(frame, static_cast<std::uint16_t>(payload.size()));
+  frame.push_back(0u);
+  frame.push_back(1u);
+  AppendLittleEndian16(frame, 2200u);
+  AppendLittleEndian32(frame, 123456u);
+  AppendLittleEndian32(frame, 18u);
+  frame.push_back(0u);
+  frame.push_back(16u);
+  AppendLittleEndian16(frame, 0u);
+  frame.insert(frame.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
+  AppendLittleEndian32(frame, crc);
+  return frame;
 }
 
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
@@ -203,6 +245,15 @@ void TestStreamDetection(TestContext& ctx)
   ctx.Expect(rtcm_result.protocol == DetectedStreamProtocol::kRtcm3 &&
                  rtcm_result.frame_length_bytes == 8u,
              "stream detector should classify a valid RTCM3 frame");
+
+  std::vector<std::uint8_t> unicore_binary_stream = {0xAAu};
+  Append(unicore_binary_stream, BuildUnicoreBinaryFrame(2118u, std::vector<std::uint8_t>(120u, 0u)));
+  const auto unicore_binary_result = detector.Detect(unicore_binary_stream);
+  ctx.Expect(unicore_binary_result.protocol == DetectedStreamProtocol::kUnicoreBinary &&
+                 unicore_binary_result.frame_length_bytes ==
+                     (universal_gnss_protocols::kUnicoreBinaryHeaderSize + 120u +
+                      universal_gnss_protocols::kUnicoreBinaryCrcSize),
+             "stream detector should classify a valid Unicore binary frame");
 
   const auto unknown_result = detector.Detect(std::vector<std::uint8_t>{0x10u, 0x20u, 0x30u});
   ctx.Expect(unknown_result.protocol == DetectedStreamProtocol::kUnknown &&

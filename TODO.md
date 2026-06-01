@@ -234,6 +234,7 @@ Implemented:
 - [x] HWSTATUSA
 - [x] AGCA
 - [x] text config profile builder
+- [x] BESTNAVB / PVTSLNB routing through session, replay, quality report, and JSONL export
 
 To do:
 

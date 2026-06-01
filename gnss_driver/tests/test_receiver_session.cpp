@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <optional>
 #include <string>
@@ -10,6 +11,7 @@
 #include "universal_gnss_driver/receiver_session.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 
 namespace
@@ -111,6 +113,101 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
   return bytes;
+}
+
+void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+}
+
+void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+{
+  bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+}
+
+void WriteLittleEndian32(std::vector<std::uint8_t>& bytes,
+                         const std::size_t offset,
+                         const std::uint32_t value)
+{
+  bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((value >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
+}
+
+void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const float value)
+{
+  std::uint32_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  WriteLittleEndian32(bytes, offset, raw);
+}
+
+void WriteLittleEndianFloat64(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
+                              const double value)
+{
+  std::uint64_t raw = 0u;
+  std::memcpy(&raw, &value, sizeof(raw));
+  bytes[offset] = static_cast<std::uint8_t>(raw & 0xFFu);
+  bytes[offset + 1u] = static_cast<std::uint8_t>((raw >> 8) & 0xFFu);
+  bytes[offset + 2u] = static_cast<std::uint8_t>((raw >> 16) & 0xFFu);
+  bytes[offset + 3u] = static_cast<std::uint8_t>((raw >> 24) & 0xFFu);
+  bytes[offset + 4u] = static_cast<std::uint8_t>((raw >> 32) & 0xFFu);
+  bytes[offset + 5u] = static_cast<std::uint8_t>((raw >> 40) & 0xFFu);
+  bytes[offset + 6u] = static_cast<std::uint8_t>((raw >> 48) & 0xFFu);
+  bytes[offset + 7u] = static_cast<std::uint8_t>((raw >> 56) & 0xFFu);
+}
+
+std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id,
+                                                  const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {
+      universal_gnss_protocols::kUnicoreBinarySync1,
+      universal_gnss_protocols::kUnicoreBinarySync2,
+      universal_gnss_protocols::kUnicoreBinarySync3,
+      97u,
+  };
+  AppendLittleEndian16(frame, message_id);
+  AppendLittleEndian16(frame, static_cast<std::uint16_t>(payload.size()));
+  frame.push_back(0u);
+  frame.push_back(1u);
+  AppendLittleEndian16(frame, 2190u);
+  AppendLittleEndian32(frame, 364536000u);
+  AppendLittleEndian32(frame, 18u);
+  frame.push_back(0u);
+  frame.push_back(13u);
+  AppendLittleEndian16(frame, 0u);
+  frame.insert(frame.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
+  AppendLittleEndian32(frame, crc);
+  return frame;
+}
+
+std::vector<std::uint8_t> MakePvtslnBinaryPayload()
+{
+  std::vector<std::uint8_t> payload(224u, 0u);
+  WriteLittleEndian32(payload, 0u, 50u);
+  WriteLittleEndianFloat32(payload, 4u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 8u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 16u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 24u, 0.2000f);
+  WriteLittleEndianFloat32(payload, 28u, 0.1500f);
+  WriteLittleEndianFloat32(payload, 32u, 0.1800f);
+  WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  payload[68u] = 46u;
+  payload[69u] = 28u;
+  WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  return payload;
 }
 
 std::vector<std::uint8_t> MakeNavPvtPayload()
@@ -223,6 +320,24 @@ void TestAutoModeSelectsUnicore(TestContext& ctx)
              "auto-selected Unicore session should expose Unicore runtime state");
 }
 
+void TestAutoModeSelectsUnicoreBinary(TestContext& ctx)
+{
+  ReceiverSession session;
+  session.FeedBytes(BuildUnicoreBinaryFrame(1021u, MakePvtslnBinaryPayload()), 4500);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.selected_session_kind == std::optional<ReceiverSessionKind>(
+                                                  ReceiverSessionKind::kUnicore) &&
+                 metrics.selection_locked,
+             "auto mode should select Unicore on valid Unicore binary input");
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kRtkFixed &&
+                 session.current_state().heading_deg == std::optional<double>(182.25),
+             "auto-selected Unicore binary session should expose binary runtime state");
+  ctx.Expect(session.unicore_metrics().binary_frames_seen == 1u,
+             "binary Unicore routing should surface child binary frame metrics");
+}
+
 void TestRtcmOnlyStaysUndecided(TestContext& ctx)
 {
   ReceiverSession session;
@@ -272,6 +387,7 @@ int main()
   TestExplicitUnicoreMode(ctx);
   TestAutoModeSelectsUblox(ctx);
   TestAutoModeSelectsUnicore(ctx);
+  TestAutoModeSelectsUnicoreBinary(ctx);
   TestRtcmOnlyStaysUndecided(ctx);
   TestFinalizeAndReset(ctx);
 

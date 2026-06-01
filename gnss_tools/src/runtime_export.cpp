@@ -267,6 +267,8 @@ void WriteRuntimeUpdateJson(std::ostream& output,
       output, "correction_age_s", state.correction_age_s, pretty, first_field);
   WriteJsonOptionalNumber(output, "heading_deg", state.heading_deg, pretty, first_field);
   WriteJsonOptionalBool(
+      output, "dual_antenna_heading", state.dual_antenna_heading, pretty, first_field);
+  WriteJsonOptionalBool(
       output, "interference_detected", state.interference_detected, pretty, first_field);
   WriteJsonOptionalBool(
       output, "jamming_detected", state.jamming_detected, pretty, first_field);
