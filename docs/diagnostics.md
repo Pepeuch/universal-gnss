@@ -160,6 +160,16 @@ operational:
   forwarded into the portable health summary and then into
   `diagnostic_msgs/DiagnosticArray`
 
+`universal_gnss_ros2::NtripNode` is the second runtime consumer of the same
+mapping. Its node-level diagnostics stay similarly thin:
+
+- caster connection / disconnection / reconnecting states come from the
+  low-level `NtripClient`
+- correction-stream activity comes from the existing RTCM correction monitor
+- missing or stale ROS-side GNSS status input is surfaced only as GGA-source
+  diagnostics
+- stale GNSS input also suppresses GGA injection so old positions are not reused
+
 This still stops short of:
 
 - lifecycle-node health orchestration
