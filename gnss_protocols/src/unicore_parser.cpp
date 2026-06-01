@@ -1522,6 +1522,68 @@ ParserResult<UnicoreBestNavBRecord> ParseUnicoreBestNavB(const UnicoreBinaryFram
   return ParserResult<UnicoreBestNavBRecord>::RecordReady(record);
 }
 
+ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame& frame)
+{
+  constexpr std::uint16_t kPvtslnBMessageId = 1021u;
+  constexpr std::size_t kPvtslnBPayloadLength = 224u;
+
+  if (frame.protocol != ProtocolType::kUnicore ||
+      frame.message_id != kPvtslnBMessageId ||
+      frame.checksum_status != ChecksumStatus::kValid ||
+      frame.payload.size() != kPvtslnBPayloadLength)
+  {
+    return InvalidResult<UnicorePvtslnBRecord>();
+  }
+
+  UnicorePvtslnBRecord record;
+  record.header.timestamp_ns = frame.timestamp_ns;
+  record.header.cpu_idle_percent = frame.cpu_idle;
+  record.header.message_id = frame.message_id;
+  record.header.payload_length = frame.payload_length;
+  record.header.time_reference_raw = frame.time_ref;
+  record.header.time_status_raw = frame.time_status;
+  record.header.gps_week = frame.week_number;
+  record.header.gps_millis_of_week = frame.milliseconds_of_week;
+  record.header.format_version = frame.header_version;
+  record.header.reserved = frame.reserved;
+  record.header.leap_seconds = frame.leap_seconds;
+  record.header.output_delay_ms = frame.delay_ms;
+
+  record.best_position_type = ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 0u));
+  record.best_altitude_m = static_cast<double>(ReadLittleEndianFloat32(frame.payload.data() + 4u));
+  record.best_latitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 8u);
+  record.best_longitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 16u);
+  record.best_altitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 24u);
+  record.best_latitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 28u);
+  record.best_longitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 32u);
+  record.best_diff_age_s = ReadLittleEndianFloat32(frame.payload.data() + 36u);
+
+  record.psr_position_type = ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 40u));
+  record.psr_altitude_m = static_cast<double>(ReadLittleEndianFloat32(frame.payload.data() + 44u));
+  record.psr_latitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 48u);
+  record.psr_longitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 56u);
+
+  record.undulation_m = ReadLittleEndianFloat32(frame.payload.data() + 64u);
+  record.best_tracked_satellites = static_cast<std::uint16_t>(frame.payload[68u]);
+  record.best_used_satellites = static_cast<std::uint16_t>(frame.payload[69u]);
+  record.psr_tracked_satellites = static_cast<std::uint16_t>(frame.payload[70u]);
+  record.psr_used_satellites = static_cast<std::uint16_t>(frame.payload[71u]);
+
+  record.heading_status = ParseBinarySolutionStatus(ReadLittleEndian32(frame.payload.data() + 96u));
+  record.heading_length_m = ReadLittleEndianFloat32(frame.payload.data() + 100u);
+  record.heading_deg = ReadLittleEndianFloat32(frame.payload.data() + 104u);
+  record.heading_pitch_deg = ReadLittleEndianFloat32(frame.payload.data() + 108u);
+  record.heading_tracked_satellites = static_cast<std::uint16_t>(frame.payload[112u]);
+  record.heading_used_satellites = static_cast<std::uint16_t>(frame.payload[113u]);
+
+  record.gdop = ReadLittleEndianFloat32(frame.payload.data() + 116u);
+  record.pdop = ReadLittleEndianFloat32(frame.payload.data() + 120u);
+  record.hdop = ReadLittleEndianFloat32(frame.payload.data() + 124u);
+  record.htdop = ReadLittleEndianFloat32(frame.payload.data() + 128u);
+  record.tdop = ReadLittleEndianFloat32(frame.payload.data() + 132u);
+  return ParserResult<UnicorePvtslnBRecord>::RecordReady(record);
+}
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
@@ -1619,6 +1681,43 @@ universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
   SetTrackedAndUsedSatellites(state, record.tracked_satellites, record.used_satellites);
   SetCorrectionAge(state, record.diff_age_s);
 
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
+    const UnicorePvtslnBRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+
+  ApplyFixType(state, record.best_position_type);
+  ApplyRtkMode(state, record.best_position_type);
+  if (state.fix_valid)
+  {
+    state.latitude_deg = record.best_latitude_deg;
+    state.longitude_deg = record.best_longitude_deg;
+    state.altitude_m = record.best_altitude_m;
+  }
+
+  SetHorizontalAccuracyFromSigmas(
+      state, record.best_latitude_std_m, record.best_longitude_std_m);
+  SetVerticalAccuracy(state, record.best_altitude_std_m);
+  SetTrackedAndUsedSatellites(
+      state, record.best_tracked_satellites, record.best_used_satellites);
+  SetCorrectionAge(state, record.best_diff_age_s);
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
+  if (record.hdop.has_value())
+  {
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kHdop,
+        state.hdop,
+        *record.hdop);
+  }
+
+  SetHeading(state, record.heading_status, record.heading_deg);
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }

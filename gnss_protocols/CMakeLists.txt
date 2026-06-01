@@ -200,4 +200,18 @@ if(BUILD_TESTING)
     NAME gnss_protocols_test_unicore_binary_bestnav
     COMMAND gnss_protocols_test_unicore_binary_bestnav
   )
+
+  add_executable(
+    gnss_protocols_test_unicore_binary_pvtsln
+    tests/test_unicore_binary_pvtsln.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_unicore_binary_pvtsln
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(
+    NAME gnss_protocols_test_unicore_binary_pvtsln
+    COMMAND gnss_protocols_test_unicore_binary_pvtsln
+  )
 endif()

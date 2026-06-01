@@ -30,12 +30,17 @@ ParserResult<UnicoreAgcRecord> ParseUnicoreAgc(const UnicoreFrame& frame);
 
 ParserResult<UnicoreBestNavBRecord> ParseUnicoreBestNavB(const UnicoreBinaryFrame& frame);
 
+ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame& frame);
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestNavRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
     const UnicoreBestNavBRecord& record);
+
+universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
+    const UnicorePvtslnBRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
     const UnicoreRtkStatusRecord& record);

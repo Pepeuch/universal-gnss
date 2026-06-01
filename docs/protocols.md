@@ -262,6 +262,7 @@ Implemented binary foundation:
 Implemented semantic messages:
 
 - `BESTNAVB`
+- `PVTSLNB`
 - `PVTSLNA`
 - `BESTNAVA`
 - `RTKSTATUSA`
@@ -282,16 +283,21 @@ Implemented behaviors:
 
 Current Unicore notes:
 
-- binary `N4` framing is currently integrity-only:
+- binary `N4` framing currently provides:
   - sync detection
   - documented header extraction
   - payload-length extraction
   - CRC validation
-  - unknown binary message ids are preserved as valid binary frames when frame
+  - unknown binary message ids preserved as valid binary frames when frame
     integrity is valid
-- `BESTNAVB` is the first binary semantic decoder and mirrors the documented
-  conservative runtime projection of `BESTNAVA` for fix, RTK, position,
-  accuracy, correction age, and satellite counts
+  - semantic decoding for `BESTNAVB` and `PVTSLNB`
+- `BESTNAVB` and `PVTSLNB` are the first binary semantic decoders
+- `BESTNAVB` mirrors the documented conservative runtime projection of
+  `BESTNAVA` for fix, RTK, position, accuracy, correction age, and satellite
+  counts
+- `PVTSLNB` mirrors the documented conservative runtime projection of
+  `PVTSLNA` for fix, RTK, position, accuracy, heading, correction age, and
+  satellite counts
 - `PVTSLNA` is the richest current Unicore position / heading source
 - `BESTNAVA` provides stable position-quality, accuracy, and correction-age
   fields
@@ -306,8 +312,9 @@ Current Unicore notes:
   AGC thresholds are explicitly hardware-dependent in the vendor manual
 - `RTCMSTATUSA` is parsed semantically but does not project into runtime state
   yet
-- `BESTNAVB` is currently available as a binary semantic parser and runtime
-  mapping helper only; binary session/replay routing is still deferred
+- `BESTNAVB` and `PVTSLNB` are currently available as binary semantic parsers
+  and runtime mapping helpers only; binary session/replay routing is still
+  deferred
 - ASCII remains the primary Unicore runtime source today; binary `N4` semantic
   decode and session routing are still deferred
 
@@ -316,7 +323,7 @@ for the current message-by-message Unicore runtime mapping contract.
 
 What Unicore does not do yet:
 
-- broader binary `N4` semantic decoding beyond `BESTNAVB`
+- broader binary `N4` semantic decoding beyond `BESTNAVB` / `PVTSLNB`
 - receiver configuration commands
 - AGC threshold interpretation beyond documented safe semantics
 - constellation-specific aggregate statistics
@@ -329,22 +336,22 @@ by protocol-specific mapping helpers.
 ```text
 Runtime field            Current protocol sources
 ---------------------------------------------------------------
-fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
-fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
-rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
-latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
-altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
-horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
-vertical accuracy        NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
-hdop                     NMEA GGA, NMEA GSA, UBX NAV-DOP, Unicore PVTSLNA
+fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
+fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
+rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
+latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
+altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
+horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
+vertical accuracy        NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
+hdop                     NMEA GGA, NMEA GSA, UBX NAV-DOP, Unicore PVTSLNA, Unicore PVTSLNB
 vdop                     NMEA GSA, UBX NAV-DOP
-satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
+satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 satellites_visible       NMEA GSV, UBX NAV-SAT
-satellites_tracked       Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB, Unicore SATSINFOA
+satellites_tracked       Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore SATSINFOA
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
-heading                  UBX NAV-PVT, Unicore PVTSLNA
+heading                  UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB
 interference / jamming   UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA
-correction_age           Unicore PVTSLNA, Unicore BESTNAVA, Unicore BESTNAVB
+correction_age           Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 dual antenna state       Unicore RTKSTATUSA
 ```
 
@@ -373,8 +380,8 @@ Examples:
   bits
 - UBX `NAV-DOP` can set `hdop` / `vdop`, but it does not imply fix validity,
   RTK mode, or position
-- Unicore `PVTSLNA`, `BESTNAVA`, and `BESTNAVB` can set RTK mode only from documented
-  position-type enums, not from indirect heuristics
+- Unicore `PVTSLNA`, `PVTSLNB`, `BESTNAVA`, and `BESTNAVB` can set RTK mode
+  only from documented position-type enums, not from indirect heuristics
 - Unicore `JAMSTATUSA` and `FREQJAMSTATUSA` only map documented jamming state;
   they do not imply fix, RTK, or correction quality
 - Unicore `HWSTATUSA` emits conservative receiver diagnostics only
@@ -415,7 +422,7 @@ The following are intentionally deferred:
 
 Also deferred for later protocol growth:
 
-- most Unicore binary `N4` semantic decoding beyond `BESTNAVB`
+- most Unicore binary `N4` semantic decoding beyond `BESTNAVB` and `PVTSLNB`
 - Unicore receiver configuration commands
 - Quectel semantic decoding
 - Septentrio or other vendor-specific semantic layers

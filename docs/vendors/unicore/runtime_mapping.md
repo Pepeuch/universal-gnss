@@ -8,7 +8,7 @@ The goal is to keep Unicore support portable and conservative:
 - parse documented Unicore messages conservatively
 - project only fields that map cleanly into `universal_gnss::GnssRuntimeState`
 - avoid Mowgli-specific diagnostics schemas, launch scripts, and ROS 2 glue
-- defer binary `N4` semantic decode and driver-specific arbitration
+- defer broader binary `N4` semantic decode and driver-specific arbitration
 - defer receiver configuration and driver-specific arbitration
 
 ## Current Coverage
@@ -16,6 +16,7 @@ The goal is to keep Unicore support portable and conservative:
 Current parsed Unicore messages:
 
 - `BESTNAVB`
+- `PVTSLNB`
 - `PVTSLNA`
 - `BESTNAVA`
 - `RTKSTATUSA`
@@ -28,7 +29,7 @@ Current parsed Unicore messages:
 
 Not implemented yet:
 
-- broader binary `N4` semantic decode beyond `BESTNAVB`
+- broader binary `N4` semantic decode beyond `BESTNAVB` and `PVTSLNB`
 - Unicore configuration commands like `MODE`, `CONFIG`, and `LOG`
 
 Binary `N4` framing now exists separately from the ASCII parser:
@@ -39,9 +40,9 @@ Binary `N4` framing now exists separately from the ASCII parser:
 - documented reflected 32-bit CRC validation across the frame minus the final
   CRC field
 
-That binary path now includes one semantic decoder: `BESTNAVB`. Even so,
-ASCII remains the primary Unicore runtime source today because binary routing
-through `UnicoreSession` and replay is still deferred.
+That binary path now includes two semantic decoders: `BESTNAVB` and
+`PVTSLNB`. Even so, ASCII remains the primary Unicore runtime source today
+because binary routing through `UnicoreSession` and replay is still deferred.
 
 ## Data Flow
 
@@ -150,6 +151,34 @@ Current non-mappings:
   ignored in this first binary step
 - no heading or azimuth is inferred from `BESTNAVB`
 - `BESTNAVB` is not yet routed through `UnicoreSession` or replay
+
+## PVTSLNB
+
+`PVTSLNB` is the binary `N4` counterpart to `PVTSLNA` and follows the same
+portable runtime policy where the documented fields match.
+
+Current mappings:
+
+- binary `bestpos_type` -> generic `fix_type`
+- binary `bestpos_type` -> generic `rtk_mode` when the documented position type
+  is float or integer RTK
+- binary `bestpos_lat`, `bestpos_lon`, `bestpos_hgt` -> coordinates / altitude
+- binary `bestpos_latstd`, `bestpos_lonstd` -> horizontal accuracy
+- binary `bestpos_hgtstd` -> vertical accuracy
+- binary `bestpos_diffage` -> correction age
+- binary `bestpos_svs`, `bestpos_solnsvs` -> satellites tracked / used
+- binary `heading_type` + `heading_degree` -> heading only when heading status
+  is `SOL_COMPUTED`
+- binary `hdop` -> `hdop`
+
+Current non-mappings:
+
+- documented PSR position fields are parsed semantically but not projected into
+  core yet
+- documented velocity, pitch, baseline length, tracked-PRN list, and other
+  DOP fields are intentionally left out of the portable runtime in this step
+- no RF, jamming, or CN0 state is inferred from `PVTSLNB`
+- `PVTSLNB` is not yet routed through `UnicoreSession` or replay
 
 ## RTKSTATUSA
 
@@ -374,6 +403,8 @@ Examples:
 
 - `BESTNAVA` can refresh coordinates, accuracy, and correction age
 - `BESTNAVB` can do the same from documented binary fields
+- `PVTSLNB` can do the same for position / heading where the documented binary
+  heading status is `SOL_COMPUTED`
 - `RTKSTATUSA` can refresh RTK mode and dual-antenna state
 - `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
 - `JAMSTATUSA` and `FREQJAMSTATUSA` can refresh portable

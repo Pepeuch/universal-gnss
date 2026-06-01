@@ -76,4 +76,42 @@ struct UnicoreBestNavBRecord
   std::optional<std::uint16_t> used_satellites{};
 };
 
+struct UnicorePvtslnBRecord
+{
+  UnicoreBinaryHeader header{};
+
+  UnicorePositionType best_position_type{UnicorePositionType::kUnknown};
+  double best_altitude_m{0.0};
+  double best_latitude_deg{0.0};
+  double best_longitude_deg{0.0};
+  std::optional<float> best_altitude_std_m{};
+  std::optional<float> best_latitude_std_m{};
+  std::optional<float> best_longitude_std_m{};
+  std::optional<float> best_diff_age_s{};
+
+  UnicorePositionType psr_position_type{UnicorePositionType::kUnknown};
+  std::optional<double> psr_altitude_m{};
+  std::optional<double> psr_latitude_deg{};
+  std::optional<double> psr_longitude_deg{};
+
+  std::optional<float> undulation_m{};
+  std::optional<std::uint16_t> best_tracked_satellites{};
+  std::optional<std::uint16_t> best_used_satellites{};
+  std::optional<std::uint16_t> psr_tracked_satellites{};
+  std::optional<std::uint16_t> psr_used_satellites{};
+
+  UnicoreSolutionStatus heading_status{UnicoreSolutionStatus::kUnknown};
+  std::optional<float> heading_length_m{};
+  std::optional<float> heading_deg{};
+  std::optional<float> heading_pitch_deg{};
+  std::optional<std::uint16_t> heading_tracked_satellites{};
+  std::optional<std::uint16_t> heading_used_satellites{};
+
+  std::optional<float> gdop{};
+  std::optional<float> pdop{};
+  std::optional<float> hdop{};
+  std::optional<float> htdop{};
+  std::optional<float> tdop{};
+};
+
 }  // namespace universal_gnss_protocols
