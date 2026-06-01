@@ -15,4 +15,7 @@ bool HasValidCapabilityValueInvariant(const universal_gnss_ros2::msg::GnssStatus
 universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
     const universal_gnss::GnssRuntimeState& state);
 
+universal_gnss::GnssRuntimeState FromGnssStatusMessage(
+    const universal_gnss_ros2::msg::GnssStatus& message);
+
 }  // namespace universal_gnss_ros2

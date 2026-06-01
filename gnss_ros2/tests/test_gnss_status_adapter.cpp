@@ -227,4 +227,73 @@ TEST(GnssStatusAdapterTest, DefaultUnknownStateMapsSafely)
   EXPECT_TRUE(universal_gnss_ros2::HasValidCapabilityValueInvariant(msg));
 }
 
+TEST(GnssStatusAdapterTest, RoundTripsRicherStateBackToRuntimeModel)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = 2222333344LL;
+  state.fix_valid = true;
+  state.fix_type = universal_gnss::GnssFixType::kRtkFloat;
+  state.latitude_deg = 48.1;
+  state.longitude_deg = 2.2;
+  state.altitude_m = 101.3;
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionAge);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
+
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kRtkMode, state.rtk_mode,
+      universal_gnss::GnssRtkMode::kFloat));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kCorrectionAge, state.correction_age_s, 0.7f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kHeading, state.heading_deg, 123.4f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kInterferenceState,
+                                               state.interference_detected,
+                                               true));
+
+  const auto msg = universal_gnss_ros2::ToGnssStatusMessage(state);
+  const auto round_trip = universal_gnss_ros2::FromGnssStatusMessage(msg);
+
+  EXPECT_EQ(round_trip.timestamp_ns, state.timestamp_ns);
+  EXPECT_TRUE(round_trip.fix_valid);
+  EXPECT_EQ(round_trip.fix_type, universal_gnss::GnssFixType::kRtkFloat);
+  ASSERT_TRUE(round_trip.rtk_mode.has_value());
+  EXPECT_EQ(*round_trip.rtk_mode, universal_gnss::GnssRtkMode::kFloat);
+  ASSERT_TRUE(round_trip.latitude_deg.has_value());
+  EXPECT_DOUBLE_EQ(*round_trip.latitude_deg, 48.1);
+  ASSERT_TRUE(round_trip.longitude_deg.has_value());
+  EXPECT_DOUBLE_EQ(*round_trip.longitude_deg, 2.2);
+  ASSERT_TRUE(round_trip.altitude_m.has_value());
+  EXPECT_DOUBLE_EQ(*round_trip.altitude_m, 101.3);
+  ASSERT_TRUE(round_trip.correction_age_s.has_value());
+  EXPECT_FLOAT_EQ(*round_trip.correction_age_s, 0.7f);
+  ASSERT_TRUE(round_trip.heading_deg.has_value());
+  EXPECT_FLOAT_EQ(*round_trip.heading_deg, 123.4f);
+  ASSERT_TRUE(round_trip.interference_detected.has_value());
+  EXPECT_TRUE(*round_trip.interference_detected);
+  EXPECT_EQ(round_trip.capability_flags, state.capability_flags);
+  EXPECT_EQ(round_trip.value_flags, state.value_flags);
+}
+
+TEST(GnssStatusAdapterTest, ReverseMappingDoesNotInventFlaggedOptionalFields)
+{
+  Msg msg;
+  msg.fix_valid = false;
+  msg.fix_type = Msg::FIX_TYPE_UNKNOWN;
+  msg.capability_flags = Msg::CAP_HEADING | Msg::CAP_CORRECTION_AGE;
+  msg.value_flags = 0u;
+  msg.heading_deg = 45.0f;
+  msg.correction_age_s = 0.5f;
+
+  const auto state = universal_gnss_ros2::FromGnssStatusMessage(msg);
+
+  EXPECT_FALSE(state.heading_deg.has_value());
+  EXPECT_FALSE(state.correction_age_s.has_value());
+  EXPECT_EQ(state.capability_flags, msg.capability_flags);
+  EXPECT_EQ(state.value_flags, 0u);
+}
+
 }  // namespace

@@ -43,6 +43,12 @@ if(NOT TARGET universal_gnss_driver)
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_driver"
   )
 endif()
+if(NOT TARGET universal_gnss_ntrip)
+  add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_ntrip"
+    "${CMAKE_CURRENT_BINARY_DIR}/gnss_ntrip"
+  )
+endif()
 set(BUILD_TESTING "${_saved_build_testing}")
 
 rosidl_generate_interfaces(
@@ -131,6 +137,37 @@ target_link_libraries(
 )
 ament_target_dependencies(receiver_node rclcpp)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_library(${PROJECT_NAME}_ntrip_node STATIC src/ntrip_node.cpp)
+  target_compile_features(${PROJECT_NAME}_ntrip_node PUBLIC cxx_std_17)
+  target_include_directories(
+    ${PROJECT_NAME}_ntrip_node
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+      $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
+      $<INSTALL_INTERFACE:include>
+  )
+  ament_target_dependencies(
+    ${PROJECT_NAME}_ntrip_node
+    diagnostic_msgs
+    rclcpp
+  )
+  target_link_libraries(
+    ${PROJECT_NAME}_ntrip_node
+    ${PROJECT_NAME}_diagnostic_adapter
+    ${PROJECT_NAME}_gnss_status_adapter
+    universal_gnss_ntrip
+    "${cpp_typesupport_target}"
+  )
+
+  add_executable(ntrip_node src/ntrip_node_main.cpp)
+  target_link_libraries(
+    ntrip_node
+    ${PROJECT_NAME}_ntrip_node
+  )
+  ament_target_dependencies(ntrip_node rclcpp)
+endif()
+
 install(
   TARGETS
     ${PROJECT_NAME}_gnss_status_adapter
@@ -150,6 +187,17 @@ install(
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  install(
+    TARGETS
+      ${PROJECT_NAME}_ntrip_node
+      ntrip_node
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION lib/${PROJECT_NAME}
+  )
+endif()
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/" DESTINATION include)
@@ -220,6 +268,26 @@ if(BUILD_TESTING)
       test_receiver_node
       rclcpp
     )
+  endif()
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ament_add_gtest(test_ntrip_node tests/test_ntrip_node.cpp)
+    if(TARGET test_ntrip_node)
+      target_link_libraries(
+        test_ntrip_node
+        ${PROJECT_NAME}_ntrip_node
+      )
+      target_include_directories(
+        test_ntrip_node
+        PRIVATE
+          ${CMAKE_CURRENT_SOURCE_DIR}/include
+          ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+      )
+      ament_target_dependencies(
+        test_ntrip_node
+        rclcpp
+      )
+    endif()
   endif()
 endif()
 

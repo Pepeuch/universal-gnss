@@ -62,7 +62,7 @@ Implemented:
 Primary focus:
 
 - [x] ROS2 receiver node skeleton
-- [ ] ROS2 NTRIP node
+- [x] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [x] minimal ROS2 launch/examples
 - [x] robot_localization example config/docs
@@ -111,14 +111,16 @@ Implemented:
 - [x] `NavSatFix` adapter
 - [x] `DiagnosticArray` adapter
 - [x] `ReceiverNode`
+- [x] `NtripNode`
 - [x] minimal receiver launch examples
+- [x] minimal NTRIP launch example
 - [x] robot_localization example YAML and launch
 - [x] receiver node runtime validation and diagnostics hardening
 
 To do:
 
-- [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
+- [ ] correction forwarding / bringup composition between `ReceiverNode` and `NtripNode`
 - [ ] production bringup / launch structure
 - [ ] Humble / Jazzy validation
 - [ ] Kilted linkage modernization
@@ -185,7 +187,7 @@ To do:
 - [x] reconnect/backoff policy/state model
 - [x] Feed RTCM frames into metrics
 - [ ] Keep TLS optional/deferred
-- [ ] Keep ROS2/ESP32 adapters separate
+- [x] Keep ROS2/ESP32 adapters separate
 - [x] TCP-backed NTRIP client
 - [x] sourcetable support
 - [x] RTCM frame extraction from stream
@@ -405,13 +407,15 @@ Implemented:
 - [x] ROS2 covariance projection from runtime accuracy fields
 - [x] Kilted local build/test validation
 - [x] ROS2 receiver node skeleton
+- [x] ROS2 NTRIP node
 - [x] minimal ROS2 serial/TCP launch examples
+- [x] minimal ROS2 NTRIP launch example
 
 To do:
 
-- [ ] harden ROS2 receiver node
-- [ ] ROS2 NTRIP node
+- [x] harden ROS2 receiver node
 - [ ] ROS2 replay node
+- [ ] correction forwarding / bringup composition between receiver and NTRIP nodes
 - [ ] richer launch/examples
 - [ ] Humble/Jazzy CI
 - [ ] Foxglove-friendly topics

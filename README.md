@@ -66,7 +66,9 @@ Current implemented layers:
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
   - minimal `ReceiverNode` skeleton publishing `fix`, `status`, and `diagnostics`
+  - minimal `NtripNode` wrapper publishing `diagnostics` for ROS-side NTRIP state
   - minimal serial / TCP launch examples for `receiver_node`
+  - minimal `ntrip.launch.py` example for the ROS2 NTRIP wrapper
 
 Planned layers:
 
@@ -99,7 +101,7 @@ flowchart TB
 ```
 
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
-receiver-node skeleton surface, and the current status / covariance policy.
+receiver/NTRIP node surfaces, and the current status / covariance policy.
 
 See [docs/robot_localization.md](docs/robot_localization.md) for the first
 example of connecting Universal GNSS `fix` output to

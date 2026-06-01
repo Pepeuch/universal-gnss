@@ -77,11 +77,13 @@ public:
   void set_tcp_config(universal_gnss_transport::TcpClientConfig config);
   const universal_gnss_transport::TcpClientConfig& tcp_config() const;
 
-  NtripClientError Connect();
+  NtripClientError Connect(
+      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   NtripClientError AdoptConnectedSocket(int fd);
   void Disconnect(NtripClientError error = NtripClientError::kNone);
 
-  NtripClientError SendRequest();
+  NtripClientError SendRequest(
+      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   NtripGgaSendResult SendGga(const universal_gnss::GnssRuntimeState& state,
                              universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripGgaSendResult MaybeSendGga(const universal_gnss::GnssRuntimeState& state,
@@ -112,8 +114,6 @@ public:
   const universal_gnss_protocols::RtcmCorrectionMonitor& correction_monitor() const;
 
 private:
-  NtripClientError ConnectWithTransport(
-      const universal_gnss_transport::TcpClientConfig& transport_config);
   NtripClientError FailWith(
       NtripClientError error,
       std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);

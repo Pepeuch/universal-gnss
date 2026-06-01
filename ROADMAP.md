@@ -103,14 +103,14 @@ Completed at the start of this phase:
 - `diagnostic_msgs` mapping helpers
 - runtime-to-ROS2 mapping audit
 - local Kilted package build/test validation
+- `ReceiverNode` with serial / TCP launch examples
+- `NtripNode` with ROS2 launch example
+- `robot_localization` example configuration and documentation
 
 Next:
 
-- harden the first ROS2 receiver node skeleton
-- ROS2 NTRIP node
 - ROS2 replay node
-- launch examples
-- robot_localization example configuration and documentation
+- correction forwarding / bringup composition between receiver and NTRIP nodes
 - Humble/Jazzy validation
 - Foxglove-friendly topic surface
 

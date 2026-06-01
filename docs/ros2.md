@@ -30,6 +30,8 @@ Current responsibilities:
   `diagnostic_msgs`
 - provide a minimal `ReceiverNode` that composes the existing low-level
   sessions, transports, runner, and adapters into standard ROS 2 publishers
+- provide a minimal `NtripNode` that wraps the existing low-level `NtripClient`
+  in ROS 2 subscriptions, timers, and diagnostics
 
 Current non-responsibilities:
 
@@ -37,7 +39,7 @@ Current non-responsibilities:
 - receiver-specific protocol logic
 - receiver configuration ownership
 - backend-specific fix inference
-- NTRIP transport ownership
+- low-level NTRIP protocol or reconnect implementation ownership
 - downstream integration packages
 
 That last point is starting to soften slightly: this repository now includes a
@@ -454,6 +456,104 @@ ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
   tcp_port:=2101
 ```
 
+## NTRIP Node
+
+`universal_gnss_ros2` now also includes a first minimal ROS 2 NTRIP wrapper:
+
+- class: `universal_gnss_ros2::NtripNode`
+- executable: `ntrip_node`
+
+This node stays intentionally thin. It does not reimplement request building,
+RTCM extraction, reconnect timing, or GGA sentence generation. It composes the
+existing low-level path:
+
+```text
+GnssStatus subscription -> GnssRuntimeState -> NtripClient::MaybeInjectGga()
+                        -> NtripClient TCP/reconnect/read loop
+                        -> RTCM correction monitor
+                        -> ROS 2 diagnostics
+```
+
+### Inputs
+
+Subscriptions:
+
+- `status`
+  - type: `universal_gnss_ros2/msg/GnssStatus`
+
+The incoming status message is used only as the normalized position/fix source
+for optional GGA injection. The node does not create a second ROS-side runtime
+model.
+
+### Parameters
+
+- `caster_host`
+- `caster_port`
+- `mountpoint`
+- `username`
+- `password`
+- `gga_enabled`
+- `gga_interval_s`
+- `tls_enabled`
+
+Validation policy:
+
+- empty `caster_host` or `mountpoint` fails node construction
+- `caster_port` must stay within `1..65535`
+- `gga_interval_s` must stay within `1..86400`
+- `tls_enabled=true` fails fast today because TLS is not yet implemented in the
+  low-level transport
+
+Runtime policy:
+
+- the wrapped TCP client is configured nonblocking inside the node
+- the low-level reconnect policy is reused directly
+- the ROS 2 node only owns periodic `StepOnce()` scheduling and diagnostics
+
+### Outputs
+
+Topics published by the current NTRIP node:
+
+- `diagnostics`
+  - type: `diagnostic_msgs/msg/DiagnosticArray`
+
+Current diagnostic states include:
+
+- `ntrip_connected`
+- `ntrip_disconnected`
+- `ntrip_reconnecting`
+- `ntrip_streaming`
+- `correction_stream_waiting`
+- `gga_source_missing`
+- `gga_source_stale`
+- `gga_injection_active`
+- `gga_send_error`
+
+### Launch
+
+The package now also installs:
+
+- `ntrip.launch.py`
+
+Example usage:
+
+```bash
+ros2 launch universal_gnss_ros2 ntrip.launch.py \
+  caster_host:=caster.example.com \
+  caster_port:=2101 \
+  mountpoint:=RTCM3 \
+  gga_enabled:=true \
+  gga_interval_s:=10
+```
+
+### Current limits
+
+- no RTCM ROS topic is published yet
+- no direct correction forwarding into `receiver_node` exists yet
+- no TLS yet
+- no lifecycle-node behavior yet
+- no multi-caster orchestration yet
+
 ## robot_localization Example
 
 The repository now includes a minimal example stack for:
@@ -478,19 +578,18 @@ This example is intentionally conservative:
 
 ### Current limits
 
-- no NTRIP ownership yet
 - no owned `robot_localization` integration package yet
 - no Nav2 integration yet
 - no receiver command/config ownership yet
 - no automatic reconnect loop yet
-- no retry/reconnect lifecycle node yet
+- no retry/reconnect lifecycle node yet at the ROS 2 node level
 
 ## What Comes Next
 
 The next ROS 2 phase is still higher-level integration, not more low-level
 feature work:
 
-- NTRIP node
 - replay node
 - richer launch/examples
+- correction forwarding / bringup composition around the receiver and NTRIP nodes
 - downstream integration surfaces such as Nav2

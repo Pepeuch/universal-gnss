@@ -233,12 +233,33 @@ const universal_gnss_transport::TcpClientConfig& NtripClient::tcp_config() const
   return tcp_config_;
 }
 
-NtripClientError NtripClient::Connect()
+NtripClientError NtripClient::Connect(
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
   universal_gnss_transport::TcpClientConfig transport_config = tcp_config_;
   transport_config.host = config_.host;
   transport_config.port = config_.port;
-  return ConnectWithTransport(transport_config);
+  transport_.Close();
+  ResetSessionState();
+  ResetSessionMetrics();
+
+  if (transport_config.host.empty() || transport_config.port == 0u)
+  {
+    return FailWith(NtripClientError::kConfiguration, timestamp_ns);
+  }
+
+  state_ = NtripClientState::kConnecting;
+  const auto connect_error = transport_.Open(transport_config);
+  if (connect_error != universal_gnss_transport::TransportError::kNone)
+  {
+    return FailWith(MapTransportError(connect_error), timestamp_ns);
+  }
+
+  state_ = NtripClientState::kConnected;
+  MarkConnected(metrics_);
+  ClearLastError(metrics_);
+  RecordReconnectSuccess(timestamp_ns);
+  return NtripClientError::kNone;
 }
 
 NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
@@ -268,11 +289,12 @@ void NtripClient::Disconnect(const NtripClientError error)
   MarkDisconnected(metrics_, error);
 }
 
-NtripClientError NtripClient::SendRequest()
+NtripClientError NtripClient::SendRequest(
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
   if (!transport_.IsOpen() || state_ == NtripClientState::kDisconnected)
   {
-    return FailWith(NtripClientError::kDisconnected);
+    return FailWith(NtripClientError::kDisconnected, timestamp_ns);
   }
 
   if (state_ == NtripClientState::kFailed)
@@ -298,12 +320,12 @@ NtripClientError NtripClient::SendRequest()
 
     if (write_result.status != universal_gnss_transport::TransportStatus::kOk)
     {
-      return FailWith(MapTransportError(write_result.error));
+      return FailWith(MapTransportError(write_result.error), timestamp_ns);
     }
 
     if (write_result.bytes_written == 0u)
     {
-      return FailWith(NtripClientError::kTimeout);
+      return FailWith(NtripClientError::kTimeout, timestamp_ns);
     }
 
     NoteSentBytes(metrics_, write_result.bytes_written);
@@ -637,32 +659,6 @@ const NtripConnectionMetrics& NtripClient::metrics() const
 const universal_gnss_protocols::RtcmCorrectionMonitor& NtripClient::correction_monitor() const
 {
   return correction_monitor_;
-}
-
-NtripClientError NtripClient::ConnectWithTransport(
-    const universal_gnss_transport::TcpClientConfig& transport_config)
-{
-  transport_.Close();
-  ResetSessionState();
-  ResetSessionMetrics();
-
-  if (transport_config.host.empty() || transport_config.port == 0u)
-  {
-    return FailWith(NtripClientError::kConfiguration);
-  }
-
-  state_ = NtripClientState::kConnecting;
-  const auto connect_error = transport_.Open(transport_config);
-  if (connect_error != universal_gnss_transport::TransportError::kNone)
-  {
-    return FailWith(MapTransportError(connect_error));
-  }
-
-  state_ = NtripClientState::kConnected;
-  MarkConnected(metrics_);
-  ClearLastError(metrics_);
-  RecordReconnectSuccess(std::nullopt);
-  return NtripClientError::kNone;
 }
 
 NtripClientError NtripClient::FailWith(

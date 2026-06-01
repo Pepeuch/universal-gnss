@@ -41,7 +41,7 @@ Current non-responsibilities:
 - reconnect loops
 - RTCM forwarding
 - serial output
-- ROS 2 nodes
+- owning ROS 2 nodes inside `gnss_ntrip`
 - ESP32 WiFi or Ethernet integration
 
 ## Data Flow
@@ -68,6 +68,14 @@ future ROS 2 / ESP32 / tools integrations
 
 `gnss_ntrip` stays above raw socket mechanics and below application-specific
 runtime orchestration.
+
+`gnss_ros2` now provides that first orchestration wrapper through
+`universal_gnss_ros2::NtripNode`, but the ownership split stays deliberate:
+
+- `gnss_ntrip` owns `NtripClient`, request generation, GGA injection policy,
+  reconnect policy, RTCM extraction, and correction monitoring
+- `gnss_ros2` owns subscriptions, timers, diagnostics publishing, and launch
+  wiring
 
 ## Configuration Model
 

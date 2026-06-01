@@ -47,6 +47,26 @@ std::uint8_t ToMsgFixType(universal_gnss::GnssFixType fix_type)
   }
 }
 
+universal_gnss::GnssFixType FromMsgFixType(const std::uint8_t fix_type)
+{
+  switch (fix_type)
+  {
+    case Msg::FIX_TYPE_NO_FIX:
+      return universal_gnss::GnssFixType::kNoFix;
+    case Msg::FIX_TYPE_FIX:
+      return universal_gnss::GnssFixType::kFix;
+    case Msg::FIX_TYPE_RTK_FLOAT:
+      return universal_gnss::GnssFixType::kRtkFloat;
+    case Msg::FIX_TYPE_RTK_FIXED:
+      return universal_gnss::GnssFixType::kRtkFixed;
+    case Msg::FIX_TYPE_DEAD_RECKONING:
+      return universal_gnss::GnssFixType::kDeadReckoning;
+    case Msg::FIX_TYPE_UNKNOWN:
+    default:
+      return universal_gnss::GnssFixType::kUnknown;
+  }
+}
+
 std::uint8_t ToMsgRtkMode(universal_gnss::GnssRtkMode rtk_mode)
 {
   switch (rtk_mode)
@@ -60,6 +80,22 @@ std::uint8_t ToMsgRtkMode(universal_gnss::GnssRtkMode rtk_mode)
     case universal_gnss::GnssRtkMode::kUnknown:
     default:
       return Msg::RTK_MODE_UNKNOWN;
+  }
+}
+
+universal_gnss::GnssRtkMode FromMsgRtkMode(const std::uint8_t rtk_mode)
+{
+  switch (rtk_mode)
+  {
+    case Msg::RTK_MODE_NONE:
+      return universal_gnss::GnssRtkMode::kNone;
+    case Msg::RTK_MODE_FLOAT:
+      return universal_gnss::GnssRtkMode::kFloat;
+    case Msg::RTK_MODE_FIXED:
+      return universal_gnss::GnssRtkMode::kFixed;
+    case Msg::RTK_MODE_UNKNOWN:
+    default:
+      return universal_gnss::GnssRtkMode::kUnknown;
   }
 }
 
@@ -89,6 +125,64 @@ void AssignFlaggedOptional(bool& destination,
                            bool value_available)
 {
   destination = value_available && source.has_value() ? *source : false;
+}
+
+std::optional<universal_gnss::GnssTimestampNs> FromRosTime(
+    const builtin_interfaces::msg::Time& stamp)
+{
+  if (stamp.sec == 0 && stamp.nanosec == 0u)
+  {
+    return std::nullopt;
+  }
+
+  return static_cast<universal_gnss::GnssTimestampNs>(stamp.sec) * kNanosecondsPerSecond +
+         static_cast<universal_gnss::GnssTimestampNs>(stamp.nanosec);
+}
+
+template <typename T>
+std::optional<T> OptionalFromFinite(const T value)
+{
+  return std::isfinite(value) ? std::optional<T>(value) : std::nullopt;
+}
+
+template <typename T>
+void AssignOptionalField(std::optional<T>& destination,
+                         const T value,
+                         const bool value_available)
+{
+  if (!value_available)
+  {
+    destination.reset();
+    return;
+  }
+
+  destination = value;
+}
+
+void AssignOptionalField(std::optional<float>& destination,
+                         const float value,
+                         const bool value_available)
+{
+  if (!value_available || !std::isfinite(value))
+  {
+    destination.reset();
+    return;
+  }
+
+  destination = value;
+}
+
+void AssignOptionalField(std::optional<bool>& destination,
+                         const bool value,
+                         const bool value_available)
+{
+  if (!value_available)
+  {
+    destination.reset();
+    return;
+  }
+
+  destination = value;
 }
 
 }  // namespace
@@ -205,6 +299,70 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
   AssignFlaggedOptional(message.jamming_detected, state.jamming_detected, has_jamming_state);
 
   return message;
+}
+
+universal_gnss::GnssRuntimeState FromGnssStatusMessage(
+    const universal_gnss_ros2::msg::GnssStatus& message)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = FromRosTime(message.stamp);
+  state.fix_valid = message.fix_valid;
+  state.fix_type = FromMsgFixType(message.fix_type);
+
+  state.capability_flags = message.capability_flags;
+  state.value_flags = message.value_flags & message.capability_flags;
+
+  state.latitude_deg = OptionalFromFinite(message.latitude_deg);
+  state.longitude_deg = OptionalFromFinite(message.longitude_deg);
+  state.altitude_m = OptionalFromFinite(message.altitude_m);
+
+  if ((state.value_flags & Msg::CAP_RTK_MODE) != 0u)
+  {
+    state.rtk_mode = FromMsgRtkMode(message.rtk_mode);
+  }
+
+  AssignOptionalField(state.horizontal_accuracy_m,
+                      message.horizontal_accuracy_m,
+                      (state.value_flags & Msg::CAP_HORIZONTAL_ACCURACY) != 0u);
+  AssignOptionalField(state.vertical_accuracy_m,
+                      message.vertical_accuracy_m,
+                      (state.value_flags & Msg::CAP_VERTICAL_ACCURACY) != 0u);
+  AssignOptionalField(
+      state.hdop, message.hdop, (state.value_flags & Msg::CAP_HDOP) != 0u);
+  AssignOptionalField(
+      state.vdop, message.vdop, (state.value_flags & Msg::CAP_VDOP) != 0u);
+  AssignOptionalField(state.satellites_used,
+                      message.satellites_used,
+                      (state.value_flags & Msg::CAP_SATELLITES_USED) != 0u);
+  AssignOptionalField(state.satellites_visible,
+                      message.satellites_visible,
+                      (state.value_flags & Msg::CAP_SATELLITES_VISIBLE) != 0u);
+  AssignOptionalField(state.satellites_tracked,
+                      message.satellites_tracked,
+                      (state.value_flags & Msg::CAP_SATELLITES_TRACKED) != 0u);
+  AssignOptionalField(state.mean_cn0_db_hz,
+                      message.mean_cn0_db_hz,
+                      (state.value_flags & Msg::CAP_MEAN_CN0) != 0u);
+  AssignOptionalField(state.max_cn0_db_hz,
+                      message.max_cn0_db_hz,
+                      (state.value_flags & Msg::CAP_MAX_CN0) != 0u);
+  AssignOptionalField(state.correction_age_s,
+                      message.correction_age_s,
+                      (state.value_flags & Msg::CAP_CORRECTION_AGE) != 0u);
+  AssignOptionalField(state.heading_deg,
+                      message.heading_deg,
+                      (state.value_flags & Msg::CAP_HEADING) != 0u);
+  AssignOptionalField(state.dual_antenna_heading,
+                      message.dual_antenna_heading,
+                      (state.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u);
+  AssignOptionalField(state.interference_detected,
+                      message.interference_detected,
+                      (state.value_flags & Msg::CAP_INTERFERENCE_STATE) != 0u);
+  AssignOptionalField(state.jamming_detected,
+                      message.jamming_detected,
+                      (state.value_flags & Msg::CAP_JAMMING_STATE) != 0u);
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
 }
 
 }  // namespace universal_gnss_ros2
