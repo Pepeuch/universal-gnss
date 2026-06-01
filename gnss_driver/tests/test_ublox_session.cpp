@@ -257,6 +257,20 @@ std::vector<std::uint8_t> MakeMonRfPayload(const std::uint8_t first_jamming_stat
   return payload;
 }
 
+std::vector<std::uint8_t> MakeMonHwPayload(const std::uint8_t antenna_status,
+                                           const std::uint8_t antenna_power,
+                                           const std::uint8_t jamming_state)
+{
+  std::vector<std::uint8_t> payload(60u, 0u);
+  WriteLeU2(payload, 16u, 180u);
+  WriteLeU2(payload, 18u, 4096u);
+  payload[20u] = antenna_status;
+  payload[21u] = antenna_power;
+  payload[22u] = static_cast<std::uint8_t>((jamming_state & 0x03u) << 2u);
+  payload[45u] = 17u;
+  return payload;
+}
+
 void TestNavPvtRuntimeUpdates(TestContext& ctx)
 {
   UbloxSession session;
@@ -341,6 +355,22 @@ void TestNavDopUpdatesHdopAndVdop(TestContext& ctx)
                  !state.latitude_deg.has_value() &&
                  !state.satellites_visible.has_value(),
              "NAV-DOP should not invent fix, position, or satellite state");
+}
+
+void TestMonHwInterferenceAndJammingUpdates(TestContext& ctx)
+{
+  UbloxSession session;
+  session.FeedBytes(BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(2u, 1u, 2u)), 4546);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(4546) &&
+                 state.interference_detected == std::optional<bool>(true) &&
+                 state.jamming_detected == std::optional<bool>(true),
+             "MON-HW should update interference and jamming state conservatively");
+  ctx.Expect(state.fix_type == GnssFixType::kUnknown &&
+                 !state.latitude_deg.has_value() &&
+                 !state.horizontal_accuracy_m.has_value(),
+             "MON-HW should not invent fix, position, or accuracy state");
 }
 
 void TestNmeaGstAccuracyUpdates(TestContext& ctx)
@@ -473,6 +503,7 @@ int main()
   TestNavStatusRtkUpdates(ctx);
   TestMonRfInterferenceAndJammingUpdates(ctx);
   TestNavDopUpdatesHdopAndVdop(ctx);
+  TestMonHwInterferenceAndJammingUpdates(ctx);
   TestNmeaGstAccuracyUpdates(ctx);
   TestMixedStreamRouting(ctx);
   TestUnknownAndMalformedFrameCounting(ctx);

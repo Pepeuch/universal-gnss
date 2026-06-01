@@ -462,6 +462,11 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUbx(const std::vector<std:
   {
     return universal_gnss_protocols::UbxNavSatToRuntimeState(*nav_sat.record);
   }
+  if (const auto mon_hw = universal_gnss_protocols::ParseUbxMonHw(frame);
+      mon_hw.status == ParserStatus::kRecordReady && mon_hw.record.has_value())
+  {
+    return universal_gnss_protocols::UbxMonHwToRuntimeState(*mon_hw.record);
+  }
   if (const auto mon_rf = universal_gnss_protocols::ParseUbxMonRf(frame);
       mon_rf.status == ParserStatus::kRecordReady && mon_rf.record.has_value())
   {

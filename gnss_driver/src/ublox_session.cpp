@@ -75,6 +75,7 @@ bool IsSupportedUbxFrame(const UbxFrame& frame)
          (frame.class_id == 0x01u && frame.message_id == 0x07u) ||
          (frame.class_id == 0x01u && frame.message_id == 0x35u) ||
          (frame.class_id == 0x01u && frame.message_id == 0x03u) ||
+         (frame.class_id == 0x0Au && frame.message_id == 0x09u) ||
          (frame.class_id == 0x0Au && frame.message_id == 0x38u);
 }
 
@@ -498,6 +499,16 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
   {
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxNavDop,
                        universal_gnss_protocols::UbxNavDopToRuntimeState,
+                       frame,
+                       aggregator_,
+                       metrics_);
+    return;
+  }
+
+  if (frame.class_id == 0x0Au && frame.message_id == 0x09u)
+  {
+    ParseAndMergeFrame(universal_gnss_protocols::ParseUbxMonHw,
+                       universal_gnss_protocols::UbxMonHwToRuntimeState,
                        frame,
                        aggregator_,
                        metrics_);

@@ -186,6 +186,59 @@ enum class UbxMonRfJammingState : std::uint8_t
   kCritical = 3,
 };
 
+enum class UbxMonHwLayout : std::uint8_t
+{
+  kClassic = 0,
+  kReserved = 1,
+};
+
+enum class UbxAntennaStatus : std::uint8_t
+{
+  kInit = 0,
+  kDontKnow = 1,
+  kOk = 2,
+  kShort = 3,
+  kOpen = 4,
+};
+
+enum class UbxAntennaPower : std::uint8_t
+{
+  kOff = 0,
+  kOn = 1,
+  kDontKnow = 2,
+};
+
+struct UbxMonHwRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  UbxMonHwLayout layout{UbxMonHwLayout::kClassic};
+  std::size_t payload_size{0};
+
+  std::optional<std::uint16_t> noise_per_ms{};
+  std::optional<std::uint16_t> agc_count{};
+  std::optional<UbxAntennaStatus> antenna_status{};
+  std::optional<UbxAntennaPower> antenna_power{};
+  std::optional<std::uint8_t> flags{};
+  UbxMonRfJammingState jamming_state{UbxMonRfJammingState::kUnknown};
+  std::optional<std::uint8_t> cw_suppression{};
+
+  bool rtc_calibrated{false};
+  bool safe_boot{false};
+  bool xtal_absent{false};
+};
+
+struct UbxMonHw2Record
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::int8_t ofs_i{0};
+  std::uint8_t mag_i{0};
+  std::int8_t ofs_q{0};
+  std::uint8_t mag_q{0};
+  std::uint8_t cfg_source{0};
+  std::uint32_t low_level_configuration{0};
+  std::uint32_t post_status{0};
+};
+
 struct UbxMonRfBlock
 {
   std::uint8_t block_id{0};

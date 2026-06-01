@@ -21,10 +21,17 @@ ParserResult<UbxNavDopRecord> ParseUbxNavDop(const UbxFrame& frame);
 
 ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame);
 
+ParserResult<UbxMonHwRecord> ParseUbxMonHw(const UbxFrame& frame);
+
+ParserResult<UbxMonHw2Record> ParseUbxMonHw2(const UbxFrame& frame);
+
 ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame);
 
 universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
     const UbxRxmRtcmRecord& record);
+
+universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(
+    const UbxMonHwRecord& record);
 
 universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record);
 
@@ -33,6 +40,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
 universal_gnss::GnssRuntimeState UbxNavDopToRuntimeState(const UbxNavDopRecord& record);
 
 universal_gnss::GnssRuntimeState UbxNavSatToRuntimeState(const UbxNavSatRecord& record);
+
+universal_gnss::GnssRuntimeState UbxMonHwToRuntimeState(const UbxMonHwRecord& record);
 
 universal_gnss::GnssRuntimeState UbxMonRfToRuntimeState(const UbxMonRfRecord& record);
 

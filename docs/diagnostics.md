@@ -90,6 +90,20 @@ This complements the stream-side RTCM monitor:
 
 It still does not imply RTK float/fixed state or position quality by itself.
 
+The first u-blox receiver-health consumer now also lives in the UBX semantic
+layer:
+
+- classic `MON-HW` emits portable receiver events for documented antenna states
+  and documented jamming states
+
+That `MON-HW` mapping is intentionally conservative:
+
+- it uses only documented antenna and jamming states
+- it does not threshold `noisePerMS`, `agcCnt`, or `cwSuppression`
+- it does not infer fix, RTK, position, or correction quality
+- `MON-HW2` remains semantic-only for now because the local docs expose raw
+  imbalance / POST fields without a portable threshold model
+
 The first Unicore receiver-health consumers now live in the Unicore ASCII
 semantic layer:
 

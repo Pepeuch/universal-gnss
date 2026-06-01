@@ -164,6 +164,8 @@ Implemented semantic messages:
 - `NAV-PVT`
 - `NAV-DOP`
 - `NAV-SAT`
+- `MON-HW`
+- `MON-HW2`
 - `MON-RF`
 
 Implemented behaviors:
@@ -192,6 +194,10 @@ Current UBX notes:
   mode
 - `NAV-DOP` provides receiver-native `hdop` / `vdop` only
 - `NAV-SAT` provides satellites visible / used and CN0 summaries
+- `MON-HW` provides documented antenna / receiver-health diagnostics and
+  conservative jamming booleans when the classic hardware payload is available
+- `MON-HW2` is parsed as documented extended low-level hardware status only; it
+  is not thresholded into the portable runtime or diagnostics model yet
 - `MON-RF` provides documented RF-interference / jamming state only
 - `RXM-RTCM` maps into portable correction diagnostics only; it does not
   project into `GnssRuntimeState`
@@ -206,7 +212,8 @@ What UBX does not do yet:
 - richer receiver-side correction acceptance tracking beyond the current
   per-message status helper
 - `MON-SPAN`
-- richer RF diagnostics or spoofing classification
+- richer RF diagnostics or spoofing classification beyond documented
+  `MON-HW` / `MON-RF` state
 
 ### RTCM3
 
@@ -380,7 +387,7 @@ satellites_visible       NMEA GSV, UBX NAV-SAT
 satellites_tracked       Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore BESTSATA, Unicore SATSINFOA
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
 heading                  UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB
-interference / jamming   UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA
+interference / jamming   UBX MON-HW, UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA
 correction_age           Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 dual antenna state       Unicore RTKSTATUSA
 ```

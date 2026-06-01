@@ -14,6 +14,8 @@ Current UBX semantic coverage:
 - `NAV-DOP`
 - `NAV-SAT`
 - `NAV-STATUS`
+- `MON-HW`
+- `MON-HW2`
 - `MON-RF`
 - `RXM-RTCM`
 
@@ -82,6 +84,8 @@ This means:
 - `NAV-DOP` can contribute receiver-native `hdop` / `vdop` without changing
   fix, RTK, or position state
 - `NAV-SAT` can contribute visibility and CN0 without changing fix state
+- `MON-HW` can contribute receiver diagnostics and conservative
+  jamming/interference state without touching position fields
 - `MON-RF` can contribute jamming/interference without touching position fields
 - `RXM-RTCM` can contribute receiver-side RTCM acceptance diagnostics without
   touching runtime fix or position fields
@@ -297,6 +301,80 @@ What `NAV-STATUS` intentionally does not do:
 - no RF mapping
 - no RTK inference from `diffSoln` alone
 
+### MON-HW / MON-HW2
+
+`MON-HW` and `MON-HW2` are hardware-monitor messages.
+
+Current support is intentionally conservative:
+
+- `MON-HW`
+  - the classic 60-byte hardware payload documented in the local F9 manual is
+    semantically decoded
+  - the 56-byte reserved payload documented in the local F10 manual is accepted
+    structurally but left semantically unmapped
+- `MON-HW2`
+  - the documented 28-byte extended hardware payload is parsed into a typed
+    record
+  - it is not currently thresholded into portable runtime or diagnostic state
+
+Mapped fields from classic `MON-HW` only:
+
+- `interference_detected`
+- `jamming_detected`
+
+Current `MON-HW` mapping details:
+
+- the classic payload parses:
+  - `noisePerMS`
+  - `agcCnt`
+  - `aStatus`
+  - `aPower`
+  - `flags`
+  - `cwSuppression`
+- `jammingState` is the only `MON-HW` field projected into the portable runtime
+- `warning` / `critical` jamming states map to:
+  - `interference_detected = true`
+  - `jamming_detected = true`
+- a known `ok` jamming state maps to:
+  - `interference_detected = false`
+  - `jamming_detected = false`
+
+Current diagnostics behavior:
+
+- classic `MON-HW` emits portable receiver diagnostics for:
+  - antenna `ok`
+  - antenna `open`
+  - antenna `short`
+  - antenna power `off`
+  - documented jamming states
+- `MON-HW2` currently stays semantic-only because the local docs expose raw
+  imbalance / low-level configuration / POST fields, but not a portable
+  threshold model for them
+
+Fields parsed but not projected into the core yet:
+
+- `noisePerMS`
+- `agcCnt`
+- `cwSuppression`
+- `rtcCalib`
+- `safeBoot`
+- `xtalAbsent`
+- `MON-HW2 ofsI` / `magI` / `ofsQ` / `magQ`
+- `MON-HW2 cfgSource`
+- `MON-HW2 lowLevCfg`
+- `MON-HW2 postStatus`
+
+Those remain available in semantic records for future vendor-aware tooling.
+
+What `MON-HW` / `MON-HW2` intentionally do not do:
+
+- no fix mapping
+- no RTK mapping
+- no position mapping
+- no accuracy mapping
+- no satellite count mapping
+- no CN0 mapping
+
 ### MON-RF
 
 `MON-RF` is currently the UBX source for normalized RF health state.
@@ -328,11 +406,11 @@ Why the boolean projection is intentionally simple:
 
 Fields parsed but not projected into the core yet:
 
-- `noisePerMS`
-- `agcCnt`
-- `cwSuppression`
-- `postStatus`
-- antenna status / power details
+- per-block `noisePerMS`
+- per-block `agcCnt`
+- per-block `cwSuppression`
+- per-block `postStatus`
+- per-block antenna status / power details
 
 Those remain in the semantic record for future vendor-aware tooling or a later
 portable RF model.
@@ -384,7 +462,7 @@ What `RXM-RTCM` intentionally does not do:
 The current UBX mapping follows these guardrails:
 
 - no RTK mode without documented carrier-solution fields
-- no correction age from `NAV-PVT`, `NAV-STATUS`, `NAV-SAT`, or `MON-RF`
+- no correction age from `NAV-PVT`, `NAV-STATUS`, `NAV-SAT`, `MON-HW`, or `MON-RF`
 - no RTK inference from `RXM-RTCM` alone
 - no RF state from `NAV-PVT`, `NAV-STATUS`, or `NAV-SAT`
 - no accuracy from `NAV-STATUS`
@@ -396,7 +474,7 @@ Examples:
 - `diffSoln` does not imply `rtk_mode = float`
 - `NAV-STATUS` does not erase coordinates from an earlier `NAV-PVT` update
 - `NAV-SAT` CN0 values do not imply a valid fix
-- `MON-RF` does not imply a degraded position solution directly
+- `MON-HW` and `MON-RF` do not imply a degraded position solution directly
 
 ## Relationship To Aggregation
 
@@ -419,11 +497,12 @@ NAV-STATUS -> fix metadata + optional RTK mode
 NAV-PVT    -> coordinates + altitude + accuracy + satellites_used + RTK mode
 NAV-DOP    -> hdop + vdop
 NAV-SAT    -> satellites_visible + satellites_used + CN0 summary
+MON-HW     -> receiver diagnostics + optional jamming booleans
 MON-RF     -> interference/jamming booleans
 RXM-RTCM   -> receiver-side correction diagnostics only
 ```
 
-After aggregation, the coherent runtime state may contain fields from all four
+After aggregation, the coherent runtime state may contain fields from multiple
 messages without any single UBX message needing to carry the whole model.
 
 For the generic merge rules, see [docs/runtime_aggregation.md](../../runtime_aggregation.md).
@@ -435,7 +514,7 @@ The following UBX areas are intentionally deferred:
 - `CFG-*` messages
 - `MON-SPAN`
 - `NAV-DOP` downstream consumers beyond normalized `hdop` / `vdop`
-- richer RF severity models
+- richer RF severity models beyond documented `MON-HW` / `MON-RF` states
 - spoofing-state projection
 - persistent satellite tracking
 - constellation-specific runtime fields

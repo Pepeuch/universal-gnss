@@ -177,6 +177,17 @@ if(BUILD_TESTING)
   add_test(NAME gnss_protocols_test_ubx_mon_rf COMMAND gnss_protocols_test_ubx_mon_rf)
 
   add_executable(
+    gnss_protocols_test_ubx_mon_hw
+    tests/test_ubx_mon_hw.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_ubx_mon_hw
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(NAME gnss_protocols_test_ubx_mon_hw COMMAND gnss_protocols_test_ubx_mon_hw)
+
+  add_executable(
     gnss_protocols_test_unicore_ascii_parser
     tests/test_unicore_ascii_parser.cpp
   )

@@ -296,6 +296,26 @@ std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
   return parsed.record;
 }
 
+std::optional<universal_gnss_protocols::UbxMonHwRecord> ParseMonHwAtOffset(
+    const std::vector<std::uint8_t>& bytes,
+    const std::size_t byte_offset)
+{
+  UbxFrameFramer framer;
+  const auto probe = ProbeAtOffset<UbxFrameFramer, UbxFrame>(framer, bytes, byte_offset);
+  if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+  {
+    return std::nullopt;
+  }
+
+  const auto parsed = universal_gnss_protocols::ParseUbxMonHw(*probe.record);
+  if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+  {
+    return std::nullopt;
+  }
+
+  return parsed.record;
+}
+
 std::optional<RtcmFrame> ParseRtcmFrameAtOffset(const std::vector<std::uint8_t>& bytes,
                                                 const std::size_t byte_offset)
 {
@@ -647,8 +667,25 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
       continue;
     }
 
-    if (item.protocol != ProtocolType::kUbx || item.ubx_class_id != 0x02u ||
-        item.ubx_message_id != 0x32u)
+    if (item.protocol != ProtocolType::kUbx)
+    {
+      continue;
+    }
+
+    if (item.ubx_class_id == 0x0Au && item.ubx_message_id == 0x09u)
+    {
+      const auto parsed_record = ParseMonHwAtOffset(bytes, item.byte_offset);
+      if (!parsed_record.has_value())
+      {
+        continue;
+      }
+
+      const auto events = universal_gnss_protocols::UbxMonHwToDiagnosticEvents(*parsed_record);
+      report.diagnostics.insert(report.diagnostics.end(), events.begin(), events.end());
+      continue;
+    }
+
+    if (item.ubx_class_id != 0x02u || item.ubx_message_id != 0x32u)
     {
       continue;
     }

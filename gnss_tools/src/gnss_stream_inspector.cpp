@@ -747,6 +747,14 @@ std::string DescribeUbxMessage(const std::uint8_t class_id, const std::uint8_t m
   {
     return "ACK-ACK";
   }
+  if (class_id == 0x0Au && message_id == 0x09u)
+  {
+    return "MON-HW";
+  }
+  if (class_id == 0x0Au && message_id == 0x0Bu)
+  {
+    return "MON-HW2";
+  }
   if (class_id == 0x0Au && message_id == 0x38u)
   {
     return "MON-RF";

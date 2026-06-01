@@ -200,12 +200,27 @@ std::vector<std::uint8_t> MakeRxmRtcmPayload(const std::uint8_t flags,
   return payload;
 }
 
+std::vector<std::uint8_t> MakeMonHwPayload(const std::uint8_t antenna_status,
+                                           const std::uint8_t antenna_power,
+                                           const std::uint8_t jamming_state)
+{
+  std::vector<std::uint8_t> payload(60u, 0u);
+  WriteLeU2(payload, 16u, 180u);
+  WriteLeU2(payload, 18u, 4096u);
+  payload[20u] = antenna_status;
+  payload[21u] = antenna_power;
+  payload[22u] = static_cast<std::uint8_t>((jamming_state & 0x03u) << 2u);
+  payload[45u] = 21u;
+  return payload;
+}
+
 std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
 {
   std::vector<std::uint8_t> bytes;
   Append(bytes, BuildUbxFrame(0x01u, 0x03u, MakeNavStatusFixedPayload()));
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x04u, 0u, 42u, 1077u)));
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x01u, 0u, 42u, 1005u)));
+  Append(bytes, BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(3u, 0u, 3u)));
   Append(bytes, BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u));
   Append(bytes, BuildRtcmFrame(1077u));
   return bytes;
@@ -303,8 +318,8 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
                  report.rtcm.last_base_station_arp->station_id == 42u &&
                  report.rtcm.last_base_station_arp->antenna_height_m.has_value(),
              "quality report should retain the last decoded base station ARP record");
-  ctx.Expect(report.summary.warning_count == 1u && report.summary.error_count == 0u,
-             "receiver-side CRC failure should surface as one warning and no errors");
+  ctx.Expect(report.summary.warning_count >= 1u && report.summary.error_count >= 2u,
+             "receiver-side CRC failure plus MON-HW faults should surface warning and error diagnostics");
 
   bool saw_crc_failed = false;
   for (const auto& event : report.diagnostics)
@@ -366,6 +381,37 @@ void TestUnicoreRfDiagnostics(TestContext& ctx)
              "quality report should preserve Unicore RF and hardware diagnostic events");
 }
 
+void TestUbxMonHwDiagnostics(TestContext& ctx)
+{
+  const auto report = universal_gnss_tools::BuildGnssQualityReportBytes(
+      BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(3u, 0u, 3u)));
+
+  ctx.Expect(report.summary.records_processed == 1u &&
+                 report.summary.counts_by_protocol.at("ubx") == 1u,
+             "MON-HW quality report should count the UBX frame");
+  ctx.Expect(report.final_state.interference_detected == std::optional<bool>(true) &&
+                 report.final_state.jamming_detected == std::optional<bool>(true),
+             "MON-HW should enrich the final quality-report state with RF booleans");
+
+  bool saw_antenna_short = false;
+  bool saw_jamming_critical = false;
+  for (const auto& event : report.diagnostics)
+  {
+    if (event.code == "ubx_mon_hw.antenna_short")
+    {
+      saw_antenna_short = true;
+    }
+    if (event.code == "ubx_mon_hw.jamming_critical")
+    {
+      saw_jamming_critical = true;
+    }
+  }
+
+  ctx.Expect(saw_antenna_short && saw_jamming_critical &&
+                 report.summary.error_count >= 2u,
+             "MON-HW antenna and jamming faults should surface as receiver diagnostics");
+}
+
 }  // namespace
 
 int main()
@@ -376,6 +422,7 @@ int main()
   TestReportFromMixedLog(ctx);
   TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(ctx);
   TestUnicoreRfDiagnostics(ctx);
+  TestUbxMonHwDiagnostics(ctx);
 
   if (ctx.failures != 0)
   {

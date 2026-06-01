@@ -21,6 +21,8 @@ constexpr std::uint8_t kUbxNavStatusId = 0x03u;
 constexpr std::uint8_t kUbxNavDopId = 0x04u;
 constexpr std::uint8_t kUbxNavPvtId = 0x07u;
 constexpr std::uint8_t kUbxNavSatId = 0x35u;
+constexpr std::uint8_t kUbxMonHwId = 0x09u;
+constexpr std::uint8_t kUbxMonHw2Id = 0x0Bu;
 constexpr std::uint8_t kUbxMonRfId = 0x38u;
 constexpr std::size_t kUbxAckPayloadSize = 2u;
 constexpr std::size_t kUbxRxmRtcmPayloadSize = 8u;
@@ -29,6 +31,9 @@ constexpr std::size_t kUbxNavDopPayloadSize = 18u;
 constexpr std::size_t kUbxNavPvtPayloadSize = 92u;
 constexpr std::size_t kUbxNavSatHeaderSize = 8u;
 constexpr std::size_t kUbxNavSatBlockSize = 12u;
+constexpr std::size_t kUbxMonHwClassicPayloadSize = 60u;
+constexpr std::size_t kUbxMonHwReservedPayloadSize = 56u;
+constexpr std::size_t kUbxMonHw2PayloadSize = 28u;
 constexpr std::size_t kUbxMonRfHeaderSize = 4u;
 constexpr std::size_t kUbxMonRfBlockSize = 24u;
 
@@ -43,6 +48,10 @@ constexpr std::uint8_t kCarrSolnValidBit = 1u << 1;
 constexpr std::uint8_t kCarrSolnMask = 0xC0u;
 constexpr std::uint8_t kRxmRtcmCrcFailedBit = 1u << 0;
 constexpr std::uint8_t kRxmRtcmMsgUsedMask = 0x06u;
+constexpr std::uint8_t kMonHwRtcCalibBit = 1u << 0;
+constexpr std::uint8_t kMonHwSafeBootBit = 1u << 1;
+constexpr std::uint8_t kMonHwJammingMask = 0x0Cu;
+constexpr std::uint8_t kMonHwXtalAbsentBit = 1u << 4;
 
 constexpr std::uint16_t kInvalidLlhBit = 1u << 0;
 constexpr std::uint32_t kNavSatQualityMask = 0x00000007u;
@@ -138,6 +147,62 @@ UbxMonRfJammingState DecodeMonRfJammingState(std::uint8_t flags)
     default:
       return UbxMonRfJammingState::kUnknown;
   }
+}
+
+std::optional<UbxAntennaStatus> DecodeAntennaStatus(const std::uint8_t raw_value)
+{
+  switch (raw_value)
+  {
+    case 0u:
+      return UbxAntennaStatus::kInit;
+    case 1u:
+      return UbxAntennaStatus::kDontKnow;
+    case 2u:
+      return UbxAntennaStatus::kOk;
+    case 3u:
+      return UbxAntennaStatus::kShort;
+    case 4u:
+      return UbxAntennaStatus::kOpen;
+    default:
+      return std::nullopt;
+  }
+}
+
+std::optional<UbxAntennaPower> DecodeAntennaPower(const std::uint8_t raw_value)
+{
+  switch (raw_value)
+  {
+    case 0u:
+      return UbxAntennaPower::kOff;
+    case 1u:
+      return UbxAntennaPower::kOn;
+    case 2u:
+      return UbxAntennaPower::kDontKnow;
+    default:
+      return std::nullopt;
+  }
+}
+
+UbxMonRfJammingState DecodeMonHwJammingState(const std::uint8_t flags)
+{
+  return DecodeMonRfJammingState(static_cast<std::uint8_t>((flags & kMonHwJammingMask) >> 2u));
+}
+
+universal_gnss::GnssDiagnosticEvent BuildReceiverDiagnostic(
+    const universal_gnss::GnssDiagnosticSeverity severity,
+    const std::string& code,
+    const std::string& message,
+    const std::optional<ProtocolTimestampNs>& timestamp_ns,
+    const std::string& source)
+{
+  universal_gnss::GnssDiagnosticEvent event;
+  event.severity = severity;
+  event.category = universal_gnss::GnssDiagnosticCategory::kReceiver;
+  event.code = code;
+  event.message = message;
+  event.timestamp_ns = timestamp_ns;
+  event.source = source;
+  return event;
 }
 
 UbxRxmRtcmMessageUse DecodeRxmRtcmMessageUse(const std::uint8_t flags)
@@ -416,6 +481,73 @@ ParserResult<UbxNavSatRecord> ParseUbxNavSat(const UbxFrame& frame)
   return ParserResult<UbxNavSatRecord>::RecordReady(std::move(record));
 }
 
+ParserResult<UbxMonHwRecord> ParseUbxMonHw(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxMonClass || frame.message_id != kUbxMonHwId)
+  {
+    return ParserResult<UbxMonHwRecord>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxMonHwRecord>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxMonHwClassicPayloadSize &&
+      frame.payload.size() != kUbxMonHwReservedPayloadSize)
+  {
+    return ParserResult<UbxMonHwRecord>::InvalidData();
+  }
+
+  UbxMonHwRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.payload_size = frame.payload.size();
+
+  if (frame.payload.size() == kUbxMonHwReservedPayloadSize)
+  {
+    record.layout = UbxMonHwLayout::kReserved;
+    return ParserResult<UbxMonHwRecord>::RecordReady(std::move(record));
+  }
+
+  record.layout = UbxMonHwLayout::kClassic;
+  record.noise_per_ms = ReadLeU2(frame.payload, 16u);
+  record.agc_count = ReadLeU2(frame.payload, 18u);
+  record.antenna_status = DecodeAntennaStatus(frame.payload[20u]);
+  record.antenna_power = DecodeAntennaPower(frame.payload[21u]);
+  record.flags = frame.payload[22u];
+  record.jamming_state = DecodeMonHwJammingState(*record.flags);
+  record.rtc_calibrated = (*record.flags & kMonHwRtcCalibBit) != 0u;
+  record.safe_boot = (*record.flags & kMonHwSafeBootBit) != 0u;
+  record.xtal_absent = (*record.flags & kMonHwXtalAbsentBit) != 0u;
+  record.cw_suppression = frame.payload[45u];
+  return ParserResult<UbxMonHwRecord>::RecordReady(std::move(record));
+}
+
+ParserResult<UbxMonHw2Record> ParseUbxMonHw2(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxMonClass || frame.message_id != kUbxMonHw2Id)
+  {
+    return ParserResult<UbxMonHw2Record>::Skipped();
+  }
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return ParserResult<UbxMonHw2Record>::InvalidData();
+  }
+  if (frame.payload.size() != kUbxMonHw2PayloadSize)
+  {
+    return ParserResult<UbxMonHw2Record>::InvalidData();
+  }
+
+  UbxMonHw2Record record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.ofs_i = static_cast<std::int8_t>(frame.payload[0u]);
+  record.mag_i = frame.payload[1u];
+  record.ofs_q = static_cast<std::int8_t>(frame.payload[2u]);
+  record.mag_q = frame.payload[3u];
+  record.cfg_source = frame.payload[4u];
+  record.low_level_configuration = ReadLeU4(frame.payload, 8u);
+  record.post_status = ReadLeU4(frame.payload, 20u);
+  return ParserResult<UbxMonHw2Record>::RecordReady(std::move(record));
+}
+
 ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame)
 {
   if (frame.class_id != kUbxMonClass || frame.message_id != kUbxMonRfId)
@@ -521,6 +653,112 @@ universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
       FormatRtcmTypeAndStationMessage(record) +
       " was parsed by the receiver but usage is unknown";
   return event;
+}
+
+universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(const UbxMonHwRecord& record)
+{
+  using universal_gnss::GnssDiagnosticEvents;
+  using universal_gnss::GnssDiagnosticSeverity;
+
+  GnssDiagnosticEvents events;
+  if (record.layout != UbxMonHwLayout::kClassic)
+  {
+    return events;
+  }
+
+  if (record.antenna_status.has_value())
+  {
+    switch (*record.antenna_status)
+    {
+      case UbxAntennaStatus::kOk:
+      {
+        const bool powered =
+            record.antenna_power.has_value() && *record.antenna_power == UbxAntennaPower::kOn;
+        if (powered)
+        {
+          events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                                   "ubx_mon_hw.antenna_ok",
+                                                   "u-blox antenna supervisor reports antenna OK and powered",
+                                                   record.timestamp_ns,
+                                                   "ubx.mon_hw"));
+        }
+        else
+        {
+          events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kInfo,
+                                                   "ubx_mon_hw.antenna_ok_power_unknown",
+                                                   "u-blox antenna supervisor reports antenna OK but antenna power is not confirmed on",
+                                                   record.timestamp_ns,
+                                                   "ubx.mon_hw"));
+        }
+        break;
+      }
+      case UbxAntennaStatus::kOpen:
+        events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                                 "ubx_mon_hw.antenna_open",
+                                                 "u-blox antenna supervisor reports an open antenna condition",
+                                                 record.timestamp_ns,
+                                                 "ubx.mon_hw"));
+        break;
+      case UbxAntennaStatus::kShort:
+        events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
+                                                 "ubx_mon_hw.antenna_short",
+                                                 "u-blox antenna supervisor reports an antenna short condition",
+                                                 record.timestamp_ns,
+                                                 "ubx.mon_hw"));
+        break;
+      case UbxAntennaStatus::kInit:
+      case UbxAntennaStatus::kDontKnow:
+        events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kUnknown,
+                                                 "ubx_mon_hw.antenna_unknown",
+                                                 "u-blox antenna supervisor state is not yet known",
+                                                 record.timestamp_ns,
+                                                 "ubx.mon_hw"));
+        break;
+    }
+  }
+
+  if (record.antenna_power.has_value() &&
+      *record.antenna_power == UbxAntennaPower::kOff &&
+      record.antenna_status.has_value() &&
+      *record.antenna_status != UbxAntennaStatus::kInit &&
+      *record.antenna_status != UbxAntennaStatus::kDontKnow)
+  {
+    events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                             "ubx_mon_hw.antenna_power_off",
+                                             "u-blox antenna supervisor reports antenna power off",
+                                             record.timestamp_ns,
+                                             "ubx.mon_hw"));
+  }
+
+  switch (record.jamming_state)
+  {
+    case UbxMonRfJammingState::kOk:
+      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                               "ubx_mon_hw.jamming_ok",
+                                               "u-blox hardware monitor reports no significant jamming",
+                                               record.timestamp_ns,
+                                               "ubx.mon_hw"));
+      break;
+    case UbxMonRfJammingState::kWarning:
+      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                               "ubx_mon_hw.jamming_warning",
+                                               "u-blox hardware monitor reports visible interference but fix remains available",
+                                               record.timestamp_ns,
+                                               "ubx.mon_hw"));
+      break;
+    case UbxMonRfJammingState::kCritical:
+      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
+                                               "ubx_mon_hw.jamming_critical",
+                                               "u-blox hardware monitor reports critical interference with no fix",
+                                               record.timestamp_ns,
+                                               "ubx.mon_hw"));
+      break;
+    case UbxMonRfJammingState::kUnknown:
+    default:
+      break;
+  }
+
+  return events;
 }
 
 universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record)
@@ -761,6 +999,37 @@ universal_gnss::GnssRuntimeState UbxNavSatToRuntimeState(const UbxNavSatRecord& 
                                      static_cast<float>(max_cn0));
   }
 
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UbxMonHwToRuntimeState(const UbxMonHwRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+
+  if (record.layout != UbxMonHwLayout::kClassic)
+  {
+    return state;
+  }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kJammingState);
+
+  if (record.jamming_state == UbxMonRfJammingState::kUnknown)
+  {
+    return state;
+  }
+
+  const bool issue_detected = record.jamming_state == UbxMonRfJammingState::kWarning ||
+                              record.jamming_state == UbxMonRfJammingState::kCritical;
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kInterferenceState,
+                                   state.interference_detected,
+                                   issue_detected);
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kJammingState,
+                                   state.jamming_detected,
+                                   issue_detected);
   return state;
 }
 

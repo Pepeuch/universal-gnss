@@ -135,6 +135,8 @@ Legend:
 | `NAV-DOP` | yes | yes | yes | yes | yes | yes | status | `hdop` / `vdop` only |
 | `NAV-SAT` | yes | yes | yes | yes | yes | yes | status | visible / used satellites and CN0 |
 | `NAV-STATUS` | yes | yes | yes | yes | yes | yes | status | fix-status and carrier-solution metadata |
+| `MON-HW` | yes | yes | yes | yes | yes | yes | status | classic hardware payload only; antenna + jamming diagnostics plus conservative RF booleans |
+| `MON-HW2` | yes | no | no | no | no | no | no | semantic-only extended hardware status; no portable threshold model yet |
 | `MON-RF` | yes | yes | yes | yes | yes | yes | status | portable interference / jamming only |
 | `RXM-RTCM` | yes | no | no | no | diag | no | no | receiver-side correction acceptance diagnostics only |
 | `ACK-ACK` | yes | no | no | no | no | no | no | config / transaction plumbing only |
