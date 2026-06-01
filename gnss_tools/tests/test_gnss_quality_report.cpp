@@ -35,6 +35,41 @@ void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8
   destination.insert(destination.end(), source.begin(), source.end());
 }
 
+void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, const bool bit)
+{
+  if ((bit_offset % 8u) == 0u)
+  {
+    payload.push_back(0u);
+  }
+
+  if (bit)
+  {
+    payload.back() |= static_cast<std::uint8_t>(1u << (7u - (bit_offset % 8u)));
+  }
+  ++bit_offset;
+}
+
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
+{
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t shift = bit_count - 1u - i;
+    AppendBit(payload, bit_offset, ((value >> shift) & 0x01u) != 0u);
+  }
+}
+
+void AppendSignedBits(std::vector<std::uint8_t>& payload,
+                      std::size_t& bit_offset,
+                      const std::int64_t value,
+                      const std::size_t bit_count)
+{
+  const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
+  AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
+}
+
 void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
@@ -99,6 +134,45 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
+                                             const std::int64_t ecef_x_0_1mm,
+                                             const std::int64_t ecef_y_0_1mm,
+                                             const std::int64_t ecef_z_0_1mm,
+                                             const std::uint16_t antenna_height_0_1mm)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1006u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 21u, 6u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendSignedBits(payload, bit_offset, ecef_x_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendSignedBits(payload, bit_offset, ecef_y_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendSignedBits(payload, bit_offset, ecef_z_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, antenna_height_0_1mm, 16u);
+
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      0x00u,
+      static_cast<std::uint8_t>(payload.size()),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
 std::vector<std::uint8_t> MakeNavStatusFixedPayload()
 {
   std::vector<std::uint8_t> payload(16u, 0u);
@@ -132,7 +206,7 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
   Append(bytes, BuildUbxFrame(0x01u, 0x03u, MakeNavStatusFixedPayload()));
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x04u, 0u, 42u, 1077u)));
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x01u, 0u, 42u, 1005u)));
-  Append(bytes, BuildRtcmFrame(1005u));
+  Append(bytes, BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u));
   Append(bytes, BuildRtcmFrame(1077u));
   return bytes;
 }
@@ -224,6 +298,11 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
                  report.rtcm.receiver_side.not_used_messages == 0u &&
                  report.rtcm.receiver_side.crc_failed_messages == 1u,
              "receiver-side RTCM diagnostics should distinguish accepted and CRC-failed messages");
+  ctx.Expect(report.rtcm.last_base_station_arp.has_value() &&
+                 report.rtcm.last_base_station_arp->message_type == 1006u &&
+                 report.rtcm.last_base_station_arp->station_id == 42u &&
+                 report.rtcm.last_base_station_arp->antenna_height_m.has_value(),
+             "quality report should retain the last decoded base station ARP record");
   ctx.Expect(report.summary.warning_count == 1u && report.summary.error_count == 0u,
              "receiver-side CRC failure should surface as one warning and no errors");
 
@@ -237,6 +316,15 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
   }
   ctx.Expect(saw_crc_failed,
              "quality report should preserve the RXM-RTCM CRC-failed diagnostic event");
+
+  const std::string text = universal_gnss_tools::FormatGnssQualityReportText(report, true);
+  const std::string json = universal_gnss_tools::FormatGnssQualityReportJson(report, true);
+  ctx.Expect(text.find("rtcm_base station_id=42") != std::string::npos &&
+                 text.find("antenna_height_m=0.4321") != std::string::npos,
+             "text quality report should include decoded base station ARP details");
+  ctx.Expect(json.find("\"base_station_arp\":{\"message_type\":1006") != std::string::npos &&
+                 json.find("\"station_id\":42") != std::string::npos,
+             "JSON quality report should include the decoded base station ARP object");
 }
 
 void TestUnicoreRfDiagnostics(TestContext& ctx)

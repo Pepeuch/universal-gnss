@@ -56,6 +56,14 @@ void AccumulateFrame(const RtcmFrame& frame,
   {
     ++result.summary.msm_counts_by_constellation[message_info.msm_constellation];
   }
+  if (frame.checksum_status == ChecksumStatus::kValid && message_info.is_station_arp)
+  {
+    const auto parsed_arp = universal_gnss_protocols::ParseRtcmBaseStationArp(frame);
+    if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
+    {
+      result.summary.last_base_station_arp = *parsed_arp.record;
+    }
+  }
 
   if (!include_frames)
   {
@@ -127,6 +135,45 @@ void AppendJsonFieldSeparator(std::ostringstream& output, bool& first_field)
     output << ',';
   }
   first_field = false;
+}
+
+void WriteBaseStationArpJson(
+    std::ostringstream& output,
+    const std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord>& arp_record)
+{
+  if (!arp_record.has_value())
+  {
+    output << "null";
+    return;
+  }
+
+  output << '{'
+         << "\"message_type\":" << arp_record->message_type << ','
+         << "\"station_id\":" << arp_record->station_id << ','
+         << "\"itrf_year\":" << static_cast<unsigned int>(arp_record->itrf_year) << ','
+         << "\"gps_indicator\":" << (arp_record->gps_indicator ? "true" : "false") << ','
+         << "\"glonass_indicator\":" << (arp_record->glonass_indicator ? "true" : "false") << ','
+         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false")
+         << ','
+         << "\"reference_station_indicator\":"
+         << (arp_record->reference_station_indicator ? "true" : "false") << ','
+         << "\"ecef_x_m\":" << arp_record->ecef_x_m << ','
+         << "\"ecef_y_m\":" << arp_record->ecef_y_m << ','
+         << "\"ecef_z_m\":" << arp_record->ecef_z_m << ','
+         << "\"single_receiver_oscillator_indicator\":"
+         << (arp_record->single_receiver_oscillator_indicator ? "true" : "false") << ','
+         << "\"quarter_cycle_indicator\":"
+         << static_cast<unsigned int>(arp_record->quarter_cycle_indicator) << ','
+         << "\"antenna_height_m\":";
+  if (arp_record->antenna_height_m.has_value())
+  {
+    output << *arp_record->antenna_height_m;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << '}';
 }
 
 }  // namespace
@@ -269,6 +316,25 @@ std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, const b
     output << '\n';
   }
 
+  output << "base_station_arp";
+  if (result.summary.last_base_station_arp.has_value())
+  {
+    output << " available"
+           << " station_id=" << result.summary.last_base_station_arp->station_id
+           << " ecef_x_m=" << result.summary.last_base_station_arp->ecef_x_m
+           << " ecef_y_m=" << result.summary.last_base_station_arp->ecef_y_m
+           << " ecef_z_m=" << result.summary.last_base_station_arp->ecef_z_m;
+    if (result.summary.last_base_station_arp->antenna_height_m.has_value())
+    {
+      output << " antenna_height_m=" << *result.summary.last_base_station_arp->antenna_height_m;
+    }
+  }
+  else
+  {
+    output << " unavailable";
+  }
+  output << '\n';
+
   return output.str();
 }
 
@@ -344,6 +410,10 @@ std::string FormatRtcmInspectionJson(const RtcmInspectionResult& result, const b
     output << '"' << DescribeRtcmConstellation(entry.first) << "\":" << entry.second;
   }
   output << '}';
+
+  AppendJsonFieldSeparator(output, first_summary_field);
+  output << "\"base_station_arp\":";
+  WriteBaseStationArpJson(output, result.summary.last_base_station_arp);
 
   output << "}}";
   return output.str();

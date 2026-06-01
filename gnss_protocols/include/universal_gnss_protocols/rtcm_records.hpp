@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 
 namespace universal_gnss_protocols
 {
@@ -24,6 +25,23 @@ struct RtcmMessageInfo
   bool is_glonass_bias{false};
   bool is_msm{false};
   RtcmConstellation msm_constellation{RtcmConstellation::kUnknown};
+};
+
+struct RtcmBaseStationArpRecord
+{
+  std::uint16_t message_type{0};
+  std::uint16_t station_id{0};
+  std::uint8_t itrf_year{0};
+  bool gps_indicator{false};
+  bool glonass_indicator{false};
+  bool galileo_indicator{false};
+  bool reference_station_indicator{false};
+  double ecef_x_m{0.0};
+  double ecef_y_m{0.0};
+  double ecef_z_m{0.0};
+  std::optional<double> antenna_height_m{};
+  bool single_receiver_oscillator_indicator{false};
+  std::uint8_t quarter_cycle_indicator{0};
 };
 
 }  // namespace universal_gnss_protocols

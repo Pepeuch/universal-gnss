@@ -6,10 +6,68 @@ namespace universal_gnss_protocols
 namespace
 {
 
+constexpr double kRtcmArpCoordinateScaleM = 0.0001;
+constexpr std::size_t kRtcm1005Bits = 153u;
+constexpr std::size_t kRtcm1006Bits = 169u;
+
 bool IsRtcmMsmVariant(const std::uint16_t message_type)
 {
   const std::uint16_t variant = static_cast<std::uint16_t>(message_type % 10u);
   return variant >= 1u && variant <= 7u;
+}
+
+std::optional<std::uint64_t> ReadRtcmUnsignedBits(const ByteVector& payload,
+                                                  const std::size_t bit_offset,
+                                                  const std::size_t bit_count)
+{
+  if (bit_count == 0u || bit_count > 64u)
+  {
+    return std::nullopt;
+  }
+
+  const std::size_t total_bits = payload.size() * 8u;
+  if (bit_offset + bit_count > total_bits)
+  {
+    return std::nullopt;
+  }
+
+  std::uint64_t value = 0u;
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t absolute_bit = bit_offset + i;
+    const std::size_t byte_index = absolute_bit / 8u;
+    const std::size_t bit_index = 7u - (absolute_bit % 8u);
+    const std::uint8_t bit =
+        static_cast<std::uint8_t>((payload[byte_index] >> bit_index) & 0x01u);
+    value = (value << 1u) | static_cast<std::uint64_t>(bit);
+  }
+
+  return value;
+}
+
+std::optional<std::int64_t> ReadRtcmSignedBits(const ByteVector& payload,
+                                               const std::size_t bit_offset,
+                                               const std::size_t bit_count)
+{
+  if (bit_count == 0u || bit_count >= 64u)
+  {
+    return std::nullopt;
+  }
+
+  const auto raw_value = ReadRtcmUnsignedBits(payload, bit_offset, bit_count);
+  if (!raw_value.has_value())
+  {
+    return std::nullopt;
+  }
+
+  std::uint64_t extended_value = *raw_value;
+  const std::uint64_t sign_mask = 1ULL << (bit_count - 1u);
+  if ((extended_value & sign_mask) != 0u)
+  {
+    extended_value |= (~0ULL << bit_count);
+  }
+
+  return static_cast<std::int64_t>(extended_value);
 }
 
 }  // namespace
@@ -94,6 +152,95 @@ ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame)
   info.msm_constellation = GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
   return ParserResult<RtcmMessageInfo>::RecordReady(info);
+}
+
+ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& frame)
+{
+  const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
+  if (!message_type.has_value() || !IsRtcmStationArpMessage(*message_type))
+  {
+    return ParserResult<RtcmBaseStationArpRecord>::InvalidData();
+  }
+
+  const std::size_t required_bits = *message_type == 1006u ? kRtcm1006Bits : kRtcm1005Bits;
+  if (frame.payload.size() * 8u < required_bits)
+  {
+    return ParserResult<RtcmBaseStationArpRecord>::InvalidData();
+  }
+
+  std::size_t bit_offset = 0u;
+  const auto read_u = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmUnsignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+  const auto read_s = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmSignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+
+  const auto parsed_message_type = read_u(12u);
+  const auto station_id = read_u(12u);
+  const auto itrf_year = read_u(6u);
+  const auto gps_indicator = read_u(1u);
+  const auto glonass_indicator = read_u(1u);
+  const auto reserved_a = read_u(1u);
+  const auto galileo_indicator = read_u(1u);
+  const auto reference_station_indicator = read_u(1u);
+  const auto ecef_x = read_s(38u);
+  const auto single_receiver_oscillator_indicator = read_u(1u);
+  const auto reserved_b = read_u(1u);
+  const auto ecef_y = read_s(38u);
+  const auto quarter_cycle_indicator = read_u(2u);
+  const auto ecef_z = read_s(38u);
+
+  (void)reserved_a;
+  (void)reserved_b;
+
+  if (!parsed_message_type.has_value() || !station_id.has_value() || !itrf_year.has_value() ||
+      !gps_indicator.has_value() || !glonass_indicator.has_value() ||
+      !galileo_indicator.has_value() || !reference_station_indicator.has_value() ||
+      !ecef_x.has_value() || !single_receiver_oscillator_indicator.has_value() ||
+      !ecef_y.has_value() || !quarter_cycle_indicator.has_value() || !ecef_z.has_value())
+  {
+    return ParserResult<RtcmBaseStationArpRecord>::InvalidData();
+  }
+
+  RtcmBaseStationArpRecord record;
+  record.message_type = static_cast<std::uint16_t>(*parsed_message_type);
+  record.station_id = static_cast<std::uint16_t>(*station_id);
+  record.itrf_year = static_cast<std::uint8_t>(*itrf_year);
+  record.gps_indicator = *gps_indicator != 0u;
+  record.glonass_indicator = *glonass_indicator != 0u;
+  record.galileo_indicator = *galileo_indicator != 0u;
+  record.reference_station_indicator = *reference_station_indicator != 0u;
+  record.ecef_x_m = static_cast<double>(*ecef_x) * kRtcmArpCoordinateScaleM;
+  record.ecef_y_m = static_cast<double>(*ecef_y) * kRtcmArpCoordinateScaleM;
+  record.ecef_z_m = static_cast<double>(*ecef_z) * kRtcmArpCoordinateScaleM;
+  record.single_receiver_oscillator_indicator =
+      *single_receiver_oscillator_indicator != 0u;
+  record.quarter_cycle_indicator = static_cast<std::uint8_t>(*quarter_cycle_indicator);
+
+  if (*message_type == 1006u)
+  {
+    const auto antenna_height = read_u(16u);
+    if (!antenna_height.has_value())
+    {
+      return ParserResult<RtcmBaseStationArpRecord>::InvalidData();
+    }
+
+    record.antenna_height_m =
+        static_cast<double>(*antenna_height) * kRtcmArpCoordinateScaleM;
+  }
+
+  return ParserResult<RtcmBaseStationArpRecord>::RecordReady(record);
 }
 
 }  // namespace universal_gnss_protocols

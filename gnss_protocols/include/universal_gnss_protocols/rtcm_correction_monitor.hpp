@@ -57,10 +57,14 @@ public:
       RtcmConstellation constellation) const;
 
   bool HasSeenBasePositionMessage() const;
+  bool HasBaseStationPosition() const;
   bool HasSeenBasePosition1005() const;
   bool HasSeenBasePosition1006() const;
   bool HasSeenGlonassBias1230() const;
   bool HasSeenAnyMsmMessage() const;
+
+  const std::optional<RtcmBaseStationArpRecord>& last_base_station_arp() const;
+  std::optional<ProtocolTimestampNs> LastBaseStationArpTimestampNs() const;
 
   bool HasRequiredMessageTypes(const std::vector<std::uint16_t>& message_types) const;
   bool HasRequiredCorrectionMessages(const RtcmCorrectionHealthOptions& options) const;
@@ -70,6 +74,8 @@ public:
                                                            ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceMsmConstellationNs(
       RtcmConstellation constellation,
+      ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs> AgeSinceBaseStationArpNs(
       ProtocolTimestampNs now_timestamp_ns) const;
 
   std::optional<double> TotalFrameRateHz(ProtocolTimestampNs window_end_timestamp_ns,
@@ -100,6 +106,8 @@ private:
   bool seen_base_position_1005_{false};
   bool seen_base_position_1006_{false};
   bool seen_glonass_bias_1230_{false};
+  std::optional<RtcmBaseStationArpRecord> last_base_station_arp_{};
+  std::optional<ProtocolTimestampNs> last_base_station_arp_timestamp_ns_{};
 
   void RecordValidMessage(const RtcmMessageInfo& info,
                           std::optional<ProtocolTimestampNs> timestamp_ns);

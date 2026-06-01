@@ -61,6 +61,20 @@ if(BUILD_TESTING)
   add_test(NAME gnss_protocols_test_rtcm_parser COMMAND gnss_protocols_test_rtcm_parser)
 
   add_executable(
+    gnss_protocols_test_rtcm_base_position
+    tests/test_rtcm_base_position.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_rtcm_base_position
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(
+    NAME gnss_protocols_test_rtcm_base_position
+    COMMAND gnss_protocols_test_rtcm_base_position
+  )
+
+  add_executable(
     gnss_protocols_test_rtcm_correction_monitor
     tests/test_rtcm_correction_monitor.cpp
   )

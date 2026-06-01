@@ -18,6 +18,7 @@
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
+#include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
@@ -45,6 +46,8 @@ using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::ProtocolType;
 using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmConstellation;
+using universal_gnss_protocols::RtcmFrame;
+using universal_gnss_protocols::RtcmFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_protocols::UbxFrame;
@@ -234,6 +237,45 @@ void AppendJsonFieldSeparator(std::ostringstream& output, bool& first_field)
   first_field = false;
 }
 
+void WriteBaseStationArpJson(
+    std::ostringstream& output,
+    const std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord>& arp_record)
+{
+  if (!arp_record.has_value())
+  {
+    output << "null";
+    return;
+  }
+
+  output << '{'
+         << "\"message_type\":" << arp_record->message_type << ','
+         << "\"station_id\":" << arp_record->station_id << ','
+         << "\"itrf_year\":" << static_cast<unsigned int>(arp_record->itrf_year) << ','
+         << "\"gps_indicator\":" << (arp_record->gps_indicator ? "true" : "false") << ','
+         << "\"glonass_indicator\":" << (arp_record->glonass_indicator ? "true" : "false") << ','
+         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false")
+         << ','
+         << "\"reference_station_indicator\":"
+         << (arp_record->reference_station_indicator ? "true" : "false") << ','
+         << "\"ecef_x_m\":" << arp_record->ecef_x_m << ','
+         << "\"ecef_y_m\":" << arp_record->ecef_y_m << ','
+         << "\"ecef_z_m\":" << arp_record->ecef_z_m << ','
+         << "\"single_receiver_oscillator_indicator\":"
+         << (arp_record->single_receiver_oscillator_indicator ? "true" : "false") << ','
+         << "\"quarter_cycle_indicator\":"
+         << static_cast<unsigned int>(arp_record->quarter_cycle_indicator) << ','
+         << "\"antenna_height_m\":";
+  if (arp_record->antenna_height_m.has_value())
+  {
+    output << *arp_record->antenna_height_m;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << '}';
+}
+
 std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
     const std::vector<std::uint8_t>& bytes,
     const std::size_t byte_offset)
@@ -252,6 +294,19 @@ std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
   }
 
   return parsed.record;
+}
+
+std::optional<RtcmFrame> ParseRtcmFrameAtOffset(const std::vector<std::uint8_t>& bytes,
+                                                const std::size_t byte_offset)
+{
+  RtcmFrameFramer framer;
+  const auto probe = ProbeAtOffset<RtcmFrameFramer, RtcmFrame>(framer, bytes, byte_offset);
+  if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
+  {
+    return std::nullopt;
+  }
+
+  return probe.record;
 }
 
 template <typename RecordT, typename ParseFn>
@@ -541,9 +596,9 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
   {
     if (item.protocol == ProtocolType::kRtcm3)
     {
-      if (item.checksum_status == ChecksumStatus::kValid)
+      if (const auto frame = ParseRtcmFrameAtOffset(bytes, item.byte_offset); frame.has_value())
       {
-        correction_monitor.ObserveMessage(item.rtcm_message_info);
+        correction_monitor.ObserveFrame(*frame);
       }
       else if (item.checksum_status == ChecksumStatus::kInvalid)
       {
@@ -625,6 +680,7 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
   report.rtcm.total_frames = static_cast<std::size_t>(correction_monitor.total_frames());
   report.rtcm.valid_frames = static_cast<std::size_t>(correction_monitor.valid_frames());
   report.rtcm.invalid_frames = static_cast<std::size_t>(correction_monitor.invalid_frames());
+  report.rtcm.last_base_station_arp = correction_monitor.last_base_station_arp();
   for (const auto& entry : correction_monitor.msm_constellation_activity())
   {
     report.rtcm.msm_constellation_counts[entry.first] =
@@ -697,6 +753,20 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
          << " receiver_not_used=" << report.rtcm.receiver_side.not_used_messages
          << " receiver_crc_failed=" << report.rtcm.receiver_side.crc_failed_messages
          << '\n';
+
+  if (report.rtcm.last_base_station_arp.has_value())
+  {
+    output << "rtcm_base"
+           << " station_id=" << report.rtcm.last_base_station_arp->station_id
+           << " ecef_x_m=" << report.rtcm.last_base_station_arp->ecef_x_m
+           << " ecef_y_m=" << report.rtcm.last_base_station_arp->ecef_y_m
+           << " ecef_z_m=" << report.rtcm.last_base_station_arp->ecef_z_m;
+    if (report.rtcm.last_base_station_arp->antenna_height_m.has_value())
+    {
+      output << " antenna_height_m=" << *report.rtcm.last_base_station_arp->antenna_height_m;
+    }
+    output << '\n';
+  }
 
   if (!report.rtcm.message_type_counts.empty())
   {
@@ -823,6 +893,10 @@ std::string FormatGnssQualityReportJson(const GnssQualityReport& report, const b
   write_rtcm_number("total_frames", report.rtcm.total_frames);
   write_rtcm_number("valid_frames", report.rtcm.valid_frames);
   write_rtcm_number("invalid_frames", report.rtcm.invalid_frames);
+
+  AppendJsonFieldSeparator(output, first_rtcm_field);
+  output << "\"base_station_arp\":";
+  WriteBaseStationArpJson(output, report.rtcm.last_base_station_arp);
 
   AppendJsonFieldSeparator(output, first_rtcm_field);
   output << "\"message_type_counts\":{";

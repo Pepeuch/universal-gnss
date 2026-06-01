@@ -105,6 +105,8 @@ void RtcmCorrectionMonitor::Reset()
   seen_base_position_1005_ = false;
   seen_base_position_1006_ = false;
   seen_glonass_bias_1230_ = false;
+  last_base_station_arp_.reset();
+  last_base_station_arp_timestamp_ns_.reset();
 }
 
 void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
@@ -124,6 +126,16 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   {
     ++invalid_frames_;
     return;
+  }
+
+  if (parsed_info.record->is_station_arp)
+  {
+    const auto parsed_arp = ParseRtcmBaseStationArp(frame);
+    if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
+    {
+      last_base_station_arp_ = *parsed_arp.record;
+      UpdateLatestTimestamp(frame.timestamp_ns, last_base_station_arp_timestamp_ns_);
+    }
   }
 
   RecordValidMessage(*parsed_info.record, frame.timestamp_ns);
@@ -208,6 +220,11 @@ bool RtcmCorrectionMonitor::HasSeenBasePositionMessage() const
   return seen_base_position_1005_ || seen_base_position_1006_;
 }
 
+bool RtcmCorrectionMonitor::HasBaseStationPosition() const
+{
+  return last_base_station_arp_.has_value();
+}
+
 bool RtcmCorrectionMonitor::HasSeenBasePosition1005() const
 {
   return seen_base_position_1005_;
@@ -226,6 +243,16 @@ bool RtcmCorrectionMonitor::HasSeenGlonassBias1230() const
 bool RtcmCorrectionMonitor::HasSeenAnyMsmMessage() const
 {
   return !msm_constellation_activity_.empty();
+}
+
+const std::optional<RtcmBaseStationArpRecord>& RtcmCorrectionMonitor::last_base_station_arp() const
+{
+  return last_base_station_arp_;
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastBaseStationArpTimestampNs() const
+{
+  return last_base_station_arp_timestamp_ns_;
 }
 
 bool RtcmCorrectionMonitor::HasRequiredMessageTypes(
@@ -291,6 +318,12 @@ std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceMsmConstellati
     const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(LastSeenMsmConstellationTimestampNs(constellation), now_timestamp_ns);
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceBaseStationArpNs(
+    const ProtocolTimestampNs now_timestamp_ns) const
+{
+  return ComputeAgeSince(last_base_station_arp_timestamp_ns_, now_timestamp_ns);
 }
 
 std::optional<double> RtcmCorrectionMonitor::TotalFrameRateHz(

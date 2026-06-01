@@ -216,6 +216,7 @@ Implemented behaviors:
 - CRC24Q validation
 - 12-bit message type extraction from validated frames
 - lightweight classification helpers
+- base-station ARP decode for `1005` / `1006`
 
 Current RTCM classifications:
 
@@ -237,14 +238,26 @@ Current RTCM monitor support:
 - per-message-type counts, last-seen timestamps, and simple windowed rates
 - MSM constellation counts, last-seen timestamps, and simple windowed rates
 - presence tracking for base-position messages `1005` / `1006`
+- latest decoded base-station ARP ECEF position from `1005` / `1006`
 - presence tracking for GLONASS bias message `1230`
 - portable correction-health summaries for later NTRIP / ROS 2 / GUI reuse
 
+Current RTCM semantic decode coverage:
+
+- `1005`: reference-station ARP ECEF position
+- `1006`: reference-station ARP ECEF position plus antenna height
+
+Current RTCM decode policy:
+
+- ECEF coordinates are exposed only as base-station metadata
+- no rover runtime-state mapping is inferred from `1005` / `1006`
+- no MSM signal / satellite extraction yet
+
 What RTCM does not do yet:
 
-- payload semantic decoding
+- full payload semantic decoding
 - MSM satellite / signal extraction
-- station metadata decode
+- broader station metadata decode beyond base-station ARP
 - correction-age estimation
 - runtime-state mapping
 - LoRa filtering

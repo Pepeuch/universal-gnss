@@ -42,6 +42,7 @@ struct GnssQualityReportRtcmSummary
   std::map<std::uint16_t, std::size_t> message_type_counts{};
   std::map<universal_gnss_protocols::RtcmConstellation, std::size_t> msm_constellation_counts{};
   GnssReceiverRtcmDiagnosticsSummary receiver_side{};
+  std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord> last_base_station_arp{};
 };
 
 struct GnssQualityReportSummary

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iosfwd>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ struct RtcmInspectionSummary
   std::map<std::uint16_t, std::size_t> counts_by_message_type{};
   std::map<universal_gnss_protocols::RtcmConstellation, std::size_t>
       msm_counts_by_constellation{};
+  std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord> last_base_station_arp{};
 };
 
 struct RtcmInspectionResult

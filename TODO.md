@@ -97,7 +97,7 @@ Implemented:
 To do:
 
 - [ ] Prepare LoRa filtering policy
-- [ ] basic 1005/1006 base position decode
+- [x] basic 1005/1006 base position decode
 - [ ] 1230 GLONASS bias decode
 - [ ] MSM signal/satellite summary
 - [ ] LoRa filtering policy

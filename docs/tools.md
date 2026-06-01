@@ -31,6 +31,8 @@ Typical uses:
 - inspect RTCM files captured from radios or NTRIP logs
 - count correction message types
 - confirm whether a stream contains MSM traffic
+- confirm whether a stream contains a decodable `1005` / `1006` base-station
+  ARP position
 
 Examples:
 
@@ -156,6 +158,7 @@ Current behavior:
 - reconstructs the final normalized runtime state
 - reports final fix / RTK state, accuracy, DOP, satellite counts, and CN0
 - reports RTCM frame counts and message-type activity
+- reports decoded RTCM `1005` / `1006` base-station ECEF position when present
 - reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
   present
 - emits either readable text output or compact JSON

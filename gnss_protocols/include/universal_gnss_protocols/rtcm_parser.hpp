@@ -24,4 +24,6 @@ RtcmConstellation GetRtcmMsmConstellation(std::uint16_t message_type);
 
 ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame);
 
+ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& frame);
+
 }  // namespace universal_gnss_protocols
