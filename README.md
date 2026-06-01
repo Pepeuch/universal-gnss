@@ -64,6 +64,8 @@ Current implemented layers:
   - `GnssStatus` message
   - `GnssRuntimeState -> GnssStatus` adapter
   - `GnssRuntimeState -> NavSatFix` adapter
+  - `GnssHealthSummary -> DiagnosticArray` adapter
+  - minimal `ReceiverNode` skeleton publishing `fix`, `status`, and `diagnostics`
 
 Planned layers:
 
@@ -95,8 +97,8 @@ flowchart TB
     ROS --> APP
 ```
 
-See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts and the
-current status / covariance policy.
+See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
+receiver-node skeleton surface, and the current status / covariance policy.
 
 See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
 runtime mapping coverage, and intentionally deferred protocol support.

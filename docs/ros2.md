@@ -28,15 +28,17 @@ Current responsibilities:
 - convert `universal_gnss::GnssRuntimeState` to `sensor_msgs/msg/NavSatFix`
 - convert portable `GnssHealthSummary` / `GnssDiagnosticEvent` values into
   `diagnostic_msgs`
+- provide a minimal `ReceiverNode` that composes the existing low-level
+  sessions, transports, runner, and adapters into standard ROS 2 publishers
 
 Current non-responsibilities:
 
 - parsing NMEA, RTCM, UBX, Unicore, or any vendor protocol
-- receiver detection or configuration
-- receiver-node lifecycle ownership
+- receiver-specific protocol logic
+- receiver configuration ownership
 - backend-specific fix inference
 - NTRIP transport ownership
-- application nodes or launch files
+- launch files or downstream integration packages
 
 ## Layer Split
 
@@ -84,6 +86,7 @@ flowchart TB
 - `NavSatFix` status mapping
 - covariance projection policy
 - diagnostic-array projection policy
+- ROS node-facing parameter and publisher policies
 
 ## Typed Runtime State Philosophy
 
@@ -311,12 +314,94 @@ That document records:
 The same audit document also records the exact local Kilted build/test method
 used for `universal_gnss_ros2` validation in the MowgliNext development image.
 
+## Receiver Node
+
+`universal_gnss_ros2` now includes a first minimal receiver node skeleton:
+
+- class: `universal_gnss_ros2::ReceiverNode`
+- executable: `receiver_node`
+
+The node is intentionally thin. It does not parse raw protocols itself. It
+composes the existing low-level path:
+
+```text
+ByteSource -> ReceiverSessionRunner -> ReceiverSession -> GnssRuntimeState
+           -> ROS adapters -> ROS 2 publishers
+```
+
+### Inputs
+
+Supported transport parameters:
+
+- `transport=serial`
+- `transport=tcp`
+
+Supported receiver families:
+
+- `receiver_family=auto`
+- `receiver_family=nmea`
+- `receiver_family=ublox`
+- `receiver_family=unicore`
+
+### Parameters
+
+- `receiver_family`
+- `transport`
+- `serial_device`
+- `serial_baud`
+- `tcp_host`
+- `tcp_port`
+- `publish_rate_hz`
+- `frame_id`
+
+### Outputs
+
+Topics published by the skeleton node:
+
+- `fix`
+  - type: `sensor_msgs/msg/NavSatFix`
+- `status`
+  - type: `universal_gnss_ros2/msg/GnssStatus`
+- `diagnostics`
+  - type: `diagnostic_msgs/msg/DiagnosticArray`
+
+### Example invocation
+
+Serial u-blox example:
+
+```bash
+ros2 run universal_gnss_ros2 receiver_node --ros-args \
+  -p receiver_family:=ublox \
+  -p transport:=serial \
+  -p serial_device:=/dev/ttyACM0 \
+  -p serial_baud:=921600 \
+  -p frame_id:=gnss
+```
+
+TCP generic-NMEA example:
+
+```bash
+ros2 run universal_gnss_ros2 receiver_node --ros-args \
+  -p receiver_family:=nmea \
+  -p transport:=tcp \
+  -p tcp_host:=127.0.0.1 \
+  -p tcp_port:=2101 \
+  -p frame_id:=gnss
+```
+
+### Current limits
+
+- no NTRIP ownership yet
+- no launch files yet
+- no `robot_localization` / Nav2 integration yet
+- no receiver command/config ownership yet
+- no retry/reconnect lifecycle node yet
+
 ## What Comes Next
 
 The next ROS 2 phase is still higher-level integration, not more low-level
 feature work:
 
-- receiver node
 - NTRIP node
 - replay node
 - launch/examples

@@ -106,7 +106,7 @@ Completed at the start of this phase:
 
 Next:
 
-- ROS2 receiver node
+- harden the first ROS2 receiver node skeleton
 - ROS2 NTRIP node
 - ROS2 replay node
 - launch examples

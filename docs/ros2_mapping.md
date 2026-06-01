@@ -14,8 +14,7 @@ Scope:
 
 Out of scope for this step:
 
-- receiver nodes
-- publishers / subscribers
+- receiver-node transport ownership beyond the current skeleton
 - launch files
 - `robot_localization` or Nav2 integration
 
@@ -26,6 +25,9 @@ The ROS 2 layer now has three mapping surfaces:
 - `GnssStatus` for the full normalized runtime view
 - `NavSatFix` for ecosystem compatibility
 - `DiagnosticArray` for portable health / diagnostic events
+
+Those mappings are now also exercised by the first minimal `ReceiverNode`, but
+the node is intentionally just a composition layer over the existing adapters.
 
 Current design intent:
 
@@ -185,9 +187,9 @@ Current policy:
 
 Still deferred:
 
-- `rclcpp` publishers
-- topic naming / node lifecycle
+- higher-level topic naming policy
 - higher-level receiver-node aggregation policy
+- richer transport / reconnection ownership
 
 ## Semantic-Only Inputs
 
@@ -218,11 +220,13 @@ Current compatibility assumptions:
   - `builtin_interfaces`
   - `sensor_msgs`
   - `diagnostic_msgs`
-- the adapters are pure conversion code
+- the mapping helpers remain pure conversion code
   - no `rclcpp`
   - no executors
   - no timers
   - no node APIs
+- the package now also contains a minimal `rclcpp` receiver node, but the
+  message adapters themselves still avoid distro-specific runtime APIs
 - the package uses standard `ament_cmake` and `rosidl_default_generators`
   patterns shared across modern ROS 2 distros
 - no distro-specific preprocessor branches are required in the mapping helpers
@@ -267,6 +271,9 @@ docker run --rm \
     mkdir -p /tmp/universal_gnss_ros2_ws/src
     ln -s /repo/gnss_ros2 /tmp/universal_gnss_ros2_ws/src/gnss_ros2
     ln -s /repo/gnss_core /tmp/universal_gnss_ros2_ws/src/gnss_core
+    ln -s /repo/gnss_protocols /tmp/universal_gnss_ros2_ws/src/gnss_protocols
+    ln -s /repo/gnss_transport /tmp/universal_gnss_ros2_ws/src/gnss_transport
+    ln -s /repo/gnss_driver /tmp/universal_gnss_ros2_ws/src/gnss_driver
     cd /tmp/universal_gnss_ros2_ws
     colcon build --packages-select universal_gnss_ros2 --event-handlers console_direct+
     colcon test --packages-select universal_gnss_ros2 --event-handlers console_direct+
@@ -283,7 +290,7 @@ Notes:
 Why this shape was used:
 
 - the Universal GNSS source tree stayed the only modified tree
-- `gnss_ros2` still needs sibling `gnss_core/include`
+- `gnss_ros2` now composes sibling low-level libraries during standalone ROS 2 package builds
 - the container workspace was throwaway and did not modify MowgliNext
 
 Current local result:
@@ -293,6 +300,7 @@ Current local result:
   - `test_gnss_status_adapter`
   - `test_navsat_fix_adapter`
   - `test_diagnostic_adapter`
+  - `test_receiver_node`
 
 Known follow-up compatibility gap:
 

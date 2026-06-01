@@ -61,7 +61,7 @@ Implemented:
 
 Primary focus:
 
-- [ ] ROS2 receiver node
+- [x] ROS2 receiver node skeleton
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [ ] ROS2 launch/examples
@@ -86,6 +86,7 @@ To do:
 - [x] Define portable diagnostics/event model
 - [x] Add severity levels
 - [x] Keep ROS2 diagnostics as adapter-only
+- [x] Add first ROS2 receiver-node skeleton
 
 ### Offline export and analysis
 
@@ -380,10 +381,11 @@ Implemented:
 - [x] runtime-to-ROS2 mapping audit
 - [x] ROS2 covariance projection from runtime accuracy fields
 - [x] Kilted local build/test validation
+- [x] ROS2 receiver node skeleton
 
 To do:
 
-- [ ] ROS2 receiver node
+- [ ] harden ROS2 receiver node
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [ ] launch examples

@@ -5,6 +5,7 @@ project(universal_gnss_ros2 LANGUAGES C CXX)
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
+find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -18,6 +19,31 @@ set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_core/in
 if(NOT EXISTS "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/universal_gnss/gnss_runtime_state.hpp")
   message(FATAL_ERROR "gnss_core headers were not found next to gnss_ros2")
 endif()
+
+set(_saved_build_testing "${BUILD_TESTING}")
+set(BUILD_TESTING OFF)
+if(NOT TARGET universal_gnss_core)
+  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../gnss_core" "${CMAKE_CURRENT_BINARY_DIR}/gnss_core")
+endif()
+if(NOT TARGET universal_gnss_protocols)
+  add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_protocols"
+    "${CMAKE_CURRENT_BINARY_DIR}/gnss_protocols"
+  )
+endif()
+if(NOT TARGET universal_gnss_transport)
+  add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_transport"
+    "${CMAKE_CURRENT_BINARY_DIR}/gnss_transport"
+  )
+endif()
+if(NOT TARGET universal_gnss_driver)
+  add_subdirectory(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_driver"
+    "${CMAKE_CURRENT_BINARY_DIR}/gnss_driver"
+  )
+endif()
+set(BUILD_TESTING "${_saved_build_testing}")
 
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
@@ -73,6 +99,38 @@ target_link_libraries(
   ${PROJECT_NAME}_gnss_status_adapter
 )
 
+add_library(${PROJECT_NAME}_receiver_node STATIC src/receiver_node.cpp)
+target_compile_features(${PROJECT_NAME}_receiver_node PUBLIC cxx_std_17)
+target_include_directories(
+  ${PROJECT_NAME}_receiver_node
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(
+  ${PROJECT_NAME}_receiver_node
+  diagnostic_msgs
+  rclcpp
+  sensor_msgs
+)
+target_link_libraries(
+  ${PROJECT_NAME}_receiver_node
+  ${PROJECT_NAME}_diagnostic_adapter
+  ${PROJECT_NAME}_gnss_status_adapter
+  ${PROJECT_NAME}_navsat_fix_adapter
+  universal_gnss_driver
+  universal_gnss_transport
+  "${cpp_typesupport_target}"
+)
+
+add_executable(receiver_node src/receiver_node_main.cpp)
+target_link_libraries(
+  receiver_node
+  ${PROJECT_NAME}_receiver_node
+)
+ament_target_dependencies(receiver_node rclcpp)
+
 install(
   TARGETS
     ${PROJECT_NAME}_gnss_status_adapter
@@ -82,6 +140,15 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+
+install(
+  TARGETS
+    ${PROJECT_NAME}_receiver_node
+    receiver_node
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
 install(DIRECTORY include/ DESTINATION include)
@@ -130,6 +197,24 @@ if(BUILD_TESTING)
         ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
     )
   endif()
+
+  ament_add_gtest(test_receiver_node tests/test_receiver_node.cpp)
+  if(TARGET test_receiver_node)
+    target_link_libraries(
+      test_receiver_node
+      ${PROJECT_NAME}_receiver_node
+    )
+    target_include_directories(
+      test_receiver_node
+      PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+    )
+    ament_target_dependencies(
+      test_receiver_node
+      rclcpp
+    )
+  endif()
 endif()
 
 ament_export_include_directories(include)
@@ -137,6 +222,7 @@ ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   builtin_interfaces
   diagnostic_msgs
+  rclcpp
   rosidl_default_runtime
   sensor_msgs
 )
