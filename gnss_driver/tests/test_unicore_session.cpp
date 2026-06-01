@@ -55,6 +55,10 @@ constexpr const char* kSatsInfoLine =
     "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
     "5,225,14,1,50,0,1*abcdef12\r\n";
 
+constexpr const char* kBestSatLine =
+    "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
+    "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000*12345678\r\n";
+
 constexpr const char* kJamStatusLine =
     "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
 
@@ -133,6 +137,26 @@ void TestSatsInfoUpdatesTrackedAndCn0(TestContext& ctx)
                  state.mean_cn0_db_hz == std::optional<float>(46.0f) &&
                  state.max_cn0_db_hz == std::optional<float>(50.0f),
              "SATSINFOA should update CN0 summaries");
+}
+
+void TestBestSatUpdatesTrackedAndUsedOnly(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedString(kBestSatLine, 5656);
+
+  const auto& state = session.current_state();
+  ctx.Expect(HasCapability(state, GnssCapability::kSatellitesTracked) &&
+                 HasCapability(state, GnssCapability::kSatellitesUsed) &&
+                 HasValueAvailable(state, GnssCapability::kSatellitesTracked) &&
+                 HasValueAvailable(state, GnssCapability::kSatellitesUsed) &&
+                 state.satellites_tracked == std::optional<std::uint16_t>(4u) &&
+                 state.satellites_used == std::optional<std::uint16_t>(2u),
+             "BESTSATA should update conservative tracked and used satellite counts");
+  ctx.Expect(!HasCapability(state, GnssCapability::kMeanCn0) &&
+                 !HasCapability(state, GnssCapability::kMaxCn0) &&
+                 !HasCapability(state, GnssCapability::kSatellitesVisible) &&
+                 state.fix_type == GnssFixType::kUnknown,
+             "BESTSATA should not invent CN0, visibility, or fix state");
 }
 
 void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
@@ -234,6 +258,7 @@ int main()
   TestPvtslnUpdatesHeading(ctx);
   TestRtkStatusUpdatesDualAntenna(ctx);
   TestSatsInfoUpdatesTrackedAndCn0(ctx);
+  TestBestSatUpdatesTrackedAndUsedOnly(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
   TestUnknownAndMalformedRecords(ctx);
   TestPartialChunksAcrossFeeds(ctx);

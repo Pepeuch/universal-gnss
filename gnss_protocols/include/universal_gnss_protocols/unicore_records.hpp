@@ -73,6 +73,16 @@ enum class UnicoreJammingState : std::uint8_t
   kStrongJamming = 3,
 };
 
+enum class UnicoreSatelliteConstellation : std::uint8_t
+{
+  kUnknown = 0,
+  kGps = 1,
+  kGlonass = 2,
+  kGalileo = 3,
+  kBeiDou = 4,
+  kQzss = 5,
+};
+
 struct UnicoreAsciiHeader
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};
@@ -141,6 +151,28 @@ struct UnicoreBestNavRecord
   std::optional<float> solution_age_s{};
   std::optional<std::uint16_t> tracked_satellites{};
   std::optional<std::uint16_t> used_satellites{};
+};
+
+constexpr std::size_t kMaxUnicoreBestSatEntries = 96u;
+
+struct UnicoreBestSatSatellite
+{
+  UnicoreSatelliteConstellation constellation{UnicoreSatelliteConstellation::kUnknown};
+  std::uint16_t satellite_id{0};
+  std::optional<std::int16_t> glonass_frequency_channel{};
+  bool status_good{false};
+  std::uint32_t signal_mask{0};
+  bool used_in_solution{false};
+  bool common_view{false};
+};
+
+struct UnicoreBestSatRecord
+{
+  UnicoreAsciiHeader header{};
+
+  std::uint16_t entry_count{0};
+  std::uint16_t parsed_satellite_count{0};
+  std::array<UnicoreBestSatSatellite, kMaxUnicoreBestSatEntries> satellites{};
 };
 
 struct UnicoreRtkStatusRecord

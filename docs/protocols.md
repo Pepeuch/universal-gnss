@@ -265,6 +265,7 @@ Implemented semantic messages:
 - `PVTSLNB`
 - `PVTSLNA`
 - `BESTNAVA`
+- `BESTSATA`
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
 - `SATSINFOA`
@@ -303,6 +304,8 @@ Current Unicore notes:
   fields
 - `RTKSTATUSA` complements position messages with RTK-mode and dual-antenna
   status
+- `BESTSATA` provides tracked-satellite counts and signal-mask-derived
+  used-satellite counts
 - `SATSINFOA` provides tracked-satellite counts and CN0 summaries
 - `JAMSTATUSA` and `FREQJAMSTATUSA` provide documented Unicore-side
   interference / jamming state
@@ -345,9 +348,9 @@ horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB
 vertical accuracy        NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 hdop                     NMEA GGA, NMEA GSA, UBX NAV-DOP, Unicore PVTSLNA, Unicore PVTSLNB
 vdop                     NMEA GSA, UBX NAV-DOP
-satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
+satellites_used          NMEA GGA, NMEA GSA, UBX NAV-PVT, UBX NAV-SAT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore BESTSATA
 satellites_visible       NMEA GSV, UBX NAV-SAT
-satellites_tracked       Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore SATSINFOA
+satellites_tracked       Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore BESTSATA, Unicore SATSINFOA
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
 heading                  UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB
 interference / jamming   UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA

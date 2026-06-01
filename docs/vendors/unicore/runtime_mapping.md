@@ -19,6 +19,7 @@ Current parsed Unicore messages:
 - `PVTSLNB`
 - `PVTSLNA`
 - `BESTNAVA`
+- `BESTSATA`
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
 - `SATSINFOA`
@@ -259,6 +260,34 @@ Current conservative rules:
 - no RTK, correction-age, or RF state is inferred from signal-strength data
 - no constellation-specific aggregate fields are projected into core yet
 
+## BESTSATA
+
+`BESTSATA` is the current Unicore ASCII satellite-usage summary message.
+
+Current semantic coverage:
+
+- documented tracked-satellite entry count
+- per-satellite constellation/system
+- per-satellite satellite identifier
+- GLONASS frequency-channel suffix when the documented `slot+channel` or
+  `slot-channel` form is present
+- documented status text
+- documented signal mask
+
+Current runtime mappings:
+
+- tracked entry count -> `satellites_tracked`
+- satellites with at least one documented solution-use signal-mask bit ->
+  `satellites_used`
+
+Current conservative rules:
+
+- `BESTSATA` does not currently claim `satellites_visible`
+- `BESTSATA` does not currently claim `mean_cn0` or `max_cn0`
+- no fix, RTK, accuracy, correction-age, heading, or RF state is inferred
+- the runtime helper treats the signal mask only as a documented per-satellite
+  “used in solution” indicator, not as a signal-quality metric
+
 ## JAMSTATUSA
 
 `JAMSTATUSA` is the current coarse Unicore jamming-status message.
@@ -405,6 +434,8 @@ Examples:
 - `BESTNAVB` can do the same from documented binary fields
 - `PVTSLNB` can do the same for position / heading where the documented binary
   heading status is `SOL_COMPUTED`
+- `BESTSATA` can refresh tracked- and used-satellite counts without claiming
+  CN0 or visibility
 - `RTKSTATUSA` can refresh RTK mode and dual-antenna state
 - `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
 - `JAMSTATUSA` and `FREQJAMSTATUSA` can refresh portable

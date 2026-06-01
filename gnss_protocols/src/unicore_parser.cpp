@@ -122,6 +122,28 @@ bool TryParseUnsignedAutoBase(std::string_view text, unsigned int& value)
   return true;
 }
 
+bool TryParseUnsignedBase(std::string_view text, const int base, unsigned int& value)
+{
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return false;
+  }
+
+  std::string buffer(text);
+  char* end = nullptr;
+  errno = 0;
+  const unsigned long parsed = std::strtoul(buffer.c_str(), &end, base);
+  if (errno != 0 || end == nullptr || *end != '\0' ||
+      parsed > std::numeric_limits<unsigned int>::max())
+  {
+    return false;
+  }
+
+  value = static_cast<unsigned int>(parsed);
+  return true;
+}
+
 bool TryParseSigned(std::string_view text, int& value)
 {
   text = TrimField(text);
@@ -518,6 +540,99 @@ UnicoreJammingState ParseJammingState(const unsigned int raw_value)
     default:
       return UnicoreJammingState::kUnknown;
   }
+}
+
+UnicoreSatelliteConstellation ParseBestSatConstellation(std::string_view text)
+{
+  text = TrimField(text);
+  if (text == "GPS")
+  {
+    return UnicoreSatelliteConstellation::kGps;
+  }
+  if (text == "GLONASS")
+  {
+    return UnicoreSatelliteConstellation::kGlonass;
+  }
+  if (text == "GALILEO")
+  {
+    return UnicoreSatelliteConstellation::kGalileo;
+  }
+  if (text == "BEIDOU" || text == "BDS")
+  {
+    return UnicoreSatelliteConstellation::kBeiDou;
+  }
+  if (text == "QZSS")
+  {
+    return UnicoreSatelliteConstellation::kQzss;
+  }
+  return UnicoreSatelliteConstellation::kUnknown;
+}
+
+std::uint32_t BestSatUsedSignalMask(const UnicoreSatelliteConstellation constellation)
+{
+  switch (constellation)
+  {
+    case UnicoreSatelliteConstellation::kGps:
+    case UnicoreSatelliteConstellation::kGalileo:
+    case UnicoreSatelliteConstellation::kQzss:
+      return 0x0Fu;
+    case UnicoreSatelliteConstellation::kGlonass:
+    case UnicoreSatelliteConstellation::kBeiDou:
+      return 0x07u;
+    case UnicoreSatelliteConstellation::kUnknown:
+    default:
+      return 0x00u;
+  }
+}
+
+bool ParseBestSatSatelliteId(std::string_view text,
+                             std::uint16_t& satellite_id,
+                             std::optional<std::int16_t>& glonass_frequency_channel)
+{
+  satellite_id = 0u;
+  glonass_frequency_channel.reset();
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return false;
+  }
+
+  const std::size_t suffix_offset = text.find_first_of("+-", 1u);
+  const std::string_view satellite_text =
+      suffix_offset == std::string_view::npos ? text : text.substr(0u, suffix_offset);
+
+  unsigned int parsed_satellite_id = 0u;
+  if (!TryParseUnsigned(satellite_text, parsed_satellite_id) ||
+      parsed_satellite_id > std::numeric_limits<std::uint16_t>::max())
+  {
+    return false;
+  }
+
+  satellite_id = static_cast<std::uint16_t>(parsed_satellite_id);
+  if (suffix_offset == std::string_view::npos)
+  {
+    return true;
+  }
+
+  unsigned int parsed_channel = 0u;
+  if (suffix_offset + 1u >= text.size() ||
+      !TryParseUnsigned(text.substr(suffix_offset + 1u), parsed_channel) ||
+      parsed_channel > static_cast<unsigned int>(std::numeric_limits<std::int16_t>::max()))
+  {
+    return false;
+  }
+
+  const int signed_channel =
+      text[suffix_offset] == '-' ? -static_cast<int>(parsed_channel)
+                                 : static_cast<int>(parsed_channel);
+  if (signed_channel < static_cast<int>(std::numeric_limits<std::int16_t>::min()) ||
+      signed_channel > static_cast<int>(std::numeric_limits<std::int16_t>::max()))
+  {
+    return false;
+  }
+
+  glonass_frequency_channel = static_cast<std::int16_t>(signed_channel);
+  return true;
 }
 
 UnicoreSolutionStatus ParseBinarySolutionStatus(const std::uint32_t raw_value)
@@ -1212,6 +1327,77 @@ ParserResult<UnicoreRtcmStatusRecord> ParseUnicoreRtcmStatus(const UnicoreFrame&
   return ParserResult<UnicoreRtcmStatusRecord>::RecordReady(record);
 }
 
+ParserResult<UnicoreBestSatRecord> ParseUnicoreBestSat(const UnicoreFrame& frame)
+{
+  const auto parsed = ParseAsciiHeader<16u>(frame, "BESTSATA");
+  if (!parsed.has_value())
+  {
+    return InvalidResult<UnicoreBestSatRecord>();
+  }
+
+  std::string_view remaining = parsed->body;
+  std::string_view field{};
+  unsigned int entry_count = 0u;
+  if (!ConsumeCsvField(remaining, field) || !TryParseUnsigned(field, entry_count) ||
+      entry_count > kMaxUnicoreBestSatEntries)
+  {
+    return InvalidResult<UnicoreBestSatRecord>();
+  }
+
+  UnicoreBestSatRecord record;
+  record.header = parsed->header;
+  record.entry_count = static_cast<std::uint16_t>(entry_count);
+
+  for (unsigned int satellite_index = 0u; satellite_index < entry_count; ++satellite_index)
+  {
+    UnicoreBestSatSatellite satellite;
+
+    if (!ConsumeCsvField(remaining, field))
+    {
+      return InvalidResult<UnicoreBestSatRecord>();
+    }
+    satellite.constellation = ParseBestSatConstellation(field);
+
+    if (!ConsumeCsvField(remaining, field) ||
+        !ParseBestSatSatelliteId(
+            field, satellite.satellite_id, satellite.glonass_frequency_channel))
+    {
+      return InvalidResult<UnicoreBestSatRecord>();
+    }
+
+    if (!ConsumeCsvField(remaining, field))
+    {
+      return InvalidResult<UnicoreBestSatRecord>();
+    }
+    const std::string_view status_text = TrimField(field);
+    if (status_text.empty())
+    {
+      return InvalidResult<UnicoreBestSatRecord>();
+    }
+    satellite.status_good = (status_text == "GOOD");
+
+    unsigned int signal_mask = 0u;
+    if (!ConsumeCsvField(remaining, field) || !TryParseUnsignedBase(field, 16, signal_mask))
+    {
+      return InvalidResult<UnicoreBestSatRecord>();
+    }
+
+    satellite.signal_mask = static_cast<std::uint32_t>(signal_mask);
+    satellite.used_in_solution =
+        (satellite.signal_mask & BestSatUsedSignalMask(satellite.constellation)) != 0u;
+    satellite.common_view = (satellite.signal_mask & 0x10u) != 0u;
+
+    record.satellites[record.parsed_satellite_count++] = satellite;
+  }
+
+  if (!remaining.empty())
+  {
+    return InvalidResult<UnicoreBestSatRecord>();
+  }
+
+  return ParserResult<UnicoreBestSatRecord>::RecordReady(record);
+}
+
 ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& frame)
 {
   const auto parsed = ParseAsciiHeader<16u>(frame, "SATSINFOA");
@@ -1741,6 +1927,27 @@ universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UnicoreBestSatToRuntimeState(const UnicoreBestSatRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+
+  std::uint16_t used_satellite_count = 0u;
+  for (std::size_t satellite_index = 0u;
+       satellite_index < static_cast<std::size_t>(record.parsed_satellite_count);
+       ++satellite_index)
+  {
+    if (record.satellites[satellite_index].used_in_solution)
+    {
+      ++used_satellite_count;
+    }
+  }
+
+  SetTrackedAndUsedSatellites(state, record.entry_count, used_satellite_count);
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }

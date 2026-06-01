@@ -12,6 +12,7 @@ namespace
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
+using universal_gnss_protocols::ParseUnicoreBestSat;
 using universal_gnss_protocols::ParseUnicoreBestNav;
 using universal_gnss_protocols::ParseUnicoreFreqJamStatus;
 using universal_gnss_protocols::ParseUnicoreHwStatus;
@@ -264,6 +265,64 @@ void TestSatsInfoParsingAndRuntimeMapping(TestContext& ctx)
              "SATSINFOA should not invent RTK, correction, or RF capabilities");
 }
 
+void TestBestSatParsingAndRuntimeMapping(TestContext& ctx)
+{
+  const std::string line =
+      "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
+      "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000*12345678\r\n";
+
+  const auto result = ParseUnicoreBestSat(BuildAsciiFrame(line, 5656));
+  ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+             "valid BESTSATA line should parse successfully");
+  if (!result.record.has_value())
+  {
+    return;
+  }
+
+  const auto& record = *result.record;
+  ctx.Expect(record.header.timestamp_ns == 5656 &&
+                 record.entry_count == 4u &&
+                 record.parsed_satellite_count == 4u,
+             "BESTSATA should preserve timestamp and parse the documented entry count");
+  ctx.Expect(record.satellites[0].constellation ==
+                 universal_gnss_protocols::UnicoreSatelliteConstellation::kGps &&
+                 record.satellites[0].satellite_id == 2u &&
+                 record.satellites[0].signal_mask == 0x13u &&
+                 record.satellites[0].used_in_solution &&
+                 record.satellites[0].common_view,
+             "BESTSATA should decode documented GPS identity and signal-mask usage flags");
+  ctx.Expect(record.satellites[1].constellation ==
+                 universal_gnss_protocols::UnicoreSatelliteConstellation::kGlonass &&
+                 record.satellites[1].satellite_id == 2u &&
+                 record.satellites[1].glonass_frequency_channel == std::optional<std::int16_t>(-4) &&
+                 !record.satellites[1].used_in_solution &&
+                 record.satellites[1].common_view,
+             "BESTSATA should preserve the documented GLONASS slot and frequency-channel suffix");
+  ctx.Expect(record.satellites[2].constellation ==
+                 universal_gnss_protocols::UnicoreSatelliteConstellation::kGalileo &&
+                 record.satellites[2].used_in_solution &&
+                 !record.satellites[2].common_view &&
+                 record.satellites[3].constellation ==
+                     universal_gnss_protocols::UnicoreSatelliteConstellation::kBeiDou &&
+                 !record.satellites[3].used_in_solution,
+             "BESTSATA should decode documented constellation names and conservative used flags");
+
+  const auto state = universal_gnss_protocols::UnicoreBestSatToRuntimeState(record);
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kSatellitesTracked) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kSatellitesUsed),
+             "BESTSATA runtime mapping should advertise only tracked and used satellites");
+  ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kSatellitesTracked) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kSatellitesUsed) &&
+                 state.satellites_tracked == 4u &&
+                 state.satellites_used == 2u,
+             "BESTSATA runtime mapping should expose conservative tracked and used counts");
+  ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kSatellitesVisible) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kMeanCn0) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kMaxCn0) &&
+                 !universal_gnss::HasCapability(state, GnssCapability::kRtkMode),
+             "BESTSATA should not invent visibility, CN0, or RTK capabilities");
+}
+
 void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
 {
   const std::string jam_line =
@@ -404,6 +463,13 @@ void TestMalformedAndMissingFields(TestContext& ctx)
   ctx.Expect(malformed_satsinfo_result.status == ParserStatus::kInvalidData,
              "SATSINFOA should reject malformed essentials like a zero frequency count");
 
+  const std::string malformed_bestsat =
+      "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
+      "1,GPS,2,GOOD,zzzzzzzz*12345678\r\n";
+  const auto malformed_bestsat_result = ParseUnicoreBestSat(BuildAsciiFrame(malformed_bestsat));
+  ctx.Expect(malformed_bestsat_result.status == ParserStatus::kInvalidData,
+             "BESTSATA should reject malformed hexadecimal signal masks");
+
   const std::string empty_satsinfo =
       "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;0,2,0,0,0,63*12345678\r\n";
   const auto empty_satsinfo_result = ParseUnicoreSatsInfo(BuildAsciiFrame(empty_satsinfo, 6666));
@@ -444,6 +510,7 @@ int main()
   TestBestNavParsingAndMapping(ctx);
   TestRtkStatusAndRtcmStatusParsing(ctx);
   TestSatsInfoParsingAndRuntimeMapping(ctx);
+  TestBestSatParsingAndRuntimeMapping(ctx);
   TestRfAndHardwareParsingAndMapping(ctx);
   TestMalformedAndMissingFields(ctx);
 

@@ -56,8 +56,9 @@ void ParseRecordOnly(const UnicoreFrame& frame,
 bool IsSupportedRecordName(const std::string_view name)
 {
   return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" ||
-         name == "RTCMSTATUSA" || name == "SATSINFOA" || name == "JAMSTATUSA" ||
-         name == "FREQJAMSTATUSA" || name == "HWSTATUSA" || name == "AGCA";
+         name == "RTCMSTATUSA" || name == "BESTSATA" || name == "SATSINFOA" ||
+         name == "JAMSTATUSA" || name == "FREQJAMSTATUSA" || name == "HWSTATUSA" ||
+         name == "AGCA";
 }
 
 }  // namespace
@@ -218,6 +219,17 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
         frame,
         universal_gnss_protocols::ParseUnicoreSatsInfo,
         universal_gnss_protocols::UnicoreSatsInfoToRuntimeState,
+        aggregator_,
+        metrics_);
+    return;
+  }
+
+  if (frame.message_name == "BESTSATA")
+  {
+    ParseAndMergeRecord(
+        frame,
+        universal_gnss_protocols::ParseUnicoreBestSat,
+        universal_gnss_protocols::UnicoreBestSatToRuntimeState,
         aggregator_,
         metrics_);
     return;

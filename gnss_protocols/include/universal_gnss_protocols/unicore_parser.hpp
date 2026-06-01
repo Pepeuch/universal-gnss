@@ -18,6 +18,8 @@ ParserResult<UnicoreRtkStatusRecord> ParseUnicoreRtkStatus(const UnicoreFrame& f
 
 ParserResult<UnicoreRtcmStatusRecord> ParseUnicoreRtcmStatus(const UnicoreFrame& frame);
 
+ParserResult<UnicoreBestSatRecord> ParseUnicoreBestSat(const UnicoreFrame& frame);
+
 ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& frame);
 
 ParserResult<UnicoreJamStatusRecord> ParseUnicoreJamStatus(const UnicoreFrame& frame);
@@ -47,6 +49,9 @@ universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
 
 universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
     const UnicoreRtcmStatusRecord& record);
+
+universal_gnss::GnssRuntimeState UnicoreBestSatToRuntimeState(
+    const UnicoreBestSatRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(
     const UnicoreSatsInfoRecord& record);

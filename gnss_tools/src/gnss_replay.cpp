@@ -500,6 +500,11 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
   {
     return universal_gnss_protocols::UnicoreRtcmStatusToRuntimeState(*rtcmstatus.record);
   }
+  if (const auto bestsat = universal_gnss_protocols::ParseUnicoreBestSat(frame);
+      bestsat.status == ParserStatus::kRecordReady && bestsat.record.has_value())
+  {
+    return universal_gnss_protocols::UnicoreBestSatToRuntimeState(*bestsat.record);
+  }
   if (const auto satsinfo = universal_gnss_protocols::ParseUnicoreSatsInfo(frame);
       satsinfo.status == ParserStatus::kRecordReady && satsinfo.record.has_value())
   {
