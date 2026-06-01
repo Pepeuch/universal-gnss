@@ -42,8 +42,8 @@ Binary `N4` framing now exists separately from the ASCII parser:
   CRC field
 
 That binary path now includes two semantic decoders: `BESTNAVB` and
-`PVTSLNB`. Even so, ASCII remains the primary Unicore runtime source today
-because binary routing through `UnicoreSession` and replay is still deferred.
+`PVTSLNB`. Those two binary messages now flow through the same portable live
+and offline runtime path as the current ASCII position messages.
 
 ## Data Flow
 
@@ -73,6 +73,7 @@ The first portable consumer of these mappings now exists in
 `gnss_driver::UnicoreSession`:
 
 - frame Unicore ASCII input
+- frame Unicore binary `N4` input
 - parse supported messages
 - turn them into partial `GnssRuntimeState` updates
 - merge them through `GnssRuntimeAggregator`
@@ -151,7 +152,8 @@ Current non-mappings:
 - documented velocity, track, latency, and signal-mask fields are intentionally
   ignored in this first binary step
 - no heading or azimuth is inferred from `BESTNAVB`
-- `BESTNAVB` is not yet routed through `UnicoreSession` or replay
+- `BESTNAVB` is routed through `UnicoreSession`, `gnss_replay`,
+  `gnss_quality_report`, and JSONL export
 
 ## PVTSLNB
 
@@ -179,7 +181,8 @@ Current non-mappings:
 - documented velocity, pitch, baseline length, tracked-PRN list, and other
   DOP fields are intentionally left out of the portable runtime in this step
 - no RF, jamming, or CN0 state is inferred from `PVTSLNB`
-- `PVTSLNB` is not yet routed through `UnicoreSession` or replay
+- `PVTSLNB` is routed through `UnicoreSession`, `gnss_replay`,
+  `gnss_quality_report`, and JSONL export
 
 ## RTKSTATUSA
 
