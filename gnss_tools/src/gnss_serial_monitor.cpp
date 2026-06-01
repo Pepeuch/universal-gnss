@@ -37,12 +37,13 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " --port <path> --baud <int> [--vendor auto|ublox|unicore]"
+      << " --port <path> --baud <int> [--vendor auto|ublox|unicore|nmea]"
       << " [--chunk-size <bytes>] [--max-bytes <bytes>] [--summary] [--json]\n"
       << "Examples:\n"
       << "  " << program_name << " --port /dev/ttyACM0 --baud 921600 --vendor auto\n"
       << "  " << program_name << " --port /dev/ttyUSB0 --baud 115200 --vendor ublox\n"
-      << "  " << program_name << " --port /dev/ttyUSB0 --baud 921600 --vendor unicore\n";
+      << "  " << program_name << " --port /dev/ttyUSB0 --baud 921600 --vendor unicore\n"
+      << "  " << program_name << " --port /dev/ttyUSB0 --baud 115200 --vendor nmea\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::size_t& value)
@@ -88,6 +89,10 @@ std::optional<ReceiverSessionKind> ParseVendor(const std::string& text)
   if (text == "unicore")
   {
     return ReceiverSessionKind::kUnicore;
+  }
+  if (text == "nmea")
+  {
+    return ReceiverSessionKind::kNmea;
   }
   return std::nullopt;
 }
@@ -247,7 +252,7 @@ int main(int argc, char** argv)
       const auto vendor = ParseVendor(require_value("--vendor"));
       if (!vendor.has_value())
       {
-        std::cerr << "error: vendor must be auto, ublox, or unicore\n";
+        std::cerr << "error: vendor must be auto, ublox, unicore, or nmea\n";
         return EXIT_FAILURE;
       }
       options.vendor = *vendor;

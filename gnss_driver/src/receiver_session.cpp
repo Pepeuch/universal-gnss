@@ -89,7 +89,10 @@ bool IsSupportedUnicoreBinaryCandidate(const UnicoreBinaryFrame& frame)
 }  // namespace
 
 ReceiverSession::ReceiverSession(ReceiverSessionConfig config)
-    : config_(config), ublox_session_(config.ublox), unicore_session_(config.unicore)
+    : config_(config),
+      nmea_session_(config.nmea),
+      ublox_session_(config.ublox),
+      unicore_session_(config.unicore)
 {
   InitializeSelectionFromConfig();
 }
@@ -156,6 +159,10 @@ void ReceiverSession::Finalize()
   {
     unicore_session_.Finalize();
   }
+  else if (metrics_.selected_session_kind == ReceiverSessionKind::kNmea)
+  {
+    nmea_session_.Finalize();
+  }
   else
   {
     pending_auto_detect_bytes_.clear();
@@ -166,6 +173,7 @@ void ReceiverSession::Finalize()
 
 void ReceiverSession::Reset()
 {
+  nmea_session_.Reset();
   ublox_session_.Reset();
   unicore_session_.Reset();
   pending_auto_detect_bytes_.clear();
@@ -182,6 +190,10 @@ const universal_gnss::GnssRuntimeState& ReceiverSession::current_state() const
   if (metrics_.selected_session_kind == ReceiverSessionKind::kUnicore)
   {
     return unicore_session_.current_state();
+  }
+  if (metrics_.selected_session_kind == ReceiverSessionKind::kNmea)
+  {
+    return nmea_session_.current_state();
   }
   return empty_state_;
 }
@@ -206,10 +218,16 @@ const UnicoreSessionMetrics& ReceiverSession::unicore_metrics() const
   return unicore_session_.metrics();
 }
 
+const NmeaSessionMetrics& ReceiverSession::nmea_metrics() const
+{
+  return nmea_session_.metrics();
+}
+
 void ReceiverSession::InitializeSelectionFromConfig()
 {
   if (config_.kind == ReceiverSessionKind::kUblox ||
-      config_.kind == ReceiverSessionKind::kUnicore)
+      config_.kind == ReceiverSessionKind::kUnicore ||
+      config_.kind == ReceiverSessionKind::kNmea)
   {
     metrics_.selected_session_kind = config_.kind;
     metrics_.selection_locked = true;
@@ -234,6 +252,12 @@ void ReceiverSession::RouteToSelectedSession(const std::uint8_t* data,
   if (metrics_.selected_session_kind == ReceiverSessionKind::kUnicore)
   {
     unicore_session_.FeedBytes(data, size, timestamp_ns);
+    return;
+  }
+
+  if (metrics_.selected_session_kind == ReceiverSessionKind::kNmea)
+  {
+    nmea_session_.FeedBytes(data, size, timestamp_ns);
   }
 }
 
@@ -330,6 +354,12 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
       unicore_candidate.has_value() || unicore_binary_candidate.has_value();
   if (ubx_candidate.has_value() == has_unicore_candidate)
   {
+    if (config_.allow_generic_nmea_auto_detect &&
+        earliest_detection.protocol == DetectedStreamProtocol::kNmea &&
+        !ubx_candidate.has_value() && !has_unicore_candidate)
+    {
+      SelectSession(ReceiverSessionKind::kNmea);
+    }
     return;
   }
 
@@ -339,7 +369,17 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
     return;
   }
 
-  SelectSession(ReceiverSessionKind::kUnicore);
+  if (has_unicore_candidate)
+  {
+    SelectSession(ReceiverSessionKind::kUnicore);
+    return;
+  }
+
+  if (config_.allow_generic_nmea_auto_detect &&
+      earliest_detection.protocol == DetectedStreamProtocol::kNmea)
+  {
+    SelectSession(ReceiverSessionKind::kNmea);
+  }
 }
 
 void ReceiverSession::SelectSession(const ReceiverSessionKind kind)
@@ -378,6 +418,15 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     return;
   }
 
+  if (metrics_.selected_session_kind == ReceiverSessionKind::kNmea)
+  {
+    const auto& child = nmea_session_.metrics();
+    metrics_.runtime_updates = child.runtime_updates;
+    metrics_.malformed_records = child.malformed_sentences + child.records_rejected;
+    metrics_.unknown_records = child.unknown_sentences;
+    return;
+  }
+
   metrics_.runtime_updates = 0u;
   metrics_.malformed_records = 0u;
   metrics_.unknown_records = 0u;
@@ -393,6 +442,8 @@ const char* ToString(const ReceiverSessionKind kind)
       return "ublox";
     case ReceiverSessionKind::kUnicore:
       return "unicore";
+    case ReceiverSessionKind::kNmea:
+      return "nmea";
     default:
       return "unknown";
   }

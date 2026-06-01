@@ -91,15 +91,19 @@ Current export / adapter notes:
 
 ## Session Notes
 
-- `UbloxSession` is the current live NMEA carrier.
+- `NmeaSession` is now the generic live NMEA carrier.
+  - `GGA`, `RMC`, `GSA`, `GSV`, and `GST` flow through it as runtime updates.
+  - `VTG` and `ZDA` are parsed there as semantic-only records.
+- `UbloxSession` still accepts `NMEA` as a mixed-stream companion path.
   - `GGA`, `RMC`, `GSA`, `GSV`, and `GST` flow through it.
-  - `VTG` and `ZDA` do not, because they are semantic-only today.
 - `ReceiverSession` auto-detect is still conservative.
   - UBX selects u-blox
   - Unicore ASCII selects Unicore
   - Unicore binary `N4` now selects Unicore
   - RTCM-only stays undecided
-  - NMEA-only still stays undecided; there is no generic NMEA vendor session yet
+  - NMEA-only stays undecided by default
+  - generic NMEA fallback exists only when `allow_generic_nmea_auto_detect`
+    is explicitly enabled
 
 ## Coverage Matrix
 
@@ -120,8 +124,8 @@ Legend:
 | `GSA` | yes | yes | yes | yes | yes | yes | status | contributes DOP and active-satellite counts |
 | `GSV` | yes | yes | yes | yes | yes | yes | status | contributes visible satellites and CN0 summaries |
 | `GST` | yes | yes | yes | yes | yes | yes | status + navsat | conservative accuracy only |
-| `VTG` | yes | no | no | no | no | no | no | semantic-only until generic speed/course fields exist |
-| `ZDA` | yes | no | no | no | no | no | no | semantic-only until GNSS wall-clock/date contract exists |
+| `VTG` | yes | no | yes | no | no | no | no | semantic-only in `NmeaSession` until generic speed/course fields exist |
+| `ZDA` | yes | no | yes | no | no | no | no | semantic-only in `NmeaSession` until GNSS wall-clock/date contract exists |
 
 ### UBX
 
@@ -164,7 +168,6 @@ These remain intentionally deferred after the audit:
 
 - ROS 2 receiver node work
 - ROS 2 diagnostics adapter work
-- generic NMEA live session / NMEA-only vendor auto-selection
 - generic speed / course runtime contract for `VTG`
 - GNSS wall-clock / date runtime contract for `ZDA`
 - broader Unicore binary `N4` semantic decoding beyond `BESTNAVB` / `PVTSLNB`

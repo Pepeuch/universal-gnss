@@ -17,6 +17,7 @@ Implemented:
 - Unicore parser: BESTNAVB, PVTSLNB, PVTSLNA, BESTNAVA, BESTSATA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
 - RTCM3 framing, CRC24Q, message type extraction
 - Driver abstraction foundation
+- Generic NMEA session
 - UbloxSession foundation
 - UnicoreSession foundation
 - Generic ReceiverSession router
@@ -29,6 +30,7 @@ Implemented:
 - u-blox response router foundation
 - Unicore response router foundation
 - Receiver driver abstraction
+- generic NMEA driver
 - u-blox driver
 - Unicore driver
 - Transport abstraction foundation
@@ -187,6 +189,7 @@ Implemented:
 - [x] GST
 - [x] VTG
 - [x] ZDA
+- [x] generic NMEA session / driver
 
 To do:
 

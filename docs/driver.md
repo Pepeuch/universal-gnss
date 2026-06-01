@@ -500,6 +500,7 @@ Current role:
 
 Current concrete drivers:
 
+- `NmeaDriver`
 - `UbloxDriver`
 - `UnicoreDriver`
 
@@ -513,6 +514,11 @@ Current policy:
 
 Current vendor coverage:
 
+- `NmeaDriver`
+  - family: `NMEA`
+  - profiles: none
+  - runtime state: delegated to `NmeaSession`
+  - capabilities: read-only NMEA output support, rover mode
 - `UbloxDriver`
   - family: `F9/F10`
   - profiles: rover, diagnostics, base
@@ -544,6 +550,7 @@ protocol families:
 - `UBX`
 - `RTCM3`
 - `Unicore ASCII`
+- `Unicore binary`
 - `Unknown`
 
 Current policy:
@@ -557,6 +564,43 @@ Current policy:
   NMEA
 
 This is intentionally not a full auto-detection state machine yet.
+
+### Generic NMEA session
+
+`nmea_session.*` is the portable session layer for generic NMEA-only receivers.
+
+Its job is:
+
+- accept incremental byte chunks or strings
+- frame NMEA sentences with the existing NMEA framer
+- route conservative runtime-producing sentences:
+  - `GGA`
+  - `RMC`
+  - `GSA`
+  - `GSV`
+  - `GST`
+- parse `VTG` and `ZDA` semantically without projecting them into runtime state
+- merge runtime updates through `GnssRuntimeAggregator`
+- expose current runtime state and lightweight session metrics
+
+Current metrics include:
+
+- bytes seen
+- framed sentences seen
+- parsed vs rejected sentences
+- runtime updates
+- semantic-only sentence count
+- unknown sentences
+- malformed checksum / truncated / overflowed sentences
+
+This session is intentionally not:
+
+- a serial driver
+- a TCP driver
+- a receiver configuration engine
+- a speed/course runtime mapper
+- a GNSS wall-clock runtime mapper
+- a ROS 2 node
 
 ### Unicore session
 
@@ -579,6 +623,13 @@ Current supported routed messages:
 - `RTKSTATUSA`
 - `RTCMSTATUSA`
 - `SATSINFOA`
+- `BESTSATA`
+- `JAMSTATUSA`
+- `FREQJAMSTATUSA`
+- `HWSTATUSA`
+- `AGCA`
+- binary `BESTNAVB`
+- binary `PVTSLNB`
 
 Current metrics include:
 
@@ -608,6 +659,7 @@ Its job is:
 - route `UBX`, `NMEA`, and `RTCM3` using the existing framers
 - parse supported `UBX` semantic messages:
   - `NAV-PVT`
+  - `NAV-DOP`
   - `NAV-SAT`
   - `NAV-STATUS`
   - `MON-RF`
@@ -641,6 +693,7 @@ This session is intentionally not yet:
 
 It wraps:
 
+- `NmeaSession`
 - `UbloxSession`
 - `UnicoreSession`
 
@@ -648,6 +701,7 @@ and exposes a unified runtime-state and metrics surface.
 
 Current modes:
 
+- explicit `nmea`
 - explicit `ublox`
 - explicit `unicore`
 - conservative `auto_detect`
@@ -656,9 +710,12 @@ Current policy:
 
 - explicit mode is preferred for production use
 - auto mode only locks on vendor-specific evidence
+- generic `NMEA` can be selected explicitly
 - `UBX` selects the u-blox session
 - Unicore ASCII selects the Unicore session
-- `NMEA` alone does not select a vendor
+- `NMEA` alone stays undecided by default
+- `NMEA` can become a generic fallback only when
+  `allow_generic_nmea_auto_detect` is explicitly enabled
 - `RTCM3` alone does not select a vendor
 - ambiguous mixed vendor evidence stays undecided
 
@@ -760,6 +817,12 @@ streams:
 - `gnss_core` owns normalized state and merge invariants
 - `gnss_driver` owns byte-stream session routing and per-session metrics
 
+`NmeaSession` is the same kind of bridge for generic NMEA-only receivers:
+
+- `gnss_protocols` owns NMEA framing, checksum validation, and semantic decode
+- `gnss_core` owns normalized state and merge invariants
+- `gnss_driver` owns NMEA session routing and per-session metrics
+
 `ReceiverSession` sits one level above those vendor sessions:
 
 - it chooses which vendor session should own the stream
@@ -776,7 +839,7 @@ The following driver-layer work is intentionally deferred:
 - live config transactions
 - multi-command scheduling
 - Quectel config messages
-- binary `N4` Unicore session routing
+- broader binary `N4` Unicore semantic routing beyond `BESTNAVB` / `PVTSLNB`
 - auto-detection state machines
 - correction injection paths
 - receiver-family runtime arbitration

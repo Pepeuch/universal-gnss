@@ -1,5 +1,7 @@
 add_library(
   universal_gnss_driver
+  src/nmea_driver.cpp
+  src/nmea_session.cpp
   src/receiver_config_application.cpp
   src/receiver_command_dispatcher.cpp
   src/unicore_driver.cpp
@@ -44,6 +46,17 @@ if(BUILD_TESTING)
       universal_gnss_driver
   )
   add_test(NAME gnss_driver_test_foundation COMMAND gnss_driver_test_foundation)
+
+  add_executable(
+    gnss_driver_test_nmea_session
+    tests/test_nmea_session.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_nmea_session
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(NAME gnss_driver_test_nmea_session COMMAND gnss_driver_test_nmea_session)
 
   add_executable(
     gnss_driver_test_unicore_session

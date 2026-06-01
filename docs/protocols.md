@@ -134,6 +134,10 @@ Current NMEA notes:
 - `ZDA` currently contributes semantic UTC date/time and local-zone parsing only
 - `GST` accuracy now flows through the NMEA session/replay routing paths that
   already consume `GGA` / `RMC` / `GSA` / `GSV`
+- the generic NMEA live-session path now routes `GGA` / `RMC` / `GSA` / `GSV`
+  / `GST` into normalized runtime state too
+- `VTG` and `ZDA` are parsed by the generic NMEA session for semantic/metrics
+  purposes only
 - `VTG` is not projected into `GnssRuntimeState` yet because the core does not
   yet define a generic speed/course field contract
 - `ZDA` is not projected into `GnssRuntimeState` yet because the core does not

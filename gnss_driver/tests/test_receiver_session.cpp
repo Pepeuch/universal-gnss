@@ -282,6 +282,41 @@ void TestExplicitUnicoreMode(TestContext& ctx)
              "explicit Unicore mode should expose child metrics cleanly");
 }
 
+void TestExplicitNmeaMode(TestContext& ctx)
+{
+  ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      2100);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 2101);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      2102);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 2103);
+  session.FeedBytes(
+      BuildNmeaSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"), 2104);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.selected_session_kind == std::optional<ReceiverSessionKind>(
+                                                  ReceiverSessionKind::kNmea) &&
+                 metrics.selection_locked,
+             "explicit NMEA mode should start selected and locked");
+  ctx.Expect(state.fix_valid &&
+                 state.fix_type == GnssFixType::kFix &&
+                 state.hdop == std::optional<float>(1.0f) &&
+                 state.vdop == std::optional<float>(1.5f) &&
+                 state.satellites_visible == std::optional<std::uint16_t>(8u) &&
+                 state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 !state.heading_deg.has_value(),
+             "explicit NMEA mode should route runtime-mapped NMEA sentences without inventing VTG heading");
+  ctx.Expect(session.nmea_metrics().semantic_only_records == 1u &&
+                 session.nmea_metrics().records_parsed == 5u,
+             "explicit NMEA mode should still parse VTG semantically");
+}
+
 void TestAutoModeSelectsUblox(TestContext& ctx)
 {
   ReceiverSession session;
@@ -318,6 +353,25 @@ void TestAutoModeSelectsUnicore(TestContext& ctx)
   ctx.Expect(session.current_state().fix_valid &&
                  session.current_state().fix_type == GnssFixType::kRtkFloat,
              "auto-selected Unicore session should expose Unicore runtime state");
+}
+
+void TestAutoModeSelectsNmeaWhenEnabled(TestContext& ctx)
+{
+  ReceiverSessionConfig config;
+  config.allow_generic_nmea_auto_detect = true;
+  ReceiverSession session(config);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      4250);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.selected_session_kind == std::optional<ReceiverSessionKind>(
+                                                  ReceiverSessionKind::kNmea) &&
+                 metrics.selection_locked,
+             "auto mode should select generic NMEA only when the fallback is explicitly enabled");
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kFix,
+             "generic NMEA auto-selection should expose runtime state once enabled");
 }
 
 void TestAutoModeSelectsUnicoreBinary(TestContext& ctx)
@@ -385,8 +439,10 @@ int main()
 
   TestExplicitUbloxMode(ctx);
   TestExplicitUnicoreMode(ctx);
+  TestExplicitNmeaMode(ctx);
   TestAutoModeSelectsUblox(ctx);
   TestAutoModeSelectsUnicore(ctx);
+  TestAutoModeSelectsNmeaWhenEnabled(ctx);
   TestAutoModeSelectsUnicoreBinary(ctx);
   TestRtcmOnlyStaysUndecided(ctx);
   TestFinalizeAndReset(ctx);

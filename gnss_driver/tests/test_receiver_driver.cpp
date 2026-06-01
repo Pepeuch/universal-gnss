@@ -9,8 +9,10 @@
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_driver/receiver_capabilities.hpp"
 #include "universal_gnss_driver/receiver_driver.hpp"
+#include "universal_gnss_driver/nmea_driver.hpp"
 #include "universal_gnss_driver/ublox_driver.hpp"
 #include "universal_gnss_driver/unicore_driver.hpp"
+#include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 
 namespace
@@ -25,6 +27,7 @@ using universal_gnss_driver::ReceiverDriverProfileBuildStatus;
 using universal_gnss_driver::ReceiverFeature;
 using universal_gnss_driver::ReceiverProtocol;
 using universal_gnss_driver::ReceiverVendor;
+using universal_gnss_driver::NmeaDriver;
 using universal_gnss_driver::UbloxDriver;
 using universal_gnss_driver::UnicoreDriver;
 
@@ -82,6 +85,22 @@ std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
+{
+  std::vector<std::uint8_t> bytes;
+  bytes.push_back(static_cast<std::uint8_t>('$'));
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+  bytes.push_back(static_cast<std::uint8_t>('*'));
+
+  const std::uint8_t checksum = universal_gnss_protocols::ComputeNmeaChecksum(payload);
+  constexpr char kHexDigits[] = "0123456789ABCDEF";
+  bytes.push_back(static_cast<std::uint8_t>(kHexDigits[(checksum >> 4u) & 0x0Fu]));
+  bytes.push_back(static_cast<std::uint8_t>(kHexDigits[checksum & 0x0Fu]));
+  bytes.push_back(static_cast<std::uint8_t>('\r'));
+  bytes.push_back(static_cast<std::uint8_t>('\n'));
+  return bytes;
+}
+
 std::vector<std::uint8_t> MakeNavPvtPayload()
 {
   std::vector<std::uint8_t> payload(92u, 0u);
@@ -118,9 +137,11 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
 {
   UbloxDriver ublox;
   UnicoreDriver unicore;
+  NmeaDriver nmea;
 
   const ReceiverDriver& ublox_driver = ublox;
   const ReceiverDriver& unicore_driver = unicore;
+  const ReceiverDriver& nmea_driver = nmea;
 
   ctx.Expect(ublox_driver.vendor() == ReceiverVendor::kUblox &&
                  ublox_driver.family() == "F9/F10",
@@ -128,6 +149,9 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
   ctx.Expect(unicore_driver.vendor() == ReceiverVendor::kUnicore &&
                  unicore_driver.family() == "UM98x",
              "Unicore driver should expose the expected vendor and family");
+  ctx.Expect(nmea_driver.vendor() == ReceiverVendor::kGeneric &&
+                 nmea_driver.family() == "NMEA",
+             "generic NMEA driver should expose the expected vendor and family");
 
   ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
                  ublox_driver.capabilities(), ReceiverProtocol::kUbx) &&
@@ -154,15 +178,27 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
                  universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
              "Unicore driver should advertise RTK, signal-group config, and ASCII command config support");
+
+  ctx.Expect(!universal_gnss_driver::SupportsInputProtocol(
+                 nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::SupportsOutputProtocol(
+                     nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     nmea_driver.capabilities(), ReceiverFeature::kRoverMode) &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     nmea_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
+             "generic NMEA driver should advertise a read-only NMEA output path without config features");
 }
 
 void TestSupportedProfilesAndGeneration(TestContext& ctx)
 {
   UbloxDriver ublox;
   UnicoreDriver unicore;
+  NmeaDriver nmea;
 
   const ReceiverDriver& ublox_driver = ublox;
   const ReceiverDriver& unicore_driver = unicore;
+  const ReceiverDriver& nmea_driver = nmea;
 
   ctx.Expect(ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kRover) &&
                  ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kDiagnosticsOutput) &&
@@ -172,6 +208,9 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
                  unicore_driver.SupportsProfile(ReceiverConfigProfileKind::kDiagnosticsOutput) &&
                  !unicore_driver.SupportsProfile(ReceiverConfigProfileKind::kBase),
              "Unicore driver should report rover/diagnostics support without base support");
+  ctx.Expect(!nmea_driver.SupportsProfile(ReceiverConfigProfileKind::kRover) &&
+                 !nmea_driver.SupportsProfile(ReceiverConfigProfileKind::kDiagnosticsOutput),
+             "generic NMEA driver should expose no configuration profiles");
 
   const auto ublox_rover = ublox_driver.BuildRoverProfile();
   const auto ublox_diag =
@@ -196,6 +235,8 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
   const auto unicore_rover = unicore_driver.BuildRoverProfile();
   const auto unicore_diag = unicore_driver.BuildDiagnosticsProfile();
   const auto unicore_base = unicore_driver.BuildBaseProfile();
+  const auto nmea_rover = nmea_driver.BuildRoverProfile();
+  const auto nmea_diag = nmea_driver.BuildDiagnosticsProfile();
   ctx.Expect(unicore_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
                  unicore_rover.commands.size() == 10u,
@@ -207,15 +248,22 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
   ctx.Expect(unicore_base.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
                  unicore_base.profile_kind == ReceiverConfigProfileKind::kBase,
              "Unicore drivers should report base profile generation as unsupported");
+  ctx.Expect(nmea_rover.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
+                 nmea_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
+                 nmea_diag.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
+                 nmea_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput,
+             "generic NMEA drivers should reject configuration profile generation cleanly");
 }
 
 void TestRuntimeStateAccess(TestContext& ctx)
 {
   UbloxDriver ublox;
   UnicoreDriver unicore;
+  NmeaDriver nmea;
 
   ReceiverDriver& ublox_driver = ublox;
   ReceiverDriver& unicore_driver = unicore;
+  ReceiverDriver& nmea_driver = nmea;
 
   ctx.Expect(!ublox_driver.current_state().fix_valid &&
                  ublox_driver.current_state().fix_type == GnssFixType::kUnknown,
@@ -223,9 +271,17 @@ void TestRuntimeStateAccess(TestContext& ctx)
   ctx.Expect(!unicore_driver.current_state().fix_valid &&
                  unicore_driver.current_state().fix_type == GnssFixType::kUnknown,
              "Unicore driver should expose the default empty runtime state before input");
+  ctx.Expect(!nmea_driver.current_state().fix_valid &&
+                 nmea_driver.current_state().fix_type == GnssFixType::kUnknown,
+             "generic NMEA driver should expose the default empty runtime state before input");
 
   ublox_driver.FeedBytes(BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()), 1000);
   unicore_driver.FeedString(kBestNavLine, 2000);
+  nmea_driver.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      3000);
+  nmea_driver.FeedBytes(
+      BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
 
   ctx.Expect(ublox_driver.current_state().fix_valid &&
                  ublox_driver.current_state().fix_type == GnssFixType::kFix &&
@@ -237,14 +293,22 @@ void TestRuntimeStateAccess(TestContext& ctx)
                      std::optional<universal_gnss::GnssRtkMode>(GnssRtkMode::kFloat) &&
                  unicore_driver.current_state().timestamp_ns == std::optional<std::int64_t>(2000),
              "Unicore driver should surface runtime state from the underlying session");
+  ctx.Expect(nmea_driver.current_state().fix_valid &&
+                 nmea_driver.current_state().fix_type == GnssFixType::kFix &&
+                 nmea_driver.current_state().timestamp_ns == std::optional<std::int64_t>(3001) &&
+                 nmea_driver.current_state().horizontal_accuracy_m == std::optional<float>(0.5f),
+             "generic NMEA driver should surface runtime state from the underlying session");
 
   ublox_driver.Reset();
   unicore_driver.Reset();
+  nmea_driver.Reset();
 
   ctx.Expect(!ublox_driver.current_state().fix_valid &&
                  ublox_driver.current_state().fix_type == GnssFixType::kUnknown &&
                  !unicore_driver.current_state().fix_valid &&
-                 unicore_driver.current_state().fix_type == GnssFixType::kUnknown,
+                 unicore_driver.current_state().fix_type == GnssFixType::kUnknown &&
+                 !nmea_driver.current_state().fix_valid &&
+                 nmea_driver.current_state().fix_type == GnssFixType::kUnknown,
              "resetting drivers should clear the runtime state back to defaults");
 }
 

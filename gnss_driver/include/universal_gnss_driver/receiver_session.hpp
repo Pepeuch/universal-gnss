@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "universal_gnss_driver/nmea_session.hpp"
 #include "universal_gnss_driver/ublox_session.hpp"
 #include "universal_gnss_driver/unicore_session.hpp"
 
@@ -17,12 +18,15 @@ enum class ReceiverSessionKind : std::uint8_t
   kAutoDetect = 0,
   kUblox = 1,
   kUnicore = 2,
+  kNmea = 3,
 };
 
 struct ReceiverSessionConfig
 {
   ReceiverSessionKind kind{ReceiverSessionKind::kAutoDetect};
   std::size_t max_auto_detect_buffer_bytes{4096u};
+  bool allow_generic_nmea_auto_detect{false};
+  NmeaSessionConfig nmea{};
   UbloxSessionConfig ublox{};
   UnicoreSessionConfig unicore{};
 };
@@ -73,6 +77,8 @@ public:
 
   const UnicoreSessionMetrics& unicore_metrics() const;
 
+  const NmeaSessionMetrics& nmea_metrics() const;
+
 private:
   void InitializeSelectionFromConfig();
   void RouteToSelectedSession(const std::uint8_t* data,
@@ -89,6 +95,7 @@ private:
 
   ReceiverSessionConfig config_{};
   ReceiverSessionMetrics metrics_{};
+  NmeaSession nmea_session_;
   UbloxSession ublox_session_;
   UnicoreSession unicore_session_;
   std::vector<BufferedByte> pending_auto_detect_bytes_{};
