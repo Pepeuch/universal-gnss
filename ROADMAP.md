@@ -105,6 +105,8 @@ Completed at the start of this phase:
 - local Kilted package build/test validation
 - `ReceiverNode` with serial / TCP launch examples
 - `NtripNode` with ROS2 launch example
+- combined receiver + NTRIP launch example
+- ROS2 end-to-end audit / hardening pass
 - `robot_localization` example configuration and documentation
 
 Next:

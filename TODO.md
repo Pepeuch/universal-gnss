@@ -65,6 +65,7 @@ Primary focus:
 - [x] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [x] minimal ROS2 launch/examples
+- [x] receiver + NTRIP combined launch example
 - [x] robot_localization example config/docs
 - [ ] ROS2 CI coverage
 
@@ -114,8 +115,10 @@ Implemented:
 - [x] `NtripNode`
 - [x] minimal receiver launch examples
 - [x] minimal NTRIP launch example
+- [x] minimal combined receiver/NTRIP launch example
 - [x] robot_localization example YAML and launch
 - [x] receiver node runtime validation and diagnostics hardening
+- [x] ROS2 end-to-end audit and fix pass
 
 To do:
 
@@ -410,6 +413,8 @@ Implemented:
 - [x] ROS2 NTRIP node
 - [x] minimal ROS2 serial/TCP launch examples
 - [x] minimal ROS2 NTRIP launch example
+- [x] minimal receiver + NTRIP combined launch example
+- [x] ROS2 end-to-end audit doc
 
 To do:
 

@@ -258,6 +258,12 @@ if(BUILD_TESTING)
       test_receiver_node
       ${PROJECT_NAME}_receiver_node
     )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+      target_link_libraries(
+        test_receiver_node
+        ${PROJECT_NAME}_ntrip_node
+      )
+    endif()
     target_include_directories(
       test_receiver_node
       PRIVATE

@@ -77,6 +77,10 @@ runtime orchestration.
 - `gnss_ros2` owns subscriptions, timers, diagnostics publishing, and launch
   wiring
 
+The current ROS 2 wrapper also applies one additional runtime policy at the
+node boundary: if the subscribed GNSS status becomes stale, it suppresses GGA
+injection instead of reusing an old rover position.
+
 ## Configuration Model
 
 `NtripConfig` currently includes:

@@ -338,6 +338,76 @@ TEST_F(NtripNodeTest, ReportsReconnectStateAfterStreamDisconnect)
             std::optional<std::string>{"false"});
 }
 
+TEST_F(NtripNodeTest, DoesNotInjectGgaWithoutStatusAndReportsMissingSource)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", true),
+      rclcpp::Parameter("gga_interval_s", 1),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  EXPECT_TRUE(node.StepOnce());
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"));
+  node.StepOnce();
+
+  const std::string peer_text = sockets.ReadPeerText(1024u);
+  EXPECT_EQ(peer_text.find("$GPGGA"), std::string::npos);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3200));
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_source_missing"),
+            nullptr);
+}
+
+TEST_F(NtripNodeTest, DoesNotInjectGgaWhenStatusIsStaleAndReportsStaleSource)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", true),
+      rclcpp::Parameter("gga_interval_s", 1),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  auto publisher_node = std::make_shared<rclcpp::Node>("ntrip_stale_status_publisher");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  DeliverStatus(node, publisher_node, executor, MakeGnssStatus());
+  EXPECT_TRUE(node.has_runtime_state());
+
+  EXPECT_TRUE(node.StepOnce());
+  std::this_thread::sleep_for(std::chrono::milliseconds(5200));
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"));
+  node.StepOnce();
+
+  const std::string peer_text = sockets.ReadPeerText(1024u);
+  EXPECT_EQ(peer_text.find("$GPGGA"), std::string::npos);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_source_stale"),
+            nullptr);
+}
+
 #endif
 
 }  // namespace

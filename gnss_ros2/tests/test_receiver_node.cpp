@@ -13,6 +13,9 @@
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
+#if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
+#include "universal_gnss_ros2/ntrip_node.hpp"
+#endif
 #include "universal_gnss_ros2/receiver_node.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
@@ -172,6 +175,32 @@ TEST_F(ReceiverNodeTest, ConstructsWithParametersAndPublishersReady)
   EXPECT_DOUBLE_EQ(node.get_parameter("publish_rate_hz").as_double(), 5.0);
   EXPECT_EQ(node.get_parameter("frame_id").as_string(), "base_link");
 }
+
+#if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
+TEST_F(ReceiverNodeTest, ReceiverAndNtripNodesConstructWithCompatibleParameters)
+{
+  rclcpp::NodeOptions receiver_options;
+  receiver_options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "ublox"),
+      rclcpp::Parameter("frame_id", "gnss_link"),
+  });
+
+  rclcpp::NodeOptions ntrip_options;
+  ntrip_options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", true),
+  });
+
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+  universal_gnss_ros2::ReceiverNode receiver(std::move(source), receiver_options);
+  universal_gnss_ros2::NtripNode ntrip(ntrip_options);
+
+  EXPECT_TRUE(receiver.publishers_ready());
+  EXPECT_TRUE(ntrip.diagnostics_ready());
+}
+#endif
 
 TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
 {

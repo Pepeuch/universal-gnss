@@ -69,6 +69,7 @@ Current implemented layers:
   - minimal `NtripNode` wrapper publishing `diagnostics` for ROS-side NTRIP state
   - minimal serial / TCP launch examples for `receiver_node`
   - minimal `ntrip.launch.py` example for the ROS2 NTRIP wrapper
+  - minimal `receiver_and_ntrip.launch.py` combined bringup example
 
 Planned layers:
 
@@ -102,6 +103,10 @@ flowchart TB
 
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
 receiver/NTRIP node surfaces, and the current status / covariance policy.
+
+See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
+current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and
+the latest hardware smoke-test notes.
 
 See [docs/robot_localization.md](docs/robot_localization.md) for the first
 example of connecting Universal GNSS `fix` output to

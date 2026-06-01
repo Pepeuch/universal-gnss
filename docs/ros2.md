@@ -324,6 +324,10 @@ That document records:
 The same audit document also records the exact local Kilted build/test method
 used for `universal_gnss_ros2` validation in the MowgliNext development image.
 
+For the current runtime-node audit across `ReceiverNode`, `NtripNode`, launch
+files, diagnostics behavior, and manual hardware-smoke procedure, see
+[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
+
 ## Receiver Node
 
 `universal_gnss_ros2` now includes a first minimal receiver node skeleton:
@@ -391,6 +395,7 @@ The minimal launch examples now installed with the package are:
 
 - `receiver_serial.launch.py`
 - `receiver_tcp.launch.py`
+- `receiver_and_ntrip.launch.py`
 
 They are intentionally parameter-forwarding wrappers around `receiver_node`.
 
@@ -454,6 +459,16 @@ ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
 ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
   tcp_host:=127.0.0.1 \
   tcp_port:=2101
+
+ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
+  receiver_family:=ublox \
+  transport:=serial \
+  serial_device:=/dev/ttyACM0 \
+  serial_baud:=115200 \
+  caster_host:=127.0.0.1 \
+  caster_port:=2101 \
+  mountpoint:=RTCM3 \
+  gga_enabled:=true
 ```
 
 ## NTRIP Node
@@ -509,6 +524,8 @@ Runtime policy:
 - the wrapped TCP client is configured nonblocking inside the node
 - the low-level reconnect policy is reused directly
 - the ROS 2 node only owns periodic `StepOnce()` scheduling and diagnostics
+- stale GNSS status input suppresses GGA injection instead of reusing old
+  coordinates
 
 ### Outputs
 
