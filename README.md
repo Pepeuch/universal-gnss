@@ -101,6 +101,10 @@ flowchart TB
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
 receiver-node skeleton surface, and the current status / covariance policy.
 
+See [docs/robot_localization.md](docs/robot_localization.md) for the first
+example of connecting Universal GNSS `fix` output to
+`robot_localization/navsat_transform_node` and `ekf_node`.
+
 See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
 runtime mapping coverage, and intentionally deferred protocol support.
 

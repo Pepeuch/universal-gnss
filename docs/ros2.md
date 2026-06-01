@@ -40,6 +40,10 @@ Current non-responsibilities:
 - NTRIP transport ownership
 - downstream integration packages
 
+That last point is starting to soften slightly: this repository now includes a
+documented `robot_localization` example, but it is still an example layer, not a
+fully owned integration package.
+
 ## Layer Split
 
 The intended boundary is:
@@ -87,6 +91,10 @@ flowchart TB
 - covariance projection policy
 - diagnostic-array projection policy
 - ROS node-facing parameter and publisher policies
+
+See [robot_localization.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/robot_localization.md)
+for the first end-to-end example of how `receiver_node` feeds
+`navsat_transform_node` and `ekf_node`.
 
 ## Typed Runtime State Philosophy
 
@@ -414,10 +422,33 @@ ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
   tcp_port:=2101
 ```
 
+## robot_localization Example
+
+The repository now includes a minimal example stack for:
+
+- `universal_gnss_ros2/receiver_node`
+- `robot_localization/navsat_transform_node`
+- `robot_localization/ekf_node`
+
+Files:
+
+- [docs/robot_localization.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/robot_localization.md)
+- [examples/robot_localization/ekf.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/ekf.yaml)
+- [examples/robot_localization/navsat_transform.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/navsat_transform.yaml)
+- [examples/robot_localization/robot_localization_example.launch.py](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/robot_localization_example.launch.py)
+
+This example is intentionally conservative:
+
+- it assumes `fix` is the GNSS input to `navsat_transform_node`
+- it assumes IMU and wheel odometry come from the rest of the robot stack
+- it is not a production-ready localization bringup
+- it does not introduce Nav2 yet
+
 ### Current limits
 
 - no NTRIP ownership yet
-- no `robot_localization` / Nav2 integration yet
+- no owned `robot_localization` integration package yet
+- no Nav2 integration yet
 - no receiver command/config ownership yet
 - no retry/reconnect lifecycle node yet
 
@@ -428,5 +459,5 @@ feature work:
 
 - NTRIP node
 - replay node
-- launch/examples
-- downstream integration surfaces such as `robot_localization` / Nav2
+- richer launch/examples
+- downstream integration surfaces such as Nav2

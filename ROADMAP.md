@@ -110,6 +110,7 @@ Next:
 - ROS2 NTRIP node
 - ROS2 replay node
 - launch examples
+- robot_localization example configuration and documentation
 - Humble/Jazzy validation
 - Foxglove-friendly topic surface
 

@@ -65,6 +65,7 @@ Primary focus:
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
 - [x] minimal ROS2 launch/examples
+- [x] robot_localization example config/docs
 - [ ] ROS2 CI coverage
 
 Keep deferred until after ROS2 stabilization:
@@ -87,6 +88,7 @@ To do:
 - [x] Add severity levels
 - [x] Keep ROS2 diagnostics as adapter-only
 - [x] Add first ROS2 receiver-node skeleton
+- [x] Add first robot_localization example documentation
 
 ### Offline export and analysis
 
@@ -100,6 +102,26 @@ To do:
 - [ ] schema versioning if needed
 - [ ] live stream export adapters
 - [ ] plotting / notebook helpers
+
+### ROS2 integration
+
+Implemented:
+
+- [x] `GnssStatus` adapter
+- [x] `NavSatFix` adapter
+- [x] `DiagnosticArray` adapter
+- [x] `ReceiverNode`
+- [x] minimal receiver launch examples
+- [x] robot_localization example YAML and launch
+
+To do:
+
+- [ ] ROS2 NTRIP node
+- [ ] ROS2 replay node
+- [ ] production bringup / launch structure
+- [ ] Humble / Jazzy validation
+- [ ] Kilted linkage modernization
+- [ ] Nav2 integration after localization examples stabilize
 
 ### RTCM correction monitor
 
