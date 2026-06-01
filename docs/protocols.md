@@ -249,9 +249,17 @@ tracks correction-stream activity and health around already-classified RTCM
 frames, and is intended to feed later NTRIP clients, ROS 2 diagnostics, and
 GUI/dashboard work without introducing transport or middleware coupling here.
 
-### Unicore ASCII
+### Unicore
 
-Implemented semantic messages:
+Implemented binary foundation:
+
+- binary `N4` framing
+- documented `AA 44 B5` sync detection
+- documented 24-byte header extraction
+- documented 32-bit CRC validation
+- binary frame container with header metadata and raw payload bytes
+
+Implemented semantic ASCII messages:
 
 - `PVTSLNA`
 - `BESTNAVA`
@@ -266,12 +274,20 @@ Implemented semantic messages:
 Implemented behaviors:
 
 - Unicore ASCII framing through the existing line framer
+- Unicore binary `N4` framing through a dedicated incremental framer
 - fixed-layout semantic decode for the messages above
 - conservative `GnssRuntimeState` mapping helpers for position / RTK / heading /
   correction-age fields that are explicitly documented
 
 Current Unicore notes:
 
+- binary `N4` framing is currently integrity-only:
+  - sync detection
+  - documented header extraction
+  - payload-length extraction
+  - CRC validation
+  - unknown binary message ids are preserved as valid binary frames when frame
+    integrity is valid
 - `PVTSLNA` is the richest current Unicore position / heading source
 - `BESTNAVA` provides stable position-quality, accuracy, and correction-age
   fields
@@ -286,13 +302,15 @@ Current Unicore notes:
   AGC thresholds are explicitly hardware-dependent in the vendor manual
 - `RTCMSTATUSA` is parsed semantically but does not project into runtime state
   yet
+- ASCII remains the primary Unicore runtime source today; binary `N4` semantic
+  decode and session routing are still deferred
 
 See [docs/vendors/unicore/runtime_mapping.md](vendors/unicore/runtime_mapping.md)
 for the current message-by-message Unicore runtime mapping contract.
 
 What Unicore does not do yet:
 
-- binary `N4`
+- binary `N4` semantic decoding
 - receiver configuration commands
 - AGC threshold interpretation beyond documented safe semantics
 - constellation-specific aggregate statistics
@@ -391,7 +409,7 @@ The following are intentionally deferred:
 
 Also deferred for later protocol growth:
 
-- Unicore binary `N4`
+- Unicore binary `N4` semantic decoding
 - Unicore receiver configuration commands
 - Quectel semantic decoding
 - Septentrio or other vendor-specific semantic layers

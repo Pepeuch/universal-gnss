@@ -234,7 +234,7 @@ Implemented:
 
 To do:
 
-- [ ] binary N4 framing
+- [x] binary N4 framing
 - [ ] binary BESTNAV/PVTSLN equivalents
 - [ ] BESTSATA if useful
 - [ ] raw observation support

@@ -41,3 +41,6 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+
+#exemple driver
+exemple/

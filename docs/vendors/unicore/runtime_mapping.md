@@ -1,14 +1,15 @@
 # Unicore Runtime Mapping
 
-This document freezes the current Unicore ASCII runtime-mapping policy used by
+This document freezes the current Unicore runtime-mapping policy used by
 `gnss_protocols`.
 
 The goal is to keep Unicore support portable and conservative:
 
-- parse documented ASCII messages only
+- parse documented Unicore messages conservatively
 - project only fields that map cleanly into `universal_gnss::GnssRuntimeState`
 - avoid Mowgli-specific diagnostics schemas, launch scripts, and ROS 2 glue
-- defer receiver configuration, binary `N4`, and driver-specific arbitration
+- defer binary `N4` semantic decode and driver-specific arbitration
+- defer receiver configuration and driver-specific arbitration
 
 ## Current Coverage
 
@@ -26,8 +27,20 @@ Current parsed Unicore ASCII messages:
 
 Not implemented yet:
 
-- binary `N4`
+- binary `N4` semantic decode
 - Unicore configuration commands like `MODE`, `CONFIG`, and `LOG`
+
+Binary `N4` framing now exists separately from the ASCII parser:
+
+- documented `AA 44 B5` sync detection
+- documented 24-byte header extraction
+- documented little-endian `message_id` / `message_length`
+- documented reflected 32-bit CRC validation across the frame minus the final
+  CRC field
+
+That binary path currently stops at typed frame containers. It does not yet
+project any binary messages into `GnssRuntimeState`, and ASCII remains the
+primary Unicore runtime source today.
 
 ## Data Flow
 
