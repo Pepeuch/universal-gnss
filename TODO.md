@@ -64,7 +64,7 @@ Primary focus:
 - [x] ROS2 receiver node skeleton
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
-- [ ] ROS2 launch/examples
+- [x] minimal ROS2 launch/examples
 - [ ] ROS2 CI coverage
 
 Keep deferred until after ROS2 stabilization:
@@ -382,13 +382,14 @@ Implemented:
 - [x] ROS2 covariance projection from runtime accuracy fields
 - [x] Kilted local build/test validation
 - [x] ROS2 receiver node skeleton
+- [x] minimal ROS2 serial/TCP launch examples
 
 To do:
 
 - [ ] harden ROS2 receiver node
 - [ ] ROS2 NTRIP node
 - [ ] ROS2 replay node
-- [ ] launch examples
+- [ ] richer launch/examples
 - [ ] Humble/Jazzy CI
 - [ ] Foxglove-friendly topics
 - [ ] BlueOS extension packaging

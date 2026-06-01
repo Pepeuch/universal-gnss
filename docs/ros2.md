@@ -38,7 +38,7 @@ Current non-responsibilities:
 - receiver configuration ownership
 - backend-specific fix inference
 - NTRIP transport ownership
-- launch files or downstream integration packages
+- downstream integration packages
 
 ## Layer Split
 
@@ -365,6 +365,13 @@ Topics published by the skeleton node:
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
 
+The minimal launch examples now installed with the package are:
+
+- `receiver_serial.launch.py`
+- `receiver_tcp.launch.py`
+
+They are intentionally parameter-forwarding wrappers around `receiver_node`.
+
 ### Example invocation
 
 Serial u-blox example:
@@ -389,10 +396,27 @@ ros2 run universal_gnss_ros2 receiver_node --ros-args \
   -p frame_id:=gnss
 ```
 
+Launch-file equivalents:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=/dev/ttyACM0 \
+  serial_baud:=921600 \
+  receiver_family:=unicore
+
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=/dev/ttyUSB0 \
+  serial_baud:=115200 \
+  receiver_family:=ublox
+
+ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
+  tcp_host:=127.0.0.1 \
+  tcp_port:=2101
+```
+
 ### Current limits
 
 - no NTRIP ownership yet
-- no launch files yet
 - no `robot_localization` / Nav2 integration yet
 - no receiver command/config ownership yet
 - no retry/reconnect lifecycle node yet

@@ -66,6 +66,7 @@ Current implemented layers:
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
   - minimal `ReceiverNode` skeleton publishing `fix`, `status`, and `diagnostics`
+  - minimal serial / TCP launch examples for `receiver_node`
 
 Planned layers:
 

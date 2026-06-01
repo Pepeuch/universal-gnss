@@ -153,6 +153,12 @@ install(
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/" DESTINATION include)
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+  PATTERN "__pycache__" EXCLUDE
+  PATTERN "*.pyc" EXCLUDE
+)
 
 if(BUILD_TESTING)
   ament_add_gtest(test_gnss_status_adapter tests/test_gnss_status_adapter.cpp)
