@@ -186,4 +186,18 @@ if(BUILD_TESTING)
     NAME gnss_protocols_test_unicore_binary_framer
     COMMAND gnss_protocols_test_unicore_binary_framer
   )
+
+  add_executable(
+    gnss_protocols_test_unicore_binary_bestnav
+    tests/test_unicore_binary_bestnav.cpp
+  )
+  target_link_libraries(
+    gnss_protocols_test_unicore_binary_bestnav
+    PRIVATE
+      universal_gnss_protocols
+  )
+  add_test(
+    NAME gnss_protocols_test_unicore_binary_bestnav
+    COMMAND gnss_protocols_test_unicore_binary_bestnav
+  )
 endif()

@@ -4,6 +4,7 @@
 #include <array>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -310,6 +311,44 @@ OptionalFieldStatus ParseOptionalAgcRegister(std::string_view text,
   return OptionalFieldStatus::kValue;
 }
 
+std::uint16_t ReadLittleEndian16(const std::uint8_t* data)
+{
+  return static_cast<std::uint16_t>(data[0]) |
+         (static_cast<std::uint16_t>(data[1]) << 8);
+}
+
+std::uint32_t ReadLittleEndian32(const std::uint8_t* data)
+{
+  return static_cast<std::uint32_t>(data[0]) |
+         (static_cast<std::uint32_t>(data[1]) << 8) |
+         (static_cast<std::uint32_t>(data[2]) << 16) |
+         (static_cast<std::uint32_t>(data[3]) << 24);
+}
+
+float ReadLittleEndianFloat32(const std::uint8_t* data)
+{
+  const std::uint32_t bits = ReadLittleEndian32(data);
+  float value = 0.0f;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
+double ReadLittleEndianFloat64(const std::uint8_t* data)
+{
+  const std::uint64_t bits =
+      static_cast<std::uint64_t>(data[0]) |
+      (static_cast<std::uint64_t>(data[1]) << 8) |
+      (static_cast<std::uint64_t>(data[2]) << 16) |
+      (static_cast<std::uint64_t>(data[3]) << 24) |
+      (static_cast<std::uint64_t>(data[4]) << 32) |
+      (static_cast<std::uint64_t>(data[5]) << 40) |
+      (static_cast<std::uint64_t>(data[6]) << 48) |
+      (static_cast<std::uint64_t>(data[7]) << 56);
+  double value = 0.0;
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
+
 UnicoreTimeReference ParseTimeReference(std::string_view text)
 {
   text = TrimField(text);
@@ -478,6 +517,72 @@ UnicoreJammingState ParseJammingState(const unsigned int raw_value)
       return UnicoreJammingState::kStrongJamming;
     default:
       return UnicoreJammingState::kUnknown;
+  }
+}
+
+UnicoreSolutionStatus ParseBinarySolutionStatus(const std::uint32_t raw_value)
+{
+  switch (raw_value)
+  {
+    case 0u:
+      return UnicoreSolutionStatus::kSolComputed;
+    case 1u:
+      return UnicoreSolutionStatus::kInsufficientObs;
+    case 2u:
+      return UnicoreSolutionStatus::kNoConvergence;
+    case 4u:
+      return UnicoreSolutionStatus::kCovTrace;
+    default:
+      return UnicoreSolutionStatus::kUnknown;
+  }
+}
+
+UnicorePositionType ParseBinaryPositionType(const std::uint32_t raw_value)
+{
+  switch (raw_value)
+  {
+    case 0u:
+      return UnicorePositionType::kNone;
+    case 1u:
+      return UnicorePositionType::kFixedPos;
+    case 2u:
+      return UnicorePositionType::kFixedHeight;
+    case 8u:
+      return UnicorePositionType::kDopplerVelocity;
+    case 16u:
+      return UnicorePositionType::kSingle;
+    case 17u:
+      return UnicorePositionType::kPsrDiff;
+    case 18u:
+      return UnicorePositionType::kSbas;
+    case 32u:
+      return UnicorePositionType::kL1Float;
+    case 33u:
+      return UnicorePositionType::kIonoFreeFloat;
+    case 34u:
+      return UnicorePositionType::kNarrowFloat;
+    case 48u:
+      return UnicorePositionType::kL1Int;
+    case 49u:
+      return UnicorePositionType::kWideInt;
+    case 50u:
+      return UnicorePositionType::kNarrowInt;
+    case 52u:
+      return UnicorePositionType::kIns;
+    case 53u:
+      return UnicorePositionType::kInsPsrsp;
+    case 54u:
+      return UnicorePositionType::kInsPsrDiff;
+    case 55u:
+      return UnicorePositionType::kInsRtkFloat;
+    case 56u:
+      return UnicorePositionType::kInsRtkFixed;
+    case 68u:
+      return UnicorePositionType::kPppConverging;
+    case 69u:
+      return UnicorePositionType::kPpp;
+    default:
+      return UnicorePositionType::kUnknown;
   }
 }
 
@@ -1372,6 +1477,51 @@ ParserResult<UnicoreAgcRecord> ParseUnicoreAgc(const UnicoreFrame& frame)
   return ParserResult<UnicoreAgcRecord>::RecordReady(record);
 }
 
+ParserResult<UnicoreBestNavBRecord> ParseUnicoreBestNavB(const UnicoreBinaryFrame& frame)
+{
+  constexpr std::uint16_t kBestNavBMessageId = 2118u;
+  constexpr std::size_t kBestNavBPayloadLength = 120u;
+  constexpr std::uint32_t kWgs84DatumId = 61u;
+
+  if (frame.protocol != ProtocolType::kUnicore ||
+      frame.message_id != kBestNavBMessageId ||
+      frame.checksum_status != ChecksumStatus::kValid ||
+      frame.payload.size() != kBestNavBPayloadLength)
+  {
+    return InvalidResult<UnicoreBestNavBRecord>();
+  }
+
+  UnicoreBestNavBRecord record;
+  record.header.timestamp_ns = frame.timestamp_ns;
+  record.header.cpu_idle_percent = frame.cpu_idle;
+  record.header.message_id = frame.message_id;
+  record.header.payload_length = frame.payload_length;
+  record.header.time_reference_raw = frame.time_ref;
+  record.header.time_status_raw = frame.time_status;
+  record.header.gps_week = frame.week_number;
+  record.header.gps_millis_of_week = frame.milliseconds_of_week;
+  record.header.format_version = frame.header_version;
+  record.header.reserved = frame.reserved;
+  record.header.leap_seconds = frame.leap_seconds;
+  record.header.output_delay_ms = frame.delay_ms;
+
+  record.solution_status = ParseBinarySolutionStatus(ReadLittleEndian32(frame.payload.data() + 0u));
+  record.position_type = ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 4u));
+  record.latitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 8u);
+  record.longitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 16u);
+  record.altitude_m = ReadLittleEndianFloat64(frame.payload.data() + 24u);
+  record.undulation_m = ReadLittleEndianFloat32(frame.payload.data() + 32u);
+  record.datum_is_wgs84 = (ReadLittleEndian32(frame.payload.data() + 36u) == kWgs84DatumId);
+  record.latitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 40u);
+  record.longitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 44u);
+  record.altitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 48u);
+  record.diff_age_s = ReadLittleEndianFloat32(frame.payload.data() + 56u);
+  record.solution_age_s = ReadLittleEndianFloat32(frame.payload.data() + 60u);
+  record.tracked_satellites = static_cast<std::uint16_t>(frame.payload[64u]);
+  record.used_satellites = static_cast<std::uint16_t>(frame.payload[65u]);
+  return ParserResult<UnicoreBestNavBRecord>::RecordReady(record);
+}
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
@@ -1435,6 +1585,38 @@ universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestN
   SetVerticalAccuracy(state, record.altitude_std_m);
   SetTrackedAndUsedSatellites(
       state, record.tracked_satellites, record.used_satellites);
+  SetCorrectionAge(state, record.diff_age_s);
+
+  universal_gnss::RefreshValueFlagsFromFields(state);
+  return state;
+}
+
+universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
+    const UnicoreBestNavBRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.header.timestamp_ns;
+
+  ApplyFixType(state, record.position_type);
+  if (record.solution_status != UnicoreSolutionStatus::kSolComputed)
+  {
+    state.fix_valid = false;
+    if (state.fix_type != universal_gnss::GnssFixType::kUnknown)
+    {
+      state.fix_type = universal_gnss::GnssFixType::kNoFix;
+    }
+  }
+  ApplyRtkMode(state, record.position_type);
+  if (state.fix_valid)
+  {
+    state.latitude_deg = record.latitude_deg;
+    state.longitude_deg = record.longitude_deg;
+    state.altitude_m = record.altitude_m;
+  }
+
+  SetHorizontalAccuracyFromSigmas(state, record.latitude_std_m, record.longitude_std_m);
+  SetVerticalAccuracy(state, record.altitude_std_m);
+  SetTrackedAndUsedSatellites(state, record.tracked_satellites, record.used_satellites);
   SetCorrectionAge(state, record.diff_age_s);
 
   universal_gnss::RefreshValueFlagsFromFields(state);

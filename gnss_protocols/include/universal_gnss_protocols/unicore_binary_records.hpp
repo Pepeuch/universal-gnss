@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "universal_gnss_protocols/protocol_records.hpp"
+#include "universal_gnss_protocols/unicore_records.hpp"
 
 namespace universal_gnss_protocols
 {
@@ -37,6 +38,42 @@ struct UnicoreBinaryFrame
   ChecksumStatus checksum_status{ChecksumStatus::kMissing};
   std::uint32_t reported_crc32{0};
   std::uint32_t computed_crc32{0};
+};
+
+struct UnicoreBinaryHeader
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::uint8_t cpu_idle_percent{0};
+  std::uint16_t message_id{0};
+  std::uint16_t payload_length{0};
+  std::uint8_t time_reference_raw{0};
+  std::uint8_t time_status_raw{0};
+  std::uint16_t gps_week{0};
+  std::uint32_t gps_millis_of_week{0};
+  std::uint32_t format_version{0};
+  std::uint8_t reserved{0};
+  std::uint8_t leap_seconds{0};
+  std::uint16_t output_delay_ms{0};
+};
+
+struct UnicoreBestNavBRecord
+{
+  UnicoreBinaryHeader header{};
+
+  UnicoreSolutionStatus solution_status{UnicoreSolutionStatus::kUnknown};
+  UnicorePositionType position_type{UnicorePositionType::kUnknown};
+  double latitude_deg{0.0};
+  double longitude_deg{0.0};
+  double altitude_m{0.0};
+  std::optional<float> undulation_m{};
+  std::optional<bool> datum_is_wgs84{};
+  std::optional<float> latitude_std_m{};
+  std::optional<float> longitude_std_m{};
+  std::optional<float> altitude_std_m{};
+  std::optional<float> diff_age_s{};
+  std::optional<float> solution_age_s{};
+  std::optional<std::uint16_t> tracked_satellites{};
+  std::optional<std::uint16_t> used_satellites{};
 };
 
 }  // namespace universal_gnss_protocols

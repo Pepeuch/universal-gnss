@@ -14,7 +14,7 @@ Implemented:
 - TCP client transport
 - NMEA parser: GGA, RMC, GSA, GSV, GST, VTG, ZDA
 - UBX parser: NAV-PVT, NAV-DOP, NAV-SAT, NAV-STATUS, MON-RF, RXM-RTCM
-- Unicore ASCII parser: PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
+- Unicore parser: BESTNAVB, PVTSLNA, BESTNAVA, RTKSTATUSA, RTCMSTATUSA, SATSINFOA
 - RTCM3 framing, CRC24Q, message type extraction
 - Driver abstraction foundation
 - UbloxSession foundation
@@ -221,6 +221,7 @@ To do:
 
 Implemented:
 
+- [x] BESTNAVB
 - [x] PVTSLNA
 - [x] BESTNAVA
 - [x] RTKSTATUSA
@@ -235,7 +236,7 @@ Implemented:
 To do:
 
 - [x] binary N4 framing
-- [ ] binary BESTNAV/PVTSLN equivalents
+- [ ] binary PVTSLNB
 - [ ] BESTSATA if useful
 - [ ] raw observation support
 - [ ] AGC threshold interpretation if a safe generic policy emerges

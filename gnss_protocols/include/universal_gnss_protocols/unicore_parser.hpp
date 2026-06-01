@@ -4,6 +4,7 @@
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
+#include "universal_gnss_protocols/unicore_binary_records.hpp"
 #include "universal_gnss_protocols/unicore_records.hpp"
 
 namespace universal_gnss_protocols
@@ -27,9 +28,14 @@ ParserResult<UnicoreHwStatusRecord> ParseUnicoreHwStatus(const UnicoreFrame& fra
 
 ParserResult<UnicoreAgcRecord> ParseUnicoreAgc(const UnicoreFrame& frame);
 
+ParserResult<UnicoreBestNavBRecord> ParseUnicoreBestNavB(const UnicoreBinaryFrame& frame);
+
 universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtslnRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestNavRecord& record);
+
+universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
+    const UnicoreBestNavBRecord& record);
 
 universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
     const UnicoreRtkStatusRecord& record);

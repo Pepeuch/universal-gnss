@@ -13,8 +13,9 @@ The goal is to keep Unicore support portable and conservative:
 
 ## Current Coverage
 
-Current parsed Unicore ASCII messages:
+Current parsed Unicore messages:
 
+- `BESTNAVB`
 - `PVTSLNA`
 - `BESTNAVA`
 - `RTKSTATUSA`
@@ -27,7 +28,7 @@ Current parsed Unicore ASCII messages:
 
 Not implemented yet:
 
-- binary `N4` semantic decode
+- broader binary `N4` semantic decode beyond `BESTNAVB`
 - Unicore configuration commands like `MODE`, `CONFIG`, and `LOG`
 
 Binary `N4` framing now exists separately from the ASCII parser:
@@ -38,14 +39,14 @@ Binary `N4` framing now exists separately from the ASCII parser:
 - documented reflected 32-bit CRC validation across the frame minus the final
   CRC field
 
-That binary path currently stops at typed frame containers. It does not yet
-project any binary messages into `GnssRuntimeState`, and ASCII remains the
-primary Unicore runtime source today.
+That binary path now includes one semantic decoder: `BESTNAVB`. Even so,
+ASCII remains the primary Unicore runtime source today because binary routing
+through `UnicoreSession` and replay is still deferred.
 
 ## Data Flow
 
 ```text
-framed Unicore ASCII record
+framed Unicore ASCII or binary record
     ->
 typed Unicore semantic record
     ->
@@ -123,6 +124,32 @@ Current non-mappings:
   projected into core
 - velocity and track fields are kept out of core for now
 - no heading is inferred from `BESTNAVA`
+
+## BESTNAVB
+
+`BESTNAVB` is the first binary `N4` semantic decoder and follows the same
+portable runtime policy as `BESTNAVA` where the documented binary fields match.
+
+Current mappings:
+
+- binary `solution status` + `position type` -> fix validity and generic
+  `fix_type`
+- binary `position type` -> generic `rtk_mode` when documented float / integer
+  RTK solution types are present
+- binary `lat`, `lon`, `hgt` -> coordinates / altitude
+- binary `lat sigma`, `lon sigma` -> horizontal accuracy
+- binary `hgt sigma` -> vertical accuracy
+- binary `diff_age` -> correction age
+- binary `#SVs`, `#solnSVs` -> satellites tracked / used
+
+Current non-mappings:
+
+- `undulation` and `datum id` are parsed semantically but not projected into
+  core
+- documented velocity, track, latency, and signal-mask fields are intentionally
+  ignored in this first binary step
+- no heading or azimuth is inferred from `BESTNAVB`
+- `BESTNAVB` is not yet routed through `UnicoreSession` or replay
 
 ## RTKSTATUSA
 
@@ -346,6 +373,7 @@ That means:
 Examples:
 
 - `BESTNAVA` can refresh coordinates, accuracy, and correction age
+- `BESTNAVB` can do the same from documented binary fields
 - `RTKSTATUSA` can refresh RTK mode and dual-antenna state
 - `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
 - `JAMSTATUSA` and `FREQJAMSTATUSA` can refresh portable
