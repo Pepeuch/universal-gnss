@@ -168,6 +168,75 @@ void TestPortEnumerationPrefersByIdAndDeduplicates(TestContext& ctx)
   fs::remove_all(root);
 }
 
+void TestPlatformUartsExcludedByDefault(TestContext& ctx)
+{
+  const fs::path root =
+      fs::temp_directory_path() / "universal_gnss_discovery_platform_default_test";
+  fs::remove_all(root);
+  fs::create_directories(root / "dev/serial/by-id");
+
+  std::ofstream(root / "dev/ttyAMA0").put('\n');
+  std::ofstream(root / "dev/ttyS1").put('\n');
+  std::ofstream(root / "dev/ttyTHS2").put('\n');
+
+  ReceiverDiscoveryPaths paths;
+  paths.serial_by_id_dir = (root / "dev/serial/by-id").string();
+  paths.dev_dir = (root / "dev").string();
+
+  const auto candidates = DiscoverSerialPorts(paths);
+  ctx.Expect(candidates.empty(),
+             "platform UARTs should stay excluded unless explicitly enabled");
+
+  fs::remove_all(root);
+}
+
+void TestPlatformUartsIncludedAndDeduplicated(TestContext& ctx)
+{
+  const fs::path root =
+      fs::temp_directory_path() / "universal_gnss_discovery_platform_enabled_test";
+  fs::remove_all(root);
+  fs::create_directories(root / "dev/serial/by-id");
+
+  std::ofstream(root / "dev/ttyUSB0").put('\n');
+  std::ofstream(root / "dev/ttyAMA0").put('\n');
+  std::ofstream(root / "dev/ttyAMA2").put('\n');
+  std::ofstream(root / "dev/ttyS1").put('\n');
+  std::ofstream(root / "dev/ttyTHS2").put('\n');
+  fs::create_symlink(root / "dev/ttyAMA0", root / "dev/serial0");
+
+  ReceiverDiscoveryPaths paths;
+  paths.serial_by_id_dir = (root / "dev/serial/by-id").string();
+  paths.dev_dir = (root / "dev").string();
+
+  ReceiverProbeConfig config;
+  config.include_platform_uarts = true;
+  config.platform_uart_paths = {
+      (root / "dev/serial0").string(),
+      (root / "dev/serial1").string(),
+  };
+
+  const auto candidates = DiscoverSerialPorts(config, paths);
+  ctx.Expect(candidates.size() == 5u,
+             "enabled platform UART scanning should include aliases and prefixed UARTs with dedup");
+  ctx.Expect(candidates[0].source == ReceiverPortSource::kTtyUsb &&
+                 candidates[0].path.find("ttyUSB0") != std::string::npos,
+             "existing USB enumeration priority should remain unchanged");
+  ctx.Expect(candidates[1].source == ReceiverPortSource::kPlatformUart &&
+                 candidates[1].path.find("serial0") != std::string::npos,
+             "platform UART aliases should be preferred over their canonical tty target");
+  ctx.Expect(candidates[2].source == ReceiverPortSource::kPlatformUart &&
+                 candidates[2].path.find("ttyAMA2") != std::string::npos,
+             "ttyAMA devices should be included when platform UART scanning is enabled");
+  ctx.Expect(candidates[3].source == ReceiverPortSource::kPlatformUart &&
+                 candidates[3].path.find("ttyS1") != std::string::npos,
+             "ttyS devices should be included deterministically after ttyAMA");
+  ctx.Expect(candidates[4].source == ReceiverPortSource::kPlatformUart &&
+                 candidates[4].path.find("ttyTHS2") != std::string::npos,
+             "ttyTHS devices should be included when platform UART scanning is enabled");
+
+  fs::remove_all(root);
+}
+
 void TestExplicitPathCandidate(TestContext& ctx)
 {
   const auto candidate =
@@ -300,6 +369,8 @@ int main()
   TestContext ctx;
 
   TestPortEnumerationPrefersByIdAndDeduplicates(ctx);
+  TestPlatformUartsExcludedByDefault(ctx);
+  TestPlatformUartsIncludedAndDeduplicated(ctx);
   TestExplicitPathCandidate(ctx);
   TestUbxDetection(ctx);
   TestUnicoreAsciiDetection(ctx);

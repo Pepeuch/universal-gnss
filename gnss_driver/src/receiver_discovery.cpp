@@ -126,11 +126,13 @@ int SourcePriority(const ReceiverPortSource source)
       return 1;
     case ReceiverPortSource::kTtyUsb:
       return 2;
-    case ReceiverPortSource::kExplicitPath:
+    case ReceiverPortSource::kPlatformUart:
       return 3;
+    case ReceiverPortSource::kExplicitPath:
+      return 4;
   }
 
-  return 4;
+  return 5;
 }
 
 void MaybeInsertPreferredCandidate(std::map<std::string, ReceiverPortCandidate>& deduplicated,
@@ -404,6 +406,12 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
 
 std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPaths& paths)
 {
+  return DiscoverSerialPorts(ReceiverProbeConfig{}, paths);
+}
+
+std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig& config,
+                                                       const ReceiverDiscoveryPaths& paths)
+{
   std::map<std::string, ReceiverPortCandidate> deduplicated;
 
   for (const auto& by_id_path : ListDirectoryPaths(paths.serial_by_id_dir))
@@ -432,6 +440,42 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPa
     candidate.source = ReceiverPortSource::kTtyUsb;
     candidate.transport_type = ReceiverTransportType::kSerial;
     MaybeInsertPreferredCandidate(deduplicated, candidate);
+  }
+
+  if (config.include_platform_uarts)
+  {
+    for (const auto& platform_path : config.platform_uart_paths)
+    {
+      try
+      {
+        if (!fs::exists(platform_path))
+        {
+          continue;
+        }
+      }
+      catch (const fs::filesystem_error&)
+      {
+        continue;
+      }
+
+      ReceiverPortCandidate candidate;
+      candidate.path = platform_path;
+      candidate.source = ReceiverPortSource::kPlatformUart;
+      candidate.transport_type = ReceiverTransportType::kSerial;
+      MaybeInsertPreferredCandidate(deduplicated, candidate);
+    }
+
+    for (const auto& prefix : config.platform_uart_prefixes)
+    {
+      for (const auto& platform_uart_path : ListMatchingDevicePaths(paths.dev_dir, prefix))
+      {
+        ReceiverPortCandidate candidate;
+        candidate.path = platform_uart_path;
+        candidate.source = ReceiverPortSource::kPlatformUart;
+        candidate.transport_type = ReceiverTransportType::kSerial;
+        MaybeInsertPreferredCandidate(deduplicated, candidate);
+      }
+    }
   }
 
   std::vector<ReceiverPortCandidate> candidates;
@@ -605,7 +649,7 @@ std::vector<ReceiverProbeResult> DiscoverReceivers(const ReceiverProbeConfig& co
   }
   else
   {
-    candidates = DiscoverSerialPorts(paths);
+    candidates = DiscoverSerialPorts(config, paths);
   }
 
   std::vector<ReceiverProbeResult> results;
@@ -669,6 +713,8 @@ const char* ToString(const ReceiverPortSource source)
       return "tty_acm";
     case ReceiverPortSource::kTtyUsb:
       return "tty_usb";
+    case ReceiverPortSource::kPlatformUart:
+      return "platform_uart";
     case ReceiverPortSource::kExplicitPath:
     default:
       return "explicit_path";

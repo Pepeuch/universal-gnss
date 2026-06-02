@@ -15,6 +15,7 @@ struct DiscoverOptions
   std::optional<std::string> explicit_path{};
   bool json_output{false};
   bool allow_generic_nmea{false};
+  bool include_platform_uarts{false};
   std::vector<std::uint32_t> baud_candidates{};
 };
 
@@ -22,12 +23,15 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " [--path <device>] [--json] [--baud 921600,115200] [--allow-nmea]\n"
+      << " [--path <device>] [--json] [--baud 921600,115200] [--allow-nmea]"
+      << " [--include-platform-uarts]\n"
       << "Examples:\n"
       << "  " << program_name << '\n'
       << "  " << program_name << " --path /dev/ttyACM0\n"
       << "  " << program_name << " --json\n"
-      << "  " << program_name << " --baud 921600,115200 --allow-nmea\n";
+      << "  " << program_name << " --baud 921600,115200 --allow-nmea\n"
+      << "  " << program_name << " --include-platform-uarts\n"
+      << "  " << program_name << " --path /dev/ttyAMA2 --baud 921600\n";
 }
 
 bool ParseUnsigned32(const std::string& text, std::uint32_t& value)
@@ -120,6 +124,11 @@ int main(int argc, char** argv)
       options.allow_generic_nmea = true;
       continue;
     }
+    if (argument == "--include-platform-uarts")
+    {
+      options.include_platform_uarts = true;
+      continue;
+    }
     if (argument == "--baud")
     {
       if (!ParseBaudList(require_value("--baud"), options.baud_candidates))
@@ -141,6 +150,7 @@ int main(int argc, char** argv)
     config.baud_candidates = options.baud_candidates;
   }
   config.allow_generic_nmea_fallback = options.allow_generic_nmea;
+  config.include_platform_uarts = options.include_platform_uarts;
 
   const auto results = universal_gnss_driver::DiscoverReceivers(config, options.explicit_path);
   if (options.json_output)

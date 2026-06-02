@@ -129,6 +129,7 @@ Implemented:
 - [x] live RTCM / `RXM-RTCM` real-hardware validation through the ROS2 path
 - [x] portable receiver discovery foundation
 - [x] `gnss_discover` CLI
+- [x] optional onboard/platform UART discovery
 
 To do:
 

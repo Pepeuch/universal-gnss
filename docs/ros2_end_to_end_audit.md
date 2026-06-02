@@ -855,6 +855,12 @@ Recommended operator flow today:
 2. confirm the preferred stable `/dev/serial/by-id/*` path, baud, and family
 3. launch `receiver_node` with explicit parameters
 
+For embedded Linux boards where the receiver is wired to an onboard UART, the
+discovery layer also supports:
+
+- `gnss_discover --include-platform-uarts`
+- `gnss_discover --path /dev/ttyAMA2 --baud 921600`
+
 Direct `serial_device:=auto` and ROS2-side receiver discovery remain deferred.
 
 ## Remaining Blockers Before A `v0.5` Tag

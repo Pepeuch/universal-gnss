@@ -563,6 +563,23 @@ Current Linux enumeration order is:
 - `/dev/ttyACM*`
 - `/dev/ttyUSB*`
 
+Optional platform UART scanning exists but stays disabled by default.
+
+When `include_platform_uarts=true`, discovery also considers:
+
+- `/dev/serial0`
+- `/dev/serial1`
+- `/dev/ttyAMA*`
+- `/dev/ttyS*`
+- `/dev/ttyTHS*`
+
+This is intentionally opt-in because onboard UARTs may belong to:
+
+- a Linux serial console
+- Bluetooth firmware links
+- unrelated board peripherals
+- other application-specific device wiring
+
 Current default baud probe order is:
 
 - `921600`

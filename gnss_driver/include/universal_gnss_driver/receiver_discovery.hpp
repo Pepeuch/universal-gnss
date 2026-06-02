@@ -19,7 +19,8 @@ enum class ReceiverPortSource : std::uint8_t
   kSerialById = 0,
   kTtyAcm = 1,
   kTtyUsb = 2,
-  kExplicitPath = 3,
+  kPlatformUart = 3,
+  kExplicitPath = 4,
 };
 
 enum class ReceiverDetectedFamily : std::uint8_t
@@ -58,6 +59,9 @@ struct ReceiverProbeConfig
   std::uint32_t read_timeout_ms{250u};
   std::size_t max_probe_bytes{4096u};
   bool allow_generic_nmea_fallback{false};
+  bool include_platform_uarts{false};
+  std::vector<std::string> platform_uart_paths{"/dev/serial0", "/dev/serial1"};
+  std::vector<std::string> platform_uart_prefixes{"ttyAMA", "ttyS", "ttyTHS"};
 };
 
 struct ReceiverProbeEvidence
@@ -82,6 +86,10 @@ struct ReceiverProbeResult
   ReceiverProbeEvidence evidence{};
   std::string note{};
 };
+
+std::vector<ReceiverPortCandidate> DiscoverSerialPorts(
+    const ReceiverProbeConfig& config,
+    const ReceiverDiscoveryPaths& paths = {});
 
 std::vector<ReceiverPortCandidate> DiscoverSerialPorts(
     const ReceiverDiscoveryPaths& paths = {});

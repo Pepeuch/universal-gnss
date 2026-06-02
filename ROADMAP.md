@@ -115,6 +115,7 @@ Completed at the start of this phase:
 - live UM982 correction forwarding validation through the same ROS2 path
 - portable serial receiver discovery and read-only auto-detection foundation
 - `gnss_discover` CLI with real F9P and UM982 validation at `921600`
+- optional onboard/platform UART discovery for embedded Linux targets
 
 Next:
 

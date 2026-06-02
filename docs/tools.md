@@ -36,6 +36,9 @@ Current behavior:
   - `460800`
   - `115200`
   - `38400`
+- keeps onboard/platform UART scanning disabled by default
+- can opt into platform UART probing for embedded Linux targets such as
+  Raspberry Pi, Orange Pi, or Jetson-like boards
 - performs bounded read-only probing with no receiver writes
 - reports a detected family:
   - `ublox`
@@ -62,6 +65,9 @@ Current policy:
 - no baud or protocol settings are persisted
 - generic `NMEA` fallback is disabled by default and must be opted in with
   `--allow-nmea`
+- onboard UART scanning must be opted in with `--include-platform-uarts`
+  because `/dev/serial0`, `/dev/ttyAMA*`, `/dev/ttyS*`, or `/dev/ttyTHS*`
+  may be console, Bluetooth, or non-GNSS peripherals
 
 Examples:
 
@@ -71,6 +77,8 @@ gnss_discover --path /dev/ttyACM0
 gnss_discover --json
 gnss_discover --baud 921600,115200
 gnss_discover --allow-nmea
+gnss_discover --include-platform-uarts
+gnss_discover --path /dev/ttyAMA2 --baud 921600
 ```
 
 Typical text output includes:
@@ -86,6 +94,17 @@ Typical text output includes:
 
 `--json` emits a list of stable result objects intended for later ROS 2 or GUI
 integration work.
+
+Recommended embedded Linux usage:
+
+```text
+gnss_discover --include-platform-uarts
+gnss_discover --path /dev/ttyAMA2 --baud 921600
+```
+
+On boards that expose many inactive `ttyS*` devices, `--include-platform-uarts`
+may produce several `unknown` results. When the target UART is already known,
+prefer the explicit `--path` form.
 
 ## Current Tools
 
