@@ -16,6 +16,7 @@
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
+#include "diagnostic_msgs/msg/key_value.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
@@ -25,6 +26,7 @@
 #include "universal_gnss_driver/receiver_session_runner.hpp"
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include "universal_gnss_ros2/navsat_fix_adapter.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
@@ -108,6 +110,14 @@ universal_gnss::GnssDiagnosticEvent MakeEvent(universal_gnss::GnssDiagnosticSeve
   event.message = std::move(message);
   event.source = "receiver_node";
   return event;
+}
+
+diagnostic_msgs::msg::KeyValue MakeKeyValue(std::string key, std::string value)
+{
+  diagnostic_msgs::msg::KeyValue entry;
+  entry.key = std::move(key);
+  entry.value = std::move(value);
+  return entry;
 }
 
 void LogDiagnosticEvent(rclcpp::Node& node, const universal_gnss::GnssDiagnosticEvent& event)
@@ -397,6 +407,12 @@ struct ReceiverNode::Impl
         owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
+    rtcm_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
+        "rtcm",
+        rclcpp::QoS(rclcpp::KeepLast(50)).reliable(),
+        [this](const universal_gnss_ros2::msg::RtcmFrame& message) {
+          this->OnRtcmMessage(message);
+        });
 
     if (injected_source != nullptr)
     {
@@ -411,6 +427,8 @@ struct ReceiverNode::Impl
       transport_configured_ = transport_source_ != nullptr;
       transport_ready_ = transport_source_ != nullptr;
     }
+
+    transport_sink_ = dynamic_cast<universal_gnss_transport::ByteSink*>(transport_source_.get());
 
     for (const auto& event : startup_events_)
     {
@@ -436,6 +454,59 @@ struct ReceiverNode::Impl
   {
     StepOnce();
     PublishNow();
+  }
+
+  void OnRtcmMessage(const universal_gnss_ros2::msg::RtcmFrame& message)
+  {
+    if (message.data.empty())
+    {
+      return;
+    }
+
+    if (transport_sink_ == nullptr)
+    {
+      ++rtcm_forward_write_errors_;
+      last_rtcm_forward_failure_message_ = "Receiver transport does not support correction writes";
+      return;
+    }
+
+    const auto write_all = [&](const std::uint8_t* data,
+                               const std::size_t size) -> universal_gnss_transport::WriteResult {
+      universal_gnss_transport::WriteResult final_result{};
+      std::size_t offset = 0u;
+      while (offset < size)
+      {
+        const auto result = transport_sink_->Write(
+            data + static_cast<std::ptrdiff_t>(offset), size - offset);
+        final_result.bytes_written += result.bytes_written;
+        final_result.status = result.status;
+        final_result.error = result.error;
+        if (result.status != universal_gnss_transport::TransportStatus::kOk ||
+            result.bytes_written == 0u)
+        {
+          break;
+        }
+        offset += result.bytes_written;
+      }
+      return final_result;
+    };
+
+    const auto result = write_all(message.data.data(), message.data.size());
+    if (result.status != universal_gnss_transport::TransportStatus::kOk ||
+        result.bytes_written != message.data.size())
+    {
+      ++rtcm_forward_write_errors_;
+      transport_ready_ = transport_source_ != nullptr && transport_source_->IsOpen();
+      last_rtcm_forward_failure_message_ =
+          "Failed to forward RTCM corrections: " + std::string(ToString(result.error));
+      return;
+    }
+
+    ++rtcm_forwarded_frames_;
+    rtcm_forwarded_bytes_ += result.bytes_written;
+    last_rtcm_forward_time_ = SteadyClock::now();
+    last_rtcm_forward_message_type_ = message.message_type;
+    last_rtcm_forward_failure_message_.reset();
   }
 
   bool StepOnce()
@@ -484,9 +555,12 @@ struct ReceiverNode::Impl
     const auto& state = session_->current_state();
     const auto& session_metrics = session_->metrics();
 
+    const bool receiver_rtcm_active =
+        ActiveUbloxMetrics() != nullptr && ActiveUbloxMetrics()->receiver_rtcm_messages_used > 0u;
+
     summary.fix_valid = state.fix_valid;
     summary.rtk_available = HasRtkAvailability(state);
-    summary.correction_available = HasCorrectionAvailability(state);
+    summary.correction_available = HasCorrectionAvailability(state) || receiver_rtcm_active;
     summary.receiver_healthy =
         !HasKnownBoolField(state,
                           universal_gnss::GnssCapability::kInterferenceState,
@@ -596,7 +670,143 @@ struct ReceiverNode::Impl
                                  "Receiver reported GNSS jamming"));
     }
 
+    if (transport_sink_ == nullptr)
+    {
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                                 universal_gnss::GnssDiagnosticCategory::kTransport,
+                                 "rtcm_forwarding_unavailable",
+                                 "Receiver transport is read-only; RTCM forwarding is unavailable"));
+    }
+    else if (rtcm_forwarded_frames_ > 0u)
+    {
+      summary.AddEvent(MakeEvent(
+          universal_gnss::GnssDiagnosticSeverity::kOk,
+          universal_gnss::GnssDiagnosticCategory::kCorrection,
+          "rtcm_forwarding_active",
+          "RTCM corrections are being forwarded to the live receiver transport"));
+    }
+
+    if (rtcm_forward_write_errors_ > 0u)
+    {
+      summary.AddEvent(MakeEvent(
+          universal_gnss::GnssDiagnosticSeverity::kWarning,
+          universal_gnss::GnssDiagnosticCategory::kCorrection,
+          "rtcm_forwarding_error",
+          last_rtcm_forward_failure_message_.value_or("RTCM forwarding reported write errors")));
+    }
+
+    if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
+    {
+      if (ublox_metrics->receiver_rtcm_messages_used > 0u)
+      {
+        summary.AddEvent(MakeEvent(
+            universal_gnss::GnssDiagnosticSeverity::kOk,
+            universal_gnss::GnssDiagnosticCategory::kCorrection,
+            "receiver_rtcm_active",
+            "Receiver reported accepted RTCM corrections"));
+      }
+
+      if (ublox_metrics->receiver_rtcm_messages_not_used > 0u)
+      {
+        summary.AddEvent(MakeEvent(
+            universal_gnss::GnssDiagnosticSeverity::kWarning,
+            universal_gnss::GnssDiagnosticCategory::kCorrection,
+            "receiver_rtcm_not_used",
+            "Receiver reported RTCM messages that were received but not used"));
+      }
+
+      if (ublox_metrics->receiver_rtcm_crc_failed > 0u)
+      {
+        summary.AddEvent(MakeEvent(
+            universal_gnss::GnssDiagnosticSeverity::kWarning,
+            universal_gnss::GnssDiagnosticCategory::kCorrection,
+            "receiver_rtcm_crc_failed",
+            "Receiver reported RTCM messages that failed receiver-side CRC validation"));
+      }
+    }
+
     return summary;
+  }
+
+  void AppendRtcmForwardingStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics,
+                                  const universal_gnss::GnssRuntimeState& state) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/rtcm_forwarding";
+    status.hardware_id = hardware_id_;
+
+    if (transport_sink_ == nullptr)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM forwarding unavailable";
+    }
+    else if (rtcm_forward_write_errors_ > 0u)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM forwarding write errors observed";
+    }
+    else if (rtcm_forwarded_frames_ > 0u)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "RTCM forwarding active";
+    }
+    else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "RTCM forwarding idle";
+    }
+
+    status.values.push_back(
+        MakeKeyValue("forwarding_supported", transport_sink_ != nullptr ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("forwarded_frame_count", std::to_string(rtcm_forwarded_frames_)));
+    status.values.push_back(
+        MakeKeyValue("forwarded_bytes", std::to_string(rtcm_forwarded_bytes_)));
+    status.values.push_back(
+        MakeKeyValue("write_error_count", std::to_string(rtcm_forward_write_errors_)));
+    const bool receiver_rtcm_active =
+        ActiveUbloxMetrics() != nullptr && ActiveUbloxMetrics()->receiver_rtcm_messages_used > 0u;
+    status.values.push_back(
+        MakeKeyValue("receiver_correction_available",
+                     (HasCorrectionAvailability(state) || receiver_rtcm_active) ? "true" : "false"));
+    if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
+    {
+      status.values.push_back(MakeKeyValue(
+          "receiver_rtcm_messages_seen", std::to_string(ublox_metrics->receiver_rtcm_messages_seen)));
+      status.values.push_back(MakeKeyValue(
+          "receiver_rtcm_messages_used", std::to_string(ublox_metrics->receiver_rtcm_messages_used)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_messages_not_used",
+                       std::to_string(ublox_metrics->receiver_rtcm_messages_not_used)));
+      status.values.push_back(MakeKeyValue(
+          "receiver_rtcm_crc_failed", std::to_string(ublox_metrics->receiver_rtcm_crc_failed)));
+      if (ublox_metrics->last_receiver_rtcm_message_type.has_value())
+      {
+        status.values.push_back(MakeKeyValue(
+            "receiver_last_message_type",
+            std::to_string(*ublox_metrics->last_receiver_rtcm_message_type)));
+      }
+    }
+    if (last_rtcm_forward_message_type_.has_value())
+    {
+      status.values.push_back(
+          MakeKeyValue("last_message_type", std::to_string(*last_rtcm_forward_message_type_)));
+    }
+    if (last_rtcm_forward_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          SteadyClock::now() - *last_rtcm_forward_time_);
+      std::ostringstream stream;
+      stream << (static_cast<double>(age_ms.count()) / 1000.0);
+      status.values.push_back(MakeKeyValue("last_frame_age_s", stream.str()));
+    }
+    if (last_rtcm_forward_failure_message_.has_value())
+    {
+      status.values.push_back(
+          MakeKeyValue("last_failure", *last_rtcm_forward_failure_message_));
+    }
+
+    diagnostics.status.push_back(std::move(status));
   }
 
   void PublishNow()
@@ -618,6 +828,7 @@ struct ReceiverNode::Impl
       last_diagnostics_message_->header.stamp = ToRosTime(state.timestamp_ns);
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;
+    AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
 
     if (CanPublishFixMessage(state))
     {
@@ -637,13 +848,25 @@ struct ReceiverNode::Impl
   bool publishers_ready() const
   {
     return fix_publisher_ != nullptr && status_publisher_ != nullptr &&
-           diagnostics_publisher_ != nullptr;
+           diagnostics_publisher_ != nullptr && rtcm_subscription_ != nullptr;
   }
 
   bool HasFreshRuntimeState() const
   {
     return last_runtime_update_time_.has_value() &&
            (SteadyClock::now() - *last_runtime_update_time_ < kStaleTimeout);
+  }
+
+  const universal_gnss_driver::UbloxSessionMetrics* ActiveUbloxMetrics() const
+  {
+    if (session_ == nullptr ||
+        session_->metrics().selected_session_kind !=
+            universal_gnss_driver::ReceiverSessionKind::kUblox)
+    {
+      return nullptr;
+    }
+
+    return &session_->ublox_metrics();
   }
 
   bool CanPublishFixMessage(const universal_gnss::GnssRuntimeState& state) const
@@ -693,9 +916,11 @@ struct ReceiverNode::Impl
   std::unique_ptr<universal_gnss_driver::ReceiverSession> session_{};
   std::unique_ptr<universal_gnss_transport::ByteSource> transport_source_{};
   std::optional<universal_gnss_driver::ReceiverSessionRunner> runner_{};
+  universal_gnss_transport::ByteSink* transport_sink_{nullptr};
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr fix_publisher_{};
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_publisher_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
+  rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
   rclcpp::TimerBase::SharedPtr timer_{};
   std::vector<universal_gnss::GnssDiagnosticEvent> startup_events_{};
   std::optional<sensor_msgs::msg::NavSatFix> last_fix_message_{};
@@ -704,9 +929,15 @@ struct ReceiverNode::Impl
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
   std::optional<SteadyClock::time_point> last_runtime_update_time_{};
+  std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
+  std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
   std::optional<universal_gnss_transport::TransportStatus> last_logged_terminal_status_{};
+  std::optional<std::string> last_rtcm_forward_failure_message_{};
   universal_gnss_transport::TransportError last_logged_transport_error_{
       universal_gnss_transport::TransportError::kNone};
+  std::size_t rtcm_forwarded_frames_{0u};
+  std::size_t rtcm_forwarded_bytes_{0u};
+  std::size_t rtcm_forward_write_errors_{0u};
   bool transport_configured_{false};
   bool transport_ready_{false};
   bool using_injected_source_{false};

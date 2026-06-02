@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cerrno>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -12,9 +13,14 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
+#include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 #include "universal_gnss_ros2/ntrip_node.hpp"
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 #include "universal_gnss_ros2/receiver_node.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
@@ -41,6 +47,74 @@ std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
 void AppendBytes(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
 {
   destination.insert(destination.end(), source.begin(), source.end());
+}
+
+std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
+                                         const bool valid_crc = true)
+{
+  const std::vector<std::uint8_t> payload = {
+      static_cast<std::uint8_t>((message_type >> 4u) & 0xFFu),
+      static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
+  };
+
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      0x00u,
+      static_cast<std::uint8_t>(payload.size()),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  if (!valid_crc)
+  {
+    crc ^= 0x01u;
+  }
+
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
+void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+{
+  payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
+  payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
+}
+
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
+                                        const std::uint8_t message_id,
+                                        const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {
+      0xB5u,
+      0x62u,
+      class_id,
+      message_id,
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0xFFu),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const auto checksum =
+      universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
+  bytes.push_back(checksum.ck_a);
+  bytes.push_back(checksum.ck_b);
+  return bytes;
+}
+
+std::vector<std::uint8_t> MakeUbxRxmRtcmPayload(const std::uint16_t message_type,
+                                                const std::uint16_t ref_station_id,
+                                                const std::uint8_t flags)
+{
+  std::vector<std::uint8_t> payload(8u, 0u);
+  payload[0u] = 0x02u;
+  payload[1u] = flags;
+  WriteLeU2(payload, 2u, 0u);
+  WriteLeU2(payload, 4u, ref_station_id);
+  WriteLeU2(payload, 6u, message_type);
+  return payload;
 }
 
 class ScriptedByteSource : public universal_gnss_transport::ByteSource
@@ -199,6 +273,151 @@ TEST_F(ReceiverNodeTest, ReceiverAndNtripNodesConstructWithCompatibleParameters)
 
   EXPECT_TRUE(receiver.publishers_ready());
   EXPECT_TRUE(ntrip.diagnostics_ready());
+}
+
+TEST_F(ReceiverNodeTest, ReceiverConsumesRtcmPublishedByNtripNode)
+{
+  class SocketPair
+  {
+  public:
+    ~SocketPair()
+    {
+      if (peer_fd_ >= 0)
+      {
+        ::close(peer_fd_);
+      }
+      if (client_fd_ >= 0)
+      {
+        ::close(client_fd_);
+      }
+    }
+
+    bool Open()
+    {
+      int fds[2] = {-1, -1};
+      if (::socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0)
+      {
+        return false;
+      }
+      client_fd_ = fds[0];
+      peer_fd_ = fds[1];
+      return true;
+    }
+
+    int ReleaseClientFd()
+    {
+      const int fd = client_fd_;
+      client_fd_ = -1;
+      return fd;
+    }
+
+    bool WritePeer(const std::string& text)
+    {
+      return WritePeer(std::vector<std::uint8_t>(text.begin(), text.end()));
+    }
+
+    bool WritePeer(const std::vector<std::uint8_t>& data)
+    {
+      std::size_t offset = 0u;
+      while (offset < data.size())
+      {
+        const ssize_t bytes_written =
+            ::write(peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
+        if (bytes_written < 0)
+        {
+          if (errno == EINTR)
+          {
+            continue;
+          }
+          return false;
+        }
+        offset += static_cast<std::size_t>(bytes_written);
+      }
+      return true;
+    }
+
+    std::string ReadPeerText(const std::size_t max_bytes)
+    {
+      std::vector<char> buffer(max_bytes, '\0');
+      const ssize_t bytes_read = ::recv(peer_fd_, buffer.data(), buffer.size(), MSG_DONTWAIT);
+      if (bytes_read <= 0)
+      {
+        return {};
+      }
+      return std::string(buffer.data(), buffer.data() + bytes_read);
+    }
+
+  private:
+    int client_fd_{-1};
+    int peer_fd_{-1};
+  };
+
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions receiver_options;
+  receiver_options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+
+  rclcpp::NodeOptions ntrip_options;
+  ntrip_options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", false),
+  });
+
+  auto duplex = std::make_unique<universal_gnss_transport::MemoryByteDuplex>();
+  auto* duplex_ptr = duplex.get();
+  universal_gnss_ros2::ReceiverNode receiver(std::move(duplex), receiver_options);
+  universal_gnss_ros2::NtripNode ntrip(sockets.ReleaseClientFd(), ntrip_options);
+  auto bridge_node = std::make_shared<rclcpp::Node>("receiver_rtcm_bridge");
+  auto bridge_publisher =
+      bridge_node->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(receiver.get_node_base_interface());
+  executor.add_node(ntrip.get_node_base_interface());
+  executor.add_node(bridge_node->get_node_base_interface());
+  executor.spin_some();
+
+  EXPECT_TRUE(ntrip.StepOnce());
+  EXPECT_NE(sockets.ReadPeerText(1024u).find("GET /RTCM3 HTTP/1.1"), std::string::npos);
+
+  const auto rtcm = BuildRtcmFrame(1077u);
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\n"));
+  ASSERT_TRUE(sockets.WritePeer(rtcm));
+  for (std::size_t attempt = 0u; attempt < 8u && !ntrip.last_rtcm_message().has_value(); ++attempt)
+  {
+    ntrip.StepOnce();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(ntrip.last_rtcm_message().has_value());
+
+  for (std::size_t attempt = 0u; attempt < 50u && bridge_publisher->get_subscription_count() == 0u;
+       ++attempt)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_GT(bridge_publisher->get_subscription_count(), 0u);
+
+  bridge_publisher->publish(*ntrip.last_rtcm_message());
+  for (std::size_t attempt = 0u; attempt < 8u && duplex_ptr->written_bytes().empty(); ++attempt)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  EXPECT_EQ(duplex_ptr->written_bytes(), rtcm);
+
+  receiver.PublishNow();
+  ASSERT_TRUE(receiver.last_diagnostics_message().has_value());
+  const auto* forwarding =
+      FindDiagnosticStatusByName(*receiver.last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
 }
 #endif
 
@@ -399,6 +618,80 @@ TEST_F(ReceiverNodeTest, StaysAliveOnSerialOpenFailureAndReportsDiagnostic)
   ASSERT_NE(open_failed, nullptr);
   EXPECT_EQ(open_failed->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
   EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"), std::optional<std::string>{"false"});
+}
+
+TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmAcceptanceFromUbloxStream)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+
+  std::vector<std::uint8_t> stream =
+      BuildUbxFrame(0x02u, 0x32u, MakeUbxRxmRtcmPayload(1077u, 42u, 0x04u));
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>(std::move(stream));
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* forwarding =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/rtcm_forwarding");
+  const auto* receiver_rtcm =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/receiver_rtcm_active");
+
+  ASSERT_NE(forwarding, nullptr);
+  ASSERT_NE(receiver_rtcm, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_rtcm_messages_seen"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_rtcm_messages_used"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_correction_available"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_last_message_type"),
+            std::optional<std::string>{"1077"});
+  EXPECT_EQ(receiver_rtcm->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+}
+
+TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+
+  auto duplex = std::make_unique<universal_gnss_transport::MemoryByteDuplex>();
+  auto* duplex_ptr = duplex.get();
+  universal_gnss_ros2::ReceiverNode node(std::move(duplex), options);
+
+  auto publisher_node = std::make_shared<rclcpp::Node>("receiver_rtcm_publisher");
+  auto publisher =
+      publisher_node->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
+
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node.get_node_base_interface());
+  executor.add_node(publisher_node->get_node_base_interface());
+  executor.spin_some();
+
+  const auto bytes = BuildRtcmFrame(1077u);
+  universal_gnss_ros2::msg::RtcmFrame message;
+  message.message_type = 1077u;
+  message.data = bytes;
+  publisher->publish(message);
+  executor.spin_some();
+
+  EXPECT_EQ(duplex_ptr->written_bytes(), bytes);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* forwarding =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "last_message_type"),
+            std::optional<std::string>{"1077"});
 }
 
 }  // namespace

@@ -271,6 +271,19 @@ std::vector<std::uint8_t> MakeMonHwPayload(const std::uint8_t antenna_status,
   return payload;
 }
 
+std::vector<std::uint8_t> MakeRxmRtcmPayload(const std::uint16_t message_type,
+                                             const std::uint16_t ref_station_id,
+                                             const std::uint8_t flags)
+{
+  std::vector<std::uint8_t> payload(8u, 0u);
+  payload[0u] = 0x02u;
+  payload[1u] = flags;
+  WriteLeU2(payload, 2u, 0u);
+  WriteLeU2(payload, 4u, ref_station_id);
+  WriteLeU2(payload, 6u, message_type);
+  return payload;
+}
+
 void TestNavPvtRuntimeUpdates(TestContext& ctx)
 {
   UbloxSession session;
@@ -371,6 +384,29 @@ void TestMonHwInterferenceAndJammingUpdates(TestContext& ctx)
                  !state.latitude_deg.has_value() &&
                  !state.horizontal_accuracy_m.has_value(),
              "MON-HW should not invent fix, position, or accuracy state");
+}
+
+void TestRxmRtcmMetrics(TestContext& ctx)
+{
+  UbloxSession session;
+  session.FeedBytes(BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(1077u, 42u, 0x04u)), 4547);
+  session.FeedBytes(BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(1005u, 42u, 0x02u)), 4548);
+  session.FeedBytes(BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(1230u, 42u, 0x01u)), 4549);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.ubx_frames_seen == 3u &&
+                 metrics.frames_parsed == 3u &&
+                 metrics.receiver_rtcm_messages_seen == 3u,
+             "RXM-RTCM should be counted as a known parsed UBX message");
+  ctx.Expect(metrics.receiver_rtcm_messages_used == 1u &&
+                 metrics.receiver_rtcm_messages_not_used == 1u &&
+                 metrics.receiver_rtcm_crc_failed == 1u,
+             "RXM-RTCM metrics should track used, not-used, and CRC-failed receiver outcomes");
+  ctx.Expect(metrics.last_receiver_rtcm_message_type == std::optional<std::uint16_t>(1230u),
+             "RXM-RTCM metrics should retain the last observed message type");
+  ctx.Expect(!session.current_state().correction_age_s.has_value() &&
+                 session.current_state().fix_type == GnssFixType::kUnknown,
+             "RXM-RTCM should not invent rover correction age or fix state on its own");
 }
 
 void TestNmeaGstAccuracyUpdates(TestContext& ctx)
@@ -504,6 +540,7 @@ int main()
   TestMonRfInterferenceAndJammingUpdates(ctx);
   TestNavDopUpdatesHdopAndVdop(ctx);
   TestMonHwInterferenceAndJammingUpdates(ctx);
+  TestRxmRtcmMetrics(ctx);
   TestNmeaGstAccuracyUpdates(ctx);
   TestMixedStreamRouting(ctx);
   TestUnknownAndMalformedFrameCounting(ctx);

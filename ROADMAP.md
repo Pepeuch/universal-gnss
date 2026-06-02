@@ -109,11 +109,12 @@ Completed at the start of this phase:
 - ROS2 end-to-end audit / hardening pass
 - `robot_localization` example configuration and documentation
 - real ZED-F9P + local NTRIP caster smoke validation on ROS2 Kilted
+- live RTCM forwarding from `NtripNode` into `ReceiverNode`
+- live u-blox `RXM-RTCM` acceptance validation through the ROS2 path
 
 Next:
 
 - ROS2 replay node
-- correction forwarding / bringup composition between receiver and NTRIP nodes
 - Humble/Jazzy validation
 - Foxglove-friendly topic surface
 

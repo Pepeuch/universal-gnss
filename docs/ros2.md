@@ -357,6 +357,12 @@ Supported receiver families:
 - `receiver_family=ublox`
 - `receiver_family=unicore`
 
+Correction subscription:
+
+- `rtcm`
+  - type: `universal_gnss_ros2/msg/RtcmFrame`
+  - used only when the active transport is writable
+
 ### Parameters
 
 - `receiver_family`
@@ -421,6 +427,8 @@ Diagnostic states surfaced by the node include:
 - stale runtime state
 - terminal transport states such as EOF / closed / read error
 - portable jamming / interference state propagated from `GnssRuntimeState`
+- RTCM forwarding activity / write failures
+- receiver-side RTCM acceptance when a backend such as u-blox exposes it
 
 The first real ZED-F9P smoke test on `/dev/ttyACM0` is recorded in
 [ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
@@ -438,7 +446,7 @@ ros2 run universal_gnss_ros2 receiver_node --ros-args \
   -p receiver_family:=ublox \
   -p transport:=serial \
   -p serial_device:=/dev/ttyACM0 \
-  -p serial_baud:=115200 \
+  -p serial_baud:=921600 \
   -p frame_id:=gnss
 ```
 
@@ -462,8 +470,8 @@ ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
   receiver_family:=unicore
 
 ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
-  serial_device:=/dev/ttyUSB0 \
-  serial_baud:=115200 \
+  serial_device:=/dev/ttyACM0 \
+  serial_baud:=921600 \
   receiver_family:=ublox
 
 ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
@@ -474,7 +482,7 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   receiver_family:=ublox \
   transport:=serial \
   serial_device:=/dev/ttyACM0 \
-  serial_baud:=115200 \
+  serial_baud:=921600 \
   caster_host:=127.0.0.1 \
   caster_port:=2101 \
   mountpoint:=RTCM3 \
@@ -496,6 +504,7 @@ existing low-level path:
 GnssStatus subscription -> GnssRuntimeState -> NtripClient::MaybeInjectGga()
                         -> NtripClient TCP/reconnect/read loop
                         -> RTCM correction monitor
+                        -> /rtcm (universal_gnss_ros2/msg/RtcmFrame)
                         -> ROS 2 diagnostics
 ```
 
@@ -549,8 +558,19 @@ Runtime policy:
 
 Topics published by the current NTRIP node:
 
+- `rtcm`
+  - type: `universal_gnss_ros2/msg/RtcmFrame`
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
+
+ROS 2 forwarding contract:
+
+- `NtripNode` publishes `rtcm`
+- `ReceiverNode` subscribes to `rtcm`
+- message type: `universal_gnss_ros2/msg/RtcmFrame`
+- QoS: `reliable`, `KeepLast(50)`
+- the payload is the full RTCM frame bytes exactly as extracted by the reusable
+  low-level `NtripClient`
 
 Current diagnostic states include:
 
@@ -563,6 +583,7 @@ Current diagnostic states include:
 - `gga_source_stale`
 - `gga_injection_active`
 - `gga_send_error`
+- `rtcm_forwarding_active`
 
 ### Launch
 
@@ -583,8 +604,6 @@ ros2 launch universal_gnss_ros2 ntrip.launch.py \
 
 ### Current limits
 
-- no RTCM ROS topic is published yet
-- no direct correction forwarding into `receiver_node` exists yet
 - no TLS yet
 - no lifecycle-node behavior yet
 - no multi-caster orchestration yet
@@ -626,5 +645,4 @@ feature work:
 
 - replay node
 - richer launch/examples
-- correction forwarding / bringup composition around the receiver and NTRIP nodes
 - downstream integration surfaces such as Nav2

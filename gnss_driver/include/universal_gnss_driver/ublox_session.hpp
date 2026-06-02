@@ -32,6 +32,11 @@ struct UbloxSessionMetrics
   std::size_t runtime_updates{0u};
   std::size_t unknown_frames{0u};
   std::size_t malformed_frames{0u};
+  std::size_t receiver_rtcm_messages_seen{0u};
+  std::size_t receiver_rtcm_messages_used{0u};
+  std::size_t receiver_rtcm_messages_not_used{0u};
+  std::size_t receiver_rtcm_crc_failed{0u};
+  std::optional<std::uint16_t> last_receiver_rtcm_message_type{};
   std::map<std::uint16_t, std::size_t> rtcm_message_type_counts{};
 };
 

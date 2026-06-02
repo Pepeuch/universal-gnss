@@ -14,6 +14,7 @@
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
+#include "diagnostic_msgs/msg/key_value.hpp"
 #include "rclcpp/time.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
@@ -25,6 +26,7 @@
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 
 namespace universal_gnss_ros2
 {
@@ -126,6 +128,14 @@ universal_gnss::GnssDiagnosticEvent MakeEvent(universal_gnss::GnssDiagnosticSeve
   event.message = std::move(message);
   event.source = "ntrip_node";
   return event;
+}
+
+diagnostic_msgs::msg::KeyValue MakeKeyValue(std::string key, std::string value)
+{
+  diagnostic_msgs::msg::KeyValue entry;
+  entry.key = std::move(key);
+  entry.value = std::move(value);
+  return entry;
 }
 
 void LogDiagnosticEvent(rclcpp::Node& node, const universal_gnss::GnssDiagnosticEvent& event)
@@ -248,6 +258,8 @@ struct NtripNode::Impl
 
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
+    rtcm_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::RtcmFrame>(
+        "rtcm", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
     status_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::GnssStatus>(
         "status", 10, [this](const universal_gnss_ros2::msg::GnssStatus& message) {
           this->OnStatusMessage(message);
@@ -333,12 +345,14 @@ struct NtripNode::Impl
         ToDiagnosticArrayMessage(health, "universal_gnss_ntrip", hardware_id_);
     last_diagnostics_message_->header.stamp = ToRosTime(
         std::optional<universal_gnss::GnssTimestampNs>(owner_.get_clock()->now().nanoseconds()));
+    AppendRtcmForwardingStatus(*last_diagnostics_message_);
     diagnostics_publisher_->publish(*last_diagnostics_message_);
   }
 
   bool diagnostics_ready() const
   {
-    return diagnostics_publisher_ != nullptr && status_subscription_ != nullptr;
+    return diagnostics_publisher_ != nullptr && status_subscription_ != nullptr &&
+           rtcm_publisher_ != nullptr;
   }
 
   bool has_runtime_state() const
@@ -423,25 +437,61 @@ struct NtripNode::Impl
       return false;
     }
 
-    std::uint8_t buffer[4096] = {};
-    const auto read_result = client_->Read(buffer, sizeof(buffer), now_ns);
-    if (read_result.bytes_read > 0u)
+    bool advanced = false;
+    for (std::size_t iteration = 0u; iteration < 8u; ++iteration)
     {
-      last_correction_activity_time_ = SteadyClock::now();
-      if (client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming &&
-          !first_streaming_time_.has_value())
+      std::uint8_t buffer[4096] = {};
+      std::vector<universal_gnss_protocols::RtcmFrame> observed_frames;
+      const auto state_before = client_->state();
+      const auto read_result = client_->Read(buffer, sizeof(buffer), now_ns, &observed_frames);
+
+      if (read_result.bytes_read > 0u)
       {
-        first_streaming_time_ = SteadyClock::now();
+        advanced = true;
+        last_correction_activity_time_ = SteadyClock::now();
+        if (client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming &&
+            !first_streaming_time_.has_value())
+        {
+          first_streaming_time_ = SteadyClock::now();
+        }
+
+        for (const auto& frame : observed_frames)
+        {
+          universal_gnss_ros2::msg::RtcmFrame message;
+          message.stamp = ToRosTime(frame.timestamp_ns);
+          if (message.stamp.sec == 0 && message.stamp.nanosec == 0u)
+          {
+            message.stamp = ToRosTime(
+                std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
+          }
+          message.message_type = frame.message_type;
+          message.data = frame.raw_bytes;
+          last_rtcm_message_ = message;
+          rtcm_publisher_->publish(message);
+          ++rtcm_published_frames_;
+          last_rtcm_published_time_ = SteadyClock::now();
+          last_rtcm_message_type_ = frame.message_type;
+        }
+        continue;
       }
-      return true;
+
+      if (read_result.client_error != universal_gnss_ntrip::NtripClientError::kNone)
+      {
+        LogClientTransition(client_->state(), read_result.client_error);
+        break;
+      }
+
+      if (state_before != universal_gnss_ntrip::NtripClientState::kStreaming &&
+          client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)
+      {
+        advanced = true;
+        continue;
+      }
+
+      break;
     }
 
-    if (read_result.client_error != universal_gnss_ntrip::NtripClientError::kNone)
-    {
-      LogClientTransition(client_->state(), read_result.client_error);
-    }
-
-    return false;
+    return advanced;
 #else
     (void)now_ns;
     return false;
@@ -638,6 +688,14 @@ struct NtripNode::Impl
       }
     }
 
+    if (rtcm_published_frames_ > 0u)
+    {
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "rtcm_forwarding_active",
+                                 "RTCM frames are being published for live receiver forwarding"));
+    }
+
     if (config_.ntrip.send_gga)
     {
       if (!runtime_state_.has_value())
@@ -694,6 +752,48 @@ struct NtripNode::Impl
 #endif
   }
 
+  void AppendRtcmForwardingStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss_ntrip/rtcm_forwarding";
+    status.hardware_id = hardware_id_;
+
+    if (rtcm_published_frames_ > 0u)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "RTCM forwarding active";
+    }
+    else if (client_.has_value() &&
+             client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM forwarding waiting for valid frames";
+    }
+    else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "RTCM forwarding idle";
+    }
+
+    status.values.push_back(
+        MakeKeyValue("published_frame_count", std::to_string(rtcm_published_frames_)));
+    if (last_rtcm_message_type_.has_value())
+    {
+      status.values.push_back(
+          MakeKeyValue("last_message_type", std::to_string(*last_rtcm_message_type_)));
+    }
+    if (last_rtcm_published_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          SteadyClock::now() - *last_rtcm_published_time_);
+      std::ostringstream stream;
+      stream << (static_cast<double>(age_ms.count()) / 1000.0);
+      status.values.push_back(MakeKeyValue("last_frame_age_s", stream.str()));
+    }
+
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void LogClientTransition(const universal_gnss_ntrip::NtripClientState state,
                            const universal_gnss_ntrip::NtripClientError error)
   {
@@ -727,19 +827,24 @@ struct NtripNode::Impl
   NtripNodeConfig config_{};
   std::string hardware_id_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
+  rclcpp::Publisher<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_publisher_{};
   rclcpp::Subscription<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_subscription_{};
   rclcpp::TimerBase::SharedPtr timer_{};
   std::vector<universal_gnss::GnssDiagnosticEvent> startup_events_{};
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
+  std::optional<universal_gnss_ros2::msg::RtcmFrame> last_rtcm_message_{};
   std::optional<universal_gnss::GnssRuntimeState> runtime_state_{};
   std::optional<SteadyClock::time_point> last_status_time_{};
   std::optional<SteadyClock::time_point> last_correction_activity_time_{};
+  std::optional<SteadyClock::time_point> last_rtcm_published_time_{};
   std::optional<SteadyClock::time_point> first_streaming_time_{};
   std::optional<universal_gnss_ntrip::NtripGgaSendResult> last_gga_result_{};
+  std::optional<std::uint16_t> last_rtcm_message_type_{};
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<universal_gnss_ntrip::NtripClientState> last_logged_state_{};
   universal_gnss_ntrip::NtripClientError last_logged_error_{
       universal_gnss_ntrip::NtripClientError::kNone};
+  std::size_t rtcm_published_frames_{0u};
   bool client_ready_{false};
   bool initial_connect_attempted_{false};
 
@@ -790,6 +895,11 @@ const std::optional<diagnostic_msgs::msg::DiagnosticArray>& NtripNode::last_diag
     const
 {
   return impl_->last_diagnostics_message_;
+}
+
+const std::optional<universal_gnss_ros2::msg::RtcmFrame>& NtripNode::last_rtcm_message() const
+{
+  return impl_->last_rtcm_message_;
 }
 
 }  // namespace universal_gnss_ros2

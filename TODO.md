@@ -123,15 +123,15 @@ Implemented:
 - [x] runtime-only ZED-F9P USB diagnostics-profile validation with `NAV-SAT`, `NAV-DOP`, and RF/hardware outputs
 - [x] real local NTRIP caster validation with legacy `ICY 200 OK` response style
 - [x] real combined ROS2 receiver + NTRIP smoke test with live GGA injection
+- [x] correction forwarding / bringup composition between `ReceiverNode` and `NtripNode`
+- [x] live RTCM / `RXM-RTCM` real-hardware validation through the ROS2 path
 
 To do:
 
 - [ ] ROS2 replay node
-- [ ] correction forwarding / bringup composition between `ReceiverNode` and `NtripNode`
 - [ ] production bringup / launch structure
 - [ ] Humble / Jazzy validation
 - [ ] Kilted linkage modernization
-- [ ] live RTCM / `RXM-RTCM` real-hardware validation through the ROS2 path
 - [ ] Nav2 integration after localization examples stabilize
 
 ### RTCM correction monitor
@@ -425,7 +425,7 @@ To do:
 
 - [x] harden ROS2 receiver node
 - [ ] ROS2 replay node
-- [ ] correction forwarding / bringup composition between receiver and NTRIP nodes
+- [x] correction forwarding / bringup composition between receiver and NTRIP nodes
 - [ ] richer launch/examples
 - [ ] Humble/Jazzy CI
 - [ ] Foxglove-friendly topics

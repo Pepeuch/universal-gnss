@@ -5,6 +5,7 @@
 
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "rclcpp/node.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 
 namespace universal_gnss_ros2
 {
@@ -24,6 +25,7 @@ public:
   bool has_runtime_state() const;
 
   const std::optional<diagnostic_msgs::msg::DiagnosticArray>& last_diagnostics_message() const;
+  const std::optional<universal_gnss_ros2::msg::RtcmFrame>& last_rtcm_message() const;
 
 private:
   struct Impl;

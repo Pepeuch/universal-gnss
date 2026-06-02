@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
@@ -93,11 +94,13 @@ public:
   NtripClientReadResult Read(
       std::uint8_t* destination,
       std::size_t capacity,
-      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt);
+      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt,
+      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames = nullptr);
   std::size_t FeedRtcmMonitor(
       const std::uint8_t* data,
       std::size_t size,
-      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt);
+      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt,
+      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames = nullptr);
 
   universal_gnss::GnssHealthSummary BuildCorrectionHealth(
       const universal_gnss_protocols::RtcmCorrectionHealthOptions& options) const;
@@ -134,7 +137,8 @@ private:
       std::uint8_t* destination,
       std::size_t capacity,
       std::size_t& payload_bytes_written,
-      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns);
+      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames);
 
   NtripConfig config_{};
   universal_gnss_transport::TcpClientConfig tcp_config_{};

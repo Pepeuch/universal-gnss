@@ -29,6 +29,7 @@ flowchart TB
     RS["ReceiverNode"]
     FIX["/fix<br/>sensor_msgs/NavSatFix"]
     STATUS["/status<br/>universal_gnss_ros2/GnssStatus"]
+    RTCM["/rtcm<br/>universal_gnss_ros2/RtcmFrame"]
     DIAG1["/diagnostics<br/>DiagnosticArray"]
     NTRIP["NtripNode"]
     DIAG2["/diagnostics<br/>DiagnosticArray"]
@@ -38,6 +39,8 @@ flowchart TB
     RS --> STATUS
     RS --> DIAG1
     STATUS --> NTRIP
+    NTRIP --> RTCM
+    RTCM --> RS
     NTRIP --> DIAG2
 ```
 
@@ -70,6 +73,10 @@ Supported runtime sources:
 - real serial byte source
 - real TCP byte source
 - injected / scripted byte sources in tests
+- `/rtcm`
+  - `universal_gnss_ros2/msg/RtcmFrame`
+  - consumed as correction input and written back to the active receiver
+    transport when that transport is writable
 
 ### Outputs
 
@@ -125,6 +132,8 @@ Supported parameters:
 
 Published topics:
 
+- `/rtcm`
+  - `universal_gnss_ros2/msg/RtcmFrame`
 - `/diagnostics`
   - `diagnostic_msgs/msg/DiagnosticArray`
 
@@ -163,8 +172,8 @@ Installed launch files:
 - starts `receiver_node`
 - starts `ntrip_node`
 - forwards explicit parameters for both
-- does not include `robot_localization`, Nav2, lifecycle behavior, or NTRIP
-  correction forwarding
+- relies on the built-in `rtcm` topic bridge for correction forwarding
+- does not include `robot_localization`, Nav2, or lifecycle behavior
 
 Launch syntax was validated with:
 
@@ -231,7 +240,7 @@ colcon test-result --verbose
 Result:
 
 - `universal_gnss_ros2` built successfully
-- `43` ROS2 tests passed with `0` errors and `0` failures
+- `47` ROS2 tests passed with `0` errors and `0` failures
 
 ### Real caster discovered and validated
 
@@ -270,16 +279,17 @@ Result:
   updates
 - on this USB CDC ACM path, the configured tty baud behaved as a host-side
   parameter only
-- `115200` was used as the working ROS2 launch default for the smoke test
+- `921600` is now the preferred reference validation configuration for future
+  ROS2 receiver and RTCM-forwarding tests
 
-Example summary at `115200`:
+Example summary at `921600`:
 
 ```text
 Summary:
-  port=/dev/ttyACM0 baud=115200 vendor=ublox
-  selected_session=ublox bytes_read=1100 chunks_read=11 runtime_updates=11
-  eof_seen=false read_errors=0 malformed_records=0 unknown_records=0 last_status=ok last_error=none
-  final_state: session=ublox fix_valid=true fix_type=fix rtk_mode=none lat_deg=43.9542959 lon_deg=2.2023749 alt_m=177.981 h_acc_m=0.421 v_acc_m=0.621 sats_used=24
+  port=/dev/ttyACM0 baud=921600 vendor=ublox
+  selected_session=ublox bytes_read=8284 chunks_read=73 runtime_updates=42
+  eof_seen=false read_errors=0 malformed_records=0 unknown_records=2 last_status=ok last_error=none
+  final_state: session=ublox fix_valid=true fix_type=fix rtk_mode=none lat_deg=43.9542911 lon_deg=2.2023466 alt_m=168.629 h_acc_m=0.608 v_acc_m=0.850 hdop=0.56 vdop=0.83 sats_used=29 sats_visible=49 cn0_mean_db_hz=35.3 cn0_max_db_hz=48.0
 ```
 
 ### Receiver output observed
@@ -325,7 +335,7 @@ changes, the following runtime-only profile was applied:
 ./build/gnss_tools/gnss_config_apply \
   ublox diagnostics \
   --port /dev/ttyACM0 \
-  --baud 115200 \
+  --baud 921600 \
   --execute \
   --confirm-runtime \
   --json
@@ -376,7 +386,7 @@ Launch command used:
 ```bash
 ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
   serial_device:=/dev/ttyACM0 \
-  serial_baud:=115200 \
+  serial_baud:=921600 \
   receiver_family:=ublox
 ```
 
@@ -464,7 +474,7 @@ u-blox:
 ```bash
 ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
   serial_device:=/dev/ttyACM0 \
-  serial_baud:=115200 \
+  serial_baud:=921600 \
   receiver_family:=ublox
 ```
 
@@ -492,7 +502,7 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   receiver_family:=ublox \
   transport:=serial \
   serial_device:=/dev/ttyACM0 \
-  serial_baud:=115200 \
+  serial_baud:=921600 \
   caster_host:=127.0.0.1 \
   caster_port:=2101 \
   mountpoint:=RTCM3 \
@@ -514,7 +524,7 @@ Optional low-level serial smoke test before ROS2:
 ```bash
 ./build/gnss_tools/gnss_serial_monitor \
   --port /dev/ttyACM0 \
-  --baud 115200 \
+  --baud 921600 \
   --vendor ublox
 ```
 
@@ -565,7 +575,7 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   receiver_family:=ublox \
   transport:=serial \
   serial_device:=/dev/ttyACM0 \
-  serial_baud:=115200 \
+  serial_baud:=921600 \
   caster_host:=192.168.10.31 \
   caster_port:=2101 \
   mountpoint:=PEPEUCHGNSS \
@@ -574,6 +584,26 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   gga_enabled:=true \
   gga_interval_s:=5
 ```
+
+Observed `/rtcm` forwarding path:
+
+- `/rtcm` existed and was published by `NtripNode`
+- `NtripNode` diagnostics reported:
+  - `published_frame_count=107`
+  - `last_message_type=1127`
+  - `last_frame_age_s≈0.399`
+- `ReceiverNode` diagnostics reported:
+  - `forwarded_frame_count=84`
+  - `forwarded_bytes=22368`
+  - `write_error_count=0`
+  - `receiver_rtcm_messages_seen=44`
+  - `receiver_rtcm_messages_used=44`
+  - `receiver_rtcm_crc_failed=0`
+  - `receiver_last_message_type=1006`
+
+This is the first end-to-end proof that:
+
+`NtripNode -> /rtcm -> ReceiverNode -> live serial transport -> u-blox RXM-RTCM`
 
 Observed `/diagnostics` included:
 
@@ -588,17 +618,24 @@ Observed `/diagnostics` included:
   - `RTCM correction stream is active`
 - `universal_gnss_ntrip/gga_injection_active`
   - `NTRIP GGA injection is active`
+- `universal_gnss/rtcm_forwarding`
+  - `RTCM forwarding active`
+  - `receiver_correction_available=true`
+  - non-zero `receiver_rtcm_messages_used`
 
 Observed `/status` remained valid at `5 Hz` while the NTRIP node was active:
 
 - `fix_valid=true`
+- `rtk_mode=fixed`
+- `horizontal_accuracy_m≈0.046`
+- `vertical_accuracy_m≈0.061`
 - `hdop` and `vdop` present
 - `satellites_visible` present
 - `mean_cn0_db_hz` and `max_cn0_db_hz` present
 
 This confirms the ROS2 path:
 
-`ReceiverNode -> /status -> NtripNode -> live caster -> diagnostics`
+`ReceiverNode -> /status -> NtripNode -> /rtcm -> ReceiverNode -> live rover diagnostics`
 
 ## Test Coverage Added In This Audit
 
@@ -647,14 +684,15 @@ Result:
 
 - `universal_gnss_ros2` built successfully
 - `5/5` ROS2 package tests passed
-- `43` ROS2 gtest cases passed
+- `47` ROS2 gtest cases passed
 - real ZED-F9P smoke test passed on `/dev/ttyACM0` using `receiver_family:=ublox`
 - runtime-only USB diagnostics profile apply succeeded
 - final sampled USB output included `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`,
   `NAV-DOP`, `MON-HW`, `MON-HW2`, and `MON-RF`
 - real local NTRIP caster validation passed on `192.168.10.31:2101/PEPEUCHGNSS`
-- combined ROS2 receiver + NTRIP launch validated live correction streaming and
-  active GGA injection
+- combined ROS2 receiver + NTRIP launch validated live correction streaming,
+  active GGA injection, and live RTCM forwarding into the receiver transport
+- live u-blox `RXM-RTCM` acceptance was observed through receiver diagnostics
 
 Known note:
 
@@ -668,14 +706,12 @@ Current ROS2 end-to-end status is good enough for continued ROS2 phase work:
 - receiver input -> `/fix` / `/status` / `/diagnostics` is covered
 - `/status` -> `NtripNode` -> diagnostics is covered
 - `/status` -> `NtripNode` -> real caster -> RTCM correction health is covered
+- `/status` -> `NtripNode` -> `/rtcm` -> `ReceiverNode` -> live rover is covered
 - stale GNSS input no longer leaks into repeated GGA injection
 - combined bringup exists for manual operator testing
 
 ## Remaining Blockers Before A `v0.5` Tag
 
-- no RTCM forwarding path from `NtripNode` into a live receiver path yet
-- no real live-corrections validation of `RXM-RTCM` through the rover ROS2
-  stack yet because RTCM is not yet forwarded back into the receiver
 - Unicore and generic-NMEA ROS2 hardware smoke tests are still pending
 - no ROS2 replay node yet
 - no Humble / Jazzy package validation yet

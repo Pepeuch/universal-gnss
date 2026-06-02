@@ -75,7 +75,9 @@ bool IsSupportedUbxFrame(const UbxFrame& frame)
          (frame.class_id == 0x01u && frame.message_id == 0x07u) ||
          (frame.class_id == 0x01u && frame.message_id == 0x35u) ||
          (frame.class_id == 0x01u && frame.message_id == 0x03u) ||
+         (frame.class_id == 0x02u && frame.message_id == 0x32u) ||
          (frame.class_id == 0x0Au && frame.message_id == 0x09u) ||
+         (frame.class_id == 0x0Au && frame.message_id == 0x0Bu) ||
          (frame.class_id == 0x0Au && frame.message_id == 0x38u);
 }
 
@@ -512,6 +514,54 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        aggregator_,
                        metrics_);
+    return;
+  }
+
+  if (frame.class_id == 0x0Au && frame.message_id == 0x0Bu)
+  {
+    const auto parsed = universal_gnss_protocols::ParseUbxMonHw2(frame);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.frames_rejected;
+      return;
+    }
+
+    ++metrics_.frames_parsed;
+    return;
+  }
+
+  if (frame.class_id == 0x02u && frame.message_id == 0x32u)
+  {
+    const auto parsed = universal_gnss_protocols::ParseUbxRxmRtcm(frame);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.frames_rejected;
+      return;
+    }
+
+    ++metrics_.frames_parsed;
+    ++metrics_.receiver_rtcm_messages_seen;
+    metrics_.last_receiver_rtcm_message_type = parsed.record->message_type;
+    if (parsed.record->crc_failed)
+    {
+      ++metrics_.receiver_rtcm_crc_failed;
+      return;
+    }
+
+    switch (parsed.record->message_use)
+    {
+      case universal_gnss_protocols::UbxRxmRtcmMessageUse::kUsed:
+        ++metrics_.receiver_rtcm_messages_used;
+        break;
+
+      case universal_gnss_protocols::UbxRxmRtcmMessageUse::kNotUsed:
+        ++metrics_.receiver_rtcm_messages_not_used;
+        break;
+
+      case universal_gnss_protocols::UbxRxmRtcmMessageUse::kUnknown:
+      default:
+        break;
+    }
     return;
   }
 

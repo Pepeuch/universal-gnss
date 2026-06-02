@@ -17,8 +17,10 @@
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
+#include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include "universal_gnss_ros2/ntrip_node.hpp"
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
@@ -66,6 +68,34 @@ universal_gnss_ros2::msg::GnssStatus MakeGnssStatus()
   state.hdop = 0.9f;
   state.satellites_used = 8u;
   return universal_gnss_ros2::ToGnssStatusMessage(state);
+}
+
+std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
+                                         const bool valid_crc = true)
+{
+  const std::vector<std::uint8_t> payload = {
+      static_cast<std::uint8_t>((message_type >> 4u) & 0xFFu),
+      static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
+  };
+
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      0x00u,
+      static_cast<std::uint8_t>(payload.size()),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  if (!valid_crc)
+  {
+    crc ^= 0x01u;
+  }
+
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
 }
 
 class NtripNodeTest : public ::testing::Test
@@ -302,6 +332,53 @@ TEST_F(NtripNodeTest, ForwardsGnssStatusToRealGgaInjectionAndDiagnostics)
   EXPECT_NE(
       FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_injection_active"),
       nullptr);
+}
+
+TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", false),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  EXPECT_TRUE(node.StepOnce());
+  const auto request_text = sockets.ReadPeerText(1024u);
+  EXPECT_NE(request_text.find("GET /RTCM3 HTTP/1.1"), std::string::npos);
+
+  const auto rtcm = BuildRtcmFrame(1077u);
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\n"));
+  ASSERT_TRUE(sockets.WritePeer(rtcm));
+  for (std::size_t attempt = 0u; attempt < 8u && !node.last_rtcm_message().has_value(); ++attempt)
+  {
+    node.StepOnce();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  ASSERT_TRUE(node.last_rtcm_message().has_value());
+  EXPECT_EQ(node.last_rtcm_message()->message_type, 1077u);
+  EXPECT_EQ(node.last_rtcm_message()->data, rtcm);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* forwarding =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "published_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "last_message_type"),
+            std::optional<std::string>{"1077"});
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_forwarding_active"),
+            nullptr);
 }
 
 TEST_F(NtripNodeTest, ReportsReconnectStateAfterStreamDisconnect)

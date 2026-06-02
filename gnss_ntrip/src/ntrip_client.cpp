@@ -508,7 +508,8 @@ NtripGgaSendResult NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntime
 NtripClientReadResult NtripClient::Read(
     std::uint8_t* destination,
     const std::size_t capacity,
-    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns)
+    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+    std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames)
 {
   NtripClientReadResult result;
 
@@ -578,7 +579,7 @@ NtripClientReadResult NtripClient::Read(
   {
     std::memcpy(destination, read_buffer.data(), read_result.bytes_read);
     result.bytes_read = read_result.bytes_read;
-    FeedRtcmMonitor(destination, result.bytes_read, timestamp_ns);
+    FeedRtcmMonitor(destination, result.bytes_read, timestamp_ns, observed_frames);
     return result;
   }
 
@@ -588,7 +589,8 @@ NtripClientReadResult NtripClient::Read(
                                             destination,
                                             capacity,
                                             payload_bytes_written,
-                                            timestamp_ns);
+                                            timestamp_ns,
+                                            observed_frames);
   result.bytes_read = payload_bytes_written;
   if (result.client_error != NtripClientError::kNone)
   {
@@ -601,7 +603,8 @@ NtripClientReadResult NtripClient::Read(
 std::size_t NtripClient::FeedRtcmMonitor(
     const std::uint8_t* data,
     const std::size_t size,
-    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns)
+    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+    std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames)
 {
   if (data == nullptr || size == 0u)
   {
@@ -633,6 +636,10 @@ std::size_t NtripClient::FeedRtcmMonitor(
             parsed.record->checksum_status == universal_gnss_protocols::ChecksumStatus::kValid;
         NoteRtcmFrame(metrics_, parsed.record->message_type, valid_frame);
         correction_monitor_.ObserveFrame(*parsed.record);
+        if (valid_frame && observed_frames != nullptr)
+        {
+          observed_frames->push_back(*parsed.record);
+        }
         break;
       }
 
@@ -860,7 +867,8 @@ NtripClientError NtripClient::HandleResponseBytes(
     std::uint8_t* destination,
     const std::size_t capacity,
     std::size_t& payload_bytes_written,
-    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns)
+    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+    std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames)
 {
   response_buffer_.append(reinterpret_cast<const char*>(data), size);
   const auto header_terminator = FindResponseHeaderTerminator(response_buffer_);
@@ -898,7 +906,7 @@ NtripClientError NtripClient::HandleResponseBytes(
     std::memcpy(destination,
                 response_buffer_.data() + static_cast<std::ptrdiff_t>(header_size),
                 payload_bytes_written);
-    FeedRtcmMonitor(destination, payload_bytes_written, timestamp_ns);
+    FeedRtcmMonitor(destination, payload_bytes_written, timestamp_ns, observed_frames);
   }
 
   response_buffer_.clear();

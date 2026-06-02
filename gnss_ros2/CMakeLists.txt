@@ -57,6 +57,7 @@ set(BUILD_TESTING "${_saved_build_testing}")
 rosidl_generate_interfaces(
   ${PROJECT_NAME}
   "msg/GnssStatus.msg"
+  "msg/RtcmFrame.msg"
   DEPENDENCIES builtin_interfaces
 )
 

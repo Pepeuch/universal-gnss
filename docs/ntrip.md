@@ -41,7 +41,7 @@ Current non-responsibilities:
 
 - TLS
 - reconnect loops
-- RTCM forwarding
+- ROS 2-side RTCM forwarding ownership
 - serial output
 - owning ROS 2 nodes inside `gnss_ntrip`
 - ESP32 WiFi or Ethernet integration
@@ -76,8 +76,8 @@ runtime orchestration.
 
 - `gnss_ntrip` owns `NtripClient`, request generation, GGA injection policy,
   reconnect policy, RTCM extraction, and correction monitoring
-- `gnss_ros2` owns subscriptions, timers, diagnostics publishing, and launch
-  wiring
+- `gnss_ros2` owns subscriptions, timers, diagnostics publishing, launch
+  wiring, and the `rtcm` topic bridge into the live receiver path
 
 The current ROS 2 wrapper also applies one additional runtime policy at the
 node boundary: if the subscribed GNSS status becomes stale, it suppresses GGA
@@ -384,11 +384,9 @@ Still intentionally deferred:
 - TLS
 - reconnect loop or state machine
 - multi-caster orchestration
-- RTCM forwarding to serial or sockets
 - live sourcetable fetch and discovery workflows
 - automatic mountpoint selection
 - automatic periodic GGA sending
 - `NtripClient` delegation to the reusable `GgaInjector`
 - ROS 2 / GUI-driven GGA scheduling
-- ROS 2 nodes
 - ESP32-specific networking code
