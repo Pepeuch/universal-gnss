@@ -18,10 +18,23 @@ using universal_gnss_protocols::UbxCfgBuilderStatus;
 using universal_gnss_protocols::UbxCfgConstellation;
 using universal_gnss_protocols::UbxCfgLayer;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHw2Uart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHw2Usb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHwUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHwUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavDopUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavDopUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxRxmRtcmUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxRxmRtcmUsb;
 
 constexpr ReceiverTargetSelector kUbloxTarget{
     ReceiverVendor::kUblox,
@@ -163,9 +176,13 @@ std::vector<UbloxMessageRate> MakeRoverMessageRates()
 {
   return {
       {kMsgoutUbxNavPvtUart1, 1u},
+      {kMsgoutUbxNavPvtUsb, 1u},
       {kMsgoutUbxNavSatUart1, 1u},
+      {kMsgoutUbxNavSatUsb, 1u},
       {kMsgoutUbxNavStatusUart1, 1u},
+      {kMsgoutUbxNavStatusUsb, 1u},
       {kMsgoutUbxMonRfUart1, 1u},
+      {kMsgoutUbxMonRfUsb, 1u},
   };
 }
 
@@ -272,8 +289,11 @@ UbloxConfigProfile UbloxConfigProfileBuilder::BuildUbloxBaseProfile(
   profile.measurement_rate_hz = 1.0;
   profile.enabled_messages = {
       {kMsgoutUbxNavPvtUart1, 1u},
+      {kMsgoutUbxNavPvtUsb, 1u},
       {kMsgoutUbxNavStatusUart1, 1u},
+      {kMsgoutUbxNavStatusUsb, 1u},
       {kMsgoutNmeaGgaUart1, 1u},
+      {kMsgoutNmeaGgaUsb, 1u},
   };
   AppendStandardConstellations(profile);
   return profile;
@@ -290,10 +310,23 @@ UbloxConfigProfile UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(
   profile.measurement_rate_hz = 5.0;
   profile.enabled_messages = {
       {kMsgoutUbxNavPvtUart1, 1u},
+      {kMsgoutUbxNavPvtUsb, 1u},
       {kMsgoutUbxNavSatUart1, 1u},
+      {kMsgoutUbxNavSatUsb, 1u},
       {kMsgoutUbxNavStatusUart1, 1u},
+      {kMsgoutUbxNavStatusUsb, 1u},
+      {kMsgoutUbxNavDopUart1, 1u},
+      {kMsgoutUbxNavDopUsb, 1u},
+      {kMsgoutUbxMonHwUart1, 1u},
+      {kMsgoutUbxMonHwUsb, 1u},
+      {kMsgoutUbxMonHw2Uart1, 1u},
+      {kMsgoutUbxMonHw2Usb, 1u},
       {kMsgoutUbxMonRfUart1, 1u},
+      {kMsgoutUbxMonRfUsb, 1u},
+      {kMsgoutUbxRxmRtcmUart1, 1u},
+      {kMsgoutUbxRxmRtcmUsb, 1u},
       {kMsgoutNmeaGgaUart1, 1u},
+      {kMsgoutNmeaGgaUsb, 1u},
   };
   AppendStandardConstellations(profile);
   return profile;

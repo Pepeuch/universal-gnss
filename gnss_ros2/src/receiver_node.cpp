@@ -601,7 +601,11 @@ struct ReceiverNode::Impl
 
   void PublishNow()
   {
-    const auto& state = session_->current_state();
+    auto state = session_->current_state();
+    if (!state.timestamp_ns.has_value())
+    {
+      state.timestamp_ns = owner_.now().nanoseconds();
+    }
 
     last_status_message_ = ToGnssStatusMessage(state);
 

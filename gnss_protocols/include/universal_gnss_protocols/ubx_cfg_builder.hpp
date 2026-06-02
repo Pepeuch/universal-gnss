@@ -89,10 +89,23 @@ constexpr std::uint32_t kSignalGalEnable = 0x10310021u;
 constexpr std::uint32_t kSignalBdsEnable = 0x10310022u;
 constexpr std::uint32_t kSignalGloEnable = 0x10310025u;
 constexpr std::uint32_t kMsgoutUbxNavPvtUart1 = 0x20910007u;
+constexpr std::uint32_t kMsgoutUbxNavPvtUsb = 0x20910009u;
 constexpr std::uint32_t kMsgoutUbxNavSatUart1 = 0x20910016u;
+constexpr std::uint32_t kMsgoutUbxNavSatUsb = 0x20910018u;
 constexpr std::uint32_t kMsgoutUbxNavStatusUart1 = 0x2091001Bu;
+constexpr std::uint32_t kMsgoutUbxNavStatusUsb = 0x2091001Du;
+constexpr std::uint32_t kMsgoutUbxNavDopUart1 = 0x20910039u;
+constexpr std::uint32_t kMsgoutUbxNavDopUsb = 0x2091003Bu;
+constexpr std::uint32_t kMsgoutUbxMonHwUart1 = 0x209101B5u;
+constexpr std::uint32_t kMsgoutUbxMonHwUsb = 0x209101B7u;
+constexpr std::uint32_t kMsgoutUbxMonHw2Uart1 = 0x209101BBu;
+constexpr std::uint32_t kMsgoutUbxMonHw2Usb = 0x209101BCu;
 constexpr std::uint32_t kMsgoutUbxMonRfUart1 = 0x2091035Au;
+constexpr std::uint32_t kMsgoutUbxMonRfUsb = 0x2091035Cu;
+constexpr std::uint32_t kMsgoutUbxRxmRtcmUart1 = 0x20910269u;
+constexpr std::uint32_t kMsgoutUbxRxmRtcmUsb = 0x2091026Bu;
 constexpr std::uint32_t kMsgoutNmeaGgaUart1 = 0x209100BBu;
+constexpr std::uint32_t kMsgoutNmeaGgaUsb = 0x209100BDu;
 
 }  // namespace ubx_cfg_keys
 

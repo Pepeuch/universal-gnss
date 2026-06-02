@@ -34,6 +34,8 @@ Current responsibilities:
 - model reconnect/backoff decisions without owning a reconnect loop
 - track correction-stream metrics independently from ROS 2 or any network stack
 - feed incoming correction bytes into the existing RTCM framer and correction monitor
+- accept both full HTTP-style NTRIP responses and legacy `ICY 200 OK` caster
+  responses seen in real deployments
 
 Current non-responsibilities:
 
@@ -122,6 +124,28 @@ Shared request behavior:
 - `Accept: */*` is emitted
 - `Connection: close` is emitted
 - `Authorization:` is emitted only when at least one credential field is non-empty
+
+## Response Compatibility Policy
+
+The live client now accepts two common response styles:
+
+- full HTTP-style responses such as `HTTP/1.1 200 OK` with normal header
+  termination
+- legacy NTRIP v1 caster responses such as `ICY 200 OK`
+
+Compatibility notes:
+
+- some real casters send only `ICY 200 OK\r\n` and then start streaming RTCM
+  bytes immediately
+- some real casters may attach a new client in the middle of an RTCM frame
+  rather than on a frame boundary
+- `NtripClient` therefore treats `ICY 200 OK` followed by binary payload as a
+  valid streaming transition even when no extra blank-line header terminator is
+  present
+
+This behavior was validated against a real local caster during the ROS2
+end-to-end audit recorded in
+[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
 
 ## Authentication Policy
 

@@ -366,6 +366,132 @@ void TestSplitHttpResponseAndDisconnect(TestContext& ctx)
              "explicit disconnect should close the client cleanly without forcing an error state");
 }
 
+void TestLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
+{
+  SocketPair sockets;
+  ctx.Expect(sockets.Open(), "socketpair fixture should open for legacy ICY response test");
+
+  NtripClient client(MakeConfig());
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.read_timeout_ms = 100u;
+  client.set_tcp_config(tcp_config);
+
+  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+             "adopting a connected socket should succeed for the legacy ICY response test");
+  ctx.Expect(client.SendRequest() == NtripClientError::kNone,
+             "sending the request should succeed before a legacy ICY response");
+  sockets.ReadPeerExact(client.request().request_text.size());
+
+  const auto payload = BuildRtcmFrame(1005u);
+  std::vector<std::uint8_t> response;
+  const std::string header = "ICY 200 OK\r\n";
+  response.insert(response.end(), header.begin(), header.end());
+  Append(response, payload);
+  ctx.Expect(sockets.WritePeer(response),
+             "the fake peer should send a legacy ICY response line followed directly by RTCM payload");
+
+  std::vector<std::uint8_t> read_buffer(128u, 0u);
+  const auto read_result = client.Read(read_buffer.data(), read_buffer.size(), 2500000000LL);
+  read_buffer.resize(read_result.bytes_read);
+
+  ctx.Expect(read_result.client_error == NtripClientError::kNone &&
+                 read_result.transport_status == universal_gnss_transport::TransportStatus::kOk &&
+                 read_result.bytes_read == payload.size() &&
+                 read_buffer == payload,
+             "legacy ICY responses without a blank header terminator should still return the RTCM payload");
+  ctx.Expect(client.state() == NtripClientState::kStreaming &&
+                 client.metrics().response_received &&
+                 client.response_header() == header,
+             "legacy ICY responses should still transition the client into streaming state");
+  ctx.Expect(client.metrics().rtcm_frames_seen == 1u &&
+                 client.metrics().rtcm_frames_received == 1u &&
+                 client.metrics().invalid_rtcm_frames == 0u &&
+                 client.metrics().last_rtcm_message_type == 1005u,
+             "legacy ICY responses should still feed RTCM frame metrics");
+}
+
+void TestSplitLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
+{
+  SocketPair sockets;
+  ctx.Expect(sockets.Open(), "socketpair fixture should open for split legacy ICY response test");
+
+  NtripClient client(MakeConfig());
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.read_timeout_ms = 100u;
+  client.set_tcp_config(tcp_config);
+
+  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+             "adopting a connected socket should succeed for the split legacy ICY response test");
+  ctx.Expect(client.SendRequest() == NtripClientError::kNone,
+             "sending the request should succeed before a split legacy ICY response");
+  sockets.ReadPeerExact(client.request().request_text.size());
+
+  ctx.Expect(sockets.WritePeer("ICY 200 OK\r\n"),
+             "the fake peer should send the legacy ICY status line first");
+
+  std::vector<std::uint8_t> read_buffer(128u, 0u);
+  const auto first_read = client.Read(read_buffer.data(), read_buffer.size(), 2600000000LL);
+  ctx.Expect(first_read.client_error == NtripClientError::kNone &&
+                 first_read.bytes_read == 0u &&
+                 client.state() == NtripClientState::kConnected &&
+                 !client.metrics().response_received,
+             "a standalone legacy ICY status line should keep the client connected until payload arrives");
+
+  const auto payload = BuildRtcmFrame(1077u);
+  ctx.Expect(sockets.WritePeer(payload),
+             "the fake peer should send RTCM payload bytes after the standalone legacy ICY line");
+
+  const auto second_read = client.Read(read_buffer.data(), read_buffer.size(), 2700000000LL);
+  read_buffer.resize(second_read.bytes_read);
+  ctx.Expect(second_read.client_error == NtripClientError::kNone &&
+                 second_read.transport_status == universal_gnss_transport::TransportStatus::kOk &&
+                 second_read.bytes_read == payload.size() &&
+                 read_buffer == payload &&
+                 client.state() == NtripClientState::kStreaming &&
+                 client.metrics().response_received &&
+                 client.response_header() == "ICY 200 OK\r\n",
+             "a split legacy ICY response should still transition into streaming when the payload arrives");
+}
+
+void TestLegacyIcyResponseWithMidFrameBinary(TestContext& ctx)
+{
+  SocketPair sockets;
+  ctx.Expect(sockets.Open(), "socketpair fixture should open for mid-frame legacy ICY response test");
+
+  NtripClient client(MakeConfig());
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.read_timeout_ms = 100u;
+  client.set_tcp_config(tcp_config);
+
+  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+             "adopting a connected socket should succeed for the mid-frame legacy ICY response test");
+  ctx.Expect(client.SendRequest() == NtripClientError::kNone,
+             "sending the request should succeed before a mid-frame legacy ICY response");
+  sockets.ReadPeerExact(client.request().request_text.size());
+
+  const std::vector<std::uint8_t> payload = {0x50u, 0x81u, 0x42u, 0x00u};
+  std::vector<std::uint8_t> response;
+  const std::string header = "ICY 200 OK\r\n";
+  response.insert(response.end(), header.begin(), header.end());
+  Append(response, payload);
+  ctx.Expect(sockets.WritePeer(response),
+             "the fake peer should send a legacy ICY response line followed by binary payload that does not start on an RTCM frame boundary");
+
+  std::vector<std::uint8_t> read_buffer(128u, 0u);
+  const auto read_result = client.Read(read_buffer.data(), read_buffer.size(), 2800000000LL);
+  read_buffer.resize(read_result.bytes_read);
+
+  ctx.Expect(read_result.client_error == NtripClientError::kNone &&
+                 read_result.transport_status == universal_gnss_transport::TransportStatus::kOk &&
+                 read_result.bytes_read == payload.size() &&
+                 read_buffer == payload,
+             "legacy ICY responses should still enter streaming when binary payload bytes arrive mid-frame");
+  ctx.Expect(client.state() == NtripClientState::kStreaming &&
+                 client.metrics().response_received &&
+                 client.response_header() == header,
+             "binary payload after a legacy ICY line should still mark the response as received");
+}
+
 void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
 {
   {
@@ -757,6 +883,9 @@ int main()
 
   TestRequestAndStreamingFlow(ctx);
   TestSplitHttpResponseAndDisconnect(ctx);
+  TestLegacyIcyResponseWithoutBlankLine(ctx);
+  TestSplitLegacyIcyResponseWithoutBlankLine(ctx);
+  TestLegacyIcyResponseWithMidFrameBinary(ctx);
   TestInvalidResponsesAndConnectFailure(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
   TestExplicitStreamingOnlyGgaInjection(ctx);

@@ -39,8 +39,8 @@ void TestUbloxRoverPlan(TestContext& ctx)
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "F9/F10",
              "u-blox rover plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 9u &&
-                 result.summary.runtime_commands == 9u &&
+  ctx.Expect(result.summary.commands_total == 13u &&
+                 result.summary.runtime_commands == 13u &&
                  !result.summary.requires_explicit_safety_confirmation,
              "u-blox rover plan should remain runtime-only without extra confirmation");
   ctx.Expect(text.find("Dry run: yes") != std::string::npos &&
@@ -78,8 +78,8 @@ void TestPersistentSafetySummary(TestContext& ctx)
 
   const auto ublox_result = BuildConfigPlan(ublox_options);
   ctx.Expect(ublox_result.status == ConfigPlanStatus::kOk &&
-                 ublox_result.summary.persistent_commands == 9u &&
-                 ublox_result.summary.commands_requiring_confirmation == 9u &&
+                 ublox_result.summary.persistent_commands == 13u &&
+                 ublox_result.summary.commands_requiring_confirmation == 13u &&
                  ublox_result.summary.requires_explicit_safety_confirmation,
              "persistent u-blox plan should require confirmation for every command");
 

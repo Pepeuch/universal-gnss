@@ -153,6 +153,15 @@ If you need both:
 ]
 ```
 
+Note:
+
+- on the host used for the current ZED-F9P smoke test, `/dev/ttyACM0` was
+  `root:dialout` with mode `0660`
+- the final smoke-test host user also had `dialout` membership, which allowed
+  host-side serial tools to run directly
+- if you are not running the container as `root`, you may still need host
+  `dialout` membership in addition to `--device=/dev/ttyACM0`
+
 ## Optional privileged mode
 
 For broader manual hardware access during bringup, you may choose one of these

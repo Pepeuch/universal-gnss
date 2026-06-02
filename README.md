@@ -110,7 +110,7 @@ serial hardware access examples.
 
 See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
 current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and
-the latest hardware smoke-test notes.
+the latest real receiver and real caster hardware smoke-test notes.
 
 See [docs/robot_localization.md](docs/robot_localization.md) for the first
 example of connecting Universal GNSS `fix` output to

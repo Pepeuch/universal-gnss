@@ -234,6 +234,8 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   const auto& diagnostics = *node.last_diagnostics_message();
 
   EXPECT_EQ(fix.header.frame_id, "gnss");
+  EXPECT_TRUE(fix.header.stamp.sec != 0 || fix.header.stamp.nanosec != 0u);
+  EXPECT_TRUE(status.stamp.sec != 0 || status.stamp.nanosec != 0u);
   EXPECT_TRUE(status.fix_valid);
   EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_FIX);
   EXPECT_NEAR(fix.latitude, 48.1173, 1e-4);
@@ -247,6 +249,8 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_EQ(status.satellites_visible, 8u);
   EXPECT_FLOAT_EQ(status.max_cn0_db_hz, 43.0f);
   EXPECT_FALSE(diagnostics.status.empty());
+  EXPECT_TRUE(
+      diagnostics.header.stamp.sec != 0 || diagnostics.header.stamp.nanosec != 0u);
   EXPECT_EQ(diagnostics.header.frame_id, "gnss");
 }
 

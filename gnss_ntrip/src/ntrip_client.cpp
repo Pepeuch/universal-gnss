@@ -41,6 +41,46 @@ std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
   return std::nullopt;
 }
 
+std::optional<std::pair<std::size_t, std::size_t>> FindLegacyIcyPayloadStart(
+    const std::string_view response_bytes)
+{
+  if (!StartsWith(response_bytes, "ICY 200"))
+  {
+    return std::nullopt;
+  }
+
+  std::size_t line_end = response_bytes.find("\r\n");
+  std::size_t terminator_size = 2u;
+  if (line_end == std::string_view::npos)
+  {
+    line_end = response_bytes.find('\n');
+    terminator_size = 1u;
+  }
+
+  if (line_end == std::string_view::npos)
+  {
+    return std::nullopt;
+  }
+
+  const std::size_t payload_offset = line_end + terminator_size;
+  if (payload_offset >= response_bytes.size())
+  {
+    return std::nullopt;
+  }
+
+  const std::string_view tail = response_bytes.substr(payload_offset);
+  for (const char ch : tail)
+  {
+    const std::uint8_t byte = static_cast<std::uint8_t>(ch);
+    if (byte == 0xD3u || byte >= 0x80u || (byte < 0x20u && byte != '\r' && byte != '\n'))
+    {
+      return std::make_pair(line_end, terminator_size);
+    }
+  }
+
+  return std::nullopt;
+}
+
 std::string_view ExtractStatusLine(const std::string_view header)
 {
   const std::size_t crlf = header.find("\r\n");
@@ -824,7 +864,11 @@ NtripClientError NtripClient::HandleResponseBytes(
 {
   response_buffer_.append(reinterpret_cast<const char*>(data), size);
   const auto header_terminator = FindResponseHeaderTerminator(response_buffer_);
-  if (!header_terminator.has_value())
+  const auto legacy_icy_terminator =
+      header_terminator.has_value() ? std::nullopt : FindLegacyIcyPayloadStart(response_buffer_);
+  const auto effective_terminator =
+      header_terminator.has_value() ? header_terminator : legacy_icy_terminator;
+  if (!effective_terminator.has_value())
   {
     if (response_buffer_.size() > kMaxResponseHeaderBytes)
     {
@@ -834,7 +878,7 @@ NtripClientError NtripClient::HandleResponseBytes(
     return NtripClientError::kNone;
   }
 
-  const std::size_t header_size = header_terminator->first + header_terminator->second;
+  const std::size_t header_size = effective_terminator->first + effective_terminator->second;
   const std::string header_text = response_buffer_.substr(0u, header_size);
   const NtripClientError header_error = ParseNtripResponseStatus(header_text);
   if (header_error != NtripClientError::kNone)

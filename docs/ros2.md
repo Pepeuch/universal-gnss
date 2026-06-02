@@ -408,6 +408,9 @@ The node now follows a conservative runtime policy:
   and longitude
 - stale or disconnected runtime state suppresses `fix` publication instead of
   repeating old coordinates
+- when the low-level runtime sample has no timestamp, the live node stamps
+  outgoing `status`, `fix`, and `diagnostics` with the node clock instead of
+  publishing zero ROS time
 
 Diagnostic states surfaced by the node include:
 
@@ -419,6 +422,13 @@ Diagnostic states surfaced by the node include:
 - terminal transport states such as EOF / closed / read error
 - portable jamming / interference state propagated from `GnssRuntimeState`
 
+The first real ZED-F9P smoke test on `/dev/ttyACM0` is recorded in
+[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
+That audit now includes a runtime-only `gnss_config_apply ublox diagnostics`
+step that temporarily enabled richer USB output (`NAV-SAT`, `NAV-DOP`,
+`MON-HW`, `MON-HW2`, `MON-RF`) for live ROS2 validation without making
+persistent receiver changes.
+
 ### Example invocation
 
 Serial u-blox example:
@@ -428,7 +438,7 @@ ros2 run universal_gnss_ros2 receiver_node --ros-args \
   -p receiver_family:=ublox \
   -p transport:=serial \
   -p serial_device:=/dev/ttyACM0 \
-  -p serial_baud:=921600 \
+  -p serial_baud:=115200 \
   -p frame_id:=gnss
 ```
 
@@ -488,6 +498,14 @@ GnssStatus subscription -> GnssRuntimeState -> NtripClient::MaybeInjectGga()
                         -> RTCM correction monitor
                         -> ROS 2 diagnostics
 ```
+
+This path has now been validated against:
+
+- a real u-blox ZED-F9P receiver on `/dev/ttyACM0`
+- a real local NTRIP caster using the legacy `ICY 200 OK` response style
+
+See [ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md)
+for the exact live commands and observed diagnostics.
 
 ### Inputs
 

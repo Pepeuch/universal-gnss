@@ -97,7 +97,7 @@ void TestDryRunDoesNotRequirePort(TestContext& ctx)
                  result.dry_run &&
                  !result.execute_requested &&
                  !result.executed &&
-                 result.plan.summary.commands_total == 9u,
+                 result.plan.summary.commands_total == 13u,
              "dry-run config apply should succeed without port or execute flags");
 }
 
@@ -194,10 +194,10 @@ void TestUbloxExecuteWithMemoryDuplex(TestContext& ctx)
   const auto result = ExecuteConfigApply(transport, options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_total == 9u &&
-                 result.execution_summary.commands_completed == 9u &&
+                 result.execution_summary.commands_total == 13u &&
+                 result.execution_summary.commands_completed == 13u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 9u &&
+                 result.execution_summary.responses_applied == 13u &&
                  result.execution_summary.final_status == "completed",
              "u-blox execution should consume ACK frames and complete through the UBX router path");
   ctx.Expect(!transport.written_bytes().empty(),

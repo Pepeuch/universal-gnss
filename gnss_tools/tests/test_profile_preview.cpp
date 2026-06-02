@@ -37,10 +37,10 @@ void TestUbloxRoverPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 9u,
+                 result.commands.size() == 13u,
              "u-blox rover preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 9u &&
-                 result.summary.runtime_commands == 9u &&
+  ctx.Expect(result.summary.commands_total == 13u &&
+                 result.summary.runtime_commands == 13u &&
                  result.summary.persistent_commands == 0u,
              "u-blox rover preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
@@ -84,9 +84,9 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
 
   const auto ublox_result = BuildProfilePreview(ublox_options);
   ctx.Expect(ublox_result.status == ProfilePreviewStatus::kOk &&
-                 ublox_result.summary.commands_total == 10u &&
+                 ublox_result.summary.commands_total == 23u &&
                  ublox_result.summary.runtime_commands == 0u &&
-                 ublox_result.summary.persistent_commands == 10u,
+                 ublox_result.summary.persistent_commands == 23u,
              "persistent u-blox previews should mark every generated command persistent");
 
   ProfilePreviewOptions unicore_options;

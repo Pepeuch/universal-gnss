@@ -28,8 +28,11 @@ using universal_gnss_driver::UbloxMessageRate;
 using universal_gnss_protocols::UbxCfgConstellation;
 using universal_gnss_protocols::UbxCfgLayer;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGalEnable;
@@ -95,8 +98,8 @@ void TestRoverProfileGeneratesExpectedCommands(TestContext& ctx)
              "u-blox rover profile should build successfully");
   ctx.Expect(profile.config_kind == ReceiverConfigProfileKind::kRover,
              "u-blox rover helper should declare the rover config profile kind");
-  ctx.Expect(result.commands.size() == 9u,
-             "u-blox rover helper should generate one rate command, four message commands, and four constellation commands");
+  ctx.Expect(result.commands.size() == 13u,
+             "u-blox rover helper should generate one rate command, eight message commands, and four constellation commands");
 
   std::size_t protocol_output_commands = 0u;
   for (const auto& command : result.commands)
@@ -108,7 +111,7 @@ void TestRoverProfileGeneratesExpectedCommands(TestContext& ctx)
     }
   }
 
-  ctx.Expect(protocol_output_commands == 4u,
+  ctx.Expect(protocol_output_commands == 8u,
              "u-blox rover helper should tag message-rate changes as protocol-output commands");
 }
 
@@ -135,27 +138,41 @@ void TestMessageEnableDisableGeneration(TestContext& ctx)
   UbloxConfigProfile profile;
   profile.enabled_messages = {
       UbloxMessageRate{kMsgoutUbxNavPvtUart1, 1u},
+      UbloxMessageRate{kMsgoutUbxNavPvtUsb, 1u},
       UbloxMessageRate{kMsgoutUbxMonRfUart1, 2u},
+      UbloxMessageRate{kMsgoutUbxMonRfUsb, 2u},
   };
-  profile.disabled_messages = {kMsgoutNmeaGgaUart1};
+  profile.disabled_messages = {kMsgoutNmeaGgaUart1, kMsgoutNmeaGgaUsb};
 
   const auto result = UbloxConfigProfileBuilder::Build(profile);
   ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 3u,
+                 result.commands.size() == 6u,
              "message enable/disable requests should map to one command per message key");
 
   const auto nav_pvt = PackU32Le(kMsgoutUbxNavPvtUart1);
+  const auto nav_pvt_usb = PackU32Le(kMsgoutUbxNavPvtUsb);
   const auto mon_rf = PackU32Le(kMsgoutUbxMonRfUart1);
+  const auto mon_rf_usb = PackU32Le(kMsgoutUbxMonRfUsb);
   const auto nmea_gga = PackU32Le(kMsgoutNmeaGgaUart1);
+  const auto nmea_gga_usb = PackU32Le(kMsgoutNmeaGgaUsb);
   ctx.Expect(ContainsBytes(result.commands[0].payload.binary, nav_pvt) &&
                  ContainsBytes(result.commands[0].payload.binary, {0x01u}),
              "enabled NAV-PVT message should carry its CFG key and rate value");
-  ctx.Expect(ContainsBytes(result.commands[1].payload.binary, mon_rf) &&
-                 ContainsBytes(result.commands[1].payload.binary, {0x02u}),
+  ctx.Expect(ContainsBytes(result.commands[1].payload.binary, nav_pvt_usb) &&
+                 ContainsBytes(result.commands[1].payload.binary, {0x01u}),
+             "enabled NAV-PVT USB message should carry its CFG key and rate value");
+  ctx.Expect(ContainsBytes(result.commands[2].payload.binary, mon_rf) &&
+                 ContainsBytes(result.commands[2].payload.binary, {0x02u}),
              "enabled MON-RF message should carry its CFG key and configured rate");
-  ctx.Expect(ContainsBytes(result.commands[2].payload.binary, nmea_gga) &&
-                 ContainsBytes(result.commands[2].payload.binary, {0x00u}),
+  ctx.Expect(ContainsBytes(result.commands[3].payload.binary, mon_rf_usb) &&
+                 ContainsBytes(result.commands[3].payload.binary, {0x02u}),
+             "enabled MON-RF USB message should carry its CFG key and configured rate");
+  ctx.Expect(ContainsBytes(result.commands[4].payload.binary, nmea_gga) &&
+                 ContainsBytes(result.commands[4].payload.binary, {0x00u}),
              "disabled message command should carry the CFG key and a zero rate");
+  ctx.Expect(ContainsBytes(result.commands[5].payload.binary, nmea_gga_usb) &&
+                 ContainsBytes(result.commands[5].payload.binary, {0x00u}),
+             "disabled USB message command should carry the CFG key and a zero rate");
 }
 
 void TestConstellationAndSafetyPolicy(TestContext& ctx)

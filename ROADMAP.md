@@ -108,6 +108,7 @@ Completed at the start of this phase:
 - combined receiver + NTRIP launch example
 - ROS2 end-to-end audit / hardening pass
 - `robot_localization` example configuration and documentation
+- real ZED-F9P + local NTRIP caster smoke validation on ROS2 Kilted
 
 Next:
 

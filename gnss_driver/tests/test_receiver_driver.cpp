@@ -218,18 +218,18 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
   const auto ublox_base = ublox_driver.BuildBaseProfile();
   ctx.Expect(ublox_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
                  ublox_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
-                 ublox_rover.commands.size() == 9u,
+                 ublox_rover.commands.size() == 13u,
              "u-blox rover driver profile should delegate to the existing rover builder");
   ctx.Expect(ublox_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
                  ublox_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
-                 ublox_diag.commands.size() == 10u &&
+                 ublox_diag.commands.size() == 23u &&
                  !ublox_diag.commands.empty() &&
                  ublox_diag.commands.front().safety_level ==
                      ReceiverCommandSafetyLevel::kPersistent,
              "persistent u-blox diagnostics driver profiles should preserve persistent command safety");
   ctx.Expect(ublox_base.status == ReceiverDriverProfileBuildStatus::kOk &&
                  ublox_base.profile_kind == ReceiverConfigProfileKind::kBase &&
-                 ublox_base.commands.size() == 8u,
+                 ublox_base.commands.size() == 11u,
              "u-blox base driver profile should expose the existing base builder");
 
   const auto unicore_rover = unicore_driver.BuildRoverProfile();

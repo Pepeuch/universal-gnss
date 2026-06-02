@@ -119,6 +119,10 @@ Implemented:
 - [x] robot_localization example YAML and launch
 - [x] receiver node runtime validation and diagnostics hardening
 - [x] ROS2 end-to-end audit and fix pass
+- [x] real ZED-F9P ROS2 receiver smoke test on `/dev/ttyACM0`
+- [x] runtime-only ZED-F9P USB diagnostics-profile validation with `NAV-SAT`, `NAV-DOP`, and RF/hardware outputs
+- [x] real local NTRIP caster validation with legacy `ICY 200 OK` response style
+- [x] real combined ROS2 receiver + NTRIP smoke test with live GGA injection
 
 To do:
 
@@ -127,6 +131,7 @@ To do:
 - [ ] production bringup / launch structure
 - [ ] Humble / Jazzy validation
 - [ ] Kilted linkage modernization
+- [ ] live RTCM / `RXM-RTCM` real-hardware validation through the ROS2 path
 - [ ] Nav2 integration after localization examples stabilize
 
 ### RTCM correction monitor

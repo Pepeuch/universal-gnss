@@ -178,30 +178,284 @@ python3 -m py_compile \
 
 ## Real Hardware Smoke Test
 
-### Requested device
+### Device
 
-- u-blox ZED-F9P on `/dev/ttyACM0`
+- receiver: u-blox ZED-F9P
+- path: `/dev/ttyACM0`
+- audit date: 2026-06-02
 
-### Result
+### Host visibility and permissions
 
-Hardware smoke tests were not run in this environment because `/dev/ttyACM0`
-was not present at audit time.
-
-Observed check:
+Observed:
 
 ```bash
 ls -l /dev/ttyACM0
+id
+groups
+ls -l /dev/serial/by-id
+lsusb | rg 'u-blox'
 ```
 
 Result:
 
-- `No such file or directory`
+- `/dev/ttyACM0` existed and resolved from `/dev/serial/by-id`
+- host node permissions were `crw-rw---- root:dialout`
+- the host user had `dialout` membership during the final smoke test, so
+  host-side serial tools were usable directly
+- the Kilted container path still worked cleanly because the container ran as
+  `root` and was started with `--device=/dev/ttyACM0`
 
-Because the device was absent, the audit stayed read-only and did not attempt:
+`dmesg` was not readable as the unprivileged host user, so it was not used for
+the final result.
 
-- baud probing
-- receiver configuration reads
-- temporary receiver reconfiguration
+### Kilted container path used
+
+Container:
+
+- image: `universal-gnss-devcontainer-test`
+- device passthrough: `--device=/dev/ttyACM0`
+
+Validation inside the container:
+
+```bash
+source /opt/ros/kilted/setup.bash
+mkdir -p /tmp/universal_gnss_ros2_ws/src
+ln -s /workspaces/universal-gnss/gnss_ros2 /tmp/universal_gnss_ros2_ws/src/gnss_ros2
+ln -s /workspaces/universal-gnss/gnss_core /tmp/universal_gnss_ros2_ws/src/gnss_core
+cd /tmp/universal_gnss_ros2_ws
+colcon build --packages-select universal_gnss_ros2
+colcon test --packages-select universal_gnss_ros2
+colcon test-result --verbose
+```
+
+Result:
+
+- `universal_gnss_ros2` built successfully
+- `43` ROS2 tests passed with `0` errors and `0` failures
+
+### Real caster discovered and validated
+
+Using the supplied mountpoint and credentials, the live caster endpoint was
+identified on the local LAN as:
+
+- host: `192.168.10.31`
+- port: `2101`
+- mountpoint: `PEPEUCHGNSS`
+
+Credentials are intentionally omitted from this document. The validation used
+the operator-supplied username/password pair.
+
+### Baud probing
+
+Tested:
+
+- `115200`
+- `38400`
+- `921600`
+
+Read-only probe used:
+
+```bash
+/tmp/ug-build/gnss_serial_monitor \
+  --port /dev/ttyACM0 \
+  --baud <baud> \
+  --vendor ublox \
+  --summary \
+  --max-bytes 1024
+```
+
+Result:
+
+- all three tested baud values produced valid UBX traffic and valid runtime
+  updates
+- on this USB CDC ACM path, the configured tty baud behaved as a host-side
+  parameter only
+- `115200` was used as the working ROS2 launch default for the smoke test
+
+Example summary at `115200`:
+
+```text
+Summary:
+  port=/dev/ttyACM0 baud=115200 vendor=ublox
+  selected_session=ublox bytes_read=1100 chunks_read=11 runtime_updates=11
+  eof_seen=false read_errors=0 malformed_records=0 unknown_records=0 last_status=ok last_error=none
+  final_state: session=ublox fix_valid=true fix_type=fix rtk_mode=none lat_deg=43.9542959 lon_deg=2.2023749 alt_m=177.981 h_acc_m=0.421 v_acc_m=0.621 sats_used=24
+```
+
+### Receiver output observed
+
+Read-only byte capture plus `gnss_inspect` showed:
+
+```text
+ubx_messages 01:07=10
+```
+
+Meaning:
+
+- the current USB output stream was `UBX-NAV-PVT`
+- no `NAV-SAT`, `NAV-DOP`, `MON-RF`, or `MON-HW` messages were observed in the
+  sampled capture
+- this explains why `/status` exposed position and scalar accuracy but did not
+  expose DOP, CN0, or visible/tracked satellite counts during this smoke test
+
+### Hardware-path gap found and fixed
+
+The first real-hardware pass exposed one low-level configuration gap:
+
+- the built-in u-blox diagnostics profile only enabled message outputs on
+  `UART1`
+- applying that profile to a USB-attached ZED-F9P therefore would not have
+  enriched the current `/dev/ttyACM0` stream
+
+Fix applied:
+
+- [gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp:1)
+  now includes the documented USB `CFG-MSGOUT-*` keys used in this audit
+- [gnss_driver/src/ublox_config_profile_builder.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/src/ublox_config_profile_builder.cpp:1)
+  now emits both `UART1` and `USB` output-rate commands for the rover, base,
+  and diagnostics helpers
+- the affected u-blox config/profile tests were updated accordingly
+
+### Runtime-only receiver configuration used for validation
+
+To validate the richer ROS2 status path without making persistent receiver
+changes, the following runtime-only profile was applied:
+
+```bash
+./build/gnss_tools/gnss_config_apply \
+  ublox diagnostics \
+  --port /dev/ttyACM0 \
+  --baud 115200 \
+  --execute \
+  --confirm-runtime \
+  --json
+```
+
+Observed result:
+
+- `23/23` commands completed successfully
+- the profile targeted `CFG-RAM` only
+- no persistent save/config command was issued
+
+Effective output set enabled for the smoke test:
+
+- `UBX-NAV-PVT`
+- `UBX-NAV-SAT`
+- `UBX-NAV-STATUS`
+- `UBX-NAV-DOP`
+- `UBX-MON-HW`
+- `UBX-MON-HW2`
+- `UBX-MON-RF`
+- `UBX-RXM-RTCM`
+- `NMEA-GGA`
+
+Restore note:
+
+- because this was a runtime-only `CFG-RAM` apply, a receiver reboot or
+  factory reset is sufficient to clear the temporary message-output changes
+
+### Receiver output observed after runtime configuration
+
+Post-config capture plus `gnss_inspect` showed:
+
+```text
+ubx_messages 01:03=5 01:04=5 01:07=6 01:35=5 0A:09=1 0A:0B=1 0A:38=1
+```
+
+Meaning:
+
+- `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`, and `NAV-DOP` were flowing on USB
+- `MON-HW`, `MON-HW2`, and `MON-RF` were also present
+- the runtime path now had enough data to validate DOP, visible satellites,
+  CN0, and receiver RF/hardware diagnostics flow through ROS2
+
+### ROS2 receiver smoke test
+
+Launch command used:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=/dev/ttyACM0 \
+  serial_baud:=115200 \
+  receiver_family:=ublox
+```
+
+Observed topics:
+
+- `/status`
+- `/fix`
+- `/diagnostics`
+
+Observed `ros2 topic echo /status --once` after the timestamp fix:
+
+```text
+stamp:
+  sec: 1780387316
+  nanosec: 630151336
+fix_valid: true
+fix_type: 2
+rtk_mode: 1
+capability_flags: 25471
+value_flags: 895
+latitude_deg: 43.9542759
+longitude_deg: 2.2023804
+altitude_m: 171.577
+horizontal_accuracy_m: 0.32199999690055847
+vertical_accuracy_m: 0.492000013589859
+hdop: 0.5099999904632568
+vdop: 0.7899999618530273
+satellites_used: 32
+satellites_visible: 41
+mean_cn0_db_hz: 37.894737243652344
+max_cn0_db_hz: 48.0
+interference_detected: false
+jamming_detected: false
+```
+
+Observed `ros2 topic echo /fix --once`:
+
+- `header.stamp` was non-zero
+- `frame_id=gnss_link`
+- `status.status=0`
+- diagonal covariance was populated from scalar accuracy
+
+Observed `ros2 topic echo /diagnostics --once`:
+
+- `universal_gnss/summary`
+- `overall_severity=ok`
+- `fix_valid=true`
+- `transport_healthy=true`
+- `parser_healthy=true`
+- `stale_data=false`
+- `event_count=0`
+- `event_count=0` was expected in this run because `MON-HW` / `MON-RF`
+  reported healthy receiver state rather than warning/error conditions
+
+Observed rates:
+
+- `/status`: `5.000 Hz`
+- `/fix`: `5.000 Hz`
+
+### Smoke-test bug found and fixed
+
+The first live run revealed one ROS2 bug:
+
+- `GnssStatus.stamp` was zero on live serial data because the receiver node did
+  not fill a ROS timestamp when the low-level runtime sample lacked
+  `timestamp_ns`
+
+Fix applied:
+
+- [gnss_ros2/src/receiver_node.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_ros2/src/receiver_node.cpp:602)
+  now stamps outgoing live publications with `node->now()` when the runtime
+  sample has no timestamp
+- [gnss_ros2/tests/test_receiver_node.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_ros2/tests/test_receiver_node.cpp:167)
+  now asserts non-zero stamps for `fix`, `status`, and `diagnostics`
+
+One false intermediate reading came from a stale older `receiver_node` process
+that was still running in the test container after a manual relaunch. After the
+stale process was terminated, `/status` also showed the expected non-zero
+timestamp.
 
 ### Manual smoke-test commands when hardware is available
 
@@ -264,6 +518,88 @@ Optional low-level serial smoke test before ROS2:
   --vendor ublox
 ```
 
+### Real NTRIP caster validation
+
+Low-level caster validation command:
+
+```bash
+./build/gnss_tools/gnss_ntrip_monitor \
+  --host 192.168.10.31 \
+  --port 2101 \
+  --mountpoint PEPEUCHGNSS \
+  --user <redacted> \
+  --password <redacted> \
+  --max-seconds 8 \
+  --summary
+```
+
+Observed result after the legacy-`ICY` compatibility fix:
+
+```text
+Summary:
+  endpoint=192.168.10.31:2101/PEPEUCHGNSS state=streaming stop_reason=max_seconds
+  bytes_received=14060 bytes_sent=198 request_sent=true response_received=true elapsed_s=8.389
+  rtcm_frames_seen=60 valid_frames=60 invalid_frames=0 gga_sent=0 gga_send_errors=0 reconnects=0 last_type=1006
+  base_position_seen=true base_1005_seen=true base_1006_seen=true glonass_bias_1230_seen=true
+  correction_health=ok correction_available=true stale_data=false last_error=none
+  message_types 1005=9 1006=9 1033=1 1077=8 1087=8 1097=8 1127=16 1230=1
+  msm_constellations gps=8 glonass=8 galileo=8 beidou=16
+  response_status ICY 200 OK
+```
+
+This validated:
+
+- authentication and mountpoint access
+- RTCM streaming through the reusable `NtripClient`
+- RTCM frame extraction and correction-monitor metrics
+- `1005`, `1006`, `1033`, `1077`, `1087`, `1097`, `1127`, and `1230`
+  observation on the live stream
+- base-position and GLONASS-bias presence tracking
+
+### Real combined ROS2 receiver + NTRIP validation
+
+Combined launch used:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
+  receiver_family:=ublox \
+  transport:=serial \
+  serial_device:=/dev/ttyACM0 \
+  serial_baud:=115200 \
+  caster_host:=192.168.10.31 \
+  caster_port:=2101 \
+  mountpoint:=PEPEUCHGNSS \
+  username:=<redacted> \
+  password:=<redacted> \
+  gga_enabled:=true \
+  gga_interval_s:=5
+```
+
+Observed `/diagnostics` included:
+
+- `universal_gnss_ntrip/summary`
+  - `overall_severity=ok`
+  - `correction_available=true`
+  - `transport_healthy=true`
+  - `parser_healthy=true`
+- `universal_gnss_ntrip/ntrip_streaming`
+  - `NTRIP correction stream is active`
+- `universal_gnss_ntrip/rtcm.stream_active`
+  - `RTCM correction stream is active`
+- `universal_gnss_ntrip/gga_injection_active`
+  - `NTRIP GGA injection is active`
+
+Observed `/status` remained valid at `5 Hz` while the NTRIP node was active:
+
+- `fix_valid=true`
+- `hdop` and `vdop` present
+- `satellites_visible` present
+- `mean_cn0_db_hz` and `max_cn0_db_hz` present
+
+This confirms the ROS2 path:
+
+`ReceiverNode -> /status -> NtripNode -> live caster -> diagnostics`
+
 ## Test Coverage Added In This Audit
 
 ROS2-side additions:
@@ -312,6 +648,13 @@ Result:
 - `universal_gnss_ros2` built successfully
 - `5/5` ROS2 package tests passed
 - `43` ROS2 gtest cases passed
+- real ZED-F9P smoke test passed on `/dev/ttyACM0` using `receiver_family:=ublox`
+- runtime-only USB diagnostics profile apply succeeded
+- final sampled USB output included `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`,
+  `NAV-DOP`, `MON-HW`, `MON-HW2`, and `MON-RF`
+- real local NTRIP caster validation passed on `192.168.10.31:2101/PEPEUCHGNSS`
+- combined ROS2 receiver + NTRIP launch validated live correction streaming and
+  active GGA injection
 
 Known note:
 
@@ -324,14 +667,16 @@ Current ROS2 end-to-end status is good enough for continued ROS2 phase work:
 
 - receiver input -> `/fix` / `/status` / `/diagnostics` is covered
 - `/status` -> `NtripNode` -> diagnostics is covered
+- `/status` -> `NtripNode` -> real caster -> RTCM correction health is covered
 - stale GNSS input no longer leaks into repeated GGA injection
 - combined bringup exists for manual operator testing
 
 ## Remaining Blockers Before A `v0.5` Tag
 
-- real hardware ROS2 smoke tests still need to be rerun when a device is
-  actually present
 - no RTCM forwarding path from `NtripNode` into a live receiver path yet
+- no real live-corrections validation of `RXM-RTCM` through the rover ROS2
+  stack yet because RTCM is not yet forwarded back into the receiver
+- Unicore and generic-NMEA ROS2 hardware smoke tests are still pending
 - no ROS2 replay node yet
 - no Humble / Jazzy package validation yet
 - no ROS2 CI matrix yet
