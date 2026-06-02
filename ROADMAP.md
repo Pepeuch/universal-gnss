@@ -109,8 +109,10 @@ Completed at the start of this phase:
 - ROS2 end-to-end audit / hardening pass
 - `robot_localization` example configuration and documentation
 - real ZED-F9P + local NTRIP caster smoke validation on ROS2 Kilted
+- real UM982 ROS2 smoke validation on `/dev/ttyUSB0` at `921600`
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - live u-blox `RXM-RTCM` acceptance validation through the ROS2 path
+- live UM982 correction forwarding validation through the same ROS2 path
 
 Next:
 

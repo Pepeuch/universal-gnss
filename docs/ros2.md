@@ -465,7 +465,7 @@ Launch-file equivalents:
 
 ```bash
 ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
-  serial_device:=/dev/ttyACM0 \
+  serial_device:=/dev/ttyUSB0 \
   serial_baud:=921600 \
   receiver_family:=unicore
 
@@ -511,6 +511,7 @@ GnssStatus subscription -> GnssRuntimeState -> NtripClient::MaybeInjectGga()
 This path has now been validated against:
 
 - a real u-blox ZED-F9P receiver on `/dev/ttyACM0`
+- a real Unicore UM982 receiver on `/dev/ttyUSB0` at `921600`
 - a real local NTRIP caster using the legacy `ICY 200 OK` response style
 
 See [ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md)

@@ -467,6 +467,78 @@ that was still running in the test container after a manual relaunch. After the
 stale process was terminated, `/status` also showed the expected non-zero
 timestamp.
 
+### Real UM982 ROS2 receiver smoke test
+
+Receiver:
+
+- model: Unicore UM982
+- path: `/dev/ttyUSB0`
+- baud: `921600`
+- audit date: 2026-06-02
+
+Receiver-only launch used:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=/dev/ttyUSB0 \
+  serial_baud:=921600 \
+  receiver_family:=unicore
+```
+
+Observed `/status`:
+
+- `fix_valid=true`
+- valid lat/lon/alt
+- `horizontal_accuracy_m` and `vertical_accuracy_m` present
+- `hdop` present
+- `satellites_used=25`
+- `satellites_tracked=30`
+- `correction_age_s=0.0`
+
+Observed `/fix`:
+
+- non-zero stamp
+- `frame_id=gnss_link`
+- covariance populated
+
+Observed `/diagnostics` after the Unicore-specific fix below:
+
+- `universal_gnss/summary`
+- `overall_severity=ok`
+- `transport_healthy=true`
+- `parser_healthy=true`
+- `stale_data=false`
+- `correction_available=true`
+- `event_count=0`
+
+Observed rates:
+
+- `/status`: `5.000 Hz`
+- `/fix`: `5.000 Hz`
+
+#### UM982 bug found and fixed
+
+The first UM982 live attach produced one false parser warning:
+
+- `parser_healthy=false`
+- one startup malformed record
+
+Root cause:
+
+- `UnicoreSession` permanently counted one initial malformed line or binary
+  frame when the node attached in the middle of an already-running mixed
+  ASCII/binary stream
+
+Fix applied:
+
+- [gnss_driver/src/unicore_session.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/src/unicore_session.cpp:1)
+  now suppresses one startup resynchronization malformed event separately for
+  the ASCII and binary framers until each framer has seen its first valid
+  record
+- [gnss_driver/tests/test_unicore_session.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/tests/test_unicore_session.cpp:1)
+  now covers startup invalid-binary suppression, startup ASCII overflow
+  suppression, and the unchanged post-sync/finalize malformed behavior
+
 ### Manual smoke-test commands when hardware is available
 
 u-blox:
@@ -637,6 +709,53 @@ This confirms the ROS2 path:
 
 `ReceiverNode -> /status -> NtripNode -> /rtcm -> ReceiverNode -> live rover diagnostics`
 
+### Real combined UM982 + NTRIP validation
+
+Combined launch used:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
+  receiver_family:=unicore \
+  transport:=serial \
+  serial_device:=/dev/ttyUSB0 \
+  serial_baud:=921600 \
+  caster_host:=192.168.10.31 \
+  caster_port:=2101 \
+  mountpoint:=PEPEUCHGNSS \
+  username:=<redacted> \
+  password:=<redacted> \
+  gga_enabled:=true \
+  gga_interval_s:=5
+```
+
+Observed result:
+
+- `/rtcm` published live RTCM frames
+- `ros2 topic echo /rtcm --once` showed a valid `1005` frame
+- `NtripNode` diagnostics reported:
+  - `ntrip_streaming`
+  - `rtcm.stream_active`
+  - `rtcm_forwarding_active`
+  - `gga_injection_active`
+  - `published_frame_count=72`
+  - `last_message_type=1127`
+- `ReceiverNode` diagnostics reported:
+  - `rtcm_forwarding_active`
+  - `forwarded_frame_count=72`
+  - `forwarded_bytes=21422`
+  - `write_error_count=0`
+  - `receiver_correction_available=true`
+  - `last_message_type=1127`
+  - `last_frame_age_s≈0.6`
+- `GnssStatus` showed `correction_age_s=1.0`
+
+The UM982 also surfaced live RF diagnostics through the existing portable path:
+
+- `universal_gnss/interference_detected`
+- `universal_gnss/jamming_detected`
+
+These were treated as real receiver telemetry rather than adapter errors.
+
 ## Test Coverage Added In This Audit
 
 ROS2-side additions:
@@ -686,6 +805,7 @@ Result:
 - `5/5` ROS2 package tests passed
 - `47` ROS2 gtest cases passed
 - real ZED-F9P smoke test passed on `/dev/ttyACM0` using `receiver_family:=ublox`
+- real UM982 smoke test passed on `/dev/ttyUSB0` using `receiver_family:=unicore`
 - runtime-only USB diagnostics profile apply succeeded
 - final sampled USB output included `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`,
   `NAV-DOP`, `MON-HW`, `MON-HW2`, and `MON-RF`
@@ -693,6 +813,8 @@ Result:
 - combined ROS2 receiver + NTRIP launch validated live correction streaming,
   active GGA injection, and live RTCM forwarding into the receiver transport
 - live u-blox `RXM-RTCM` acceptance was observed through receiver diagnostics
+- combined UM982 + NTRIP launch validated live correction forwarding through
+  the same ROS2 architecture at `921600`
 
 Known note:
 
@@ -712,7 +834,7 @@ Current ROS2 end-to-end status is good enough for continued ROS2 phase work:
 
 ## Remaining Blockers Before A `v0.5` Tag
 
-- Unicore and generic-NMEA ROS2 hardware smoke tests are still pending
+- generic-NMEA ROS2 hardware smoke test is still pending
 - no ROS2 replay node yet
 - no Humble / Jazzy package validation yet
 - no ROS2 CI matrix yet

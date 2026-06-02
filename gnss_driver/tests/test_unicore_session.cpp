@@ -20,6 +20,7 @@ using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_driver::UnicoreSession;
+using universal_gnss_driver::UnicoreSessionConfig;
 
 struct TestContext
 {
@@ -397,6 +398,63 @@ void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
              "PVTSLNB should carry accuracy, correction age, heading, and HDOP");
 }
 
+void TestStartupBinaryResyncSuppressesFirstMalformedFrame(TestContext& ctx)
+{
+  UnicoreSession session;
+  auto invalid_frame = BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload());
+  invalid_frame.back() ^= 0xFFu;
+
+  session.FeedBytes(invalid_frame, 9300);
+  session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload()), 9400);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.binary_frames_seen == 1u &&
+                 metrics.malformed_frames == 0u &&
+                 metrics.records_parsed == 1u &&
+                 metrics.runtime_updates == 1u,
+             "the first malformed binary frame before sync should be suppressed once");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9400) &&
+                 state.fix_valid &&
+                 state.latitude_deg.has_value() &&
+                 NearlyEqual(*state.latitude_deg, 40.0789588272),
+             "a valid binary frame after startup resync should still update runtime state");
+}
+
+void TestStartupAsciiResyncSuppressesFirstMalformedLine(TestContext& ctx)
+{
+  UnicoreSessionConfig config;
+  config.max_frame_length_bytes = 8u;
+  UnicoreSession session(config);
+
+  session.FeedString("#TOO_LONG_LINE");
+  session.FeedString("#A;\r\n", 9500);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.malformed_lines == 0u &&
+                 metrics.lines_seen == 1u &&
+                 metrics.ascii_records_seen == 1u &&
+                 metrics.unknown_records == 1u,
+             "the first malformed ASCII fragment before sync should be suppressed once");
+}
+
+void TestMalformedBinaryFrameAfterSyncCounts(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload()), 9600);
+
+  auto invalid_frame = BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload());
+  invalid_frame.back() ^= 0x55u;
+  session.FeedBytes(invalid_frame, 9700);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.binary_frames_seen == 1u &&
+                 metrics.malformed_frames == 1u &&
+                 metrics.records_parsed == 1u &&
+                 metrics.runtime_updates == 1u,
+             "malformed binary frames after initial sync should still be counted");
+}
+
 void TestFinalizeAndReset(TestContext& ctx)
 {
   UnicoreSession session;
@@ -436,6 +494,9 @@ int main()
   TestPartialChunksAcrossFeeds(ctx);
   TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(ctx);
   TestBinaryBestNavAndPvtslnRouting(ctx);
+  TestStartupBinaryResyncSuppressesFirstMalformedFrame(ctx);
+  TestStartupAsciiResyncSuppressesFirstMalformedLine(ctx);
+  TestMalformedBinaryFrameAfterSyncCounts(ctx);
   TestFinalizeAndReset(ctx);
 
   if (ctx.failures != 0)

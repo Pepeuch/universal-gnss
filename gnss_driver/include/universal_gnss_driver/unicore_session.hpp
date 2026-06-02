@@ -59,6 +59,8 @@ public:
   const UnicoreSessionConfig& config() const;
 
 private:
+  bool ShouldSuppressStartupAsciiMalformed();
+  bool ShouldSuppressStartupBinaryMalformed();
   void HandleFramerResult(
       const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>&
           result);
@@ -73,6 +75,11 @@ private:
   universal_gnss_protocols::UnicoreBinaryFrameFramer binary_framer_;
   universal_gnss::GnssRuntimeAggregator aggregator_{};
   UnicoreSessionMetrics metrics_{};
+  bool ascii_seen_valid_record_{false};
+  bool binary_seen_valid_frame_{false};
+  bool ascii_startup_malformed_suppressed_{false};
+  bool binary_startup_malformed_suppressed_{false};
+  bool finalizing_{false};
 };
 
 }  // namespace universal_gnss_driver

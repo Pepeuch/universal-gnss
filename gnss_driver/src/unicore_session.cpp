@@ -130,8 +130,10 @@ void UnicoreSession::FeedString(const std::string_view text,
 
 void UnicoreSession::Finalize()
 {
+  finalizing_ = true;
   HandleFramerResult(framer_.Finalize());
   HandleBinaryFramerResult(binary_framer_.Finalize());
+  finalizing_ = false;
 }
 
 void UnicoreSession::Reset()
@@ -140,6 +142,11 @@ void UnicoreSession::Reset()
   binary_framer_.Reset();
   aggregator_.Reset();
   metrics_ = UnicoreSessionMetrics{};
+  ascii_seen_valid_record_ = false;
+  binary_seen_valid_frame_ = false;
+  ascii_startup_malformed_suppressed_ = false;
+  binary_startup_malformed_suppressed_ = false;
+  finalizing_ = false;
 }
 
 const universal_gnss::GnssRuntimeState& UnicoreSession::current_state() const
@@ -157,6 +164,28 @@ const UnicoreSessionConfig& UnicoreSession::config() const
   return config_;
 }
 
+bool UnicoreSession::ShouldSuppressStartupAsciiMalformed()
+{
+  if (finalizing_ || ascii_seen_valid_record_ || ascii_startup_malformed_suppressed_)
+  {
+    return false;
+  }
+
+  ascii_startup_malformed_suppressed_ = true;
+  return true;
+}
+
+bool UnicoreSession::ShouldSuppressStartupBinaryMalformed()
+{
+  if (finalizing_ || binary_seen_valid_frame_ || binary_startup_malformed_suppressed_)
+  {
+    return false;
+  }
+
+  binary_startup_malformed_suppressed_ = true;
+  return true;
+}
+
 void UnicoreSession::HandleFramerResult(
     const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>& result)
 {
@@ -166,9 +195,13 @@ void UnicoreSession::HandleFramerResult(
       ++metrics_.lines_seen;
       if (!result.record.has_value())
       {
-        ++metrics_.malformed_lines;
+        if (!ShouldSuppressStartupAsciiMalformed())
+        {
+          ++metrics_.malformed_lines;
+        }
         return;
       }
+      ascii_seen_valid_record_ = true;
       if (!result.record->message_name.empty())
       {
         ++metrics_.ascii_records_seen;
@@ -178,7 +211,10 @@ void UnicoreSession::HandleFramerResult(
 
     case ParserStatus::kOverflow:
     case ParserStatus::kTruncated:
-      ++metrics_.malformed_lines;
+      if (!ShouldSuppressStartupAsciiMalformed())
+      {
+        ++metrics_.malformed_lines;
+      }
       return;
 
     case ParserStatus::kIdle:
@@ -199,16 +235,23 @@ void UnicoreSession::HandleBinaryFramerResult(
       ++metrics_.binary_frames_seen;
       if (!result.record.has_value())
       {
-        ++metrics_.malformed_frames;
+        if (!ShouldSuppressStartupBinaryMalformed())
+        {
+          ++metrics_.malformed_frames;
+        }
         return;
       }
+      binary_seen_valid_frame_ = true;
       HandleBinaryFrame(*result.record);
       return;
 
     case ParserStatus::kOverflow:
     case ParserStatus::kTruncated:
     case ParserStatus::kInvalidData:
-      ++metrics_.malformed_frames;
+      if (!ShouldSuppressStartupBinaryMalformed())
+      {
+        ++metrics_.malformed_frames;
+      }
       return;
 
     case ParserStatus::kIdle:
