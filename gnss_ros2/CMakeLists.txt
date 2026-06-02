@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.16)
 
 project(universal_gnss_ros2 LANGUAGES C CXX)
 
+get_filename_component(UNIVERSAL_GNSS_ROS2_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+get_filename_component(UNIVERSAL_GNSS_SOURCE_ROOT "${UNIVERSAL_GNSS_ROS2_SOURCE_DIR}/.." REALPATH)
+
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
@@ -14,7 +17,7 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 endif()
 
-set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_core/include")
+set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_core/include")
 
 if(NOT EXISTS "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/universal_gnss/gnss_runtime_state.hpp")
   message(FATAL_ERROR "gnss_core headers were not found next to gnss_ros2")
@@ -23,29 +26,29 @@ endif()
 set(_saved_build_testing "${BUILD_TESTING}")
 set(BUILD_TESTING OFF)
 if(NOT TARGET universal_gnss_core)
-  add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../gnss_core" "${CMAKE_CURRENT_BINARY_DIR}/gnss_core")
+  add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_core" "${CMAKE_CURRENT_BINARY_DIR}/gnss_core")
 endif()
 if(NOT TARGET universal_gnss_protocols)
   add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_protocols"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_protocols"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_protocols"
   )
 endif()
 if(NOT TARGET universal_gnss_transport)
   add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_transport"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_transport"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_transport"
   )
 endif()
 if(NOT TARGET universal_gnss_driver)
   add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_driver"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_driver"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_driver"
   )
 endif()
 if(NOT TARGET universal_gnss_ntrip)
   add_subdirectory(
-    "${CMAKE_CURRENT_SOURCE_DIR}/../gnss_ntrip"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_ntrip"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_ntrip"
   )
 endif()

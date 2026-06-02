@@ -104,6 +104,10 @@ flowchart TB
 See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
 receiver/NTRIP node surfaces, and the current status / covariance policy.
 
+See [docs/devcontainer.md](docs/devcontainer.md) for the reproducible ROS 2
+devcontainer setup, Kilted build flow, future Lyrical switch path, and optional
+serial hardware access examples.
+
 See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
 current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and
 the latest hardware smoke-test notes.

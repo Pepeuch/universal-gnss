@@ -1,0 +1,34 @@
+{
+  "name": "Universal GNSS (ROS 2)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "ROS_DISTRO": "kilted"
+    }
+  },
+  "overrideCommand": false,
+  "remoteUser": "root",
+  "workspaceFolder": "/workspaces/universal-gnss",
+  "runArgs": [
+    "--init"
+  ],
+  "containerEnv": {
+    "COLCON_HOME": "/tmp/.colcon"
+  },
+  "postCreateCommand": "bash -lc 'source /opt/ros/${ROS_DISTRO}/setup.bash && colcon --help >/dev/null && cmake --version >/dev/null'",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "cmake.configureOnOpen": false,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "ms-python.python",
+        "ms-iot.vscode-ros"
+      ]
+    }
+  }
+}
