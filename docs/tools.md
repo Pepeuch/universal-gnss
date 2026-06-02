@@ -4,7 +4,8 @@ This document describes the current standalone inspection tools in
 `gnss_tools`.
 
 Most of these tools are intentionally offline and file/stdin oriented.
-`gnss_serial_monitor` and `gnss_ntrip_monitor` are the current live exceptions.
+`gnss_discover`, `gnss_serial_monitor`, and `gnss_ntrip_monitor` are the
+current live/read-only exceptions.
 
 Current non-goals:
 
@@ -12,6 +13,79 @@ Current non-goals:
 - ROS 2 output
 - replay timing
 - full protocol semantic decoding beyond what `gnss_protocols` already exposes
+
+## Discovery And Live Tools
+
+### `gnss_discover`
+
+`gnss_discover` is the first read-only receiver discovery CLI.
+
+It reuses:
+
+- the Linux serial-port enumeration logic from `receiver_discovery.*`
+- the existing `UBX`, `NMEA`, `RTCM3`, Unicore ASCII, and Unicore binary `N4`
+  framers
+- the same conservative family-detection heuristics used by the driver layer
+
+Current behavior:
+
+- scans likely Linux serial receiver paths
+- prefers stable `/dev/serial/by-id/*` symlinks when available
+- probes a conservative default baud list:
+  - `921600`
+  - `460800`
+  - `115200`
+  - `38400`
+- performs bounded read-only probing with no receiver writes
+- reports a detected family:
+  - `ublox`
+  - `unicore`
+  - `nmea`
+  - `unknown`
+- reports a conservative confidence level:
+  - `none`
+  - `low`
+  - `medium`
+  - `high`
+- exposes supporting evidence such as:
+  - valid `UBX` frames seen
+  - Unicore ASCII records seen
+  - Unicore binary `N4` frames seen
+  - `NMEA` sentences seen
+  - `RTCM3` frames seen
+  - total bytes read
+
+Current policy:
+
+- discovery is read-only
+- no receiver configuration is sent
+- no baud or protocol settings are persisted
+- generic `NMEA` fallback is disabled by default and must be opted in with
+  `--allow-nmea`
+
+Examples:
+
+```text
+gnss_discover
+gnss_discover --path /dev/ttyACM0
+gnss_discover --json
+gnss_discover --baud 921600,115200
+gnss_discover --allow-nmea
+```
+
+Typical text output includes:
+
+- chosen device path
+- selected baud rate
+- detected family
+- confidence
+- transport/source
+- stable `/dev/serial/by-id` id when available
+- evidence summary
+- optional note when only weak evidence is present
+
+`--json` emits a list of stable result objects intended for later ROS 2 or GUI
+integration work.
 
 ## Current Tools
 

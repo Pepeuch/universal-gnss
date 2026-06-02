@@ -64,7 +64,7 @@ Implemented:
 Still intentionally deferred inside this layer:
 
 - reconnect/session lifecycle ownership in drivers
-- advanced auto-detection
+- ROS2-side auto-attach integration
 - UDP transport
 - TLS transport adapter
 
@@ -113,9 +113,12 @@ Completed at the start of this phase:
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - live u-blox `RXM-RTCM` acceptance validation through the ROS2 path
 - live UM982 correction forwarding validation through the same ROS2 path
+- portable serial receiver discovery and read-only auto-detection foundation
+- `gnss_discover` CLI with real F9P and UM982 validation at `921600`
 
 Next:
 
+- ROS2 discovery integration (`serial_device:=auto`, `receiver_family:=auto`)
 - ROS2 replay node
 - Humble/Jazzy validation
 - Foxglove-friendly topic surface

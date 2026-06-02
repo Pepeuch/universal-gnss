@@ -2,6 +2,7 @@ add_library(
   universal_gnss_driver
   src/nmea_driver.cpp
   src/nmea_session.cpp
+  src/receiver_discovery.cpp
   src/receiver_config_application.cpp
   src/receiver_command_dispatcher.cpp
   src/unicore_driver.cpp
@@ -103,6 +104,20 @@ if(BUILD_TESTING)
   add_test(
     NAME gnss_driver_test_receiver_session_runner
     COMMAND gnss_driver_test_receiver_session_runner
+  )
+
+  add_executable(
+    gnss_driver_test_receiver_discovery
+    tests/test_receiver_discovery.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_receiver_discovery
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_receiver_discovery
+    COMMAND gnss_driver_test_receiver_discovery
   )
 
   add_executable(

@@ -127,6 +127,8 @@ Implemented:
 - [x] real combined UM982 + NTRIP smoke test with live RTCM forwarding at `921600`
 - [x] correction forwarding / bringup composition between `ReceiverNode` and `NtripNode`
 - [x] live RTCM / `RXM-RTCM` real-hardware validation through the ROS2 path
+- [x] portable receiver discovery foundation
+- [x] `gnss_discover` CLI
 
 To do:
 
@@ -211,14 +213,17 @@ To do:
 
 To do:
 
-- [ ] Prepare future auto-detection
-- [ ] Session auto-detection
+- [x] Prepare future auto-detection
+- [x] Session discovery foundation
+- [ ] `receiver_node serial_device:=auto`
+- [ ] `receiver_family:=auto` discovery integration
 - [ ] transport binding
 - [ ] Implement reconnect/backoff loop
 - [x] reconnect/backoff
 - [ ] reconnect/session lifecycle
 - [x] reconnect policies
 - [ ] timeout policies
+- [ ] automatic receiver reconfiguration after discovery
 
 ### Health monitoring
 

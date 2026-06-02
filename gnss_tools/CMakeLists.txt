@@ -8,6 +8,7 @@ add_library(
   src/gnss_quality_report.cpp
   src/ntrip_monitor.cpp
   src/profile_preview.cpp
+  src/receiver_discovery_format.cpp
   src/runtime_export.cpp
   src/runtime_state_format.cpp
 )
@@ -107,6 +108,18 @@ target_link_libraries(
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_executable(
+    gnss_discover
+    src/gnss_discover.cpp
+  )
+  target_link_libraries(
+    gnss_discover
+    PRIVATE
+      universal_gnss_driver
+      universal_gnss_tools
+      universal_gnss_transport
+  )
+
+  add_executable(
     gnss_config_apply
     src/gnss_config_apply.cpp
   )
@@ -152,6 +165,20 @@ if(BUILD_TESTING)
       universal_gnss_tools
   )
   add_test(NAME gnss_tools_test_runtime_state_format COMMAND gnss_tools_test_runtime_state_format)
+
+  add_executable(
+    gnss_tools_test_receiver_discovery_format
+    tests/test_receiver_discovery_format.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_receiver_discovery_format
+    PRIVATE
+      universal_gnss_tools
+  )
+  add_test(
+    NAME gnss_tools_test_receiver_discovery_format
+    COMMAND gnss_tools_test_receiver_discovery_format
+  )
 
   add_executable(
     gnss_tools_test_rtcm_inspector

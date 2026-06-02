@@ -832,6 +832,31 @@ Current ROS2 end-to-end status is good enough for continued ROS2 phase work:
 - stale GNSS input no longer leaks into repeated GGA injection
 - combined bringup exists for manual operator testing
 
+## Discovery Foundation Note
+
+The ROS2 receiver path still expects explicit `serial_device`, `serial_baud`,
+and `receiver_family` parameters during launch.
+
+Before wiring discovery directly into ROS 2 auto mode, the portable
+driver/tools layer now provides a read-only discovery foundation:
+
+- `DiscoverReceivers(...)` in `gnss_driver`
+- `gnss_discover` in `gnss_tools`
+
+That discovery layer was validated on the same real hardware used for this ROS2
+audit:
+
+- `/dev/ttyACM0` detected as `ublox` at `921600`
+- `/dev/ttyUSB0` detected as `unicore` at `921600`
+
+Recommended operator flow today:
+
+1. run `gnss_discover`
+2. confirm the preferred stable `/dev/serial/by-id/*` path, baud, and family
+3. launch `receiver_node` with explicit parameters
+
+Direct `serial_device:=auto` and ROS2-side receiver discovery remain deferred.
+
 ## Remaining Blockers Before A `v0.5` Tag
 
 - generic-NMEA ROS2 hardware smoke test is still pending

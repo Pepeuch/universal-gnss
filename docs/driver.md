@@ -9,7 +9,7 @@ It does not yet contain:
 
 - autonomous live receiver configuration loops
 - correction injection
-- auto-detection loops
+- autonomous attach/connect loops
 - ROS 2 nodes
 
 ## Purpose
@@ -535,12 +535,79 @@ Current vendor coverage:
 
 Still deferred:
 
-- receiver discovery
+- automatic receiver attachment
 - live transport ownership
 - auto-connect lifecycle
 - command execution ownership
 - ROS 2 integration
 - NTRIP integration
+
+### Receiver discovery
+
+`receiver_discovery.*` is the first portable read-only discovery layer for
+finding candidate serial receivers and identifying likely receiver families.
+
+Its job is intentionally narrow:
+
+- enumerate likely Linux serial receiver paths
+- prefer stable `/dev/serial/by-id/*` symlinks when available
+- fall back to `/dev/ttyACM*` and `/dev/ttyUSB*`
+- support explicit-path probing even when enumeration is skipped
+- probe common baud rates without writing any bytes
+- reuse the existing protocol framers and semantic detectors
+- return structured evidence and a conservative confidence level
+
+Current Linux enumeration order is:
+
+- `/dev/serial/by-id/*`
+- `/dev/ttyACM*`
+- `/dev/ttyUSB*`
+
+Current default baud probe order is:
+
+- `921600`
+- `460800`
+- `115200`
+- `38400`
+
+Current family detection is conservative:
+
+- `high`
+  - valid `UBX` frames -> `ublox`
+  - valid Unicore binary `N4` frames -> `unicore`
+  - clear Unicore ASCII runtime/status messages -> `unicore`
+- `medium`
+  - valid `NMEA` only and generic fallback explicitly enabled -> `nmea`
+- `low`
+  - weak `NMEA`-only evidence with fallback disabled
+  - `RTCM`-only evidence
+- `none`
+  - no recognizable receiver evidence
+
+Current implementation intentionally does not:
+
+- configure the receiver
+- send probes or poll commands
+- persist any setting
+- own reconnect logic
+- attach automatically inside ROS 2
+- replace the existing stream/session auto-routing layer
+
+The implementation reuses existing Universal GNSS framers and parsers rather
+than building a second protocol detector.
+
+Conceptually reused from the local `ELT_RTKBase` reference:
+
+- stable `/dev/serial/by-id` preference
+- practical `ttyACM` / `ttyUSB` scan order
+- a baud probing order biased toward modern high-rate RTK receivers
+
+Intentionally not reused:
+
+- project-specific shell/device heuristics
+- receiver writes during discovery
+- external dependencies or imported code
+- configuration-side probing
 
 ### Stream detection
 
@@ -564,7 +631,12 @@ Current policy:
 - avoid classifying `$...` text as Unicore ASCII to prevent collisions with
   NMEA
 
-This is intentionally not a full auto-detection state machine yet.
+This is intentionally not the same thing as the new serial-port discovery
+layer:
+
+- `stream_detector.*` classifies bytes already coming from an attached stream
+- `receiver_discovery.*` finds candidate ports, probes baud rates, and uses
+  those stream-level detectors conservatively
 
 ### Generic NMEA session
 
@@ -737,7 +809,7 @@ This router is intentionally not:
 - a serial transport
 - a TCP transport
 - a reconnect lifecycle manager
-- a full auto-detection engine
+- a full auto-attach engine
 - a ROS 2 node
 
 ### Receiver session runner
@@ -834,14 +906,14 @@ streams:
 
 The following driver-layer work is intentionally deferred:
 
-- receiver discovery
+- ROS 2-side discovery integration
 - live transport ownership
 - command execution ownership inside drivers
 - live config transactions
 - multi-command scheduling
 - Quectel config messages
 - broader binary `N4` Unicore semantic routing beyond `BESTNAVB` / `PVTSLNB`
-- auto-detection state machines
+- automatic attach / reconnect state machines
 - correction injection paths
 - receiver-family runtime arbitration
 - ROS 2 driver nodes
