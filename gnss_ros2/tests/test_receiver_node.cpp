@@ -225,6 +225,35 @@ protected:
   }
 };
 
+universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
+    const std::string& path,
+    const std::uint32_t baud,
+    const universal_gnss_driver::ReceiverDetectedFamily family,
+    const universal_gnss_driver::ReceiverProbeConfidence confidence)
+{
+  universal_gnss_driver::ReceiverProbeResult result;
+  result.path = path;
+  result.source = universal_gnss_driver::ReceiverPortSource::kExplicitPath;
+  result.transport_type = universal_gnss_driver::ReceiverTransportType::kSerial;
+  result.selected_baud = baud;
+  result.detected_family = family;
+  result.confidence = confidence;
+  result.evidence.bytes_read = 128u;
+  if (family == universal_gnss_driver::ReceiverDetectedFamily::kUblox)
+  {
+    result.evidence.ubx_frames_seen = 1u;
+  }
+  else if (family == universal_gnss_driver::ReceiverDetectedFamily::kUnicore)
+  {
+    result.evidence.unicore_binary_seen = 1u;
+  }
+  else if (family == universal_gnss_driver::ReceiverDetectedFamily::kNmea)
+  {
+    result.evidence.nmea_sentences_seen = 1u;
+  }
+  return result;
+}
+
 TEST_F(ReceiverNodeTest, ConstructsWithParametersAndPublishersReady)
 {
   rclcpp::NodeOptions options;
@@ -248,6 +277,245 @@ TEST_F(ReceiverNodeTest, ConstructsWithParametersAndPublishersReady)
   EXPECT_EQ(node.get_parameter("tcp_port").as_int(), 2101);
   EXPECT_DOUBLE_EQ(node.get_parameter("publish_rate_hz").as_double(), 5.0);
   EXPECT_EQ(node.get_parameter("frame_id").as_string(), "base_link");
+}
+
+TEST_F(ReceiverNodeTest, ExplicitSerialConfigDoesNotRunDiscovery)
+{
+  bool discovery_called = false;
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
+                       const std::optional<std::string>&,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    discovery_called = true;
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "/definitely_missing_universal_gnss_device"),
+      rclcpp::Parameter("serial_baud", 921600),
+      rclcpp::Parameter("receiver_family", "ublox"),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  EXPECT_FALSE(discovery_called);
+  EXPECT_FALSE(node.has_transport_source());
+}
+
+TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
+{
+  std::optional<std::string> captured_path;
+  bool captured_include_platform = false;
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
+                       const std::optional<std::string>& explicit_path,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    captured_path = explicit_path;
+    captured_include_platform = config.include_platform_uarts;
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
+        MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u,
+                            universal_gnss_driver::ReceiverDetectedFamily::kUblox,
+                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "auto"),
+      rclcpp::Parameter("serial_baud", std::string("auto")),
+      rclcpp::Parameter("receiver_family", "auto"),
+      rclcpp::Parameter("discovery_include_platform_uarts", true),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  EXPECT_FALSE(captured_path.has_value());
+  EXPECT_TRUE(captured_include_platform);
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* discovery_status =
+      FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/discovery");
+  ASSERT_NE(discovery_status, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "attempted"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "succeeded"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "path"),
+            std::optional<std::string>{"/dev/serial/by-id/f9p"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "baud"),
+            std::optional<std::string>{"921600"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"),
+            std::optional<std::string>{"ublox"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "confidence"),
+            std::optional<std::string>{"high"});
+}
+
+TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
+{
+  std::optional<std::string> captured_path;
+  std::vector<std::uint32_t> captured_bauds;
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
+                       const std::optional<std::string>& explicit_path,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    captured_path = explicit_path;
+    captured_bauds = config.baud_candidates;
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
+        MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+                            universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
+                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "/dev/ttyAMA2"),
+      rclcpp::Parameter("serial_baud", std::string("auto")),
+      rclcpp::Parameter("receiver_family", "auto"),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  ASSERT_TRUE(captured_path.has_value());
+  EXPECT_EQ(*captured_path, "/dev/ttyAMA2");
+  ASSERT_FALSE(captured_bauds.empty());
+  EXPECT_EQ(captured_bauds.front(), 921600u);
+}
+
+TEST_F(ReceiverNodeTest, DiscoveryFailureIsReportedClearly)
+{
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
+                       const std::optional<std::string>&,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "auto"),
+      rclcpp::Parameter("serial_baud", std::string("auto")),
+      rclcpp::Parameter("receiver_family", "auto"),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  EXPECT_FALSE(node.has_transport_source());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* discovery_status =
+      FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/discovery");
+  ASSERT_NE(discovery_status, nullptr);
+  EXPECT_EQ(discovery_status->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "succeeded"),
+            std::optional<std::string>{"false"});
+  EXPECT_TRUE(FindDiagnosticValue(*discovery_status, "failure_reason").has_value());
+}
+
+TEST_F(ReceiverNodeTest, LowConfidenceDiscoveryIsRejected)
+{
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
+                       const std::optional<std::string>&,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
+        MakeDiscoveryResult("/dev/ttyS1", 921600u,
+                            universal_gnss_driver::ReceiverDetectedFamily::kUnknown,
+                            universal_gnss_driver::ReceiverProbeConfidence::kLow)};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "auto"),
+      rclcpp::Parameter("serial_baud", std::string("auto")),
+      rclcpp::Parameter("receiver_family", "auto"),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  EXPECT_FALSE(node.has_transport_source());
+}
+
+TEST_F(ReceiverNodeTest, GenericNmeaDiscoveryRequiresExplicitOptIn)
+{
+  auto make_discovery = []() {
+    return [](const universal_gnss_driver::ReceiverProbeConfig&,
+              const std::optional<std::string>&,
+              const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+      return std::vector<universal_gnss_driver::ReceiverProbeResult>{
+          MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+                              universal_gnss_driver::ReceiverDetectedFamily::kNmea,
+                              universal_gnss_driver::ReceiverProbeConfidence::kMedium)};
+    };
+  };
+
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("transport", "serial"),
+        rclcpp::Parameter("serial_device", "auto"),
+        rclcpp::Parameter("serial_baud", std::string("auto")),
+        rclcpp::Parameter("receiver_family", "auto"),
+        rclcpp::Parameter("discovery_allow_generic_nmea", false),
+    });
+
+    universal_gnss_ros2::ReceiverNode node(make_discovery(), options);
+    EXPECT_FALSE(node.has_transport_source());
+    node.PublishNow();
+    ASSERT_TRUE(node.last_diagnostics_message().has_value());
+    const auto* discovery_status =
+        FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/discovery");
+    ASSERT_NE(discovery_status, nullptr);
+    EXPECT_EQ(discovery_status->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+  }
+
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("transport", "serial"),
+        rclcpp::Parameter("serial_device", "auto"),
+        rclcpp::Parameter("serial_baud", std::string("auto")),
+        rclcpp::Parameter("receiver_family", "auto"),
+        rclcpp::Parameter("discovery_allow_generic_nmea", true),
+    });
+
+    universal_gnss_ros2::ReceiverNode node(make_discovery(), options);
+    node.PublishNow();
+    ASSERT_TRUE(node.last_diagnostics_message().has_value());
+    const auto* discovery_status =
+        FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/discovery");
+    ASSERT_NE(discovery_status, nullptr);
+    EXPECT_EQ(discovery_status->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+    EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"),
+              std::optional<std::string>{"nmea"});
+  }
+}
+
+TEST_F(ReceiverNodeTest, DiscoveryReceivesPlatformUartOptInAndKnownBaud)
+{
+  bool include_platform_uarts = false;
+  std::vector<std::uint32_t> captured_bauds;
+  auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
+                       const std::optional<std::string>& explicit_path,
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    include_platform_uarts = config.include_platform_uarts;
+    captured_bauds = config.baud_candidates;
+    EXPECT_EQ(explicit_path, std::optional<std::string>{"/dev/ttyAMA2"});
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
+        MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+                            universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
+                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+  };
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "/dev/ttyAMA2"),
+      rclcpp::Parameter("serial_baud", 921600),
+      rclcpp::Parameter("receiver_family", "auto"),
+      rclcpp::Parameter("discovery_include_platform_uarts", true),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(discovery, options);
+  EXPECT_TRUE(include_platform_uarts);
+  ASSERT_EQ(captured_bauds.size(), 1u);
+  EXPECT_EQ(captured_bauds.front(), 921600u);
 }
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
@@ -602,6 +870,7 @@ TEST_F(ReceiverNodeTest, StaysAliveOnSerialOpenFailureAndReportsDiagnostic)
       rclcpp::Parameter("transport", "serial"),
       rclcpp::Parameter("serial_device", "/definitely_missing_universal_gnss_device"),
       rclcpp::Parameter("serial_baud", 115200),
+      rclcpp::Parameter("receiver_family", "ublox"),
   });
 
   universal_gnss_ros2::ReceiverNode node(options);

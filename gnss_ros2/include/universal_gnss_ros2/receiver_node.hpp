@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -7,6 +8,7 @@
 #include "rclcpp/node.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
+#include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 
 namespace universal_gnss_transport
@@ -22,8 +24,18 @@ namespace universal_gnss_ros2
 class ReceiverNode : public rclcpp::Node
 {
 public:
+  using DiscoveryFunction = std::function<std::vector<universal_gnss_driver::ReceiverProbeResult>(
+      const universal_gnss_driver::ReceiverProbeConfig&,
+      const std::optional<std::string>&,
+      const universal_gnss_driver::ReceiverDiscoveryPaths&)>;
+
   explicit ReceiverNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
+  ReceiverNode(DiscoveryFunction discovery_function,
+               const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
   ReceiverNode(std::unique_ptr<universal_gnss_transport::ByteSource> source,
+               const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
+  ReceiverNode(std::unique_ptr<universal_gnss_transport::ByteSource> source,
+               DiscoveryFunction discovery_function,
                const rclcpp::NodeOptions& options = rclcpp::NodeOptions{});
   ~ReceiverNode() override;
 

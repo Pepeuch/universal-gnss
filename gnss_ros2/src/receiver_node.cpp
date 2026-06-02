@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cerrno>
 #include <cstdint>
 #include <cmath>
 #include <limits>
@@ -17,6 +18,7 @@
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
+#include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
@@ -52,10 +54,25 @@ struct ReceiverNodeConfig
   std::string transport_name{"serial"};
   std::string serial_device{};
   std::uint32_t serial_baud{115200u};
+  bool receiver_family_auto{true};
+  bool serial_device_auto{false};
+  bool serial_baud_auto{false};
+  bool discovery_include_platform_uarts{false};
+  bool discovery_allow_generic_nmea{false};
+  std::uint32_t discovery_timeout_ms{250u};
+  std::size_t discovery_max_probe_bytes{4096u};
   std::string tcp_host{};
   std::uint16_t tcp_port{0u};
   double publish_rate_hz{10.0};
   std::string frame_id{"gnss"};
+};
+
+struct ReceiverDiscoveryStatus
+{
+  bool attempted{false};
+  bool succeeded{false};
+  std::optional<universal_gnss_driver::ReceiverProbeResult> result{};
+  std::optional<std::string> failure_reason{};
 };
 
 using SteadyClock = std::chrono::steady_clock;
@@ -66,6 +83,90 @@ std::string ToLowerCopy(std::string value)
     return static_cast<char>(std::tolower(ch));
   });
   return value;
+}
+
+bool ParseUnsigned32Text(const std::string& text, std::uint32_t& value)
+{
+  try
+  {
+    std::size_t consumed = 0u;
+    const auto parsed = std::stoul(text, &consumed, 10);
+    if (consumed != text.size() ||
+        parsed > static_cast<unsigned long>(std::numeric_limits<std::uint32_t>::max()))
+    {
+      return false;
+    }
+
+    value = static_cast<std::uint32_t>(parsed);
+    return true;
+  }
+  catch (const std::exception&)
+  {
+    return false;
+  }
+}
+
+bool IsAutoToken(const std::string& value)
+{
+  return ToLowerCopy(value) == "auto";
+}
+
+bool IsDiscoveryFamilyAccepted(const ReceiverNodeConfig& config,
+                               const universal_gnss_driver::ReceiverProbeResult& result)
+{
+  if (result.detected_family == universal_gnss_driver::ReceiverDetectedFamily::kUnknown)
+  {
+    return false;
+  }
+
+  if (config.receiver_family_auto)
+  {
+    return true;
+  }
+
+  if (config.receiver_family_name == "ublox")
+  {
+    return result.detected_family == universal_gnss_driver::ReceiverDetectedFamily::kUblox;
+  }
+  if (config.receiver_family_name == "unicore")
+  {
+    return result.detected_family == universal_gnss_driver::ReceiverDetectedFamily::kUnicore;
+  }
+  if (config.receiver_family_name == "nmea")
+  {
+    return result.detected_family == universal_gnss_driver::ReceiverDetectedFamily::kNmea;
+  }
+
+  return false;
+}
+
+void ApplyReceiverFamily(ReceiverNodeConfig& config, const std::string& family_name)
+{
+  config.receiver_family_name = ToLowerCopy(family_name);
+  config.receiver_family_auto = config.receiver_family_name == "auto";
+
+  if (config.receiver_family_name == "auto")
+  {
+    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kAutoDetect;
+  }
+  else if (config.receiver_family_name == "ublox")
+  {
+    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kUblox;
+  }
+  else if (config.receiver_family_name == "unicore")
+  {
+    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kUnicore;
+  }
+  else if (config.receiver_family_name == "nmea")
+  {
+    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kNmea;
+  }
+}
+
+bool ShouldRunSerialDiscovery(const ReceiverNodeConfig& config, const bool using_injected_source)
+{
+  return !using_injected_source && config.transport_kind == ReceiverTransportKind::kSerial &&
+         (config.serial_device_auto || config.serial_baud_auto || config.receiver_family_auto);
 }
 
 const char* ToString(const universal_gnss_transport::TransportError error)
@@ -209,6 +310,131 @@ std::string BuildHardwareId(const ReceiverNodeConfig& config, const bool using_i
   return stream.str();
 }
 
+std::string BuildDiscoveryEvidenceSummary(
+    const universal_gnss_driver::ReceiverProbeEvidence& evidence)
+{
+  std::ostringstream stream;
+  stream << "ubx=" << evidence.ubx_frames_seen << " unicore_ascii=" << evidence.unicore_ascii_seen
+         << " unicore_binary=" << evidence.unicore_binary_seen
+         << " nmea=" << evidence.nmea_sentences_seen << " rtcm=" << evidence.rtcm_frames_seen
+         << " bytes=" << evidence.bytes_read;
+  return stream.str();
+}
+
+ReceiverNode::DiscoveryFunction MakeDefaultDiscoveryFunction()
+{
+  return [](const universal_gnss_driver::ReceiverProbeConfig& config,
+            const std::optional<std::string>& explicit_path,
+            const universal_gnss_driver::ReceiverDiscoveryPaths& paths) {
+    return universal_gnss_driver::DiscoverReceivers(config, explicit_path, paths);
+  };
+}
+
+bool MaybeRunSerialDiscovery(rclcpp::Node& node,
+                             ReceiverNodeConfig& config,
+                             const ReceiverNode::DiscoveryFunction& discovery_function,
+                             std::vector<universal_gnss::GnssDiagnosticEvent>& events,
+                             ReceiverDiscoveryStatus& status)
+{
+  status.attempted = true;
+
+  universal_gnss_driver::ReceiverProbeConfig probe_config;
+  probe_config.read_timeout_ms = config.discovery_timeout_ms;
+  probe_config.max_probe_bytes = config.discovery_max_probe_bytes;
+  probe_config.allow_generic_nmea_fallback = config.discovery_allow_generic_nmea;
+  probe_config.include_platform_uarts = config.discovery_include_platform_uarts;
+  if (!config.serial_baud_auto)
+  {
+    probe_config.baud_candidates = {config.serial_baud};
+  }
+
+  const std::optional<std::string> explicit_path =
+      config.serial_device_auto ? std::nullopt : std::optional<std::string>{config.serial_device};
+
+  auto results = discovery_function(probe_config, explicit_path, {});
+  const auto meets_threshold = [](const universal_gnss_driver::ReceiverProbeResult& result) {
+    return result.confidence == universal_gnss_driver::ReceiverProbeConfidence::kHigh ||
+           result.confidence == universal_gnss_driver::ReceiverProbeConfidence::kMedium;
+  };
+
+  const universal_gnss_driver::ReceiverProbeResult* selected = nullptr;
+  for (const auto& result : results)
+  {
+    if (!meets_threshold(result))
+    {
+      continue;
+    }
+    if (!IsDiscoveryFamilyAccepted(config, result))
+    {
+      continue;
+    }
+    if (result.detected_family == universal_gnss_driver::ReceiverDetectedFamily::kNmea &&
+        !config.discovery_allow_generic_nmea)
+    {
+      continue;
+    }
+    selected = &result;
+    break;
+  }
+
+  if (selected == nullptr)
+  {
+    status.succeeded = false;
+    std::ostringstream message;
+    message << "No receiver matched discovery criteria";
+    if (!results.empty())
+    {
+      message << " (best candidate path=" << results.front().path
+              << ", family=" << universal_gnss_driver::ToString(results.front().detected_family)
+              << ", confidence="
+              << universal_gnss_driver::ToString(results.front().confidence) << ")";
+    }
+    status.failure_reason = message.str();
+    events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                               universal_gnss::GnssDiagnosticCategory::kConfiguration,
+                               "receiver_discovery_failed",
+                               *status.failure_reason));
+    RCLCPP_ERROR(node.get_logger(), "%s", status.failure_reason->c_str());
+    return false;
+  }
+
+  status.succeeded = true;
+  status.result = *selected;
+
+  config.serial_device = selected->path;
+  config.serial_device_auto = false;
+  if (selected->selected_baud.has_value())
+  {
+    config.serial_baud = *selected->selected_baud;
+  }
+  config.serial_baud_auto = false;
+
+  switch (selected->detected_family)
+  {
+    case universal_gnss_driver::ReceiverDetectedFamily::kUblox:
+      ApplyReceiverFamily(config, "ublox");
+      break;
+    case universal_gnss_driver::ReceiverDetectedFamily::kUnicore:
+      ApplyReceiverFamily(config, "unicore");
+      break;
+    case universal_gnss_driver::ReceiverDetectedFamily::kNmea:
+      ApplyReceiverFamily(config, "nmea");
+      break;
+    case universal_gnss_driver::ReceiverDetectedFamily::kUnknown:
+    default:
+      break;
+  }
+
+  RCLCPP_INFO(node.get_logger(),
+              "Receiver discovery selected path=%s baud=%u family=%s confidence=%s evidence=%s",
+              config.serial_device.c_str(),
+              config.serial_baud,
+              config.receiver_family_name.c_str(),
+              universal_gnss_driver::ToString(selected->confidence),
+              BuildDiscoveryEvidenceSummary(selected->evidence).c_str());
+  return true;
+}
+
 ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_injected_source)
 {
   ReceiverNodeConfig config;
@@ -217,29 +443,27 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
       ToLowerCopy(node.declare_parameter<std::string>("receiver_family", "auto"));
   config.transport_name = ToLowerCopy(node.declare_parameter<std::string>("transport", "serial"));
   config.serial_device = node.declare_parameter<std::string>("serial_device", "");
-  const auto serial_baud = node.declare_parameter<std::int64_t>("serial_baud", 115200);
+  rcl_interfaces::msg::ParameterDescriptor serial_baud_descriptor;
+  serial_baud_descriptor.dynamic_typing = true;
+  node.declare_parameter(
+      "serial_baud", rclcpp::ParameterValue(std::string("115200")), serial_baud_descriptor);
+  const auto serial_baud_parameter = node.get_parameter("serial_baud");
   config.tcp_host = node.declare_parameter<std::string>("tcp_host", "");
   const auto tcp_port = node.declare_parameter<std::int64_t>("tcp_port", 0);
   config.publish_rate_hz = node.declare_parameter<double>("publish_rate_hz", 10.0);
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
+  config.discovery_include_platform_uarts =
+      node.declare_parameter<bool>("discovery_include_platform_uarts", false);
+  config.discovery_allow_generic_nmea =
+      node.declare_parameter<bool>("discovery_allow_generic_nmea", false);
+  const auto discovery_timeout_ms =
+      node.declare_parameter<std::int64_t>("discovery_timeout_ms", 250);
+  const auto discovery_max_probe_bytes =
+      node.declare_parameter<std::int64_t>("discovery_max_probe_bytes", 4096);
 
-  if (config.receiver_family_name == "auto")
-  {
-    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kAutoDetect;
-  }
-  else if (config.receiver_family_name == "ublox")
-  {
-    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kUblox;
-  }
-  else if (config.receiver_family_name == "unicore")
-  {
-    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kUnicore;
-  }
-  else if (config.receiver_family_name == "nmea")
-  {
-    config.session.kind = universal_gnss_driver::ReceiverSessionKind::kNmea;
-  }
-  else
+  ApplyReceiverFamily(config, config.receiver_family_name);
+  if (config.receiver_family_name != "auto" && config.receiver_family_name != "ublox" &&
+      config.receiver_family_name != "unicore" && config.receiver_family_name != "nmea")
   {
     ThrowInvalidParameter(
         node, "receiver_family", "expected one of: auto, nmea, ublox, unicore");
@@ -258,11 +482,50 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
     ThrowInvalidParameter(node, "transport", "expected one of: serial, tcp");
   }
 
-  if (serial_baud <= 0 || serial_baud > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+  if (serial_baud_parameter.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER)
   {
-    ThrowInvalidParameter(node, "serial_baud", "must be in the 1..4294967295 range");
+    const auto serial_baud = serial_baud_parameter.as_int();
+    if (serial_baud <= 0 ||
+        serial_baud >
+            static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+    {
+      ThrowInvalidParameter(node, "serial_baud", "must be in the 1..4294967295 range");
+    }
+    config.serial_baud = static_cast<std::uint32_t>(serial_baud);
   }
-  config.serial_baud = static_cast<std::uint32_t>(serial_baud);
+  else if (serial_baud_parameter.get_type() == rclcpp::ParameterType::PARAMETER_STRING)
+  {
+    const auto serial_baud_text = ToLowerCopy(serial_baud_parameter.as_string());
+    if (serial_baud_text == "auto")
+    {
+      config.serial_baud_auto = true;
+    }
+    else if (!ParseUnsigned32Text(serial_baud_text, config.serial_baud) || config.serial_baud == 0u)
+    {
+      ThrowInvalidParameter(
+          node, "serial_baud", "expected a positive integer baud rate or the string 'auto'");
+    }
+  }
+  else
+  {
+    ThrowInvalidParameter(
+        node, "serial_baud", "expected a positive integer baud rate or the string 'auto'");
+  }
+
+  if (discovery_timeout_ms <= 0 ||
+      discovery_timeout_ms >
+          static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+  {
+    ThrowInvalidParameter(
+        node, "discovery_timeout_ms", "must be in the 1..4294967295 range");
+  }
+  config.discovery_timeout_ms = static_cast<std::uint32_t>(discovery_timeout_ms);
+
+  if (discovery_max_probe_bytes <= 0)
+  {
+    ThrowInvalidParameter(node, "discovery_max_probe_bytes", "must be strictly positive");
+  }
+  config.discovery_max_probe_bytes = static_cast<std::size_t>(discovery_max_probe_bytes);
 
   if (!std::isfinite(config.publish_rate_hz) || !(config.publish_rate_hz > 0.0))
   {
@@ -274,10 +537,12 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
     ThrowInvalidParameter(node, "frame_id", "must not be empty");
   }
 
+  config.serial_device_auto = IsAutoToken(config.serial_device);
+
   if (!using_injected_source && config.transport_kind == ReceiverTransportKind::kSerial &&
       config.serial_device.empty())
   {
-    ThrowInvalidParameter(node, "serial_device", "must be set when transport=serial");
+    ThrowInvalidParameter(node, "serial_device", "must be set to a device path or 'auto' when transport=serial");
   }
 
   if (config.transport_kind == ReceiverTransportKind::kTcp)
@@ -312,12 +577,21 @@ std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
   if (config.transport_kind == ReceiverTransportKind::kSerial)
   {
 #if defined(UNIVERSAL_GNSS_TRANSPORT_HAS_POSIX_SERIAL)
-    if (config.serial_device.empty())
+    if (config.serial_device.empty() || config.serial_device_auto)
     {
       events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
                                  universal_gnss::GnssDiagnosticCategory::kConfiguration,
                                  "serial_device_missing",
                                  "transport=serial requires serial_device"));
+      return nullptr;
+    }
+
+    if (config.serial_baud_auto)
+    {
+      events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kConfiguration,
+                                 "serial_baud_missing",
+                                 "transport=serial requires a resolved serial_baud"));
       return nullptr;
     }
 
@@ -392,12 +666,24 @@ struct ReceiverNode::Impl
   static constexpr std::chrono::seconds kStaleTimeout{3};
 
   explicit Impl(ReceiverNode& owner,
-                std::unique_ptr<universal_gnss_transport::ByteSource> injected_source)
+                std::unique_ptr<universal_gnss_transport::ByteSource> injected_source,
+                ReceiverNode::DiscoveryFunction discovery_function)
       : owner_(owner)
   {
     startup_events_.reserve(8u);
     const bool using_injected_source = injected_source != nullptr;
     config_ = LoadReceiverNodeConfig(owner_, using_injected_source);
+
+    if (ShouldRunSerialDiscovery(config_, using_injected_source))
+    {
+      if (!discovery_function)
+      {
+        discovery_function = MakeDefaultDiscoveryFunction();
+      }
+      MaybeRunSerialDiscovery(
+          owner_, config_, discovery_function, startup_events_, discovery_status_);
+    }
+
     hardware_id_ = BuildHardwareId(config_, injected_source != nullptr);
 
     session_ = std::make_unique<universal_gnss_driver::ReceiverSession>(config_.session);
@@ -423,7 +709,10 @@ struct ReceiverNode::Impl
     }
     else
     {
-      transport_source_ = CreateTransportSource(config_, startup_events_);
+      if (!discovery_status_.attempted || discovery_status_.succeeded)
+      {
+        transport_source_ = CreateTransportSource(config_, startup_events_);
+      }
       transport_configured_ = transport_source_ != nullptr;
       transport_ready_ = transport_source_ != nullptr;
     }
@@ -809,6 +1098,71 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
+  void AppendDiscoveryStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/discovery";
+    status.hardware_id = hardware_id_;
+
+    if (!discovery_status_.attempted)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "Discovery not used";
+    }
+    else if (discovery_status_.succeeded)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "Receiver discovery succeeded";
+    }
+    else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+      status.message = "Receiver discovery failed";
+    }
+
+    status.values.push_back(MakeKeyValue(
+        "attempted", discovery_status_.attempted ? "true" : "false"));
+    status.values.push_back(MakeKeyValue(
+        "succeeded", discovery_status_.succeeded ? "true" : "false"));
+    status.values.push_back(MakeKeyValue(
+        "include_platform_uarts", config_.discovery_include_platform_uarts ? "true" : "false"));
+    status.values.push_back(MakeKeyValue(
+        "allow_generic_nmea", config_.discovery_allow_generic_nmea ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("timeout_ms", std::to_string(config_.discovery_timeout_ms)));
+    status.values.push_back(
+        MakeKeyValue("max_probe_bytes", std::to_string(config_.discovery_max_probe_bytes)));
+
+    if (discovery_status_.result.has_value())
+    {
+      const auto& result = *discovery_status_.result;
+      status.values.push_back(MakeKeyValue("path", result.path));
+      if (result.selected_baud.has_value())
+      {
+        status.values.push_back(
+            MakeKeyValue("baud", std::to_string(*result.selected_baud)));
+      }
+      status.values.push_back(
+          MakeKeyValue("family", universal_gnss_driver::ToString(result.detected_family)));
+      status.values.push_back(
+          MakeKeyValue("confidence", universal_gnss_driver::ToString(result.confidence)));
+      status.values.push_back(MakeKeyValue(
+          "evidence", BuildDiscoveryEvidenceSummary(result.evidence)));
+      if (result.stable_id.has_value())
+      {
+        status.values.push_back(MakeKeyValue("stable_id", *result.stable_id));
+      }
+    }
+
+    if (discovery_status_.failure_reason.has_value())
+    {
+      status.values.push_back(
+          MakeKeyValue("failure_reason", *discovery_status_.failure_reason));
+    }
+
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void PublishNow()
   {
     auto state = session_->current_state();
@@ -828,6 +1182,7 @@ struct ReceiverNode::Impl
       last_diagnostics_message_->header.stamp = ToRosTime(state.timestamp_ns);
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;
+    AppendDiscoveryStatus(*last_diagnostics_message_);
     AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
 
     if (CanPublishFixMessage(state))
@@ -912,6 +1267,7 @@ struct ReceiverNode::Impl
 
   ReceiverNode& owner_;
   ReceiverNodeConfig config_{};
+  ReceiverDiscoveryStatus discovery_status_{};
   std::string hardware_id_{};
   std::unique_ptr<universal_gnss_driver::ReceiverSession> session_{};
   std::unique_ptr<universal_gnss_transport::ByteSource> transport_source_{};
@@ -945,14 +1301,33 @@ struct ReceiverNode::Impl
 
 ReceiverNode::ReceiverNode(const rclcpp::NodeOptions& options)
     : rclcpp::Node("universal_gnss_receiver", options),
-      impl_(std::make_unique<Impl>(*this, std::unique_ptr<universal_gnss_transport::ByteSource>{}))
+      impl_(std::make_unique<Impl>(*this,
+                                  std::unique_ptr<universal_gnss_transport::ByteSource>{},
+                                  MakeDefaultDiscoveryFunction()))
+{
+}
+
+ReceiverNode::ReceiverNode(DiscoveryFunction discovery_function,
+                           const rclcpp::NodeOptions& options)
+    : rclcpp::Node("universal_gnss_receiver", options),
+      impl_(std::make_unique<Impl>(*this,
+                                  std::unique_ptr<universal_gnss_transport::ByteSource>{},
+                                  std::move(discovery_function)))
 {
 }
 
 ReceiverNode::ReceiverNode(std::unique_ptr<universal_gnss_transport::ByteSource> source,
                            const rclcpp::NodeOptions& options)
     : rclcpp::Node("universal_gnss_receiver", options),
-      impl_(std::make_unique<Impl>(*this, std::move(source)))
+      impl_(std::make_unique<Impl>(*this, std::move(source), MakeDefaultDiscoveryFunction()))
+{
+}
+
+ReceiverNode::ReceiverNode(std::unique_ptr<universal_gnss_transport::ByteSource> source,
+                           DiscoveryFunction discovery_function,
+                           const rclcpp::NodeOptions& options)
+    : rclcpp::Node("universal_gnss_receiver", options),
+      impl_(std::make_unique<Impl>(*this, std::move(source), std::move(discovery_function)))
 {
 }
 

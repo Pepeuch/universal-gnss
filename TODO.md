@@ -130,6 +130,9 @@ Implemented:
 - [x] portable receiver discovery foundation
 - [x] `gnss_discover` CLI
 - [x] optional onboard/platform UART discovery
+- [x] `receiver_node serial_device:=auto`
+- [x] `receiver_family:=auto` discovery integration
+- [x] real `ReceiverNode` auto-discovery smoke tests on F9P and UM982 at `921600`
 
 To do:
 
@@ -216,8 +219,6 @@ To do:
 
 - [x] Prepare future auto-detection
 - [x] Session discovery foundation
-- [ ] `receiver_node serial_device:=auto`
-- [ ] `receiver_family:=auto` discovery integration
 - [ ] transport binding
 - [ ] Implement reconnect/backoff loop
 - [x] reconnect/backoff

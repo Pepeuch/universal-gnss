@@ -66,6 +66,7 @@ Current implemented layers:
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
   - minimal `ReceiverNode` skeleton publishing `fix`, `status`, and `diagnostics`
+  - serial receiver auto-discovery support for `ReceiverNode`
   - minimal `NtripNode` wrapper publishing `diagnostics` for ROS-side NTRIP state
   - minimal serial / TCP launch examples for `receiver_node`
   - minimal `ntrip.launch.py` example for the ROS2 NTRIP wrapper

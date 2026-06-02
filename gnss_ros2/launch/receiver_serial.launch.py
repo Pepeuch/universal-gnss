@@ -8,6 +8,12 @@ def generate_launch_description() -> LaunchDescription:
     receiver_family = LaunchConfiguration("receiver_family")
     serial_device = LaunchConfiguration("serial_device")
     serial_baud = LaunchConfiguration("serial_baud")
+    discovery_include_platform_uarts = LaunchConfiguration(
+        "discovery_include_platform_uarts"
+    )
+    discovery_allow_generic_nmea = LaunchConfiguration(
+        "discovery_allow_generic_nmea"
+    )
     publish_rate_hz = LaunchConfiguration("publish_rate_hz")
     frame_id = LaunchConfiguration("frame_id")
 
@@ -16,6 +22,12 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("receiver_family", default_value="auto"),
             DeclareLaunchArgument("serial_device", default_value="/dev/ttyACM0"),
             DeclareLaunchArgument("serial_baud", default_value="921600"),
+            DeclareLaunchArgument(
+                "discovery_include_platform_uarts", default_value="false"
+            ),
+            DeclareLaunchArgument(
+                "discovery_allow_generic_nmea", default_value="false"
+            ),
             DeclareLaunchArgument("publish_rate_hz", default_value="5.0"),
             DeclareLaunchArgument("frame_id", default_value="gnss_link"),
             Node(
@@ -29,6 +41,8 @@ def generate_launch_description() -> LaunchDescription:
                         "transport": "serial",
                         "serial_device": serial_device,
                         "serial_baud": serial_baud,
+                        "discovery_include_platform_uarts": discovery_include_platform_uarts,
+                        "discovery_allow_generic_nmea": discovery_allow_generic_nmea,
                         "publish_rate_hz": publish_rate_hz,
                         "frame_id": frame_id,
                     }

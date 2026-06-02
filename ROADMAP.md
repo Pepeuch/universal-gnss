@@ -116,10 +116,13 @@ Completed at the start of this phase:
 - portable serial receiver discovery and read-only auto-detection foundation
 - `gnss_discover` CLI with real F9P and UM982 validation at `921600`
 - optional onboard/platform UART discovery for embedded Linux targets
+- `ReceiverNode` serial auto-discovery integration for `serial_device:=auto`,
+  `serial_baud:=auto`, and `receiver_family:=auto`
+- real `ReceiverNode` auto-discovery smoke validation on F9P and UM982 at
+  `921600`
 
 Next:
 
-- ROS2 discovery integration (`serial_device:=auto`, `receiver_family:=auto`)
 - ROS2 replay node
 - Humble/Jazzy validation
 - Foxglove-friendly topic surface

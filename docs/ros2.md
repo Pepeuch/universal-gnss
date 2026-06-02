@@ -369,6 +369,10 @@ Correction subscription:
 - `transport`
 - `serial_device`
 - `serial_baud`
+- `discovery_include_platform_uarts`
+- `discovery_allow_generic_nmea`
+- `discovery_timeout_ms`
+- `discovery_max_probe_bytes`
 - `tcp_host`
 - `tcp_port`
 - `publish_rate_hz`
@@ -379,6 +383,23 @@ Validation policy:
 - invalid enum or range values fail node construction with a clear ROS error
 - required transport-specific parameters must be present
 - startup configuration errors do not silently fall back to another mode
+- `serial_baud` accepts either an explicit integer baud or the string `auto`
+
+Discovery policy:
+
+- discovery is used only for `transport=serial`
+- discovery runs only when `serial_device`, `serial_baud`, or `receiver_family`
+  is set to `auto`
+- if `serial_device` is explicit but `serial_baud` or `receiver_family` is
+  `auto`, only that path is probed
+- if `serial_device=auto`, the portable discovery layer enumerates candidate
+  ports and selects the best acceptable result
+- at least medium confidence is required
+- generic `NMEA` auto-selection is accepted only when
+  `discovery_allow_generic_nmea=true`
+- onboard/platform UART scanning remains opt-in through
+  `discovery_include_platform_uarts=true`
+- discovery remains read-only and never reconfigures the receiver
 
 Transport-open policy:
 
@@ -421,6 +442,8 @@ The node now follows a conservative runtime policy:
 Diagnostic states surfaced by the node include:
 
 - startup parameter validation failure
+- receiver discovery attempted / succeeded / failed
+- discovered path / baud / family / confidence
 - serial/TCP transport open failure
 - no data received after startup grace period
 - stale transport activity
@@ -474,6 +497,22 @@ ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
   serial_baud:=921600 \
   receiver_family:=ublox
 
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=auto \
+  serial_baud:=auto \
+  receiver_family:=auto
+
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=auto \
+  serial_baud:=auto \
+  receiver_family:=auto \
+  discovery_include_platform_uarts:=true
+
+ros2 launch universal_gnss_ros2 receiver_serial.launch.py \
+  serial_device:=/dev/ttyAMA2 \
+  serial_baud:=auto \
+  receiver_family:=auto
+
 ros2 launch universal_gnss_ros2 receiver_tcp.launch.py \
   tcp_host:=127.0.0.1 \
   tcp_port:=2101
@@ -488,6 +527,21 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   mountpoint:=RTCM3 \
   gga_enabled:=true
 ```
+
+Recommended operator flow:
+
+1. use explicit `serial_device` / `serial_baud` / `receiver_family` when they
+   are already known
+2. use `serial_device:=auto serial_baud:=auto receiver_family:=auto` when USB
+   receiver discovery is desired
+3. on embedded Linux, enable `discovery_include_platform_uarts:=true` only when
+   the GNSS receiver may be on onboard UARTs
+4. when the UART path is already known, prefer an explicit path such as
+   `/dev/ttyAMA2` over broad platform scanning
+5. when multiple USB receivers are connected at the same time, prefer an
+   explicit `serial_device` or run `gnss_discover` first, because
+   `serial_device:=auto` will select the best acceptable result in deterministic
+   discovery order rather than prompting interactively
 
 ## NTRIP Node
 

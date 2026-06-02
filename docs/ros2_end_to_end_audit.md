@@ -832,36 +832,87 @@ Current ROS2 end-to-end status is good enough for continued ROS2 phase work:
 - stale GNSS input no longer leaks into repeated GGA injection
 - combined bringup exists for manual operator testing
 
-## Discovery Foundation Note
+## Discovery Integration Note
 
-The ROS2 receiver path still expects explicit `serial_device`, `serial_baud`,
-and `receiver_family` parameters during launch.
+The ROS2 receiver path now supports serial auto mode through the same portable,
+read-only discovery foundation first introduced in the driver/tools layer.
 
-Before wiring discovery directly into ROS 2 auto mode, the portable
-driver/tools layer now provides a read-only discovery foundation:
+That discovery layer provides:
 
 - `DiscoverReceivers(...)` in `gnss_driver`
 - `gnss_discover` in `gnss_tools`
 
-That discovery layer was validated on the same real hardware used for this ROS2
-audit:
+`ReceiverNode` now consumes it when any of these serial parameters is set to
+`auto`:
+
+- `serial_device`
+- `serial_baud`
+- `receiver_family`
+
+The underlying discovery layer was validated on the same real hardware used for
+this ROS2 audit:
 
 - `/dev/ttyACM0` detected as `ublox` at `921600`
 - `/dev/ttyUSB0` detected as `unicore` at `921600`
 
 Recommended operator flow today:
 
-1. run `gnss_discover`
-2. confirm the preferred stable `/dev/serial/by-id/*` path, baud, and family
-3. launch `receiver_node` with explicit parameters
+1. use explicit launch parameters when the path/family are already known
+2. use `serial_device:=auto serial_baud:=auto receiver_family:=auto` when
+   receiver discovery should happen inside `ReceiverNode`
+3. use `gnss_discover` when an operator wants to inspect candidate ports and
+   evidence before launching ROS2
+
+### Real `ReceiverNode` auto-discovery smoke validation
+
+The integrated ROS2 auto-discovery path was validated on the same Kilted
+devcontainer workflow already used for the receiver and NTRIP hardware smoke
+tests.
+
+Portable discovery still reported both live receivers at `921600`:
+
+- `/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00`
+  -> `ublox`, confidence `high`
+- `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` -> `unicore`, confidence
+  `high`
+
+To make `serial_device:=auto` unambiguous during ROS2 validation, each smoke
+run passed only one hardware device through the container:
+
+- F9P run:
+  - device exposed: `/dev/ttyACM0`
+  - launch:
+    `ros2 launch universal_gnss_ros2 receiver_serial.launch.py serial_device:=auto serial_baud:=auto receiver_family:=auto publish_rate_hz:=5.0`
+  - discovery result: `/dev/ttyACM0`, `921600`, `ublox`, `high`
+  - observed topics: `/status`, `/fix`, `/diagnostics`
+  - observed rates: `/status ~= 5.0 Hz`, `/fix ~= 5.0 Hz`
+- UM982 run:
+  - device exposed: `/dev/ttyUSB0`
+  - launch:
+    `ros2 launch universal_gnss_ros2 receiver_serial.launch.py serial_device:=auto serial_baud:=auto receiver_family:=auto publish_rate_hz:=5.0`
+  - discovery result: `/dev/ttyUSB0`, `921600`, `unicore`, `high`
+  - observed topics: `/status`, `/fix`, `/diagnostics`
+  - observed rates: `/status ~= 5.0 Hz`, `/fix ~= 5.0 Hz`
+
+Both runs produced a healthy `universal_gnss/discovery` diagnostic with the
+selected path, baud, family, confidence, and evidence summary.
+
+Operator note:
+
+- with one candidate receiver attached, `serial_device:=auto` is the simplest
+  launch mode
+- with multiple high-confidence receivers attached simultaneously, prefer an
+  explicit `serial_device` or inspect candidates with `gnss_discover` first
 
 For embedded Linux boards where the receiver is wired to an onboard UART, the
 discovery layer also supports:
 
 - `gnss_discover --include-platform-uarts`
 - `gnss_discover --path /dev/ttyAMA2 --baud 921600`
+- `ros2 launch universal_gnss_ros2 receiver_serial.launch.py serial_device:=auto serial_baud:=auto receiver_family:=auto discovery_include_platform_uarts:=true`
 
-Direct `serial_device:=auto` and ROS2-side receiver discovery remain deferred.
+Onboard UART scanning stays opt-in because those ports may belong to serial
+console, Bluetooth, or unrelated peripherals.
 
 ## Remaining Blockers Before A `v0.5` Tag
 
