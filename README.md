@@ -1,3 +1,19 @@
+<p align="center">
+  <img src="assets/logo/ublox.svg" height="40" alt="u-blox">
+  &nbsp;&nbsp;
+  <img src="assets/logo/unicore.png" height="40" alt="Unicore">
+  &nbsp;&nbsp;
+  <img src="assets/logo/quectel.svg" height="40" alt="Quectel">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
+  <img src="https://img.shields.io/badge/NMEA-Supported-blue">
+  <img src="https://img.shields.io/badge/NTRIP-Supported-brightgreen">
+  <img src="https://img.shields.io/badge/RTCM3-Supported-brightgreen">
+  <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
+</p>
+
 # Universal GNSS
 
 Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded systems, and RTK base stations.
