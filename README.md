@@ -13,14 +13,16 @@
   <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
   <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
   <img src="https://img.shields.io/badge/Lyrical-Ready-blue">
-
+    <a href="https://mowgli.garden/">
+    <img src="https://img.shields.io/badge/MowgliNext-GNSS%20Migration-orange">
+  </a>
 </p>
 <p align="center">
-  <img src="https://img.shields.io/badge/NMEA-Supported-blue">
+  <img src="https://img.shields.io/badge/NMEA-Supported-brightgreen">
   <img src="https://img.shields.io/badge/NTRIP-Supported-brightgreen">
   <img src="https://img.shields.io/badge/RTCM3-Supported-brightgreen">
-  <img src="https://img.shields.io/badge/F9P-Validated-success">
-  <img src="https://img.shields.io/badge/UM982-Validated-success">
+  <img src="https://img.shields.io/badge/U--Blox-Validated-success">
+  <img src="https://img.shields.io/badge/Unicore-Validated-success">
 </p>
 # Universal GNSS
 
