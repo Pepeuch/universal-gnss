@@ -1,19 +1,27 @@
 <p align="center">
-  <img src="assets/logo/ublox.svg" height="40" alt="u-blox">
+  <img src="assets/logo/ublox.png" height="60" alt="u-blox">
   &nbsp;&nbsp;
-  <img src="assets/logo/unicore.png" height="40" alt="Unicore">
+  <img src="assets/logo/unicore.png" height="60" alt="Unicore">
   &nbsp;&nbsp;
-  <img src="assets/logo/quectel.svg" height="40" alt="Quectel">
+  <img src="assets/logo/quectel.png" height="60" alt="Quectel">
+   <img src="assets/logo/septentrio.png" height="60" alt="septentrio">
+  &nbsp;&nbsp;
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
   <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
+  <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
+  <img src="https://img.shields.io/badge/Lyrical-Ready-blue">
+
+</p>
+<p align="center">
   <img src="https://img.shields.io/badge/NMEA-Supported-blue">
   <img src="https://img.shields.io/badge/NTRIP-Supported-brightgreen">
   <img src="https://img.shields.io/badge/RTCM3-Supported-brightgreen">
-  <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
+  <img src="https://img.shields.io/badge/F9P-Validated-success">
+  <img src="https://img.shields.io/badge/UM982-Validated-success">
 </p>
-
 # Universal GNSS
 
 Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded systems, and RTK base stations.
