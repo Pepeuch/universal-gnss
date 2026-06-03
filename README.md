@@ -20,6 +20,11 @@
   <img src="https://img.shields.io/badge/RTCM3-Supported-brightgreen">
   <img src="https://img.shields.io/badge/U--Blox-Validated-success">
   <img src="https://img.shields.io/badge/Unicore-Validated-success">
+  <img src="https://img.shields.io/badge/Quectel-Planned-yellow">
+  <img src="https://img.shields.io/badge/Septentrio-Planned-yellow">
+    <a href="https://github.com/Pepeuch/esp32-rtk-gateway">
+    <img src="https://img.shields.io/badge/ESP32%20RTK%20Gateway-Migration%20Planned-orange">
+  </a>
 </p>
 # Universal GNSS
 
