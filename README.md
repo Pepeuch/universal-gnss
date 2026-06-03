@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo/ublox_white.png" height="60" alt="u-blox">
-  <img src="assets/logo/unicore_white.png" height="60" alt="Unicore">
-  <img src="assets/logo/quectel_white.png" height="60" alt="Quectel">
-  <img src="assets/logo/septentrio_white.png" height="60" alt="Septentrio">
+<a href="https://www.u-blox.com/"><img src="assets/logo/ublox_white.png" height="60"></a>
+<a href="https://www.unicorecomm.com/"><img src="assets/logo/unicore_white.png" height="60"></a>
+<a href="https://www.quectel.com/"><img src="assets/logo/quectel_white.png" height="60"></a>
+<a href="https://septentrio.com/"><img src="assets/logo/septentrio_white.png" height="60"></a>
 </p>
 
 <p align="center">
