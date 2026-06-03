@@ -1,22 +1,9 @@
-<table align="center">
-<tr>
-<td bgcolor="white">
-<img src="assets/logo/ublox.png" height="60">
-</td>
-
-<td bgcolor="white">
-<img src="assets/logo/unicore.png" height="60">
-</td>
-
-<td bgcolor="white">
-<img src="assets/logo/quectel.png" height="60">
-</td>
-
-<td bgcolor="white">
-<img src="assets/logo/septentrio.png" height="60">
-</td>
-</tr>
-</table>
+<p align="center">
+  <img src="assets/logo/ublox_white.png" height="60" alt="u-blox">
+  <img src="assets/logo/unicore_white.png" height="60" alt="Unicore">
+  <img src="assets/logo/quectel_white.png" height="60" alt="Quectel">
+  <img src="assets/logo/septentrio_white.png" height="60" alt="Septentrio">
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
