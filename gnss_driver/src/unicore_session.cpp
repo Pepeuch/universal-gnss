@@ -77,6 +77,24 @@ void ParseRecordOnly(const UnicoreFrame& frame,
   ++metrics.records_parsed;
 }
 
+void ParseRtcmStatusRecord(const UnicoreFrame& frame, UnicoreSessionMetrics& metrics)
+{
+  const auto parsed = universal_gnss_protocols::ParseUnicoreRtcmStatus(frame);
+  if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+  {
+    ++metrics.records_rejected;
+    return;
+  }
+
+  const auto& record = *parsed.record;
+  ++metrics.records_parsed;
+  ++metrics.receiver_rtcm_status_messages_seen;
+  metrics.receiver_rtcm_status_message_count = record.message_count;
+  metrics.receiver_last_rtcm_message_type = record.message_type;
+  metrics.receiver_last_rtcm_base_station_id = record.base_station_id;
+  metrics.receiver_last_rtcm_satellites_in_message = record.satellites_in_message;
+}
+
 bool IsSupportedRecordName(const std::string_view name)
 {
   return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" ||
@@ -310,12 +328,7 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
   if (frame.message_name == "RTCMSTATUSA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreRtcmStatus,
-        universal_gnss_protocols::UnicoreRtcmStatusToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseRtcmStatusRecord(frame, metrics_);
     return;
   }
 

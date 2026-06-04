@@ -316,6 +316,22 @@ void TestNmeaFallbackPolicy(TestContext& ctx)
              "NMEA-only probing should become medium-confidence generic NMEA when enabled");
 }
 
+void TestNmeaFallbackRejectsNonRuntimeSentences(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB1";
+
+  const std::string proprietary_or_text = "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50\r\n";
+  const std::vector<std::uint8_t> bytes(
+      proprietary_or_text.begin(), proprietary_or_text.end());
+
+  const auto result = Analyze(candidate, bytes, true);
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 result.confidence == ReceiverProbeConfidence::kNone &&
+                 result.evidence.nmea_sentences_seen == 0u,
+             "generic NMEA fallback should ignore non-runtime GNSS sentences");
+}
+
 void TestUnknownAndRtcmOnlyStreams(TestContext& ctx)
 {
   ReceiverPortCandidate candidate;
@@ -376,6 +392,7 @@ int main()
   TestUnicoreAsciiDetection(ctx);
   TestUnicoreBinaryDetection(ctx);
   TestNmeaFallbackPolicy(ctx);
+  TestNmeaFallbackRejectsNonRuntimeSentences(ctx);
   TestUnknownAndRtcmOnlyStreams(ctx);
   TestResultOrdering(ctx);
 

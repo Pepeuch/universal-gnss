@@ -90,6 +90,20 @@ This complements the stream-side RTCM monitor:
 
 It still does not imply RTK float/fixed state or position quality by itself.
 
+The Unicore session exposes the same receiver-side correction idea from
+`RTCMSTATUSA` counters:
+
+- `RTCMSTATUSA` is parsed and counted as receiver RTCM status telemetry
+- the latest RTCM message type, base-station id, satellite count, and receiver
+  message counter are exposed through Unicore session metrics
+- ROS 2 correction diagnostics use those metrics to report that the receiver
+  has observed RTCM status
+
+`RTCMSTATUSA` still does not create a fake `correction_age_s` value. Correction
+age remains sourced from position messages that document differential age, such
+as Unicore `BESTNAVA` / `PVTSLNA`, or from receiver-specific acceptance
+messages such as u-blox `RXM-RTCM`.
+
 The first u-blox receiver-health consumer now also lives in the UBX semantic
 layer:
 

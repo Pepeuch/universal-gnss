@@ -31,6 +31,11 @@ struct UnicoreSessionMetrics
   std::size_t unknown_records{0u};
   std::size_t malformed_lines{0u};
   std::size_t malformed_frames{0u};
+  std::size_t receiver_rtcm_status_messages_seen{0u};
+  std::uint32_t receiver_rtcm_status_message_count{0u};
+  std::optional<std::uint32_t> receiver_last_rtcm_message_type{};
+  std::optional<std::uint32_t> receiver_last_rtcm_base_station_id{};
+  std::optional<std::uint32_t> receiver_last_rtcm_satellites_in_message{};
 };
 
 class UnicoreSession

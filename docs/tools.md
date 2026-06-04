@@ -90,7 +90,20 @@ Typical text output includes:
 - transport/source
 - stable `/dev/serial/by-id` id when available
 - evidence summary
-- optional note when only weak evidence is present
+  - optional note when only weak evidence is present
+
+Detection policy:
+
+- u-blox is detected from valid UBX frames.
+- Unicore is detected from supported Unicore ASCII records such as `BESTNAVA`,
+  `PVTSLNA`, `RTKSTATUSA`, `RTCMSTATUSA`, `SATSINFOA`, and from valid Unicore
+  binary `N4` frames.
+- Generic NMEA fallback is opt-in. When enabled, discovery only counts valid
+  runtime GNSS NMEA sentences with known GNSS talkers (`GP`, `GL`, `GA`, `GB`,
+  `BD`, `GQ`, `GN`) and known runtime sentence types such as `GGA`, `RMC`,
+  `GSA`, `GSV`, `GST`, `VTG`, `ZDA`, and `GLL`.
+- RTCM-only streams are reported as unknown with a weak `rtcm_only_stream`
+  note, because an NTRIP/radio correction stream is not itself a receiver.
 
 `--json` emits a list of stable result objects intended for later ROS 2 or GUI
 integration work.
@@ -206,6 +219,30 @@ Current replay behavior:
 - Unicore binary `BESTNAVB` and `PVTSLNB` now contribute the same conservative
   runtime fields as their documented ASCII counterparts where those fields are
   present
+
+Typical regression workflow:
+
+```text
+gnss_inspect --summary testdata/mixed/nmea_ubx_rtcm_unicore.bin
+gnss_replay --summary testdata/ubx/nav_pvt_sat_monrf.ubx
+gnss_replay --summary testdata/nmea/basic_fix.nmea
+gnss_replay --summary testdata/unicore/basic_ascii.log
+rtcm_inspect --summary testdata/rtcm/basic_msm.rtcm
+```
+
+Captured receiver logs can be replayed directly:
+
+```text
+gnss_inspect --summary f9p_capture.ubx
+gnss_replay --summary f9p_capture.ubx
+gnss_inspect --summary um982_capture.log
+gnss_replay --summary um982_capture.log
+```
+
+Keep private NTRIP credentials out of captures before adding any replay data to
+`testdata/`. Prefer small sanitized byte-for-byte samples that cover one
+behavior, such as a UBX `NAV-PVT` update, a UM982 `RTKSTATUSA`/`RTCMSTATUSA`
+pair, or a short mixed stream with RTCM corrections.
 
 The replay timeline shows, for each recognized record:
 

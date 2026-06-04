@@ -173,6 +173,40 @@ Current policy:
 - allow optional nonblocking or read-timeout configuration
 - use pseudo-terminal tests so no real GNSS hardware is required
 
+### Stable serial device paths
+
+For robots and field rigs, prefer the udev-created stable symlinks under
+`/dev/serial/by-id/` instead of transient kernel names such as `/dev/ttyACM0`
+or `/dev/ttyUSB0`.
+
+Recommended ROS 2 configuration:
+
+```text
+transport:=serial
+serial_device:=/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00
+serial_baud:=921600
+receiver_family:=auto
+```
+
+Why:
+
+- `/dev/ttyACM*` and `/dev/ttyUSB*` can change when devices are unplugged,
+  rebooted, or opened in a different order.
+- `/dev/serial/by-id/*` carries USB identity and is stable across boots for
+  receivers such as ZED-F9P and many UM982 USB adapters.
+- The receiver node passes by-id paths directly to the POSIX serial adapter;
+  no special path normalization is required.
+
+Discovery also prefers `/dev/serial/by-id/*` candidates and deduplicates them
+against their target `/dev/tty*` node. If a by-id symlink exists, the discovered
+path stays the by-id symlink so downstream diagnostics and launch files can
+keep using the stable device name.
+
+Platform UARTs such as `/dev/serial0`, `/dev/ttyAMA*`, `/dev/ttyS*`, and
+`/dev/ttyTHS*` are excluded from automatic scanning by default because they may
+be consoles, Bluetooth, or other peripherals. Enable them only when the board
+wiring is known.
+
 ## TCP Client Transport
 
 `tcp_client_transport.*` adds the first generic network byte stream in the

@@ -923,6 +923,46 @@ TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmAcceptanceFromUbloxStream)
   EXPECT_EQ(receiver_rtcm->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
 }
 
+TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmStatusFromUnicoreStream)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+
+  const std::string rtcm_status =
+      "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+      "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>(
+      std::vector<std::uint8_t>(rtcm_status.begin(), rtcm_status.end()));
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* forwarding =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/rtcm_forwarding");
+  const auto* receiver_rtcm =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/receiver_rtcm_active");
+
+  ASSERT_NE(forwarding, nullptr);
+  ASSERT_NE(receiver_rtcm, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_correction_available"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_rtcm_status_messages_seen"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_rtcm_status_message_count"),
+            std::optional<std::string>{"21186"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_last_message_type"),
+            std::optional<std::string>{"1124"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_last_base_station_id"),
+            std::optional<std::string>{"0"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_last_satellites_in_message"),
+            std::optional<std::string>{"21"});
+  EXPECT_EQ(receiver_rtcm->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+}
+
 TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
 {
   rclcpp::NodeOptions options;

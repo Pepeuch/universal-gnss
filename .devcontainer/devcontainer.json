@@ -7,8 +7,9 @@
       "ROS_DISTRO": "kilted"
     }
   },
-  "overrideCommand": false,
+  "overrideCommand": true,
   "remoteUser": "root",
+  "containerUser": "root",
   "workspaceFolder": "/workspaces/universal-gnss",
   "runArgs": [
     "--init"

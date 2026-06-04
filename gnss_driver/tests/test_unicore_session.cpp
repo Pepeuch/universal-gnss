@@ -307,6 +307,13 @@ void TestRtcmStatusParsesWithoutRuntimeUpdate(TestContext& ctx)
                  metrics.records_parsed == 1u &&
                  metrics.runtime_updates == 0u,
              "RTCMSTATUSA should be parsed by the session without becoming a runtime update");
+  ctx.Expect(metrics.receiver_rtcm_status_messages_seen == 1u &&
+                 metrics.receiver_rtcm_status_message_count == 21186u &&
+                 metrics.receiver_last_rtcm_message_type == std::optional<std::uint32_t>(1124u) &&
+                 metrics.receiver_last_rtcm_base_station_id == std::optional<std::uint32_t>(0u) &&
+                 metrics.receiver_last_rtcm_satellites_in_message ==
+                     std::optional<std::uint32_t>(21u),
+             "RTCMSTATUSA should expose receiver-side RTCM status metrics");
   ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
                  !session.current_state().timestamp_ns.has_value(),
              "RTCMSTATUSA should stay out of the aggregated runtime state");

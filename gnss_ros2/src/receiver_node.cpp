@@ -845,7 +845,7 @@ struct ReceiverNode::Impl
     const auto& session_metrics = session_->metrics();
 
     const bool receiver_rtcm_active =
-        ActiveUbloxMetrics() != nullptr && ActiveUbloxMetrics()->receiver_rtcm_messages_used > 0u;
+        HasReceiverReportedRtcmCorrections();
 
     summary.fix_valid = state.fix_valid;
     summary.rtk_available = HasRtkAvailability(state);
@@ -1014,6 +1014,16 @@ struct ReceiverNode::Impl
       }
     }
 
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr &&
+        unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+    {
+      summary.AddEvent(MakeEvent(
+          universal_gnss::GnssDiagnosticSeverity::kOk,
+          universal_gnss::GnssDiagnosticCategory::kCorrection,
+          "receiver_rtcm_active",
+          "Receiver reported RTCM correction status"));
+    }
+
     return summary;
   }
 
@@ -1053,11 +1063,11 @@ struct ReceiverNode::Impl
         MakeKeyValue("forwarded_bytes", std::to_string(rtcm_forwarded_bytes_)));
     status.values.push_back(
         MakeKeyValue("write_error_count", std::to_string(rtcm_forward_write_errors_)));
-    const bool receiver_rtcm_active =
-        ActiveUbloxMetrics() != nullptr && ActiveUbloxMetrics()->receiver_rtcm_messages_used > 0u;
     status.values.push_back(
         MakeKeyValue("receiver_correction_available",
-                     (HasCorrectionAvailability(state) || receiver_rtcm_active) ? "true" : "false"));
+                     (HasCorrectionAvailability(state) || HasReceiverReportedRtcmCorrections())
+                         ? "true"
+                         : "false"));
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
     {
       status.values.push_back(MakeKeyValue(
@@ -1074,6 +1084,33 @@ struct ReceiverNode::Impl
         status.values.push_back(MakeKeyValue(
             "receiver_last_message_type",
             std::to_string(*ublox_metrics->last_receiver_rtcm_message_type)));
+      }
+    }
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
+    {
+      status.values.push_back(MakeKeyValue(
+          "receiver_rtcm_status_messages_seen",
+          std::to_string(unicore_metrics->receiver_rtcm_status_messages_seen)));
+      status.values.push_back(MakeKeyValue(
+          "receiver_rtcm_status_message_count",
+          std::to_string(unicore_metrics->receiver_rtcm_status_message_count)));
+      if (unicore_metrics->receiver_last_rtcm_message_type.has_value())
+      {
+        status.values.push_back(MakeKeyValue(
+            "receiver_last_message_type",
+            std::to_string(*unicore_metrics->receiver_last_rtcm_message_type)));
+      }
+      if (unicore_metrics->receiver_last_rtcm_base_station_id.has_value())
+      {
+        status.values.push_back(MakeKeyValue(
+            "receiver_last_base_station_id",
+            std::to_string(*unicore_metrics->receiver_last_rtcm_base_station_id)));
+      }
+      if (unicore_metrics->receiver_last_rtcm_satellites_in_message.has_value())
+      {
+        status.values.push_back(MakeKeyValue(
+            "receiver_last_satellites_in_message",
+            std::to_string(*unicore_metrics->receiver_last_rtcm_satellites_in_message)));
       }
     }
     if (last_rtcm_forward_message_type_.has_value())
@@ -1222,6 +1259,35 @@ struct ReceiverNode::Impl
     }
 
     return &session_->ublox_metrics();
+  }
+
+  const universal_gnss_driver::UnicoreSessionMetrics* ActiveUnicoreMetrics() const
+  {
+    if (session_ == nullptr ||
+        session_->metrics().selected_session_kind !=
+            universal_gnss_driver::ReceiverSessionKind::kUnicore)
+    {
+      return nullptr;
+    }
+
+    return &session_->unicore_metrics();
+  }
+
+  bool HasReceiverReportedRtcmCorrections() const
+  {
+    if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr &&
+        ublox_metrics->receiver_rtcm_messages_used > 0u)
+    {
+      return true;
+    }
+
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr &&
+        unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+    {
+      return true;
+    }
+
+    return false;
   }
 
   bool CanPublishFixMessage(const universal_gnss::GnssRuntimeState& state) const

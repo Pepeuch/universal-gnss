@@ -163,6 +163,27 @@ bool IsSupportedUnicoreAsciiName(const std::string_view name)
          name == "AGCA";
 }
 
+bool IsKnownGnssNmeaTalker(const std::string_view talker)
+{
+  return talker == "GP" || talker == "GL" || talker == "GA" || talker == "GB" ||
+         talker == "BD" || talker == "GQ" || talker == "GN";
+}
+
+bool IsRuntimeGnssNmeaSentenceType(const std::string_view sentence_type)
+{
+  return sentence_type == "GGA" || sentence_type == "RMC" || sentence_type == "GSA" ||
+         sentence_type == "GSV" || sentence_type == "GST" || sentence_type == "VTG" ||
+         sentence_type == "ZDA" || sentence_type == "GLL";
+}
+
+bool IsLikelyReceiverNmeaSentence(const NmeaSentence& sentence)
+{
+  return !sentence.talker.empty() &&
+         IsKnownGnssNmeaTalker(sentence.talker) &&
+         IsRuntimeGnssNmeaSentenceType(sentence.sentence_type) &&
+         sentence.checksum_status == ChecksumStatus::kValid;
+}
+
 template <typename FramerT, typename RecordT, typename AcceptFn>
 DetectionCounts CountDetectedRecords(const std::vector<std::uint8_t>& bytes, AcceptFn&& accept)
 {
@@ -528,8 +549,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   const auto nmea_counts = CountDetectedRecords<NmeaSentenceFramer, NmeaSentence>(
       bytes,
       [](const NmeaSentence& sentence) {
-        return !sentence.sentence_type.empty() &&
-               sentence.checksum_status != ChecksumStatus::kInvalid;
+        return IsLikelyReceiverNmeaSentence(sentence);
       });
   result.evidence.nmea_sentences_seen = nmea_counts.count;
 
