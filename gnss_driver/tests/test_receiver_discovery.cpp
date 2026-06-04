@@ -84,6 +84,30 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildMavlinkV1Heartbeat()
+{
+  std::vector<std::uint8_t> bytes = {
+      0xFEu,
+      9u,
+      1u,
+      1u,
+      1u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0x12u,
+      0x34u,
+  };
+  return bytes;
+}
+
 void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
 {
   bytes.push_back(static_cast<std::uint8_t>(value & 0xFFu));
@@ -257,8 +281,10 @@ void TestUbxDetection(TestContext& ctx)
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
-                 result.evidence.ubx_frames_seen == 1u,
-             "valid UBX frames should detect a high-confidence u-blox receiver");
+                 result.discovery_score == 100 &&
+                 result.evidence.ubx_frames_seen == 1u &&
+                 result.reason.find("valid_ubx_frame:+100") != std::string::npos,
+             "valid UBX frames should detect a high-confidence scored u-blox receiver");
 }
 
 void TestUnicoreAsciiDetection(TestContext& ctx)
@@ -277,8 +303,33 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnicore &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
+                 result.discovery_score == 100 &&
                  result.evidence.unicore_ascii_seen == 1u,
-             "clear Unicore ASCII runtime messages should detect Unicore with high confidence");
+             "clear Unicore ASCII runtime messages should detect Unicore with high confidence and score");
+}
+
+void TestUnicorePvtslnAndRtkStatusScoring(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB0";
+
+  const std::string lines =
+      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0*f06a8a06\r\n"
+      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
+      "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
+      "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
+      "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
+      "28,25,26*1e33c8cb\r\n";
+  const auto result = Analyze(
+      candidate, std::vector<std::uint8_t>(lines.begin(), lines.end()));
+
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 result.confidence == ReceiverProbeConfidence::kHigh &&
+                 result.discovery_score == 200 &&
+                 result.reason.find("RTKSTATUSA:+100") != std::string::npos &&
+                 result.reason.find("PVTSLNA:+100") != std::string::npos,
+             "UM982 RTKSTATUSA/PVTSLNA replay should produce additive Unicore score reasons");
 }
 
 void TestUnicoreBinaryDetection(TestContext& ctx)
@@ -300,7 +351,8 @@ void TestNmeaFallbackPolicy(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB1";
 
-  const std::string sentence = "$GPGLL,4916.45,N,12311.12,W,225444,A,*1D\r\n";
+  const std::string sentence =
+      "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n";
   const std::vector<std::uint8_t> bytes(sentence.begin(), sentence.end());
 
   const auto disabled = Analyze(candidate, bytes, false);
@@ -312,8 +364,9 @@ void TestNmeaFallbackPolicy(TestContext& ctx)
   const auto enabled = Analyze(candidate, bytes, true);
   ctx.Expect(enabled.detected_family == ReceiverDetectedFamily::kNmea &&
                  enabled.confidence == ReceiverProbeConfidence::kMedium &&
+                 enabled.discovery_score == 20 &&
                  enabled.evidence.nmea_sentences_seen == 1u,
-             "NMEA-only probing should become medium-confidence generic NMEA when enabled");
+             "NMEA-only probing should become scored medium-confidence generic NMEA when enabled");
 }
 
 void TestNmeaFallbackRejectsNonRuntimeSentences(TestContext& ctx)
@@ -330,6 +383,53 @@ void TestNmeaFallbackRejectsNonRuntimeSentences(TestContext& ctx)
                  result.confidence == ReceiverProbeConfidence::kNone &&
                  result.evidence.nmea_sentences_seen == 0u,
              "generic NMEA fallback should ignore non-runtime GNSS sentences");
+}
+
+void TestMavlinkAndGarbageRejected(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB3";
+
+  const auto mavlink = Analyze(candidate, BuildMavlinkV1Heartbeat(), true);
+  ctx.Expect(mavlink.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 mavlink.confidence == ReceiverProbeConfidence::kNone &&
+                 mavlink.discovery_score == -200 &&
+                 mavlink.evidence.mavlink_heartbeats_seen == 1u &&
+                 mavlink.note == "mavlink_heartbeat_detected",
+             "MAVLink heartbeat streams should be explicitly rejected");
+
+  const std::string garbage = "boot log: not a gnss receiver\nrandom serial text\n";
+  const auto text = Analyze(
+      candidate, std::vector<std::uint8_t>(garbage.begin(), garbage.end()), true);
+  ctx.Expect(text.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 text.confidence == ReceiverProbeConfidence::kNone &&
+                 text.discovery_score == -50 &&
+                 text.evidence.random_ascii_bytes_seen == garbage.size() &&
+                 text.note == "random_ascii_text",
+             "random serial text should be penalized and rejected");
+}
+
+void TestSilentProbeRejected(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB4";
+
+  const auto result = Analyze(candidate, {}, true);
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 result.confidence == ReceiverProbeConfidence::kNone &&
+                 result.discovery_score == 0 &&
+                 result.note == "no_data" &&
+                 result.reason == "no_data",
+             "silent ports should report no_data with no confidence");
+}
+
+void TestDefaultBaudOrder(TestContext& ctx)
+{
+  ReceiverProbeConfig config;
+  const std::vector<std::uint32_t> expected = {
+      921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
+  ctx.Expect(config.baud_candidates == expected,
+             "default auto-baud list should match Auto Discovery v2 order");
 }
 
 void TestUnknownAndRtcmOnlyStreams(TestContext& ctx)
@@ -390,9 +490,13 @@ int main()
   TestExplicitPathCandidate(ctx);
   TestUbxDetection(ctx);
   TestUnicoreAsciiDetection(ctx);
+  TestUnicorePvtslnAndRtkStatusScoring(ctx);
   TestUnicoreBinaryDetection(ctx);
   TestNmeaFallbackPolicy(ctx);
   TestNmeaFallbackRejectsNonRuntimeSentences(ctx);
+  TestMavlinkAndGarbageRejected(ctx);
+  TestSilentProbeRejected(ctx);
+  TestDefaultBaudOrder(ctx);
   TestUnknownAndRtcmOnlyStreams(ctx);
   TestResultOrdering(ctx);
 

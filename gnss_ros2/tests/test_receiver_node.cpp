@@ -238,18 +238,25 @@ universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
   result.selected_baud = baud;
   result.detected_family = family;
   result.confidence = confidence;
+  result.discovery_score =
+      confidence == universal_gnss_driver::ReceiverProbeConfidence::kHigh ? 100 :
+      confidence == universal_gnss_driver::ReceiverProbeConfidence::kMedium ? 20 :
+      confidence == universal_gnss_driver::ReceiverProbeConfidence::kLow ? 10 : 0;
   result.evidence.bytes_read = 128u;
   if (family == universal_gnss_driver::ReceiverDetectedFamily::kUblox)
   {
     result.evidence.ubx_frames_seen = 1u;
+    result.reason = "valid_ubx_frame:+100";
   }
   else if (family == universal_gnss_driver::ReceiverDetectedFamily::kUnicore)
   {
     result.evidence.unicore_binary_seen = 1u;
+    result.reason = "unicore_binary:+100";
   }
   else if (family == universal_gnss_driver::ReceiverDetectedFamily::kNmea)
   {
     result.evidence.nmea_sentences_seen = 1u;
+    result.reason = "valid_GGA:+20";
   }
   return result;
 }
@@ -347,6 +354,16 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
             std::optional<std::string>{"ublox"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "confidence"),
             std::optional<std::string>{"high"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "detected_family"),
+            std::optional<std::string>{"ublox"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "detected_device"),
+            std::optional<std::string>{"/dev/serial/by-id/f9p"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "detected_baud"),
+            std::optional<std::string>{"921600"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "discovery_confidence"),
+            std::optional<std::string>{"100"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "discovery_reason"),
+            std::optional<std::string>{"valid_ubx_frame:+100"});
 }
 
 TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)

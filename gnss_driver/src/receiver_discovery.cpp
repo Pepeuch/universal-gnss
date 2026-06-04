@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <sstream>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -48,6 +50,19 @@ struct DetectionCounts
 {
   std::size_t count{0u};
   std::optional<std::size_t> earliest_bytes_consumed{};
+};
+
+struct NmeaDetectionCounts
+{
+  DetectionCounts runtime_sentences{};
+  std::size_t gga_sentences{0u};
+};
+
+struct UnicoreAsciiDetectionCounts
+{
+  DetectionCounts supported_records{};
+  std::size_t rtkstatusa_records{0u};
+  std::size_t pvtslna_records{0u};
 };
 
 bool StartsWith(const std::string& text, const std::string_view prefix)
@@ -184,6 +199,169 @@ bool IsLikelyReceiverNmeaSentence(const NmeaSentence& sentence)
          sentence.checksum_status == ChecksumStatus::kValid;
 }
 
+bool IsValidGgaSentence(const NmeaSentence& sentence)
+{
+  return IsLikelyReceiverNmeaSentence(sentence) && sentence.sentence_type == "GGA";
+}
+
+NmeaDetectionCounts CountNmeaRecords(const std::vector<std::uint8_t>& bytes)
+{
+  NmeaDetectionCounts counts;
+  NmeaSentenceFramer framer;
+  for (std::size_t index = 0u; index < bytes.size(); ++index)
+  {
+    const auto result = framer.PushByte(bytes[index]);
+    if (result.status != ParserStatus::kRecordReady || !result.record.has_value() ||
+        !IsLikelyReceiverNmeaSentence(*result.record))
+    {
+      continue;
+    }
+
+    ++counts.runtime_sentences.count;
+    if (!counts.runtime_sentences.earliest_bytes_consumed.has_value())
+    {
+      counts.runtime_sentences.earliest_bytes_consumed = index + 1u;
+    }
+
+    if (IsValidGgaSentence(*result.record))
+    {
+      ++counts.gga_sentences;
+    }
+  }
+
+  return counts;
+}
+
+UnicoreAsciiDetectionCounts CountUnicoreAsciiRecords(
+    const std::vector<std::uint8_t>& bytes)
+{
+  UnicoreAsciiDetectionCounts counts;
+  UnicoreFrameFramer framer;
+  for (std::size_t index = 0u; index < bytes.size(); ++index)
+  {
+    const auto result = framer.PushByte(bytes[index]);
+    if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
+    {
+      continue;
+    }
+
+    const auto& frame = *result.record;
+    if (frame.sync_char == '$' || !IsSupportedUnicoreAsciiName(frame.message_name))
+    {
+      continue;
+    }
+
+    ++counts.supported_records.count;
+    if (!counts.supported_records.earliest_bytes_consumed.has_value())
+    {
+      counts.supported_records.earliest_bytes_consumed = index + 1u;
+    }
+
+    if (frame.message_name == "RTKSTATUSA")
+    {
+      ++counts.rtkstatusa_records;
+    }
+    if (frame.message_name == "PVTSLNA")
+    {
+      ++counts.pvtslna_records;
+    }
+  }
+
+  return counts;
+}
+
+std::size_t CountMavlinkHeartbeats(const std::vector<std::uint8_t>& bytes)
+{
+  std::size_t count = 0u;
+  for (std::size_t index = 0u; index + 8u < bytes.size(); ++index)
+  {
+    if (bytes[index] == 0xFEu)
+    {
+      const std::uint8_t payload_length = bytes[index + 1u];
+      const std::uint8_t message_id = bytes[index + 5u];
+      if (payload_length == 9u && message_id == 0u &&
+          index + 6u + payload_length + 2u <= bytes.size())
+      {
+        ++count;
+      }
+    }
+    else if (bytes[index] == 0xFDu && index + 9u < bytes.size())
+    {
+      const std::uint8_t payload_length = bytes[index + 1u];
+      const std::uint32_t message_id =
+          static_cast<std::uint32_t>(bytes[index + 7u]) |
+          (static_cast<std::uint32_t>(bytes[index + 8u]) << 8u) |
+          (static_cast<std::uint32_t>(bytes[index + 9u]) << 16u);
+      if (payload_length == 9u && message_id == 0u &&
+          index + 10u + payload_length + 2u <= bytes.size())
+      {
+        ++count;
+      }
+    }
+  }
+
+  return count;
+}
+
+bool LooksLikeRandomAsciiText(const std::vector<std::uint8_t>& bytes)
+{
+  if (bytes.size() < 8u)
+  {
+    return false;
+  }
+
+  std::size_t printable = 0u;
+  std::size_t line_breaks = 0u;
+  std::size_t gnss_leaders = 0u;
+  for (const auto byte : bytes)
+  {
+    if (byte == '\r' || byte == '\n')
+    {
+      ++printable;
+      ++line_breaks;
+      continue;
+    }
+    if (byte == '$' || byte == '#')
+    {
+      ++gnss_leaders;
+    }
+    if (std::isprint(static_cast<unsigned char>(byte)) != 0 ||
+        byte == '\t')
+    {
+      ++printable;
+    }
+  }
+
+  return line_breaks > 0u && gnss_leaders == 0u &&
+         printable * 100u >= bytes.size() * 80u;
+}
+
+ReceiverProbeConfidence ConfidenceFromScore(const int score)
+{
+  if (score >= 100)
+  {
+    return ReceiverProbeConfidence::kHigh;
+  }
+  if (score >= 20)
+  {
+    return ReceiverProbeConfidence::kMedium;
+  }
+  if (score > 0)
+  {
+    return ReceiverProbeConfidence::kLow;
+  }
+  return ReceiverProbeConfidence::kNone;
+}
+
+void AppendReasonToken(std::ostringstream& stream, const std::string_view token)
+{
+  if (stream.tellp() > 0)
+  {
+    stream << ',';
+  }
+  stream << token;
+}
+
 template <typename FramerT, typename RecordT, typename AcceptFn>
 DetectionCounts CountDetectedRecords(const std::vector<std::uint8_t>& bytes, AcceptFn&& accept)
 {
@@ -250,6 +428,12 @@ bool IsHighConfidence(const ReceiverProbeResult& result)
   return result.confidence == ReceiverProbeConfidence::kHigh;
 }
 
+bool MeetsConfidenceThreshold(const ReceiverProbeResult& result,
+                              const ReceiverProbeConfig& config)
+{
+  return result.discovery_score >= config.confidence_threshold_score;
+}
+
 int ConfidenceRank(const ReceiverProbeConfidence confidence)
 {
   return static_cast<int>(confidence);
@@ -272,6 +456,11 @@ int FamilyRank(const ReceiverDetectedFamily family)
 bool IsBetterProbeResult(const ReceiverProbeResult& candidate,
                          const ReceiverProbeResult& current_best)
 {
+  if (candidate.discovery_score != current_best.discovery_score)
+  {
+    return candidate.discovery_score > current_best.discovery_score;
+  }
+
   if (ConfidenceRank(candidate.confidence) != ConfidenceRank(current_best.confidence))
   {
     return ConfidenceRank(candidate.confidence) > ConfidenceRank(current_best.confidence);
@@ -410,6 +599,7 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
     if (result.note.empty())
     {
       result.note = bytes.empty() ? "no_data" : result.note;
+      result.reason = result.note;
     }
   }
 
@@ -545,13 +735,15 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   ReceiverProbeResult result = MakeBaseProbeResult(candidate);
   result.selected_baud = baud_rate;
   result.evidence.bytes_read = bytes.size();
+  if (bytes.empty())
+  {
+    result.note = "no_data";
+    result.reason = result.note;
+    return result;
+  }
 
-  const auto nmea_counts = CountDetectedRecords<NmeaSentenceFramer, NmeaSentence>(
-      bytes,
-      [](const NmeaSentence& sentence) {
-        return IsLikelyReceiverNmeaSentence(sentence);
-      });
-  result.evidence.nmea_sentences_seen = nmea_counts.count;
+  const auto nmea_counts = CountNmeaRecords(bytes);
+  result.evidence.nmea_sentences_seen = nmea_counts.runtime_sentences.count;
 
   const auto ubx_counts = CountDetectedRecords<UbxFrameFramer, UbxFrame>(
       bytes,
@@ -567,12 +759,8 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
       });
   result.evidence.rtcm_frames_seen = rtcm_counts.count;
 
-  const auto unicore_ascii_counts = CountDetectedRecords<UnicoreFrameFramer, UnicoreFrame>(
-      bytes,
-      [](const UnicoreFrame& frame) {
-        return frame.sync_char != '$' && IsSupportedUnicoreAsciiName(frame.message_name);
-      });
-  result.evidence.unicore_ascii_seen = unicore_ascii_counts.count;
+  const auto unicore_ascii_counts = CountUnicoreAsciiRecords(bytes);
+  result.evidence.unicore_ascii_seen = unicore_ascii_counts.supported_records.count;
 
   const auto unicore_binary_counts =
       CountDetectedRecords<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
@@ -581,15 +769,93 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
             return frame.checksum_status == ChecksumStatus::kValid;
           });
   result.evidence.unicore_binary_seen = unicore_binary_counts.count;
+  result.evidence.mavlink_heartbeats_seen = CountMavlinkHeartbeats(bytes);
+  if (LooksLikeRandomAsciiText(bytes))
+  {
+    result.evidence.random_ascii_bytes_seen = bytes.size();
+  }
 
   const StreamDetector detector;
   const auto earliest_detection = detector.Detect(bytes);
+
+  const int ubx_score = static_cast<int>(result.evidence.ubx_frames_seen) * 100;
+  const int unicore_score =
+      static_cast<int>(unicore_ascii_counts.rtkstatusa_records) * 100 +
+      static_cast<int>(unicore_ascii_counts.pvtslna_records) * 100 +
+      static_cast<int>(result.evidence.unicore_ascii_seen -
+                       unicore_ascii_counts.rtkstatusa_records -
+                       unicore_ascii_counts.pvtslna_records) *
+          100 +
+      static_cast<int>(result.evidence.unicore_binary_seen) * 100;
+  const int nmea_score =
+      static_cast<int>(nmea_counts.gga_sentences) * 20 +
+      static_cast<int>(result.evidence.nmea_sentences_seen - nmea_counts.gga_sentences) *
+          10;
+  const int mavlink_penalty =
+      static_cast<int>(result.evidence.mavlink_heartbeats_seen) * 200;
+  const int random_ascii_penalty =
+      result.evidence.random_ascii_bytes_seen > 0u ? 50 : 0;
+
+  const int positive_score = std::max({ubx_score, unicore_score, nmea_score, 0});
+  result.discovery_score = positive_score - mavlink_penalty - random_ascii_penalty;
+
+  std::ostringstream reason;
+  if (result.evidence.ubx_frames_seen > 0u)
+  {
+    AppendReasonToken(reason, "valid_ubx_frame:+100");
+  }
+  if (unicore_ascii_counts.rtkstatusa_records > 0u)
+  {
+    AppendReasonToken(reason, "RTKSTATUSA:+100");
+  }
+  if (unicore_ascii_counts.pvtslna_records > 0u)
+  {
+    AppendReasonToken(reason, "PVTSLNA:+100");
+  }
+  if (result.evidence.unicore_ascii_seen >
+      unicore_ascii_counts.rtkstatusa_records + unicore_ascii_counts.pvtslna_records)
+  {
+    AppendReasonToken(reason, "unicore_ascii:+100");
+  }
+  if (result.evidence.unicore_binary_seen > 0u)
+  {
+    AppendReasonToken(reason, "unicore_binary:+100");
+  }
+  if (nmea_counts.gga_sentences > 0u)
+  {
+    AppendReasonToken(reason, "valid_GGA:+20");
+  }
+  if (result.evidence.nmea_sentences_seen > nmea_counts.gga_sentences)
+  {
+    AppendReasonToken(reason, "valid_NMEA:+10");
+  }
+  if (result.evidence.mavlink_heartbeats_seen > 0u)
+  {
+    AppendReasonToken(reason, "MAVLink_heartbeat:-200");
+  }
+  if (result.evidence.random_ascii_bytes_seen > 0u)
+  {
+    AppendReasonToken(reason, "random_ascii:-50");
+  }
+  result.reason = reason.str();
+
+  if (result.evidence.mavlink_heartbeats_seen > 0u)
+  {
+    result.detected_family = ReceiverDetectedFamily::kUnknown;
+    result.confidence = ReceiverProbeConfidence::kNone;
+    result.note = "mavlink_heartbeat_detected";
+    if (result.reason.empty())
+    {
+      result.reason = result.note;
+    }
+    return result;
+  }
 
   if (result.evidence.ubx_frames_seen > 0u &&
       !(result.evidence.unicore_ascii_seen > 0u || result.evidence.unicore_binary_seen > 0u))
   {
     result.detected_family = ReceiverDetectedFamily::kUblox;
-    result.confidence = ReceiverProbeConfidence::kHigh;
+    result.confidence = ConfidenceFromScore(result.discovery_score);
     return result;
   }
 
@@ -597,7 +863,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
       result.evidence.ubx_frames_seen == 0u)
   {
     result.detected_family = ReceiverDetectedFamily::kUnicore;
-    result.confidence = ReceiverProbeConfidence::kHigh;
+    result.confidence = ConfidenceFromScore(result.discovery_score);
     return result;
   }
 
@@ -612,7 +878,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     {
       result.detected_family = ReceiverDetectedFamily::kUnicore;
     }
-    result.confidence = ReceiverProbeConfidence::kHigh;
+    result.confidence = ConfidenceFromScore(result.discovery_score);
     result.note = "mixed_vendor_evidence_selected_earliest";
     return result;
   }
@@ -620,7 +886,18 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   if (result.evidence.nmea_sentences_seen > 0u && config.allow_generic_nmea_fallback)
   {
     result.detected_family = ReceiverDetectedFamily::kNmea;
-    result.confidence = ReceiverProbeConfidence::kMedium;
+    result.confidence = ConfidenceFromScore(result.discovery_score);
+    return result;
+  }
+
+  if (result.evidence.random_ascii_bytes_seen > 0u)
+  {
+    result.note = "random_ascii_text";
+    result.confidence = ReceiverProbeConfidence::kNone;
+    if (result.reason.empty())
+    {
+      result.reason = result.note;
+    }
     return result;
   }
 
@@ -628,6 +905,10 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
                        config.allow_generic_nmea_fallback,
                        result.note,
                        result.confidence);
+  if (result.reason.empty())
+  {
+    result.reason = result.note;
+  }
   return result;
 }
 
@@ -649,7 +930,7 @@ ReceiverProbeResult ProbeReceiverPort(const ReceiverPortCandidate& candidate,
       best_result = candidate_result;
     }
 
-    if (IsHighConfidence(best_result))
+    if (IsHighConfidence(best_result) && MeetsConfidenceThreshold(best_result, config))
     {
       break;
     }
@@ -689,6 +970,11 @@ std::vector<ReceiverProbeResult> SortReceiverProbeResults(std::vector<ReceiverPr
     if (ConfidenceRank(lhs.confidence) != ConfidenceRank(rhs.confidence))
     {
       return ConfidenceRank(lhs.confidence) > ConfidenceRank(rhs.confidence);
+    }
+
+    if (lhs.discovery_score != rhs.discovery_score)
+    {
+      return lhs.discovery_score > rhs.discovery_score;
     }
 
     if (FamilyRank(lhs.detected_family) != FamilyRank(rhs.detected_family))

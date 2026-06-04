@@ -175,6 +175,11 @@ if(BUILD_TESTING)
     PRIVATE
       universal_gnss_tools
   )
+  target_compile_definitions(
+    gnss_tools_test_receiver_discovery_format
+    PRIVATE
+      TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
+  )
   add_test(
     NAME gnss_tools_test_receiver_discovery_format
     COMMAND gnss_tools_test_receiver_discovery_format

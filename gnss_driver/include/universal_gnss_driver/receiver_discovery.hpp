@@ -55,10 +55,12 @@ struct ReceiverDiscoveryPaths
 
 struct ReceiverProbeConfig
 {
-  std::vector<std::uint32_t> baud_candidates{921600u, 460800u, 115200u, 38400u};
+  std::vector<std::uint32_t> baud_candidates{
+      921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
+  int confidence_threshold_score{100};
   std::uint32_t read_timeout_ms{250u};
   std::size_t max_probe_bytes{4096u};
-  bool allow_generic_nmea_fallback{false};
+  bool allow_generic_nmea_fallback{true};
   bool include_platform_uarts{false};
   std::vector<std::string> platform_uart_paths{"/dev/serial0", "/dev/serial1"};
   std::vector<std::string> platform_uart_prefixes{"ttyAMA", "ttyS", "ttyTHS"};
@@ -71,6 +73,8 @@ struct ReceiverProbeEvidence
   std::size_t unicore_binary_seen{0u};
   std::size_t nmea_sentences_seen{0u};
   std::size_t rtcm_frames_seen{0u};
+  std::size_t mavlink_heartbeats_seen{0u};
+  std::size_t random_ascii_bytes_seen{0u};
   std::size_t bytes_read{0u};
 };
 
@@ -83,7 +87,9 @@ struct ReceiverProbeResult
   std::optional<std::uint32_t> selected_baud{};
   ReceiverDetectedFamily detected_family{ReceiverDetectedFamily::kUnknown};
   ReceiverProbeConfidence confidence{ReceiverProbeConfidence::kNone};
+  int discovery_score{0};
   ReceiverProbeEvidence evidence{};
+  std::string reason{};
   std::string note{};
 };
 

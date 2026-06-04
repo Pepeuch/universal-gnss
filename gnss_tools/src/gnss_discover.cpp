@@ -14,7 +14,7 @@ struct DiscoverOptions
 {
   std::optional<std::string> explicit_path{};
   bool json_output{false};
-  bool allow_generic_nmea{false};
+  bool allow_generic_nmea{true};
   bool include_platform_uarts{false};
   std::vector<std::uint32_t> baud_candidates{};
 };

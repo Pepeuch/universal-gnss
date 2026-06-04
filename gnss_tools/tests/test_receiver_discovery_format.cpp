@@ -5,6 +5,7 @@
 
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_tools/receiver_discovery_format.hpp"
+#include "testdata_utils.hpp"
 
 namespace
 {
@@ -41,9 +42,12 @@ ReceiverProbeResult MakeResult(const std::string& path,
   result.selected_baud = 921600u;
   result.detected_family = family;
   result.confidence = confidence;
+  result.discovery_score = 100;
   result.evidence.ubx_frames_seen = 2u;
+  result.evidence.mavlink_heartbeats_seen = 1u;
   result.evidence.bytes_read = 512u;
   result.note = "ok";
+  result.reason = "valid_ubx_frame:+100";
   return result;
 }
 
@@ -57,8 +61,9 @@ void TestTextFormatting(TestContext& ctx)
                  text.find("baud=921600") != std::string::npos &&
                  text.find("family=ublox") != std::string::npos &&
                  text.find("confidence=high") != std::string::npos &&
+                 text.find("score=100") != std::string::npos &&
                  text.find("evidence=ubx:2") != std::string::npos,
-             "text discovery output should include path, baud, family, confidence, and evidence");
+             "text discovery output should include path, baud, family, confidence, score, and evidence");
 }
 
 void TestJsonFormatting(TestContext& ctx)
@@ -70,8 +75,9 @@ void TestJsonFormatting(TestContext& ctx)
   ctx.Expect(json.find("\"path\": \"/dev/ttyUSB0\"") != std::string::npos &&
                  json.find("\"detected_family\": \"unicore\"") != std::string::npos &&
                  json.find("\"confidence\": \"high\"") != std::string::npos &&
+                 json.find("\"score\": 100") != std::string::npos &&
                  json.find("\"ubx_frames_seen\": 2") != std::string::npos,
-             "JSON discovery output should include stable schema keys");
+             "JSON discovery output should include stable v2 schema keys");
 }
 
 void TestEmptyFormatting(TestContext& ctx)
@@ -85,6 +91,43 @@ void TestEmptyFormatting(TestContext& ctx)
              "empty JSON output should still be a valid list");
 }
 
+ReceiverProbeResult AnalyzeFixture(const std::string& relative_path,
+                                   const bool allow_nmea = true)
+{
+  universal_gnss_driver::ReceiverPortCandidate candidate;
+  candidate.path = "replay:" + relative_path;
+  candidate.source = ReceiverPortSource::kExplicitPath;
+
+  universal_gnss_driver::ReceiverProbeConfig config;
+  config.allow_generic_nmea_fallback = allow_nmea;
+  return universal_gnss_driver::AnalyzeReceiverProbeBytes(
+      candidate,
+      921600u,
+      universal_gnss_tools::test::ReadBinaryFile(relative_path),
+      config);
+}
+
+void TestFileBackedDiscoveryReplaySamples(TestContext& ctx)
+{
+  const auto f9p = AnalyzeFixture("ubx/nav_pvt_sat_monrf.ubx");
+  ctx.Expect(f9p.detected_family == ReceiverDetectedFamily::kUblox &&
+                 f9p.confidence == ReceiverProbeConfidence::kHigh &&
+                 f9p.discovery_score >= 100,
+             "F9P-style UBX replay should classify as high-confidence u-blox");
+
+  const auto um982 = AnalyzeFixture("unicore/basic_ascii.log");
+  ctx.Expect(um982.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 um982.confidence == ReceiverProbeConfidence::kHigh &&
+                 um982.discovery_score >= 100,
+             "UM982-style Unicore replay should classify as high-confidence Unicore");
+
+  const auto nmea = AnalyzeFixture("nmea/basic_fix.nmea");
+  ctx.Expect(nmea.detected_family == ReceiverDetectedFamily::kNmea &&
+                 nmea.confidence == ReceiverProbeConfidence::kMedium &&
+                 nmea.discovery_score >= 20,
+             "generic NMEA replay should classify as medium-confidence NMEA");
+}
+
 }  // namespace
 
 int main()
@@ -94,6 +137,7 @@ int main()
   TestTextFormatting(ctx);
   TestJsonFormatting(ctx);
   TestEmptyFormatting(ctx);
+  TestFileBackedDiscoveryReplaySamples(ctx);
 
   if (ctx.failures != 0)
   {

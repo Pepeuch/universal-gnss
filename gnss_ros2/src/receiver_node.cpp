@@ -317,6 +317,8 @@ std::string BuildDiscoveryEvidenceSummary(
   stream << "ubx=" << evidence.ubx_frames_seen << " unicore_ascii=" << evidence.unicore_ascii_seen
          << " unicore_binary=" << evidence.unicore_binary_seen
          << " nmea=" << evidence.nmea_sentences_seen << " rtcm=" << evidence.rtcm_frames_seen
+         << " mavlink=" << evidence.mavlink_heartbeats_seen
+         << " random_ascii=" << evidence.random_ascii_bytes_seen
          << " bytes=" << evidence.bytes_read;
   return stream.str();
 }
@@ -387,7 +389,9 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
       message << " (best candidate path=" << results.front().path
               << ", family=" << universal_gnss_driver::ToString(results.front().detected_family)
               << ", confidence="
-              << universal_gnss_driver::ToString(results.front().confidence) << ")";
+              << universal_gnss_driver::ToString(results.front().confidence)
+              << ", score=" << results.front().discovery_score
+              << ", reason=" << results.front().reason << ")";
     }
     status.failure_reason = message.str();
     events.push_back(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
@@ -426,11 +430,13 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
   }
 
   RCLCPP_INFO(node.get_logger(),
-              "Receiver discovery selected path=%s baud=%u family=%s confidence=%s evidence=%s",
+              "Receiver discovery selected path=%s baud=%u family=%s confidence=%s score=%d reason=%s evidence=%s",
               config.serial_device.c_str(),
               config.serial_baud,
               config.receiver_family_name.c_str(),
               universal_gnss_driver::ToString(selected->confidence),
+              selected->discovery_score,
+              selected->reason.c_str(),
               BuildDiscoveryEvidenceSummary(selected->evidence).c_str());
   return true;
 }
@@ -455,7 +461,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.discovery_include_platform_uarts =
       node.declare_parameter<bool>("discovery_include_platform_uarts", false);
   config.discovery_allow_generic_nmea =
-      node.declare_parameter<bool>("discovery_allow_generic_nmea", false);
+      node.declare_parameter<bool>("discovery_allow_generic_nmea", true);
   const auto discovery_timeout_ms =
       node.declare_parameter<std::int64_t>("discovery_timeout_ms", 250);
   const auto discovery_max_probe_bytes =
@@ -1174,15 +1180,23 @@ struct ReceiverNode::Impl
     {
       const auto& result = *discovery_status_.result;
       status.values.push_back(MakeKeyValue("path", result.path));
+      status.values.push_back(MakeKeyValue("detected_device", result.path));
       if (result.selected_baud.has_value())
       {
         status.values.push_back(
             MakeKeyValue("baud", std::to_string(*result.selected_baud)));
+        status.values.push_back(
+            MakeKeyValue("detected_baud", std::to_string(*result.selected_baud)));
       }
       status.values.push_back(
           MakeKeyValue("family", universal_gnss_driver::ToString(result.detected_family)));
+      status.values.push_back(MakeKeyValue(
+          "detected_family", universal_gnss_driver::ToString(result.detected_family)));
       status.values.push_back(
           MakeKeyValue("confidence", universal_gnss_driver::ToString(result.confidence)));
+      status.values.push_back(
+          MakeKeyValue("discovery_confidence", std::to_string(result.discovery_score)));
+      status.values.push_back(MakeKeyValue("discovery_reason", result.reason));
       status.values.push_back(MakeKeyValue(
           "evidence", BuildDiscoveryEvidenceSummary(result.evidence)));
       if (result.stable_id.has_value())

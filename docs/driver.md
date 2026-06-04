@@ -584,22 +584,34 @@ Current default baud probe order is:
 
 - `921600`
 - `460800`
+- `230400`
 - `115200`
 - `38400`
+- `9600`
 
-Current family detection is conservative:
+Current family detection is score based:
 
 - `high`
-  - valid `UBX` frames -> `ublox`
-  - valid Unicore binary `N4` frames -> `unicore`
-  - clear Unicore ASCII runtime/status messages -> `unicore`
+  - score `>= 100`
 - `medium`
-  - valid `NMEA` only and generic fallback explicitly enabled -> `nmea`
+  - score `>= 20`
 - `low`
-  - weak `NMEA`-only evidence with fallback disabled
-  - `RTCM`-only evidence
+  - score `> 0`
 - `none`
-  - no recognizable receiver evidence
+  - score `<= 0`
+
+Scoring examples:
+
+- valid `UBX` frame -> `+100`, family `ublox`
+- Unicore `RTKSTATUSA` -> `+100`, family `unicore`
+- Unicore `PVTSLNA` -> `+100`, family `unicore`
+- valid `GGA` -> `+20`, family `nmea` when no stronger vendor evidence exists
+- random ASCII serial text -> `-50`, family `unknown`
+- MAVLink heartbeat -> `-200`, family `unknown`
+- silent port -> score `0`, family `unknown`, reason `no_data`
+
+Auto baud probing stops once a high-confidence probe reaches the configured
+score threshold, currently `100`.
 
 Current implementation intentionally does not:
 

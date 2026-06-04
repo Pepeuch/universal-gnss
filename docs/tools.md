@@ -34,8 +34,10 @@ Current behavior:
 - probes a conservative default baud list:
   - `921600`
   - `460800`
+  - `230400`
   - `115200`
   - `38400`
+  - `9600`
 - keeps onboard/platform UART scanning disabled by default
 - can opt into platform UART probing for embedded Linux targets such as
   Raspberry Pi, Orange Pi, or Jetson-like boards
@@ -63,8 +65,8 @@ Current policy:
 - discovery is read-only
 - no receiver configuration is sent
 - no baud or protocol settings are persisted
-- generic `NMEA` fallback is disabled by default and must be opted in with
-  `--allow-nmea`
+- generic `NMEA` fallback is enabled by default; `--allow-nmea` is retained as
+  a compatibility no-op for explicit CLI runs
 - onboard UART scanning must be opted in with `--include-platform-uarts`
   because `/dev/serial0`, `/dev/ttyAMA*`, `/dev/ttyS*`, or `/dev/ttyTHS*`
   may be console, Bluetooth, or non-GNSS peripherals
@@ -87,6 +89,8 @@ Typical text output includes:
 - selected baud rate
 - detected family
 - confidence
+- numeric discovery score
+- discovery reason
 - transport/source
 - stable `/dev/serial/by-id` id when available
 - evidence summary
@@ -98,12 +102,36 @@ Detection policy:
 - Unicore is detected from supported Unicore ASCII records such as `BESTNAVA`,
   `PVTSLNA`, `RTKSTATUSA`, `RTCMSTATUSA`, `SATSINFOA`, and from valid Unicore
   binary `N4` frames.
-- Generic NMEA fallback is opt-in. When enabled, discovery only counts valid
-  runtime GNSS NMEA sentences with known GNSS talkers (`GP`, `GL`, `GA`, `GB`,
-  `BD`, `GQ`, `GN`) and known runtime sentence types such as `GGA`, `RMC`,
-  `GSA`, `GSV`, `GST`, `VTG`, `ZDA`, and `GLL`.
+- Generic NMEA discovery only counts valid runtime GNSS NMEA sentences with
+  known GNSS talkers (`GP`, `GL`, `GA`, `GB`, `BD`, `GQ`, `GN`) and known
+  runtime sentence types such as `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`,
+  `ZDA`, and `GLL`.
 - RTCM-only streams are reported as unknown with a weak `rtcm_only_stream`
   note, because an NTRIP/radio correction stream is not itself a receiver.
+- MAVLink heartbeat streams are rejected with a negative score.
+- Random serial text is rejected with a negative score.
+- Silent ports are reported as `no_data` with no confidence.
+
+Scoring:
+
+- valid UBX frame: `+100`
+- Unicore `RTKSTATUSA`: `+100`
+- Unicore `PVTSLNA`: `+100`
+- other supported Unicore ASCII or binary runtime/status frame: `+100`
+- valid `GGA`: `+20`
+- other valid runtime GNSS NMEA sentence: `+10`
+- random ASCII text: `-50`
+- MAVLink heartbeat: `-200`
+
+Confidence is derived from score:
+
+- `high`: score `>= 100`
+- `medium`: score `>= 20`
+- `low`: score `> 0`
+- `none`: score `<= 0`
+
+Auto baud probing stops once a high-confidence result reaches the configured
+score threshold, currently `100`.
 
 `--json` emits a list of stable result objects intended for later ROS 2 or GUI
 integration work.
