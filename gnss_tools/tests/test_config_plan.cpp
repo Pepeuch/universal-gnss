@@ -129,6 +129,18 @@ void TestUnsupportedProfileRejection(TestContext& ctx)
              "unsupported config plan profiles should be rejected clearly");
 }
 
+void TestNmeaRejectedCleanly(TestContext& ctx)
+{
+  ConfigPlanOptions options;
+  options.vendor = "nmea";
+  options.profile = "rover";
+
+  const auto result = BuildConfigPlan(options);
+  ctx.Expect(result.status == ConfigPlanStatus::kUnsupportedReceiver &&
+                 !result.unsupported_reason.empty(),
+             "generic NMEA config plans should be rejected through the portable planner");
+}
+
 }  // namespace
 
 int main()
@@ -140,6 +152,7 @@ int main()
   TestPersistentSafetySummary(ctx);
   TestJsonFormatting(ctx);
   TestUnsupportedProfileRejection(ctx);
+  TestNmeaRejectedCleanly(ctx);
 
   if (ctx.failures != 0)
   {

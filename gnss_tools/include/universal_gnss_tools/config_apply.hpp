@@ -22,16 +22,17 @@ enum class ConfigApplyStatus : std::uint8_t
 {
   kOk = 0,
   kInvalidArgument = 1,
-  kUnsupportedVendor = 2,
-  kUnsupportedProfile = 3,
-  kBuildError = 4,
-  kSafetyRejected = 5,
-  kTransportUnavailable = 6,
-  kReadFailed = 7,
-  kDispatchFailed = 8,
-  kRejected = 9,
-  kTimedOut = 10,
-  kApplicationFailed = 11,
+  kUnsupportedReceiver = 2,
+  kUnsupportedVendor = 3,
+  kUnsupportedProfile = 4,
+  kBuildError = 5,
+  kSafetyRejected = 6,
+  kTransportUnavailable = 7,
+  kReadFailed = 8,
+  kDispatchFailed = 9,
+  kRejected = 10,
+  kTimedOut = 11,
+  kApplicationFailed = 12,
 };
 
 struct ConfigApplyOptions

@@ -42,7 +42,8 @@ Implemented:
 ### Auto Configuration
 
 - [x] design/audit pass for portable Auto Configuration architecture
-- [ ] add a driver-level planner/report layer shared by CLI and ROS2
+- [x] add a driver-level planner/report layer for discovery-aware dry-run planning
+- [ ] extend the planner/report layer into ROS2
 - [ ] live u-blox configuration transactions
 - [ ] live Unicore configuration transactions
 - [ ] make vendor-specific persistence semantics explicit in plan/apply output

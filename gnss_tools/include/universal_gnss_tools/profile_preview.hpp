@@ -59,6 +59,9 @@ struct ProfilePreviewResult
 
 ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options);
 
+std::string DescribeProfilePreviewCommand(
+    const universal_gnss_driver::ReceiverCommand& command);
+
 std::string FormatProfilePreviewText(const ProfilePreviewResult& result,
                                      bool verbose = false);
 

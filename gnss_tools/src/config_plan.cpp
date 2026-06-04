@@ -6,16 +6,34 @@
 #include <string>
 #include <string_view>
 
+#include "universal_gnss_tools/profile_preview.hpp"
+
 namespace universal_gnss_tools
 {
 
 namespace
 {
 
+using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::HasSafeDispatchApproval;
+using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigPlan;
+using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
+using universal_gnss_driver::ReceiverAutoConfigProfile;
+using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
+using universal_gnss_driver::ReceiverDetectedFamily;
+
+std::string ToLowerCopy(std::string value)
+{
+  for (char& c : value)
+  {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return value;
+}
 
 std::string TrimTrailingCrLf(std::string text)
 {
@@ -139,64 +157,179 @@ const char* PayloadKindToString(const ReceiverCommandPayloadKind payload_kind)
   return "none";
 }
 
-std::string ResolveReceiverFamily(const ProfilePreviewResult& preview)
+std::size_t CommandPayloadSize(const ReceiverCommand& command)
 {
-  if (!preview.commands.empty() && !preview.commands.front().command.target.family.empty())
+  switch (command.payload.kind)
   {
-    return std::string(preview.commands.front().command.target.family);
+    case ReceiverCommandPayloadKind::kBinary:
+      return command.payload.binary.size();
+    case ReceiverCommandPayloadKind::kText:
+      return command.payload.text.size();
+    case ReceiverCommandPayloadKind::kNone:
+      break;
   }
 
-  if (preview.vendor == "ublox")
+  return 0u;
+}
+
+std::optional<ReceiverDetectedFamily> ParseReceiverFamily(const std::string& vendor)
+{
+  const std::string normalized = ToLowerCopy(vendor);
+  if (normalized == "ublox")
   {
-    return "F9/F10";
+    return ReceiverDetectedFamily::kUblox;
+  }
+  if (normalized == "unicore")
+  {
+    return ReceiverDetectedFamily::kUnicore;
+  }
+  if (normalized == "nmea")
+  {
+    return ReceiverDetectedFamily::kNmea;
   }
 
-  if (preview.vendor == "unicore")
+  return std::nullopt;
+}
+
+std::optional<ReceiverAutoConfigProfile> ParseRequestedProfile(const std::string& profile)
+{
+  const std::string normalized = ToLowerCopy(profile);
+  if (normalized == "rover")
   {
-    return "UM98x";
+    return ReceiverAutoConfigProfile::kRover;
+  }
+  if (normalized == "base")
+  {
+    return ReceiverAutoConfigProfile::kBase;
+  }
+  if (normalized == "diagnostics")
+  {
+    return ReceiverAutoConfigProfile::kDiagnostics;
   }
 
-  return {};
+  return std::nullopt;
+}
+
+ConfigPlanStatus MapPlanStatus(const ReceiverAutoConfigPlanStatus status)
+{
+  switch (status)
+  {
+    case ReceiverAutoConfigPlanStatus::kOk:
+      return ConfigPlanStatus::kOk;
+    case ReceiverAutoConfigPlanStatus::kInvalidArgument:
+      return ConfigPlanStatus::kInvalidArgument;
+    case ReceiverAutoConfigPlanStatus::kUnsupportedReceiver:
+      return ConfigPlanStatus::kUnsupportedReceiver;
+    case ReceiverAutoConfigPlanStatus::kUnsupportedProfile:
+      return ConfigPlanStatus::kUnsupportedProfile;
+    case ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode:
+      return ConfigPlanStatus::kUnsupportedApplyMode;
+    case ReceiverAutoConfigPlanStatus::kBuildError:
+      return ConfigPlanStatus::kBuildError;
+  }
+
+  return ConfigPlanStatus::kBuildError;
+}
+
+ReceiverAutoConfigApplyMode ResolveApplyMode(const ConfigPlanOptions& options)
+{
+  return options.persistent ? ReceiverAutoConfigApplyMode::kPersistent
+                            : ReceiverAutoConfigApplyMode::kRuntimeOnly;
+}
+
+std::string SelectErrorMessage(const ReceiverAutoConfigPlan& plan)
+{
+  if (!plan.error_message.empty())
+  {
+    return plan.error_message;
+  }
+  if (!plan.unsupported_reason.empty())
+  {
+    return plan.unsupported_reason;
+  }
+  return "configuration planning failed";
 }
 
 }  // namespace
 
 ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
 {
-  ProfilePreviewOptions preview_options;
-  preview_options.vendor = options.vendor;
-  preview_options.profile = options.profile;
-  preview_options.persistent = options.persistent;
-  preview_options.baud = options.baud;
-  preview_options.rate_hz = options.rate_hz;
-
-  const ProfilePreviewResult preview = BuildProfilePreview(preview_options);
-
   ConfigPlanResult result;
-  result.status = preview.status;
-  result.vendor = preview.vendor;
-  result.receiver_family = ResolveReceiverFamily(preview);
-  result.profile = preview.profile;
-  result.persistent = preview.persistent;
-  result.baud = preview.baud;
-  result.rate_hz = preview.rate_hz;
-  result.error_message = preview.error_message;
-  result.summary.commands_total = preview.summary.commands_total;
-  result.summary.runtime_commands = preview.summary.runtime_commands;
-  result.summary.persistent_commands = preview.summary.persistent_commands;
-  result.summary.factory_reset_commands = preview.summary.factory_reset_commands;
+  result.vendor = ToLowerCopy(options.vendor);
+  result.profile = ToLowerCopy(options.profile);
+  result.apply_mode = options.persistent ? "persistent" : "runtime_only";
+  result.persistent = options.persistent;
+  result.baud = options.baud;
+  result.rate_hz = options.rate_hz;
 
-  if (preview.status != ProfilePreviewStatus::kOk)
+  if (options.vendor.empty() || options.profile.empty())
+  {
+    result.status = ConfigPlanStatus::kInvalidArgument;
+    result.error_message = "both vendor and profile are required";
+    return result;
+  }
+
+  const auto family = ParseReceiverFamily(options.vendor);
+  if (!family.has_value())
+  {
+    result.status = ConfigPlanStatus::kUnsupportedReceiver;
+    result.error_message = "unsupported receiver family";
+    result.unsupported_reason = result.error_message;
+    return result;
+  }
+
+  const auto profile = ParseRequestedProfile(options.profile);
+  if (!profile.has_value())
+  {
+    result.status = ConfigPlanStatus::kUnsupportedProfile;
+    result.error_message = "unsupported configuration profile";
+    result.unsupported_reason = result.error_message;
+    return result;
+  }
+
+  universal_gnss_driver::ReceiverAutoConfigRequest request;
+  request.receiver_family = *family;
+  request.requested_profile = *profile;
+  request.apply_mode = ResolveApplyMode(options);
+  request.config_baud = options.baud;
+  request.rate_hz = options.rate_hz;
+
+  const ReceiverAutoConfigPlan plan = BuildReceiverAutoConfigPlan(request);
+
+  result.status = MapPlanStatus(plan.status);
+  result.vendor = ToLowerCopy(options.vendor);
+  result.receiver_family = plan.receiver_family_name;
+  result.profile = ToLowerCopy(options.profile);
+  result.persistent = options.persistent;
+  result.baud = options.baud;
+  result.rate_hz = options.rate_hz;
+  result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
+  result.receiver_recognized = plan.validation.receiver_recognized;
+  result.config_supported = plan.validation.config_supported;
+  result.profile_supported = plan.validation.profile_supported;
+  result.apply_mode_supported = plan.validation.apply_mode_supported;
+  result.production_ready = plan.validation.production_ready;
+  result.ready_to_execute = plan.validation.ready_to_execute;
+  result.warnings = plan.warnings;
+  result.rollback_expectation = plan.rollback_expectation.summary;
+  result.unsupported_reason = plan.unsupported_reason;
+  result.error_message = SelectErrorMessage(plan);
+  result.summary.commands_total = plan.validation.generated_command_count;
+  result.summary.runtime_commands = plan.validation.runtime_command_count;
+  result.summary.persistent_commands = plan.validation.persistent_command_count;
+  result.summary.factory_reset_commands = plan.validation.factory_reset_command_count;
+
+  if (plan.status != ReceiverAutoConfigPlanStatus::kOk)
   {
     return result;
   }
 
-  for (const auto& preview_command : preview.commands)
+  for (const auto& planned_command : plan.commands)
   {
     ConfigPlanCommand command;
-    command.command = preview_command.command;
-    command.payload_bytes = preview_command.payload_bytes;
-    command.description = preview_command.description;
+    command.command = planned_command;
+    command.payload_bytes = CommandPayloadSize(planned_command);
+    command.description = DescribeProfilePreviewCommand(planned_command);
     command.dispatch_safe_without_confirmation = HasSafeDispatchApproval(command.command);
     command.requires_explicit_safety_confirmation =
         !command.dispatch_safe_without_confirmation;
@@ -224,9 +357,12 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
 
   output << "Receiver family: " << result.receiver_family << "\n";
   output << "Profile: " << result.vendor << ' ' << result.profile << "\n";
+  output << "Apply mode: " << result.apply_mode << "\n";
   output << "Dry run: yes\n";
   output << "Safety confirmation required: "
          << (result.summary.requires_explicit_safety_confirmation ? "yes" : "no") << "\n";
+  output << "Production ready: " << (result.production_ready ? "yes" : "no") << "\n";
+  output << "Ready to execute later: " << (result.ready_to_execute ? "yes" : "no") << "\n";
   output << "Command count: " << result.summary.commands_total << "\n";
   output << "Runtime commands: " << result.summary.runtime_commands << "\n";
   output << "Persistent commands: " << result.summary.persistent_commands << "\n";
@@ -269,6 +405,21 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
     }
   }
 
+  if (!result.warnings.empty())
+  {
+    output << "\nWarnings:\n";
+    for (const auto& warning : result.warnings)
+    {
+      output << "- " << warning << "\n";
+    }
+  }
+
+  if (!result.rollback_expectation.empty())
+  {
+    output << "\nRollback expectation:\n";
+    output << result.rollback_expectation << "\n";
+  }
+
   return output.str();
 }
 
@@ -283,6 +434,7 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "    \"vendor\": \"" << EscapeJson(result.vendor) << "\",\n";
   output << "    \"receiver_family\": \"" << EscapeJson(result.receiver_family) << "\",\n";
   output << "    \"name\": \"" << EscapeJson(result.profile) << "\",\n";
+  output << "    \"apply_mode\": \"" << EscapeJson(result.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.persistent ? "true" : "false") << ",\n";
   output << "    \"baud\": ";
   if (result.baud.has_value())
@@ -304,6 +456,20 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
     output << "null";
   }
   output << "\n";
+  output << "  },\n";
+  output << "  \"validation\": {\n";
+  output << "    \"receiver_recognized\": "
+         << (result.receiver_recognized ? "true" : "false") << ",\n";
+  output << "    \"config_supported\": "
+         << (result.config_supported ? "true" : "false") << ",\n";
+  output << "    \"profile_supported\": "
+         << (result.profile_supported ? "true" : "false") << ",\n";
+  output << "    \"apply_mode_supported\": "
+         << (result.apply_mode_supported ? "true" : "false") << ",\n";
+  output << "    \"production_ready\": "
+         << (result.production_ready ? "true" : "false") << ",\n";
+  output << "    \"ready_to_execute\": "
+         << (result.ready_to_execute ? "true" : "false") << "\n";
   output << "  },\n";
   output << "  \"summary\": {\n";
   output << "    \"commands\": " << result.summary.commands_total << ",\n";
@@ -349,6 +515,20 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   }
 
   output << "  ],\n";
+  output << "  \"warnings\": [\n";
+  for (std::size_t index = 0; index < result.warnings.size(); ++index)
+  {
+    output << "    \"" << EscapeJson(result.warnings[index]) << "\"";
+    if (index + 1u != result.warnings.size())
+    {
+      output << ",";
+    }
+    output << "\n";
+  }
+  output << "  ],\n";
+  output << "  \"rollback_expectation\": \""
+         << EscapeJson(result.rollback_expectation) << "\",\n";
+  output << "  \"unsupported_reason\": \"" << EscapeJson(result.unsupported_reason) << "\",\n";
   output << "  \"error_message\": \"" << EscapeJson(result.error_message) << "\"\n";
   output << "}\n";
   return output.str();

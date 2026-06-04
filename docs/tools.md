@@ -481,19 +481,21 @@ JSON output includes:
 
 It reuses:
 
+- the driver-level `ReceiverAutoConfig` planner/report layer
 - the portable `ReceiverCommand` model
-- the existing u-blox and Unicore config profile builders
-- the offline profile preview/build path
 - the same command safety rules used by the driver dispatcher
 
 Current behavior:
 
 - builds the same prepared command sequences that a future live config flow would use
 - reports receiver family, profile name, dry-run status, and command counts
+- reports whether the planned profile is production-ready
+- reports whether the same plan would be ready for later manual execution
 - highlights whether explicit safety confirmation would be required before dispatch
 - marks persistent and factory-reset commands clearly in the sequence
 - supports `ublox` profiles: `rover`, `diagnostics`, `base`
 - supports `unicore` profiles: `rover`, `diagnostics`
+- rejects generic `nmea` as unsupported for live configuration planning
 - emits either compact text output or JSON
 
 Current non-goals:
@@ -517,15 +519,20 @@ gnss_config_plan unicore rover --json
 Text output includes:
 
 - receiver family and profile metadata
+- requested apply mode
 - dry-run status
 - runtime / persistent / factory-reset command counts
+- production-ready and ready-to-execute status
 - whether explicit safety confirmation would be required
 - the planned command sequence in application order
+- warnings and rollback expectations when relevant
 
 JSON output includes:
 
 - a `profile` object
+- a `validation` object
 - a `summary` object
+- a `warnings` array
 - an ordered `commands` array
 
 ### `gnss_config_apply`

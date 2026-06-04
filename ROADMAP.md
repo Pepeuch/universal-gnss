@@ -157,11 +157,16 @@ Planned scope:
     - defined a portable planner/validation/rollback-report layer above the
       existing builders and apply engine
     - identified base-role scope and persistence-semantics gaps
+  - `v0.6-2` planner/report layer implemented:
+    - added a driver-level `ReceiverAutoConfig` planner
+    - wired `gnss_config_plan` to the portable planner/report layer
+    - added portable warnings, rollback expectations, and production-readiness
+      reporting
   - implementation should reuse the existing guarded apply path instead of
     creating a second live-write mechanism
   - safe live configuration transactions for u-blox and Unicore
-  - portable planner, validation report, and rollback expectations shared by
-    CLI and ROS2
+  - extend the portable planner, validation report, and rollback expectations
+    into ROS2
   - guarded runtime/persistent apply workflows
   - explicit vendor-specific persistence semantics in reports
   - post-discovery configuration policy

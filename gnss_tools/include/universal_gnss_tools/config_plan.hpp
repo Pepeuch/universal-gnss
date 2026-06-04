@@ -6,13 +6,21 @@
 #include <string>
 #include <vector>
 
+#include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_driver/receiver_command.hpp"
-#include "universal_gnss_tools/profile_preview.hpp"
 
 namespace universal_gnss_tools
 {
 
-using ConfigPlanStatus = ProfilePreviewStatus;
+enum class ConfigPlanStatus : std::uint8_t
+{
+  kOk = 0,
+  kInvalidArgument = 1,
+  kUnsupportedReceiver = 2,
+  kUnsupportedProfile = 3,
+  kUnsupportedApplyMode = 4,
+  kBuildError = 5,
+};
 
 struct ConfigPlanOptions
 {
@@ -48,12 +56,22 @@ struct ConfigPlanResult
   std::string vendor{};
   std::string receiver_family{};
   std::string profile{};
+  std::string apply_mode{};
   bool persistent{false};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
   bool dry_run{true};
   std::vector<ConfigPlanCommand> commands{};
   ConfigPlanSummary summary{};
+  bool receiver_recognized{false};
+  bool config_supported{false};
+  bool profile_supported{false};
+  bool apply_mode_supported{false};
+  bool production_ready{false};
+  bool ready_to_execute{false};
+  std::vector<std::string> warnings{};
+  std::string rollback_expectation{};
+  std::string unsupported_reason{};
   std::string error_message{};
 };
 

@@ -660,6 +660,11 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
       options, ProfilePreviewStatus::kUnsupportedVendor, "unsupported vendor");
 }
 
+std::string DescribeProfilePreviewCommand(const ReceiverCommand& command)
+{
+  return DescribeCommand(command);
+}
+
 std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const bool verbose)
 {
   std::ostringstream output;

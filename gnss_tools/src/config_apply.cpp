@@ -58,10 +58,12 @@ ConfigApplyStatus MapPlanStatus(const ConfigPlanStatus status)
       return ConfigApplyStatus::kOk;
     case ConfigPlanStatus::kInvalidArgument:
       return ConfigApplyStatus::kInvalidArgument;
-    case ConfigPlanStatus::kUnsupportedVendor:
-      return ConfigApplyStatus::kUnsupportedVendor;
+    case ConfigPlanStatus::kUnsupportedReceiver:
+      return ConfigApplyStatus::kUnsupportedReceiver;
     case ConfigPlanStatus::kUnsupportedProfile:
       return ConfigApplyStatus::kUnsupportedProfile;
+    case ConfigPlanStatus::kUnsupportedApplyMode:
+      return ConfigApplyStatus::kInvalidArgument;
     case ConfigPlanStatus::kBuildError:
       return ConfigApplyStatus::kBuildError;
   }
@@ -77,6 +79,8 @@ const char* ToString(const ConfigApplyStatus status)
       return "ok";
     case ConfigApplyStatus::kInvalidArgument:
       return "invalid_argument";
+    case ConfigApplyStatus::kUnsupportedReceiver:
+      return "unsupported_receiver";
     case ConfigApplyStatus::kUnsupportedVendor:
       return "unsupported_vendor";
     case ConfigApplyStatus::kUnsupportedProfile:

@@ -9,6 +9,19 @@ Scope of this milestone:
 - identify what already exists vs what is missing
 - prepare the next implementation milestone
 
+Implemented in `v0.6-2`:
+
+- `ReceiverAutoConfig` planner/report layer in `gnss_driver`
+- direct planner coverage for u-blox, Unicore, generic NMEA, base gating, and
+  persistent warnings
+- `gnss_config_plan` wiring to the portable planner/report layer
+
+Still intentionally deferred after `v0.6-2`:
+
+- live ROS2 integration for the planner/report surface
+- automatic receiver writes
+- read-back verification beyond the current response-routing layer
+
 Out of scope for this milestone:
 
 - adding new live receiver writes
@@ -52,10 +65,7 @@ that can sit above the current builders and below CLI/ROS2/operator surfaces.
 The current stack is still missing the pieces that make configuration feel
 portable, explainable, and safe:
 
-- no portable Auto Configuration request/plan/report abstraction exists yet
-- no shared validation report exists beyond command counts and safety flags
-- no shared rollback-expectation object exists
-- no shared driver-level planner is used by both CLI and future ROS2 flows
+- no live ROS2 planner/report integration exists yet
 - no read-back verification/report step exists after apply
 - no discovery-to-config policy exists yet
 - no transport/session arbitration exists for configuring a receiver that is
@@ -170,6 +180,18 @@ Responsibilities:
 - the existing apply path performs the live write later when explicitly enabled
 
 ### Portable request/plan/report objects
+
+Implemented in `v0.6-2`:
+
+- `ReceiverAutoConfigRequest`
+- `ReceiverAutoConfigPlan`
+- `ReceiverAutoConfigValidationSummary`
+- `ReceiverAutoConfigRollbackExpectation`
+
+Current implementation lives in:
+
+- `gnss_driver/include/universal_gnss_driver/receiver_auto_config.hpp`
+- `gnss_driver/src/receiver_auto_config.cpp`
 
 Auto Configuration should add a driver-level portable API, likely centered on a
 small `ReceiverAutoConfig*` family.
@@ -331,14 +353,17 @@ This keeps the system honest and operator-readable.
 
 ### 1. Driver-level planner layer
 
-Add a portable planner in `gnss_driver` that:
+Implemented:
 
 - accepts a portable request
-- selects the correct driver/profile build path
+- selects the correct vendor/profile build path
 - validates support and overrides
-- emits commands plus a validation/rollback report
+- emits commands plus validation and rollback-report metadata
 
-This should become the source of truth for both CLI and ROS2.
+Current next step:
+
+- keep this as the source of truth while extending it to ROS2 and future GUI
+  surfaces
 
 ### 2. u-blox support
 
@@ -369,7 +394,7 @@ honestly.
 Refactor the CLIs so they consume the new driver-level planner:
 
 - `gnss_profile_preview` remains the low-level raw builder preview tool
-- `gnss_config_plan` becomes the human-facing Auto Configuration planner
+- `gnss_config_plan` now consumes the portable planner/report layer
 - `gnss_config_apply` consumes the same shared plan/report object before later
   execution
 
