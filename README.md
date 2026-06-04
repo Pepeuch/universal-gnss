@@ -189,3 +189,9 @@ Your support helps fund:
 - RTK testing
 - CI infrastructure
 - Documentation and tooling
+
+## Trademarks
+
+u-blox®, Unicore®, Quectel®, and Septentrio® are trademarks of their respective owners.
+
+Universal GNSS is an independent open-source project and is not affiliated with, endorsed by, or sponsored by any of these companies.
