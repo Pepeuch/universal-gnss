@@ -706,7 +706,8 @@ Still intentionally deferred:
 - richer live stream readers
 - socket readers
 - live playback timing
-- live config execution CLIs
+- richer live config execution workflows beyond the current guarded
+  `gnss_config_apply` path
 - a real `gnss_config_plan --execute` path
 - background config daemons
 - ROS 2 bag or topic output

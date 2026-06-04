@@ -2,9 +2,12 @@
 
 ## Current release posture
 
-The low-level portable GNSS foundation is ready for a `v0.4` tag.
+Universal GNSS is no longer in the "next phase is ROS2" posture.
 
-That foundation now covers:
+The project now has a working ROS2-integrated stack and is ready for a `v0.5`
+tag once the planning/docs pass is synchronized.
+
+That current `v0.5` posture covers:
 
 - portable runtime state, aggregation, diagnostics, and health summary
 - NMEA, UBX/u-blox, Unicore ASCII, Unicore binary `N4`, and RTCM3 protocol work
@@ -13,8 +16,16 @@ That foundation now covers:
 - TCP-backed NTRIP client foundations
 - offline and live low-level tools for inspection, replay, reporting, export,
   config preview/plan/apply, serial monitoring, and NTRIP monitoring
+- ROS2 `ReceiverNode` and `NtripNode`
+- live RTCM forwarding and receiver-side correction diagnostics
+- serial auto-discovery with stable `/dev/serial/by-id` preference
+- score-based auto-discovery hardening for vendor detection and serial noise rejection
+- real ZED-F9P and UM982 validation on ROS2 Kilted
+- local NTRIP caster validation
+- MowgliNext migration validation with fixes kept portable in Universal GNSS
 
-The next major phase is ROS2 integration.
+The next major phase is operator-facing bringup and observability, not more
+foundational ROS2 or low-level churn.
 
 ## v0.1 — Portable Core And Protocol Base
 
@@ -64,7 +75,6 @@ Implemented:
 Still intentionally deferred inside this layer:
 
 - reconnect/session lifecycle ownership in drivers
-- ROS2-side auto-attach integration
 - UDP transport
 - TLS transport adapter
 
@@ -92,44 +102,90 @@ Implemented:
 Release verdict:
 
 - ready for `v0.4`
-- next phase is ROS2 receiver integration, not more low-level feature sprawl
 
-## v0.5 — ROS2 Integration
+## v0.5 — ROS2 Integration, Hardware Validation, And Discovery Hardening
 
-Completed at the start of this phase:
+Implemented:
 
 - `GnssStatus` runtime adapter
 - `NavSatFix` compatibility adapter
 - `diagnostic_msgs` mapping helpers
 - runtime-to-ROS2 mapping audit
-- local Kilted package build/test validation
 - `ReceiverNode` with serial / TCP launch examples
 - `NtripNode` with ROS2 launch example
 - combined receiver + NTRIP launch example
-- ROS2 end-to-end audit / hardening pass
 - `robot_localization` example configuration and documentation
-- real ZED-F9P + local NTRIP caster smoke validation on ROS2 Kilted
-- real UM982 ROS2 smoke validation on `/dev/ttyUSB0` at `921600`
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - live u-blox `RXM-RTCM` acceptance validation through the ROS2 path
 - live UM982 correction forwarding validation through the same ROS2 path
-- portable serial receiver discovery and read-only auto-detection foundation
-- `gnss_discover` CLI with real F9P and UM982 validation at `921600`
+- portable serial receiver discovery foundation
+- `gnss_discover` CLI
+- stable `/dev/serial/by-id` preference and documentation
 - optional onboard/platform UART discovery for embedded Linux targets
 - `ReceiverNode` serial auto-discovery integration for `serial_device:=auto`,
   `serial_baud:=auto`, and `receiver_family:=auto`
+- auto-discovery v2 scoring and rejection policy:
+  - reliable u-blox detection
+  - reliable Unicore detection
+  - reliable generic NMEA detection
+  - MAVLink heartbeat rejection
+  - random serial text rejection
+  - silent-port rejection
+  - discovery score/reason diagnostics
+- replay/tooling-backed regression coverage for discovery inputs
+- local Kilted package build/test validation
+- Kilted validation inside the local MowgliNext development image
+- real ZED-F9P + local NTRIP caster smoke validation on ROS2 Kilted
+- real UM982 ROS2 smoke validation on `/dev/ttyUSB0` at `921600`
 - real `ReceiverNode` auto-discovery smoke validation on F9P and UM982 at
   `921600`
+- MowgliNext integration validation, with bugs fixed in Universal GNSS rather
+  than as Mowgli-specific workarounds
 
-Next:
+Phase verdict:
 
-- ROS2 replay node
-- Humble/Jazzy validation
-- Foxglove-friendly topic surface
+- `v0.5` scope is effectively complete
+- next work should focus on operator workflows, replay bringup, and visualization
 
-## v0.6 — Minimal GUI / Dashboard
+## v0.6 — Operational Bringup
 
-Planned after the ROS2 phase:
+Planned scope:
+
+- Auto Configuration
+  - `v0.6-1` design pass completed:
+    - audited the existing config/profile, dry-run, and guarded-apply stack
+    - defined a portable planner/validation/rollback-report layer above the
+      existing builders and apply engine
+    - identified base-role scope and persistence-semantics gaps
+  - implementation should reuse the existing guarded apply path instead of
+    creating a second live-write mechanism
+  - safe live configuration transactions for u-blox and Unicore
+  - portable planner, validation report, and rollback expectations shared by
+    CLI and ROS2
+  - guarded runtime/persistent apply workflows
+  - explicit vendor-specific persistence semantics in reports
+  - post-discovery configuration policy
+  - keep `base` architected, but gate live base orchestration until the vendor
+    config/profile layer is complete
+- ROS2 Replay Node
+  - replay saved UBX / NMEA / Unicore / RTCM logs through ROS2 topics
+  - support regression, demos, and hardware-free bringup
+- Foxglove Surface
+  - Foxglove-friendly status, correction, diagnostics, and discovery surface
+- ROS2 validation and packaging hardening
+  - keep Kilted green
+  - validate Lyrical when the image/toolchain is available
+  - validate Humble/Jazzy compatibility where practical
+
+Out of scope for `v0.6`:
+
+- full custom GUI
+- ESP32 / gateway work
+- new receiver vendors
+
+## v0.7 — GUI / Dashboard
+
+Planned after `v0.6`:
 
 - live GNSS status view
 - RTK / correction status
@@ -139,7 +195,7 @@ Planned after the ROS2 phase:
 - RTCM activity view
 - JSON/debug snapshot export
 
-## v0.7 — Embedded / Gateway Layer
+## v0.8 — Embedded / Gateway Layer
 
 Planned later:
 
@@ -150,11 +206,18 @@ Planned later:
 - RTK base gateway mode
 - LoRa-facing RTCM filtering policy
 
-## v0.8 — Future Receiver Vendors
+## v0.9 — Quectel
 
-Deferred until the current NMEA / u-blox / Unicore / ROS2 stack is stable:
+Deferred until the current stack is stable:
 
-- Quectel support
-- Septentrio support
-- additional receiver profiles
-- additional configuration engines
+- Quectel framing/parsing audit
+- Quectel session/profile foundation
+- Quectel configuration engine
+
+## v1.0 — Septentrio
+
+Deferred until the current stack is stable:
+
+- Septentrio SBF audit
+- Septentrio session/profile foundation
+- Septentrio runtime/status mapping
