@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "universal_gnss_driver/receiver_auto_config.hpp"
+#include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_tools/config_plan.hpp"
 
 namespace universal_gnss_transport
@@ -37,14 +39,17 @@ enum class ConfigApplyStatus : std::uint8_t
 
 struct ConfigApplyOptions
 {
-  std::string vendor{};
-  std::string profile{};
-  bool persistent{false};
+  universal_gnss_driver::ReceiverDetectedFamily receiver_family{
+      universal_gnss_driver::ReceiverDetectedFamily::kUnknown};
+  std::optional<universal_gnss_driver::ReceiverProbeResult> discovery_result{};
+  universal_gnss_driver::ReceiverAutoConfigProfile profile{
+      universal_gnss_driver::ReceiverAutoConfigProfile::kRover};
+  universal_gnss_driver::ReceiverAutoConfigApplyMode apply_mode{
+      universal_gnss_driver::ReceiverAutoConfigApplyMode::kDryRun};
+  std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
-  bool execute{false};
-  bool confirm_runtime{false};
-  bool confirm_persistent{false};
-  std::string port{};
+  bool confirm{false};
+  std::string device_path{};
   std::uint32_t transport_baud_rate{0u};
   std::uint32_t timeout_ms{1000u};
 };
@@ -68,7 +73,7 @@ struct ConfigApplyResult
   bool requires_runtime_confirmation{false};
   bool requires_persistent_confirmation{false};
   bool execution_confirmed{false};
-  std::string port{};
+  std::string device_path{};
   std::uint32_t transport_baud_rate{0u};
   std::uint32_t timeout_ms{0u};
   ConfigPlanResult plan{};

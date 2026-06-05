@@ -61,6 +61,11 @@ struct ConfigPlanResult
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
   bool dry_run{true};
+  std::optional<std::string> detected_device{};
+  std::optional<std::string> detected_stable_id{};
+  std::optional<std::uint32_t> detected_baud{};
+  std::optional<std::string> discovery_confidence{};
+  std::optional<int> discovery_score{};
   std::vector<ConfigPlanCommand> commands{};
   ConfigPlanSummary summary{};
   bool receiver_recognized{false};
@@ -76,6 +81,10 @@ struct ConfigPlanResult
 };
 
 ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options);
+ConfigPlanResult BuildConfigPlan(
+    const universal_gnss_driver::ReceiverAutoConfigRequest& request);
+ConfigPlanResult BuildConfigPlan(
+    const universal_gnss_driver::ReceiverAutoConfigPlan& plan);
 
 std::string FormatConfigPlanText(const ConfigPlanResult& result);
 
