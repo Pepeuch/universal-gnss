@@ -38,7 +38,7 @@ venv/
 Thumbs.db
 
 # Generated / temporary
-*.log
+
 *.tmp
 *.bak
 
