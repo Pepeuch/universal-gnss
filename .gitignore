@@ -4,6 +4,8 @@ cmake-build-*/
 out/
 build_release/
 build_ros2_release/
+build_nonros_replay/
+build_ros2_replay/
 
 # CMake
 CMakeCache.txt

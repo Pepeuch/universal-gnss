@@ -6,6 +6,8 @@ Implemented:
 
 - `v0.1` to `v0.4` portable core, protocol, driver, transport, NTRIP, and tool foundations
 - `ReceiverNode` and `NtripNode`
+- `ReplayNode` for hardware-free ROS2 status/fix/diagnostics replay with
+  optional RTCM publication
 - `GnssStatus`, `NavSatFix`, and `diagnostic_msgs` projection
 - combined receiver + NTRIP ROS2 bringup
 - `robot_localization` example configuration and docs
@@ -32,13 +34,12 @@ Implemented:
 
 ## Next milestone order
 
-1. ROS2 Replay Node
-2. Foxglove Surface
-3. Auto Configuration ROS2/report extension and arbitration
-4. GUI / Dashboard
-5. ESP32 / Gateway
-6. Quectel
-7. Septentrio
+1. Foxglove Surface
+2. Auto Configuration ROS2/report extension and arbitration
+3. GUI / Dashboard
+4. ESP32 / Gateway
+5. Quectel
+6. Septentrio
 
 ## v0.6 — Operational Bringup
 
@@ -59,11 +60,12 @@ Implemented:
 
 ### ROS2 Replay Node
 
-- [ ] ROS2 replay node that publishes `/status`, `/fix`, `/diagnostics`, and optional `/rtcm`
-- [ ] stepped replay mode for deterministic debugging
-- [ ] wall-time replay mode for demos and integration tests
-- [ ] launch/examples for replayed receiver + replayed RTCM workflows
-- [ ] reuse existing `gnss_replay` parsing/mapping logic instead of duplicating decode paths
+- [x] ROS2 replay node that publishes `/status`, `/fix`, `/diagnostics`, and optional `/rtcm`
+- [x] stepped replay mode for deterministic debugging
+- [x] wall-time replay mode for demos and integration tests
+- [x] fast replay mode for hardware-free tests
+- [x] launch/examples for replayed receiver + replayed RTCM workflows
+- [x] reuse existing `gnss_replay` parsing/mapping logic instead of duplicating decode paths
 
 ### Foxglove Surface
 

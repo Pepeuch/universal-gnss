@@ -12,6 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(rosidl_default_runtime REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -50,6 +51,12 @@ if(NOT TARGET universal_gnss_ntrip)
   add_subdirectory(
     "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_ntrip"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_ntrip"
+  )
+endif()
+if(NOT TARGET universal_gnss_tools)
+  add_subdirectory(
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_tools"
+    "${CMAKE_CURRENT_BINARY_DIR}/gnss_tools"
   )
 endif()
 set(BUILD_TESTING "${_saved_build_testing}")
@@ -141,6 +148,38 @@ target_link_libraries(
 )
 ament_target_dependencies(receiver_node rclcpp)
 
+add_library(${PROJECT_NAME}_replay_node STATIC src/replay_node.cpp)
+target_compile_features(${PROJECT_NAME}_replay_node PUBLIC cxx_std_17)
+target_include_directories(
+  ${PROJECT_NAME}_replay_node
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(
+  ${PROJECT_NAME}_replay_node
+  diagnostic_msgs
+  rclcpp
+  sensor_msgs
+  std_srvs
+)
+target_link_libraries(
+  ${PROJECT_NAME}_replay_node
+  ${PROJECT_NAME}_diagnostic_adapter
+  ${PROJECT_NAME}_gnss_status_adapter
+  ${PROJECT_NAME}_navsat_fix_adapter
+  universal_gnss_tools
+  "${cpp_typesupport_target}"
+)
+
+add_executable(replay_node src/replay_node_main.cpp)
+target_link_libraries(
+  replay_node
+  ${PROJECT_NAME}_replay_node
+)
+ament_target_dependencies(replay_node rclcpp)
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_library(${PROJECT_NAME}_ntrip_node STATIC src/ntrip_node.cpp)
   target_compile_features(${PROJECT_NAME}_ntrip_node PUBLIC cxx_std_17)
@@ -186,7 +225,9 @@ install(
 install(
   TARGETS
     ${PROJECT_NAME}_receiver_node
+    ${PROJECT_NAME}_replay_node
     receiver_node
+    replay_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -213,6 +254,8 @@ install(
 )
 
 if(BUILD_TESTING)
+  set(_ros2_test_library_path "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
+
   ament_add_gtest(test_gnss_status_adapter tests/test_gnss_status_adapter.cpp)
   if(TARGET test_gnss_status_adapter)
     target_link_libraries(
@@ -278,6 +321,32 @@ if(BUILD_TESTING)
       test_receiver_node
       rclcpp
     )
+    set_tests_properties(test_receiver_node PROPERTIES ENVIRONMENT "${_ros2_test_library_path}")
+  endif()
+
+  ament_add_gtest(test_replay_node tests/test_replay_node.cpp)
+  if(TARGET test_replay_node)
+    target_link_libraries(
+      test_replay_node
+      ${PROJECT_NAME}_replay_node
+    )
+    target_include_directories(
+      test_replay_node
+      PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+    )
+    target_compile_definitions(
+      test_replay_node
+      PRIVATE
+        TESTDATA_DIR="${UNIVERSAL_GNSS_SOURCE_ROOT}/testdata"
+    )
+    ament_target_dependencies(
+      test_replay_node
+      rclcpp
+      std_srvs
+    )
+    set_tests_properties(test_replay_node PROPERTIES ENVIRONMENT "${_ros2_test_library_path}")
   endif()
 
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -297,6 +366,7 @@ if(BUILD_TESTING)
         test_ntrip_node
         rclcpp
       )
+      set_tests_properties(test_ntrip_node PROPERTIES ENVIRONMENT "${_ros2_test_library_path}")
     endif()
   endif()
 endif()

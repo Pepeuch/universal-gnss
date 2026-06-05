@@ -663,6 +663,115 @@ ros2 launch universal_gnss_ros2 ntrip.launch.py \
 - no lifecycle-node behavior yet
 - no multi-caster orchestration yet
 
+## ReplayNode
+
+`ReplayNode` is the hardware-free ROS2 replay surface for sanitized GNSS logs.
+
+It reuses:
+
+- `universal_gnss_tools::ReplayGnssBytes(...)`
+- the existing mixed-stream GNSS replay event timeline
+- the same `GnssRuntimeState -> GnssStatus`, `NavSatFix`, and
+  `DiagnosticArray` adapters used by `ReceiverNode`
+
+This keeps replay and live receiver publishing aligned instead of introducing a
+second ROS-side parser stack.
+
+### Inputs
+
+Parameters:
+
+- `input_path`
+- `replay_mode`
+  - `stepped`
+  - `wall_time`
+  - `fast`
+- `publish_rtcm`
+- `wall_time_scale`
+- `fallback_step_ms`
+- `timer_poll_ms`
+- `frame_id`
+
+Validation policy:
+
+- empty `input_path` fails node construction
+- `replay_mode` must stay within `stepped`, `wall_time`, or `fast`
+- `wall_time_scale` must be finite and strictly positive
+- `fallback_step_ms` and `timer_poll_ms` must stay within `1..4294967295`
+
+Replay policy:
+
+- `stepped` mode advances one replay action at a time through the private
+  `~/step` `std_srvs/Trigger` service
+- `wall_time` mode preserves approximate capture timing when replay timestamps
+  are available, then falls back to `fallback_step_ms`
+- `fast` mode drains the replay as quickly as the executor can service it,
+  which is useful for deterministic tests
+- RTCM publication stays optional through `publish_rtcm`
+
+### Outputs
+
+Topics published by the replay node:
+
+- `status`
+  - type: `universal_gnss_ros2/msg/GnssStatus`
+- `fix`
+  - type: `sensor_msgs/msg/NavSatFix`
+- `diagnostics`
+  - type: `diagnostic_msgs/msg/DiagnosticArray`
+- `rtcm`
+  - type: `universal_gnss_ros2/msg/RtcmFrame`
+  - only when `publish_rtcm=true` and the replay contains RTCM frames
+
+Current diagnostics include:
+
+- replay load/progress/completion state
+- parser warnings for invalid, malformed, or truncated records
+- replayed RTCM activity when present
+- the same normalized receiver health surface used by the live ROS2 adapters
+
+### Launch
+
+The package now also installs:
+
+- `replay.launch.py`
+
+Wall-time example:
+
+```bash
+ros2 launch universal_gnss_ros2 replay.launch.py \
+  input_path:=/path/to/f9p_capture.ubx \
+  replay_mode:=wall_time \
+  wall_time_scale:=1.0 \
+  publish_rtcm:=true
+```
+
+Fast test/demo example:
+
+```bash
+ros2 launch universal_gnss_ros2 replay.launch.py \
+  input_path:=/path/to/um982_capture.log \
+  replay_mode:=fast \
+  publish_rtcm:=false
+```
+
+Stepped example:
+
+```bash
+ros2 launch universal_gnss_ros2 replay.launch.py \
+  input_path:=/path/to/basic_fix.nmea \
+  replay_mode:=stepped
+
+ros2 service call /universal_gnss_replay/step std_srvs/srv/Trigger {}
+```
+
+### Current limits
+
+- replay timing is approximate and depends on the timestamps already present in
+  the normalized replay state
+- the node is file-backed today; it does not stream stdin or remote objects
+- replay diagnostics summarize parser/runtime state, not a live transport
+
 ## robot_localization Example
 
 The repository now includes a minimal example stack for:
@@ -698,6 +807,6 @@ This example is intentionally conservative:
 The next ROS 2 phase is still higher-level integration, not more low-level
 feature work:
 
-- replay node
 - richer launch/examples
+- Foxglove-facing operator surfaces
 - downstream integration surfaces such as Nav2

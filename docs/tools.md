@@ -242,6 +242,8 @@ Current replay behavior:
 - maps supported semantic GNSS messages into partial `GnssRuntimeState` updates
 - merges those updates into one coherent runtime state timeline
 - keeps RTCM as correction-stream metadata only for now
+- provides the exact event/state timeline reused by `universal_gnss_ros2`
+  `replay_node` for hardware-free ROS2 playback
 - NMEA `GST` can enrich replayed runtime states with conservative horizontal /
   vertical accuracy without changing fix or position
 - Unicore binary `BESTNAVB` and `PVTSLNB` now contribute the same conservative
@@ -296,6 +298,15 @@ cat file.bin | gnss_replay -
 gnss_replay --summary file.bin
 gnss_replay --json file.bin
 ```
+
+ROS2 reuse:
+
+- `universal_gnss_ros2/replay_node` reuses `ReplayGnssBytes(...)` instead of
+  reimplementing protocol parsing
+- the replay node republishes `status`, `fix`, and `diagnostics` from the same
+  normalized runtime states that `gnss_replay` reconstructs
+- when `publish_rtcm=true`, the replay node also republishes RTCM frame bytes
+  from the original capture on `/rtcm`
 
 ### `gnss_quality_report`
 
