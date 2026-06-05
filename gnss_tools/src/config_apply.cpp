@@ -28,6 +28,8 @@ namespace
 {
 
 using universal_gnss_driver::HasSafeDispatchApproval;
+using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigRequest;
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandResponse;
@@ -235,14 +237,50 @@ ReceiverCommandTimestampNs NowTimestampNs()
       .count();
 }
 
+bool ApplyModeRequestsExecution(const ReceiverAutoConfigApplyMode apply_mode)
+{
+  return apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+}
+
+std::string ResolveRequestedDevicePath(const ConfigApplyOptions& options)
+{
+  if (!options.device_path.empty())
+  {
+    return options.device_path;
+  }
+
+  if (options.discovery_result.has_value())
+  {
+    return options.discovery_result->path;
+  }
+
+  return {};
+}
+
+std::uint32_t ResolveRequestedTransportBaud(const ConfigApplyOptions& options)
+{
+  if (options.transport_baud_rate != 0u)
+  {
+    return options.transport_baud_rate;
+  }
+
+  if (options.discovery_result.has_value() &&
+      options.discovery_result->selected_baud.has_value())
+  {
+    return *options.discovery_result->selected_baud;
+  }
+
+  return 0u;
+}
+
 ConfigApplyResult MakeBaseResult(const ConfigApplyOptions& options)
 {
   ConfigApplyResult result;
-  result.execute_requested = options.execute;
-  result.dry_run = !options.execute;
+  result.execute_requested = ApplyModeRequestsExecution(options.apply_mode);
+  result.dry_run = true;
   result.executed = false;
-  result.port = options.port;
-  result.transport_baud_rate = options.transport_baud_rate;
+  result.device_path = ResolveRequestedDevicePath(options);
+  result.transport_baud_rate = ResolveRequestedTransportBaud(options);
   result.timeout_ms = options.timeout_ms;
   return result;
 }
@@ -255,13 +293,14 @@ void PopulateExecutionSummaryFromPlan(ConfigApplyResult& result)
 bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
                                const ConfigApplyOptions& options)
 {
-  result.requires_runtime_confirmation = result.plan.summary.runtime_commands > 0u;
+  const bool execution_requested = ApplyModeRequestsExecution(options.apply_mode);
+  result.requires_runtime_confirmation =
+      execution_requested && result.plan.summary.runtime_commands > 0u;
   result.requires_persistent_confirmation =
-      result.plan.summary.persistent_commands > 0u ||
-      result.plan.summary.factory_reset_commands > 0u;
-  result.execution_confirmed =
-      (!result.requires_runtime_confirmation || options.confirm_runtime) &&
-      (!result.requires_persistent_confirmation || options.confirm_persistent);
+      execution_requested &&
+      (result.plan.summary.persistent_commands > 0u ||
+       result.plan.summary.factory_reset_commands > 0u);
+  result.execution_confirmed = !execution_requested || options.confirm;
 
   if (result.plan.summary.factory_reset_commands > 0u)
   {
@@ -272,35 +311,40 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
     return false;
   }
 
-  if (!options.execute)
+  if (!execution_requested)
   {
     result.execution_summary.final_status = "dry_run";
     return true;
   }
 
-  if (result.execution_confirmed)
+  if (!result.plan.ready_to_execute)
   {
-    return true;
+    result.status = ConfigApplyStatus::kSafetyRejected;
+    result.error_message =
+        "live apply is blocked for this plan because it is not marked ready to execute";
+    result.execution_summary.final_status = "safety_rejected";
+    return false;
   }
 
-  result.status = ConfigApplyStatus::kSafetyRejected;
-  result.error_message.clear();
-  if (result.requires_runtime_confirmation && !options.confirm_runtime)
+  if (!result.execution_confirmed)
   {
-    result.error_message +=
-        "execute mode requires --confirm-runtime for runtime commands";
+    result.status = ConfigApplyStatus::kSafetyRejected;
+    result.error_message =
+        "live receiver writes require explicit operator confirmation via --confirm or --yes";
+    result.execution_summary.final_status = "safety_rejected";
+    return false;
   }
-  if (result.requires_persistent_confirmation && !options.confirm_persistent)
+
+  if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
-    if (!result.error_message.empty())
-    {
-      result.error_message += "; ";
-    }
-    result.error_message +=
-        "execute mode requires --confirm-persistent for persistent or factory-reset commands";
+    result.status = ConfigApplyStatus::kSafetyRejected;
+    result.error_message =
+        "persistent live apply remains guarded in gnss_config_apply; review the plan and use manual rollback-capable vendor workflows if needed";
+    result.execution_summary.final_status = "safety_rejected";
+    return false;
   }
-  result.execution_summary.final_status = "safety_rejected";
-  return false;
+
+  return true;
 }
 
 std::vector<ReceiverCommand> BuildExecutableCommands(const ConfigPlanResult& plan,
@@ -317,7 +361,7 @@ std::vector<ReceiverCommand> BuildExecutableCommands(const ConfigPlanResult& pla
     if (command.safety_level == ReceiverCommandSafetyLevel::kPersistent ||
         command.safety_level == ReceiverCommandSafetyLevel::kFactoryReset)
     {
-      command.explicit_safety_confirmation = options.confirm_persistent;
+      command.explicit_safety_confirmation = options.confirm;
     }
 
     commands.push_back(std::move(command));
@@ -555,14 +599,16 @@ bool ProcessUnicoreBytes(ConfigApplyResult& result,
   return ApplyQueuedUnicoreResponses(result, plan, application, router);
 }
 
-ConfigPlanOptions MakePlanOptions(const ConfigApplyOptions& options)
+ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& options)
 {
-  ConfigPlanOptions plan_options;
-  plan_options.vendor = options.vendor;
-  plan_options.profile = options.profile;
-  plan_options.persistent = options.persistent;
-  plan_options.rate_hz = options.rate_hz;
-  return plan_options;
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = options.receiver_family;
+  request.discovery_result = options.discovery_result;
+  request.requested_profile = options.profile;
+  request.apply_mode = options.apply_mode;
+  request.config_baud = options.config_baud;
+  request.rate_hz = options.rate_hz;
+  return request;
 }
 
 void AppendCommandSequenceText(std::ostringstream& output,
@@ -631,14 +677,6 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
 {
   ConfigApplyResult result = MakeBaseResult(options);
 
-  if (options.vendor.empty() || options.profile.empty())
-  {
-    result.status = ConfigApplyStatus::kInvalidArgument;
-    result.error_message = "both vendor and profile are required";
-    result.execution_summary.final_status = ToString(result.status);
-    return result;
-  }
-
   if (options.timeout_ms == 0u)
   {
     result.status = ConfigApplyStatus::kInvalidArgument;
@@ -647,7 +685,7 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
     return result;
   }
 
-  result.plan = BuildConfigPlan(MakePlanOptions(options));
+  result.plan = BuildConfigPlan(BuildAutoConfigRequest(options));
   result.status = MapPlanStatus(result.plan.status);
   PopulateExecutionSummaryFromPlan(result);
 
@@ -671,7 +709,8 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
                                      const ConfigApplyOptions& options)
 {
   ConfigApplyResult result = PrepareConfigApply(options);
-  if (result.status != ConfigApplyStatus::kOk || !options.execute)
+  if (result.status != ConfigApplyStatus::kOk ||
+      !ApplyModeRequestsExecution(options.apply_mode))
   {
     return result;
   }
@@ -802,11 +841,15 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
 std::string FormatConfigApplyText(const ConfigApplyResult& result)
 {
   std::ostringstream output;
+  output << "Status: " << ToString(result.status) << "\n";
   output << "Receiver family: " << result.plan.receiver_family << "\n";
   output << "Profile: " << result.plan.vendor << ' ' << result.plan.profile << "\n";
+  output << "Apply mode: " << result.plan.apply_mode << "\n";
   output << "Dry run: " << (result.dry_run ? "yes" : "no") << "\n";
-  output << "Execute requested: " << (result.execute_requested ? "yes" : "no") << "\n";
+  output << "Live apply requested: " << (result.execute_requested ? "yes" : "no") << "\n";
   output << "Executed: " << (result.executed ? "yes" : "no") << "\n";
+  output << "Production ready: " << (result.plan.production_ready ? "yes" : "no") << "\n";
+  output << "Ready to execute: " << (result.plan.ready_to_execute ? "yes" : "no") << "\n";
   output << "Runtime confirmation required: "
          << (result.requires_runtime_confirmation ? "yes" : "no") << "\n";
   output << "Persistent confirmation required: "
@@ -816,13 +859,37 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   output << "Runtime commands: " << result.plan.summary.runtime_commands << "\n";
   output << "Persistent commands: " << result.plan.summary.persistent_commands << "\n";
   output << "Factory-reset commands: " << result.plan.summary.factory_reset_commands << "\n";
-  if (!result.port.empty())
+  if (result.plan.detected_device.has_value())
   {
-    output << "Port: " << result.port << "\n";
+    output << "Detected device: " << *result.plan.detected_device << "\n";
+  }
+  if (result.plan.detected_stable_id.has_value())
+  {
+    output << "Detected stable id: " << *result.plan.detected_stable_id << "\n";
+  }
+  if (result.plan.detected_baud.has_value())
+  {
+    output << "Detected baud: " << *result.plan.detected_baud << "\n";
+  }
+  if (result.plan.discovery_confidence.has_value())
+  {
+    output << "Discovery confidence: " << *result.plan.discovery_confidence << "\n";
+  }
+  if (result.plan.discovery_score.has_value())
+  {
+    output << "Discovery score: " << *result.plan.discovery_score << "\n";
+  }
+  if (!result.device_path.empty())
+  {
+    output << "Device: " << result.device_path << "\n";
   }
   if (result.transport_baud_rate != 0u)
   {
     output << "Transport baud: " << result.transport_baud_rate << "\n";
+  }
+  if (result.plan.baud.has_value())
+  {
+    output << "Config baud override: " << *result.plan.baud << "\n";
   }
   if (result.plan.rate_hz.has_value())
   {
@@ -839,6 +906,21 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
     {
       output << "  " << line << "\n";
     }
+  }
+
+  if (!result.plan.warnings.empty())
+  {
+    output << "\nWarnings:\n";
+    for (const auto& warning : result.plan.warnings)
+    {
+      output << "- " << warning << "\n";
+    }
+  }
+
+  if (!result.plan.rollback_expectation.empty())
+  {
+    output << "\nRollback expectation:\n";
+    output << result.plan.rollback_expectation << "\n";
   }
 
   output << "\nSummary:\n";
@@ -870,7 +952,18 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"vendor\": \"" << EscapeJson(result.plan.vendor) << "\",\n";
   output << "    \"receiver_family\": \"" << EscapeJson(result.plan.receiver_family) << "\",\n";
   output << "    \"name\": \"" << EscapeJson(result.plan.profile) << "\",\n";
+  output << "    \"apply_mode\": \"" << EscapeJson(result.plan.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.plan.persistent ? "true" : "false") << ",\n";
+  output << "    \"baud\": ";
+  if (result.plan.baud.has_value())
+  {
+    output << *result.plan.baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "    \"rate_hz\": ";
   if (result.plan.rate_hz.has_value())
   {
@@ -882,8 +975,60 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   }
   output << "\n";
   output << "  },\n";
+  output << "  \"discovery\": {\n";
+  output << "    \"device\": ";
+  if (result.plan.detected_device.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.detected_device) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"stable_id\": ";
+  if (result.plan.detected_stable_id.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.detected_stable_id) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"baud\": ";
+  if (result.plan.detected_baud.has_value())
+  {
+    output << *result.plan.detected_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"confidence\": ";
+  if (result.plan.discovery_confidence.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.discovery_confidence) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"score\": ";
+  if (result.plan.discovery_score.has_value())
+  {
+    output << *result.plan.discovery_score;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << "\n";
+  output << "  },\n";
   output << "  \"transport\": {\n";
-  output << "    \"port\": \"" << EscapeJson(result.port) << "\",\n";
+  output << "    \"device\": \"" << EscapeJson(result.device_path) << "\",\n";
   output << "    \"baud\": " << result.transport_baud_rate << ",\n";
   output << "    \"timeout_ms\": " << result.timeout_ms << "\n";
   output << "  },\n";
@@ -895,6 +1040,20 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"execution_confirmed\": "
          << (result.execution_confirmed ? "true" : "false") << "\n";
   output << "  },\n";
+  output << "  \"validation\": {\n";
+  output << "    \"receiver_recognized\": "
+         << (result.plan.receiver_recognized ? "true" : "false") << ",\n";
+  output << "    \"config_supported\": "
+         << (result.plan.config_supported ? "true" : "false") << ",\n";
+  output << "    \"profile_supported\": "
+         << (result.plan.profile_supported ? "true" : "false") << ",\n";
+  output << "    \"apply_mode_supported\": "
+         << (result.plan.apply_mode_supported ? "true" : "false") << ",\n";
+  output << "    \"production_ready\": "
+         << (result.plan.production_ready ? "true" : "false") << ",\n";
+  output << "    \"ready_to_execute\": "
+         << (result.plan.ready_to_execute ? "true" : "false") << "\n";
+  output << "  },\n";
   output << "  \"plan_summary\": {\n";
   output << "    \"commands\": " << result.plan.summary.commands_total << ",\n";
   output << "    \"runtime\": " << result.plan.summary.runtime_commands << ",\n";
@@ -902,6 +1061,19 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"factory_reset\": " << result.plan.summary.factory_reset_commands << "\n";
   output << "  },\n";
   AppendCommandSequenceJson(output, result);
+  output << "  \"warnings\": [\n";
+  for (std::size_t index = 0; index < result.plan.warnings.size(); ++index)
+  {
+    output << "    \"" << EscapeJson(result.plan.warnings[index]) << "\"";
+    if (index + 1u != result.plan.warnings.size())
+    {
+      output << ",";
+    }
+    output << "\n";
+  }
+  output << "  ],\n";
+  output << "  \"rollback_expectation\": \""
+         << EscapeJson(result.plan.rollback_expectation) << "\",\n";
   output << "  \"progress\": [\n";
   for (std::size_t index = 0; index < result.progress_log.size(); ++index)
   {

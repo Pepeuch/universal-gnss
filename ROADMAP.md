@@ -162,6 +162,13 @@ Planned scope:
     - wired `gnss_config_plan` to the portable planner/report layer
     - added portable warnings, rollback expectations, and production-readiness
       reporting
+  - `v0.6-3` operator-driven apply flow implemented:
+    - wired `gnss_config_apply` to the same portable planner/report object
+    - added discovery-aware `--receiver auto` / `--family auto` / `--baud auto`
+      apply targeting
+    - required explicit operator confirmation for runtime-only live writes
+    - kept persistent live apply guarded while still surfacing plan warnings and
+      manual rollback expectations
   - implementation should reuse the existing guarded apply path instead of
     creating a second live-write mechanism
   - safe live configuration transactions for u-blox and Unicore

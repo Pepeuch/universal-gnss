@@ -46,12 +46,12 @@ Implemented:
 - [ ] extend the planner/report layer into ROS2
 - [ ] live u-blox configuration transactions
 - [ ] live Unicore configuration transactions
-- [ ] make vendor-specific persistence semantics explicit in plan/apply output
+- [x] make vendor-specific persistence semantics explicit in plan/apply output
 - [ ] runtime arbitration between streaming traffic and config traffic
-- [ ] explicit policy for runtime-only vs persistent apply
+- [x] explicit policy for runtime-only vs persistent apply
 - [ ] capability/profile consistency cleanup between built-in receiver profiles and driver support
 - [ ] keep `base` as a portable role but gate live apply until vendor base workflows are complete
-- [ ] post-discovery auto-configuration when explicitly enabled
+- [x] post-discovery auto-configuration when explicitly enabled
 - [ ] production-safe failure handling and rollback expectations
 
 ### ROS2 Replay Node

@@ -537,11 +537,11 @@ JSON output includes:
 
 ### `gnss_config_apply`
 
-`gnss_config_apply` is the first guarded live receiver-config CLI.
+`gnss_config_apply` is the operator-facing Auto Configuration apply CLI.
 
 It reuses:
 
-- the offline config-plan/profile-builder path
+- the driver-level `ReceiverAutoConfig` planner/report layer
 - `ReceiverConfigApplication`
 - `ReceiverCommandTransactionEngine`
 - `PosixSerialTransport`
@@ -549,9 +549,14 @@ It reuses:
 
 Current behavior:
 
-- defaults to dry-run mode and never touches serial unless `--execute` is set
-- requires `--confirm-runtime` before sending runtime-only command plans
-- requires `--confirm-persistent` before sending persistent command plans
+- can discover the receiver when `--receiver auto` or `--family auto` is used
+- can probe an explicit device path with `--device`
+- accepts `--baud auto` to reuse discovery-time baud detection for live apply
+- prints the full plan/report before any live-write decision
+- refuses runtime-only live writes unless `--confirm` or `--yes` is present
+- keeps persistent live apply guarded in `v0.6-3`; it reports the plan but does not send the writes
+- rejects unknown receivers and generic NMEA receivers for apply
+- warns when the `base` profile is not production-ready for live execution
 - executes one command at a time over a Linux serial port
 - waits synchronously for one matching response at a time
 - supports a simple per-command `--timeout-ms` loop without threads
@@ -571,19 +576,22 @@ Current non-goals:
 - background retry scheduling
 - interactive prompts
 - factory-reset profile execution
+- persistent live apply from this CLI while rollback remains manual and vendor-specific
 
 Examples:
 
 ```text
-gnss_config_apply ublox rover --port /dev/ttyACM0 --baud 921600
-gnss_config_apply ublox rover --port /dev/ttyACM0 --baud 921600 --execute --confirm-runtime
-gnss_config_apply unicore diagnostics --port /dev/ttyUSB0 --baud 921600 --execute --confirm-runtime
-gnss_config_apply ublox rover --persistent --port /dev/ttyACM0 --baud 921600 --execute --confirm-persistent
+gnss_config_apply --receiver auto --profile rover
+gnss_config_apply --receiver auto --device /dev/ttyACM0 --profile rover --apply-mode runtime-only --confirm
+gnss_config_apply --family ublox --device /dev/ttyACM0 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm
+gnss_config_apply --receiver auto --profile rover --apply-mode persistent
 ```
 
 Text output includes:
 
-- dry-run vs execute-requested status
+- discovered device/family/baud context when available
+- plan validation, warnings, and rollback expectations
+- dry-run vs live-apply-requested status
 - runtime/persistent confirmation requirements
 - the command sequence to be applied
 - command progress and the final execution summary
@@ -591,6 +599,8 @@ Text output includes:
 JSON output includes:
 
 - profile metadata
+- discovery metadata
+- validation and warning state
 - safety status
 - the planned command sequence
 - progress messages
@@ -700,8 +710,8 @@ The tools stay compact on purpose.
 - `gnss_ntrip_monitor` prints compact live status instead of becoming a daemon
 - `gnss_profile_preview` is preview-only and never touches receiver I/O
 - `gnss_config_plan` is dry-run only and never performs command dispatch
-- `gnss_config_apply` is guarded and remains dry-run unless `--execute` plus the
-  required confirmation flags are present
+- `gnss_config_apply` is guarded and only performs live runtime-only writes after
+  explicit operator confirmation
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
 - most tools are currently offline and file/stdin oriented only

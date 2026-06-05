@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "universal_gnss_driver/receiver_auto_config.hpp"
+#include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_driver/ubx_command_response_mapper.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/config_apply.hpp"
@@ -12,6 +14,13 @@
 namespace
 {
 
+using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigProfile;
+using universal_gnss_driver::ReceiverDetectedFamily;
+using universal_gnss_driver::ReceiverPortSource;
+using universal_gnss_driver::ReceiverProbeConfidence;
+using universal_gnss_driver::ReceiverProbeResult;
+using universal_gnss_driver::ReceiverTransportType;
 using universal_gnss_driver::TryGetUbxCommandMessageIdentity;
 using universal_gnss_tools::ConfigApplyOptions;
 using universal_gnss_tools::ConfigApplyStatus;
@@ -32,6 +41,31 @@ struct TestContext
     }
   }
 };
+
+ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
+                                        const std::uint32_t baud,
+                                        const ReceiverDetectedFamily family)
+{
+  ReceiverProbeResult result;
+  result.path = path;
+  result.transport_type = ReceiverTransportType::kSerial;
+  result.source = ReceiverPortSource::kExplicitPath;
+  result.selected_baud = baud;
+  result.detected_family = family;
+  result.confidence = family == ReceiverDetectedFamily::kNmea
+                          ? ReceiverProbeConfidence::kMedium
+                          : ReceiverProbeConfidence::kHigh;
+  result.discovery_score = family == ReceiverDetectedFamily::kNmea ? 20 : 100;
+  result.reason = family == ReceiverDetectedFamily::kUblox
+                      ? "valid_ubx_frame:+100"
+                      : family == ReceiverDetectedFamily::kUnicore
+                            ? "PVTSLNA:+100"
+                            : family == ReceiverDetectedFamily::kNmea
+                                  ? "valid_GGA:+20"
+                                  : "no_data";
+  result.note = result.reason;
+  return result;
+}
 
 std::vector<std::uint8_t> BuildUbxFrame(std::uint8_t class_id,
                                         std::uint8_t message_id,
@@ -85,79 +119,100 @@ std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
   return text;
 }
 
-void TestDryRunDoesNotRequirePort(TestContext& ctx)
+void TestDryRunDoesNotWrite(TestContext& ctx)
 {
   ConfigApplyOptions options;
-  options.vendor = "ublox";
-  options.profile = "rover";
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRover;
 
-  const auto result = PrepareConfigApply(options);
+  MemoryByteDuplex transport({});
+  const auto result = ExecuteConfigApply(transport, options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.dry_run &&
                  !result.execute_requested &&
                  !result.executed &&
                  result.plan.summary.commands_total == 13u,
-             "dry-run config apply should succeed without port or execute flags");
+             "dry-run auto-config apply should succeed without dispatching commands");
+  ctx.Expect(transport.written_bytes().empty(),
+             "dry-run auto-config apply must not write to the transport");
 }
 
-void TestExecuteWithoutConfirmRejected(TestContext& ctx)
+void TestRuntimeOnlyRequiresConfirmation(TestContext& ctx)
 {
   ConfigApplyOptions options;
-  options.vendor = "ublox";
-  options.profile = "rover";
-  options.execute = true;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
 
   const auto result = PrepareConfigApply(options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
                  result.requires_runtime_confirmation &&
                  !result.execution_confirmed &&
-                 result.error_message.find("--confirm-runtime") != std::string::npos,
-             "execute mode should reject runtime plans unless --confirm-runtime is set");
+                 result.error_message.find("--confirm") != std::string::npos,
+             "runtime-only live apply should require explicit operator confirmation");
 }
 
-void TestPersistentWithoutConfirmRejected(TestContext& ctx)
+void TestUnknownReceiverRejected(TestContext& ctx)
 {
   ConfigApplyOptions options;
-  options.vendor = "ublox";
-  options.profile = "rover";
-  options.persistent = true;
-  options.execute = true;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB99", 9600u, ReceiverDetectedFamily::kUnknown);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kUnsupportedReceiver &&
+                 result.plan.unsupported_reason == "no_data",
+             "unknown discovery results should be rejected before any live apply");
+}
+
+void TestNmeaRejected(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kUnsupportedReceiver &&
+                 result.plan.error_message.find("NMEA") != std::string::npos,
+             "generic NMEA receivers should be rejected for auto-config apply");
+}
+
+void TestPersistentGuarded(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.confirm = true;
 
   const auto result = PrepareConfigApply(options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
-                 !result.requires_runtime_confirmation &&
-                 result.requires_persistent_confirmation &&
-                 result.error_message.find("--confirm-persistent") != std::string::npos,
-             "persistent config apply should reject execution without --confirm-persistent");
-}
-
-void TestPlanSafetySummaryCorrect(TestContext& ctx)
-{
-  ConfigApplyOptions options;
-  options.vendor = "unicore";
-  options.profile = "diagnostics";
-  options.persistent = true;
-
-  const auto result = PrepareConfigApply(options);
-
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation &&
-                 result.plan.summary.runtime_commands == 11u &&
-                 result.plan.summary.persistent_commands == 1u,
-             "mixed runtime/persistent plans should surface both confirmation requirements");
+                 result.execution_confirmed &&
+                 result.plan.summary.persistent_commands == 1u &&
+                 result.error_message.find("persistent live apply remains guarded") !=
+                     std::string::npos,
+             "persistent live apply should remain guarded even after confirmation");
 }
 
-void TestUnicoreRuntimeConfirmAccepted(TestContext& ctx)
+void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
 {
   ConfigApplyOptions options;
-  options.vendor = "unicore";
-  options.profile = "rover";
-  options.execute = true;
-  options.confirm_runtime = true;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
   const std::string responses =
@@ -175,18 +230,19 @@ void TestUnicoreRuntimeConfirmAccepted(TestContext& ctx)
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 10u &&
                  result.execution_summary.final_status == "completed",
-             "confirmed runtime Unicore execution should complete against the in-memory duplex");
+             "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
-             "Unicore execution should dispatch command bytes to the transport");
+             "runtime-only Unicore apply should write command bytes to the transport");
 }
 
-void TestUbloxExecuteWithMemoryDuplex(TestContext& ctx)
+void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
 {
   ConfigApplyOptions options;
-  options.vendor = "ublox";
-  options.profile = "rover";
-  options.execute = true;
-  options.confirm_runtime = true;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
   MemoryByteDuplex transport(BuildAckFramesForPlan(prepared));
@@ -199,9 +255,9 @@ void TestUbloxExecuteWithMemoryDuplex(TestContext& ctx)
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 13u &&
                  result.execution_summary.final_status == "completed",
-             "u-blox execution should consume ACK frames and complete through the UBX router path");
+             "confirmed runtime-only u-blox apply should complete through the UBX router path");
   ctx.Expect(!transport.written_bytes().empty(),
-             "u-blox execution should write the generated UBX commands to the transport");
+             "runtime-only u-blox apply should write the planned UBX commands");
 }
 
 }  // namespace
@@ -210,12 +266,13 @@ int main()
 {
   TestContext ctx;
 
-  TestDryRunDoesNotRequirePort(ctx);
-  TestExecuteWithoutConfirmRejected(ctx);
-  TestPersistentWithoutConfirmRejected(ctx);
-  TestPlanSafetySummaryCorrect(ctx);
-  TestUnicoreRuntimeConfirmAccepted(ctx);
-  TestUbloxExecuteWithMemoryDuplex(ctx);
+  TestDryRunDoesNotWrite(ctx);
+  TestRuntimeOnlyRequiresConfirmation(ctx);
+  TestUnknownReceiverRejected(ctx);
+  TestNmeaRejected(ctx);
+  TestPersistentGuarded(ctx);
+  TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUbloxRuntimeApplyStillWorks(ctx);
 
   if (ctx.failures != 0)
   {

@@ -250,6 +250,67 @@ std::string SelectErrorMessage(const ReceiverAutoConfigPlan& plan)
   return "configuration planning failed";
 }
 
+ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& plan)
+{
+  ConfigPlanResult result;
+  result.status = MapPlanStatus(plan.status);
+  result.vendor = ToString(plan.request.receiver_family);
+  result.receiver_family = plan.receiver_family_name;
+  result.profile = universal_gnss_driver::ToString(plan.request.requested_profile);
+  result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
+  result.persistent = plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
+  result.baud = plan.request.config_baud;
+  result.rate_hz = plan.request.rate_hz;
+  result.detected_device = plan.detected_device;
+  result.detected_stable_id = plan.detected_stable_id;
+  result.detected_baud = plan.detected_baud;
+  if (plan.discovery_confidence.has_value())
+  {
+    result.discovery_confidence = universal_gnss_driver::ToString(*plan.discovery_confidence);
+  }
+  result.discovery_score = plan.discovery_score;
+  result.receiver_recognized = plan.validation.receiver_recognized;
+  result.config_supported = plan.validation.config_supported;
+  result.profile_supported = plan.validation.profile_supported;
+  result.apply_mode_supported = plan.validation.apply_mode_supported;
+  result.production_ready = plan.validation.production_ready;
+  result.ready_to_execute = plan.validation.ready_to_execute;
+  result.warnings = plan.warnings;
+  result.rollback_expectation = plan.rollback_expectation.summary;
+  result.unsupported_reason = plan.unsupported_reason;
+  result.error_message = SelectErrorMessage(plan);
+  result.summary.commands_total = plan.validation.generated_command_count;
+  result.summary.runtime_commands = plan.validation.runtime_command_count;
+  result.summary.persistent_commands = plan.validation.persistent_command_count;
+  result.summary.factory_reset_commands = plan.validation.factory_reset_command_count;
+
+  if (plan.status != ReceiverAutoConfigPlanStatus::kOk)
+  {
+    return result;
+  }
+
+  for (const auto& planned_command : plan.commands)
+  {
+    ConfigPlanCommand command;
+    command.command = planned_command;
+    command.payload_bytes = CommandPayloadSize(planned_command);
+    command.description = DescribeProfilePreviewCommand(planned_command);
+    command.dispatch_safe_without_confirmation = HasSafeDispatchApproval(command.command);
+    command.requires_explicit_safety_confirmation =
+        !command.dispatch_safe_without_confirmation;
+
+    if (command.requires_explicit_safety_confirmation)
+    {
+      ++result.summary.commands_requiring_confirmation;
+      result.summary.requires_explicit_safety_confirmation = true;
+    }
+
+    result.commands.push_back(std::move(command));
+  }
+
+  return result;
+}
+
 }  // namespace
 
 ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
@@ -294,56 +355,22 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
 
-  const ReceiverAutoConfigPlan plan = BuildReceiverAutoConfigPlan(request);
-
-  result.status = MapPlanStatus(plan.status);
+  result = BuildConfigPlan(request);
   result.vendor = ToLowerCopy(options.vendor);
-  result.receiver_family = plan.receiver_family_name;
   result.profile = ToLowerCopy(options.profile);
-  result.persistent = options.persistent;
-  result.baud = options.baud;
-  result.rate_hz = options.rate_hz;
-  result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
-  result.receiver_recognized = plan.validation.receiver_recognized;
-  result.config_supported = plan.validation.config_supported;
-  result.profile_supported = plan.validation.profile_supported;
-  result.apply_mode_supported = plan.validation.apply_mode_supported;
-  result.production_ready = plan.validation.production_ready;
-  result.ready_to_execute = plan.validation.ready_to_execute;
-  result.warnings = plan.warnings;
-  result.rollback_expectation = plan.rollback_expectation.summary;
-  result.unsupported_reason = plan.unsupported_reason;
-  result.error_message = SelectErrorMessage(plan);
-  result.summary.commands_total = plan.validation.generated_command_count;
-  result.summary.runtime_commands = plan.validation.runtime_command_count;
-  result.summary.persistent_commands = plan.validation.persistent_command_count;
-  result.summary.factory_reset_commands = plan.validation.factory_reset_command_count;
-
-  if (plan.status != ReceiverAutoConfigPlanStatus::kOk)
-  {
-    return result;
-  }
-
-  for (const auto& planned_command : plan.commands)
-  {
-    ConfigPlanCommand command;
-    command.command = planned_command;
-    command.payload_bytes = CommandPayloadSize(planned_command);
-    command.description = DescribeProfilePreviewCommand(planned_command);
-    command.dispatch_safe_without_confirmation = HasSafeDispatchApproval(command.command);
-    command.requires_explicit_safety_confirmation =
-        !command.dispatch_safe_without_confirmation;
-
-    if (command.requires_explicit_safety_confirmation)
-    {
-      ++result.summary.commands_requiring_confirmation;
-      result.summary.requires_explicit_safety_confirmation = true;
-    }
-
-    result.commands.push_back(std::move(command));
-  }
-
   return result;
+}
+
+ConfigPlanResult BuildConfigPlan(
+    const universal_gnss_driver::ReceiverAutoConfigRequest& request)
+{
+  return BuildConfigPlan(BuildReceiverAutoConfigPlan(request));
+}
+
+ConfigPlanResult BuildConfigPlan(
+    const universal_gnss_driver::ReceiverAutoConfigPlan& plan)
+{
+  return BuildConfigPlanResultFromPlan(plan);
 }
 
 std::string FormatConfigPlanText(const ConfigPlanResult& result)
@@ -359,6 +386,26 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   output << "Profile: " << result.vendor << ' ' << result.profile << "\n";
   output << "Apply mode: " << result.apply_mode << "\n";
   output << "Dry run: yes\n";
+  if (result.detected_device.has_value())
+  {
+    output << "Detected device: " << *result.detected_device << "\n";
+  }
+  if (result.detected_stable_id.has_value())
+  {
+    output << "Detected stable id: " << *result.detected_stable_id << "\n";
+  }
+  if (result.detected_baud.has_value())
+  {
+    output << "Detected baud: " << *result.detected_baud << "\n";
+  }
+  if (result.discovery_confidence.has_value())
+  {
+    output << "Discovery confidence: " << *result.discovery_confidence << "\n";
+  }
+  if (result.discovery_score.has_value())
+  {
+    output << "Discovery score: " << *result.discovery_score << "\n";
+  }
   output << "Safety confirmation required: "
          << (result.summary.requires_explicit_safety_confirmation ? "yes" : "no") << "\n";
   output << "Production ready: " << (result.production_ready ? "yes" : "no") << "\n";
@@ -450,6 +497,58 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   if (result.rate_hz.has_value())
   {
     output << FormatCompactDouble(*result.rate_hz, 6);
+  }
+  else
+  {
+    output << "null";
+  }
+  output << "\n";
+  output << "  },\n";
+  output << "  \"discovery\": {\n";
+  output << "    \"device\": ";
+  if (result.detected_device.has_value())
+  {
+    output << "\"" << EscapeJson(*result.detected_device) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"stable_id\": ";
+  if (result.detected_stable_id.has_value())
+  {
+    output << "\"" << EscapeJson(*result.detected_stable_id) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"baud\": ";
+  if (result.detected_baud.has_value())
+  {
+    output << *result.detected_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"confidence\": ";
+  if (result.discovery_confidence.has_value())
+  {
+    output << "\"" << EscapeJson(*result.discovery_confidence) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"score\": ";
+  if (result.discovery_score.has_value())
+  {
+    output << *result.discovery_score;
   }
   else
   {

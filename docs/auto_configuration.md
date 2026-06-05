@@ -144,7 +144,7 @@ Design consequence:
 
 - dry-run first
 - explicit runtime confirmation
-- explicit persistent confirmation
+- explicit live-write confirmation gates
 - one-command-at-a-time dispatch
 - timeout/retry handling
 - vendor response routing
@@ -397,6 +397,18 @@ Refactor the CLIs so they consume the new driver-level planner:
 - `gnss_config_plan` now consumes the portable planner/report layer
 - `gnss_config_apply` consumes the same shared plan/report object before later
   execution
+
+Implemented in `v0.6-3`:
+
+- `gnss_config_apply` can now discover the receiver when `--receiver auto`,
+  `--family auto`, or `--baud auto` is used
+- the CLI prints the portable plan/report before any live-write decision
+- runtime-only live writes require explicit `--confirm` / `--yes`
+- persistent apply remains guarded in the CLI even when a persistent plan can be
+  generated
+- unknown and generic NMEA receivers are rejected for apply
+- `base` plans are reported, but live execution stays gated when the planner does
+  not mark them ready
 
 ### 5. ROS2 integration
 
