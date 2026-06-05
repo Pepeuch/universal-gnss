@@ -16,8 +16,8 @@ The container is:
 
 ## Files
 
-- [`.devcontainer/devcontainer.json`](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/.devcontainer/devcontainer.json)
-- [`.devcontainer/Dockerfile`](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/.devcontainer/Dockerfile)
+- [`.devcontainer/devcontainer.json`](../.devcontainer/devcontainer.json)
+- [`.devcontainer/Dockerfile`](../.devcontainer/Dockerfile)
 
 ## ROS distribution selection
 
@@ -205,5 +205,5 @@ The devcontainer does not run hardware tests automatically.
 - Lyrical: prepared in the Dockerfile and docs, pending real-image availability
   and explicit validation
 
-See [docs/ros2.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2.md)
+See [ros2.md](ros2.md)
 for the current ROS 2 node surfaces and launch examples.

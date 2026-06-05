@@ -145,7 +145,7 @@ Compatibility notes:
 
 This behavior was validated against a real local caster during the ROS2
 end-to-end audit recorded in
-[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
+[ros2_end_to_end_audit.md](ros2_end_to_end_audit.md).
 
 ## Authentication Policy
 

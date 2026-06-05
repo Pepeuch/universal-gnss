@@ -27,11 +27,14 @@ void PrintUsage(const char* program_name)
       << " [--include-platform-uarts]\n"
       << "Examples:\n"
       << "  " << program_name << '\n'
-      << "  " << program_name << " --path /dev/ttyACM0\n"
+      << "  " << program_name
+      << " --path /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00\n"
       << "  " << program_name << " --json\n"
       << "  " << program_name << " --baud 921600,115200 --allow-nmea\n"
       << "  " << program_name << " --include-platform-uarts\n"
-      << "  " << program_name << " --path /dev/ttyAMA2 --baud 921600\n";
+      << "  " << program_name << " --path /dev/ttyAMA2 --baud 921600\n"
+      << "Notes:\n"
+      << "  stable /dev/serial/by-id/* paths are preferred when available\n";
 }
 
 bool ParseUnsigned32(const std::string& text, std::uint32_t& value)

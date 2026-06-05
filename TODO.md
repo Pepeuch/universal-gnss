@@ -15,6 +15,9 @@ Implemented:
 - stable `/dev/serial/by-id` support and preferred enumeration
 - `gnss_discover` CLI
 - `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
+- Auto Configuration planner/report layer
+- guarded operator-driven runtime-only apply for u-blox and Unicore
+- real F9P and UM982 runtime-only apply validation
 - auto-discovery v2:
   - score-based detection
   - u-blox / Unicore / generic NMEA classification
@@ -29,9 +32,9 @@ Implemented:
 
 ## Next milestone order
 
-1. Auto Configuration
-2. ROS2 Replay Node
-3. Foxglove Surface
+1. ROS2 Replay Node
+2. Foxglove Surface
+3. Auto Configuration ROS2/report extension and arbitration
 4. GUI / Dashboard
 5. ESP32 / Gateway
 6. Quectel
@@ -44,8 +47,8 @@ Implemented:
 - [x] design/audit pass for portable Auto Configuration architecture
 - [x] add a driver-level planner/report layer for discovery-aware dry-run planning
 - [ ] extend the planner/report layer into ROS2
-- [ ] live u-blox configuration transactions
-- [ ] live Unicore configuration transactions
+- [x] live u-blox runtime-only operator configuration transactions
+- [x] live Unicore runtime-only operator configuration transactions
 - [x] make vendor-specific persistence semantics explicit in plan/apply output
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [x] explicit policy for runtime-only vs persistent apply
@@ -153,7 +156,7 @@ Implemented:
 - [ ] contributor architecture guide
 - [ ] parser writing guide
 - [ ] test vector guide
-- [ ] ROS2 integration guide refresh for post-`v0.5` bringup
+- [ ] ROS2 integration guide refresh for post-`v0.6.0` bringup
 - [ ] sanitizer builds
 - [ ] clang-format
 - [ ] clang-tidy

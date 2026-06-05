@@ -1,6 +1,8 @@
 # Auto Configuration Design
 
-This document is the `v0.6-1` design pass for Auto Configuration.
+This document started as the `v0.6-1` design pass for Auto Configuration and
+now also records the later `v0.6.x` implementation and hardware-validation
+outcomes.
 
 Scope of this milestone:
 
@@ -19,12 +21,12 @@ Implemented in `v0.6-2`:
 Still intentionally deferred after `v0.6-2`:
 
 - live ROS2 integration for the planner/report surface
-- automatic receiver writes
+- automatic or unattended receiver writes without explicit operator confirmation
 - read-back verification beyond the current response-routing layer
 
 Out of scope for this milestone:
 
-- adding new live receiver writes
+- adding automatic or unattended live receiver writes
 - adding MowgliNext-specific integration logic
 - bypassing the existing Universal GNSS config/profile layer
 
@@ -416,6 +418,8 @@ Validated in `v0.6-4` on real hardware:
   `/dev/serial/by-id/*` paths at `921600`
 - dry-run planning remained runtime-only for both receivers and reported zero
   persistent commands
+- no live writes were performed during the operator review pass unless
+  `--confirm` or `--yes` was supplied explicitly
 - confirmed runtime-only rover apply completed on the F9P without any
   persistent save/write step
 - UM982 runtime-only rover apply exposed a mixed-stream response-matching gap:

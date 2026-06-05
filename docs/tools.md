@@ -75,7 +75,7 @@ Examples:
 
 ```text
 gnss_discover
-gnss_discover --path /dev/ttyACM0
+gnss_discover --path /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00
 gnss_discover --json
 gnss_discover --baud 921600,115200
 gnss_discover --allow-nmea
@@ -552,6 +552,7 @@ Current behavior:
 - can discover the receiver when `--receiver auto` or `--family auto` is used
 - can probe an explicit device path with `--device`
 - accepts `--baud auto` to reuse discovery-time baud detection for live apply
+- prefers stable `/dev/serial/by-id/*` paths when the operator provides one
 - prints the full plan/report before any live-write decision
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
 - keeps persistent live apply guarded in `v0.6-3`; it reports the plan but does not send the writes
@@ -584,9 +585,9 @@ Current non-goals:
 Examples:
 
 ```text
-gnss_config_apply --receiver auto --profile rover
-gnss_config_apply --receiver auto --device /dev/ttyACM0 --profile rover --apply-mode runtime-only --confirm
-gnss_config_apply --family ublox --device /dev/ttyACM0 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only --confirm
+gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover --apply-mode runtime-only --confirm --timeout-ms 5000
 gnss_config_apply --receiver auto --profile rover --apply-mode persistent
 ```
@@ -638,6 +639,7 @@ Current behavior:
 - opens a serial device path
 - routes bytes into the portable receiver session stack
 - supports explicit `ublox` / `unicore` routing or conservative `auto` mode
+- works best with stable `/dev/serial/by-id/*` paths when those symlinks exist
 - prints compact normalized runtime-state updates as they change
 - prints a final runner/session summary when the process exits normally
 
@@ -658,10 +660,10 @@ Current non-goals:
 Examples:
 
 ```text
-gnss_serial_monitor --port /dev/ttyACM0 --baud 921600 --vendor auto
-gnss_serial_monitor --port /dev/ttyUSB0 --baud 115200 --vendor ublox
-gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor unicore
-gnss_serial_monitor --port /dev/ttyUSB0 --baud 921600 --vendor auto --max-bytes 200000
+gnss_serial_monitor --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor auto
+gnss_serial_monitor --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor ublox
+gnss_serial_monitor --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor unicore
+gnss_serial_monitor --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor auto --max-bytes 200000
 ```
 
 ### `gnss_ntrip_monitor`

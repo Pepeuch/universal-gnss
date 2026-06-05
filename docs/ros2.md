@@ -94,7 +94,7 @@ flowchart TB
 - diagnostic-array projection policy
 - ROS node-facing parameter and publisher policies
 
-See [robot_localization.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/robot_localization.md)
+See [robot_localization.md](robot_localization.md)
 for the first end-to-end example of how `receiver_node` feeds
 `navsat_transform_node` and `ekf_node`.
 
@@ -326,7 +326,7 @@ used for `universal_gnss_ros2` validation in the MowgliNext development image.
 
 For the current runtime-node audit across `ReceiverNode`, `NtripNode`, launch
 files, diagnostics behavior, and manual hardware-smoke procedure, see
-[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
+[ros2_end_to_end_audit.md](ros2_end_to_end_audit.md).
 
 ## Receiver Node
 
@@ -454,7 +454,7 @@ Diagnostic states surfaced by the node include:
 - receiver-side RTCM acceptance when a backend such as u-blox exposes it
 
 The first real ZED-F9P smoke test on `/dev/ttyACM0` is recorded in
-[ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md).
+[ros2_end_to_end_audit.md](ros2_end_to_end_audit.md).
 That audit now includes a runtime-only `gnss_config_apply ublox diagnostics`
 step that temporarily enabled richer USB output (`NAV-SAT`, `NAV-DOP`,
 `MON-HW`, `MON-HW2`, `MON-RF`) for live ROS2 validation without making
@@ -568,7 +568,7 @@ This path has now been validated against:
 - a real Unicore UM982 receiver on `/dev/ttyUSB0` at `921600`
 - a real local NTRIP caster using the legacy `ICY 200 OK` response style
 
-See [ros2_end_to_end_audit.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/ros2_end_to_end_audit.md)
+See [ros2_end_to_end_audit.md](ros2_end_to_end_audit.md)
 for the exact live commands and observed diagnostics.
 
 ### Inputs
@@ -673,10 +673,10 @@ The repository now includes a minimal example stack for:
 
 Files:
 
-- [docs/robot_localization.md](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/docs/robot_localization.md)
-- [examples/robot_localization/ekf.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/ekf.yaml)
-- [examples/robot_localization/navsat_transform.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/navsat_transform.yaml)
-- [examples/robot_localization/robot_localization_example.launch.py](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/robot_localization_example.launch.py)
+- [docs/robot_localization.md](robot_localization.md)
+- [examples/robot_localization/ekf.yaml](../examples/robot_localization/ekf.yaml)
+- [examples/robot_localization/navsat_transform.yaml](../examples/robot_localization/navsat_transform.yaml)
+- [examples/robot_localization/robot_localization_example.launch.py](../examples/robot_localization/robot_localization_example.launch.py)
 
 This example is intentionally conservative:
 

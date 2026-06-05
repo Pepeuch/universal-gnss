@@ -17,7 +17,10 @@ void PrintUsage(const char* program_name)
       << "  " << program_name << " unicore diagnostics\n"
       << "  " << program_name << " ublox rover --persistent\n"
       << "  " << program_name << " ublox rover --rate-hz 5 --baud 921600\n"
-      << "  " << program_name << " unicore rover --json\n";
+      << "  " << program_name << " unicore rover --json\n"
+      << "Notes:\n"
+      << "  dry-run only; no receiver writes are performed\n"
+      << "  --persistent changes the planned storage target only\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)

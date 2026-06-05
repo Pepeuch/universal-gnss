@@ -32,6 +32,24 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
+## v0.6.0 Release Status
+
+`v0.6.0` is the first release posture with:
+
+- Auto Discovery v2
+- Auto Configuration dry-run planning
+- operator-driven runtime-only receiver apply for supported families
+
+Current release guidance:
+
+- live receiver writes do not occur unless `gnss_config_apply` is given
+  explicit `--confirm` or `--yes`
+- persistent apply is guarded and is not the default workflow
+- stable `/dev/serial/by-id/*` paths are recommended over transient
+  `/dev/ttyACM*` and `/dev/ttyUSB*` names whenever they exist
+- UM982 runtime-only live apply should use an operator timeout around
+  `--timeout-ms 5000`
+
 ## Goals
 
 - Provide a portable GNSS core independent from ROS 2.
@@ -84,7 +102,7 @@ Current implemented layers:
   - `gnss_replay` CLI for semantic offline runtime replay
   - `gnss_profile_preview` CLI for offline receiver command/profile review
   - `gnss_config_plan` CLI for dry-run receiver config application planning
-  - `gnss_config_apply` CLI for guarded live receiver config application
+  - `gnss_config_apply` CLI for guarded operator-driven receiver config application
   - `gnss_serial_monitor` CLI for live Linux serial monitoring
   - `gnss_ntrip_monitor` CLI for live NTRIP caster testing
 - `gnss_ros2`

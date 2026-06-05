@@ -172,6 +172,8 @@ Current policy:
 - keep the API synchronous and minimal
 - allow optional nonblocking or read-timeout configuration
 - use pseudo-terminal tests so no real GNSS hardware is required
+- opening a transport must not perform any receiver configuration writes by
+  itself; guarded live apply remains an explicit higher-layer action
 
 ### Stable serial device paths
 

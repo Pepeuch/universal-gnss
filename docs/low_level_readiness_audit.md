@@ -1,15 +1,17 @@
 # Low-Level Readiness Audit
 
-This document is the final low-level stabilization audit before the ROS2 phase.
+This document records the final low-level stabilization audit from the period
+before ROS2 integration began.
 
 It answers one question:
 
-Is the portable non-ROS2 stack ready to stop adding foundational protocol and
-transport work, tag `v0.4`, and move into ROS2 receiver-node integration?
+At the time, the question was whether the portable non-ROS2 stack was ready to
+stop adding foundational protocol and transport work, tag `v0.4`, and begin
+ROS2 receiver-node integration.
 
 ## Verdict
 
-Verdict: ready for the ROS2 phase.
+Historical verdict: ready for the ROS2 phase.
 
 The current low-level stack is coherent across:
 
@@ -202,11 +204,17 @@ These remain intentionally deferred and do not block the ROS2 phase:
 - generic speed/course runtime contract for `VTG`
 - generic GNSS wall-clock/date runtime contract for `ZDA`
 
-## Release Recommendation
+## Historical Release Recommendation
 
-Recommended next step:
+This recommendation was accurate for the earlier low-level-only audit that
+preceded ROS2 integration and Auto Configuration work. It is now superseded by
+the release posture documented in [`ROADMAP.md`](../ROADMAP.md) and the
+runtime-only operator workflow documented in
+[`auto_configuration.md`](auto_configuration.md).
+
+At the time of this audit, the recommended next step was:
 
 - tag the current low-level stack as `v0.4`
-- treat ROS2 integration as the next major active phase
+- begin ROS2 receiver-node integration work
 - avoid taking on broad new low-level vendor/protocol work until the first ROS2
   receiver-node path lands

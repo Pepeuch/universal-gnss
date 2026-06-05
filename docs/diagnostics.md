@@ -61,6 +61,10 @@ This model is intended to be reused by:
 - NTRIP and RTCM work emitting correction health and stale-data events
 - offline tools surfacing reusable health summaries without ROS 2
 
+Configuration-category diagnostics are intended for operator-driven config
+review/apply workflows. They should report the result of an explicit operator
+action, not imply that background or automatic receiver writes are happening.
+
 The first protocol-side consumer is the RTCM correction monitor in
 `gnss_protocols`. It uses these portable events to report correction-stream
 health as:

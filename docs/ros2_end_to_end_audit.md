@@ -265,7 +265,7 @@ Tested:
 Read-only probe used:
 
 ```bash
-/tmp/ug-build/gnss_serial_monitor \
+./build/gnss_tools/gnss_serial_monitor \
   --port /dev/ttyACM0 \
   --baud <baud> \
   --vendor ublox \
@@ -319,9 +319,9 @@ The first real-hardware pass exposed one low-level configuration gap:
 
 Fix applied:
 
-- [gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp:1)
+- [gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp](../gnss_protocols/include/universal_gnss_protocols/ubx_cfg_builder.hpp)
   now includes the documented USB `CFG-MSGOUT-*` keys used in this audit
-- [gnss_driver/src/ublox_config_profile_builder.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/src/ublox_config_profile_builder.cpp:1)
+- [gnss_driver/src/ublox_config_profile_builder.cpp](../gnss_driver/src/ublox_config_profile_builder.cpp)
   now emits both `UART1` and `USB` output-rate commands for the rover, base,
   and diagnostics helpers
 - the affected u-blox config/profile tests were updated accordingly
@@ -456,10 +456,10 @@ The first live run revealed one ROS2 bug:
 
 Fix applied:
 
-- [gnss_ros2/src/receiver_node.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_ros2/src/receiver_node.cpp:602)
+- [gnss_ros2/src/receiver_node.cpp](../gnss_ros2/src/receiver_node.cpp)
   now stamps outgoing live publications with `node->now()` when the runtime
   sample has no timestamp
-- [gnss_ros2/tests/test_receiver_node.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_ros2/tests/test_receiver_node.cpp:167)
+- [gnss_ros2/tests/test_receiver_node.cpp](../gnss_ros2/tests/test_receiver_node.cpp)
   now asserts non-zero stamps for `fix`, `status`, and `diagnostics`
 
 One false intermediate reading came from a stale older `receiver_node` process
@@ -531,11 +531,11 @@ Root cause:
 
 Fix applied:
 
-- [gnss_driver/src/unicore_session.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/src/unicore_session.cpp:1)
+- [gnss_driver/src/unicore_session.cpp](../gnss_driver/src/unicore_session.cpp)
   now suppresses one startup resynchronization malformed event separately for
   the ASCII and binary framers until each framer has seen its first valid
   record
-- [gnss_driver/tests/test_unicore_session.cpp](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/gnss_driver/tests/test_unicore_session.cpp:1)
+- [gnss_driver/tests/test_unicore_session.cpp](../gnss_driver/tests/test_unicore_session.cpp)
   now covers startup invalid-binary suppression, startup ASCII overflow
   suppression, and the unchanged post-sync/finalize malformed behavior
 
@@ -914,7 +914,7 @@ discovery layer also supports:
 Onboard UART scanning stays opt-in because those ports may belong to serial
 console, Bluetooth, or unrelated peripherals.
 
-## Remaining Blockers Before A `v0.5` Tag
+## Remaining ROS2 Packaging Blockers Beyond `v0.6.0`
 
 - generic-NMEA ROS2 hardware smoke test is still pending
 - no ROS2 replay node yet

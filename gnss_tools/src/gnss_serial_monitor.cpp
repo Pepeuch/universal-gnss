@@ -40,10 +40,16 @@ void PrintUsage(const char* program_name)
       << " --port <path> --baud <int> [--vendor auto|ublox|unicore|nmea]"
       << " [--chunk-size <bytes>] [--max-bytes <bytes>] [--summary] [--json]\n"
       << "Examples:\n"
-      << "  " << program_name << " --port /dev/ttyACM0 --baud 921600 --vendor auto\n"
-      << "  " << program_name << " --port /dev/ttyUSB0 --baud 115200 --vendor ublox\n"
-      << "  " << program_name << " --port /dev/ttyUSB0 --baud 921600 --vendor unicore\n"
-      << "  " << program_name << " --port /dev/ttyUSB0 --baud 115200 --vendor nmea\n";
+      << "  " << program_name
+      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor auto\n"
+      << "  " << program_name
+      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor ublox\n"
+      << "  " << program_name
+      << " --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor unicore\n"
+      << "  " << program_name
+      << " --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor auto --max-bytes 200000\n"
+      << "Notes:\n"
+      << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::size_t& value)

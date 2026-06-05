@@ -11,9 +11,12 @@
   "remoteUser": "root",
   "containerUser": "root",
   "workspaceFolder": "/workspaces/universal-gnss",
-  "runArgs": [
-    "--init"
-  ],
+ "runArgs": [
+  "--init",
+  "--privileged",
+  "-v",
+  "/dev:/dev"
+],
   "containerEnv": {
     "COLCON_HOME": "/tmp/.colcon"
   },
@@ -25,6 +28,7 @@
         "terminal.integrated.defaultProfile.linux": "bash"
       },
       "extensions": [
+        "openai.chatgpt",
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools",
         "ms-python.python",

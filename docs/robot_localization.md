@@ -82,9 +82,9 @@ Assumptions:
 
 The repository includes:
 
-- [examples/robot_localization/ekf.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/ekf.yaml)
-- [examples/robot_localization/navsat_transform.yaml](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/navsat_transform.yaml)
-- [examples/robot_localization/robot_localization_example.launch.py](/home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/robot_localization_example.launch.py)
+- [examples/robot_localization/ekf.yaml](../examples/robot_localization/ekf.yaml)
+- [examples/robot_localization/navsat_transform.yaml](../examples/robot_localization/navsat_transform.yaml)
+- [examples/robot_localization/robot_localization_example.launch.py](../examples/robot_localization/robot_localization_example.launch.py)
 
 These are examples, not production defaults.
 
@@ -160,7 +160,7 @@ Build the ROS 2 package set, then launch the receiver node and
 `robot_localization` example together:
 
 ```bash
-ros2 launch /home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/robot_localization_example.launch.py \
+ros2 launch examples/robot_localization/robot_localization_example.launch.py \
   serial_device:=/dev/ttyACM0 \
   serial_baud:=921600 \
   receiver_family:=unicore
@@ -169,7 +169,7 @@ ros2 launch /home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robo
 For a u-blox receiver:
 
 ```bash
-ros2 launch /home/pepeuch/Documents/vscode/tondeuse/universal-gnss/examples/robot_localization/robot_localization_example.launch.py \
+ros2 launch examples/robot_localization/robot_localization_example.launch.py \
   serial_device:=/dev/ttyUSB0 \
   serial_baud:=115200 \
   receiver_family:=ublox

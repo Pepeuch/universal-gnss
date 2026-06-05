@@ -4,10 +4,10 @@
 
 Universal GNSS is no longer in the "next phase is ROS2" posture.
 
-The project now has a working ROS2-integrated stack and is ready for a `v0.5`
-tag once the planning/docs pass is synchronized.
+The project now has a working ROS2-integrated stack and is ready for a
+defensible `v0.6.0` tag once release docs and test results stay synchronized.
 
-That current `v0.5` posture covers:
+That current `v0.6.0` posture covers:
 
 - portable runtime state, aggregation, diagnostics, and health summary
 - NMEA, UBX/u-blox, Unicore ASCII, Unicore binary `N4`, and RTCM3 protocol work
@@ -20,12 +20,18 @@ That current `v0.5` posture covers:
 - live RTCM forwarding and receiver-side correction diagnostics
 - serial auto-discovery with stable `/dev/serial/by-id` preference
 - score-based auto-discovery hardening for vendor detection and serial noise rejection
+- Auto Configuration planner/report coverage
+- guarded operator-driven runtime-only apply
+- explicit confirmation gating for live writes
+- persistent apply guarded out of the default workflow
+- real F9P and UM982 runtime-only apply validation
+- UM982 live apply timeout guidance around `5000 ms`
 - real ZED-F9P and UM982 validation on ROS2 Kilted
 - local NTRIP caster validation
 - MowgliNext migration validation with fixes kept portable in Universal GNSS
 
-The next major phase is operator-facing bringup and observability, not more
-foundational ROS2 or low-level churn.
+The next major phase after `v0.6.0` is replay/observability and ROS2 packaging
+hardening, not more foundational ROS2 or low-level churn.
 
 ## v0.1 — Portable Core And Protocol Base
 
@@ -149,7 +155,7 @@ Phase verdict:
 
 ## v0.6 — Operational Bringup
 
-Planned scope:
+Implemented and validated scope:
 
 - Auto Configuration
   - `v0.6-1` design pass completed:
@@ -169,16 +175,19 @@ Planned scope:
     - required explicit operator confirmation for runtime-only live writes
     - kept persistent live apply guarded while still surfacing plan warnings and
       manual rollback expectations
-  - implementation should reuse the existing guarded apply path instead of
-    creating a second live-write mechanism
-  - safe live configuration transactions for u-blox and Unicore
-  - extend the portable planner, validation report, and rollback expectations
-    into ROS2
-  - guarded runtime/persistent apply workflows
-  - explicit vendor-specific persistence semantics in reports
-  - post-discovery configuration policy
-  - keep `base` architected, but gate live base orchestration until the vendor
-    config/profile layer is complete
+  - `v0.6-4` runtime-only hardware validation completed:
+    - confirmed runtime-only rover apply on the F9P
+    - confirmed runtime-only rover apply on the UM982
+    - verified that no persistent write/save path was used
+    - validated stable `/dev/serial/by-id/*` device targeting
+    - captured and fixed a mixed-stream Unicore response-matching gap
+    - documented UM982 operator timeout guidance around `--timeout-ms 5000`
+  - implementation reuses the existing guarded apply path instead of creating a
+    second live-write mechanism
+  - vendor-specific persistence semantics are explicit in plan/apply output
+  - post-discovery configuration policy is implemented for operator-driven use
+  - `base` remains architected, but live base orchestration stays gated until
+    the vendor config/profile layer is complete
 - ROS2 Replay Node
   - replay saved UBX / NMEA / Unicore / RTCM logs through ROS2 topics
   - support regression, demos, and hardware-free bringup
@@ -194,6 +203,12 @@ Out of scope for `v0.6`:
 - full custom GUI
 - ESP32 / gateway work
 - new receiver vendors
+
+Release verdict:
+
+- ready for `v0.6.0`
+- persistent apply remains intentionally guarded beyond the default release
+  workflow
 
 ## v0.7 — GUI / Dashboard
 

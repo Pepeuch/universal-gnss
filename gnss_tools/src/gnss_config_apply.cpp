@@ -44,13 +44,18 @@ void PrintUsage(const char* program_name)
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
       << "                --confirm-persistent, and positional <family> <profile>\n"
       << "Examples:\n"
-      << "  " << program_name << " --receiver auto --profile rover\n"
       << "  " << program_name
-      << " --receiver auto --device /dev/ttyACM0 --profile rover --apply-mode runtime-only --confirm\n"
+      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only\n"
       << "  " << program_name
-      << " --family ublox --device /dev/ttyACM0 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm\n"
+      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only --confirm\n"
       << "  " << program_name
-      << " --receiver auto --profile rover --apply-mode persistent\n";
+      << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover --apply-mode runtime-only --confirm --timeout-ms 5000\n"
+      << "  " << program_name
+      << " --receiver auto --profile rover --apply-mode persistent\n"
+      << "Notes:\n"
+      << "  no live writes occur unless --confirm or --yes is present\n"
+      << "  persistent mode remains guarded and is not the default workflow\n"
+      << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)
