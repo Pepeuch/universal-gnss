@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <optional>
 #include <utility>
 
 namespace universal_gnss_driver
@@ -81,6 +82,33 @@ std::string ToLowerAscii(std::string_view text)
     lower.push_back(static_cast<char>(std::tolower(c)));
   }
   return lower;
+}
+
+std::string_view TrimLeadingResponseNoise(std::string_view line)
+{
+  std::optional<std::size_t> best_pos{};
+  auto update_best = [&](const std::size_t pos) {
+    if (pos == std::string_view::npos || pos == 0u)
+    {
+      return;
+    }
+    if (!best_pos.has_value() || pos < *best_pos)
+    {
+      best_pos = pos;
+    }
+  };
+
+  update_best(line.find("$command,"));
+  update_best(line.find("<OK"));
+  update_best(line.find("#VERSIONA"));
+
+  const std::string lower = ToLowerAscii(line);
+  for (const char* hint : kNegativeResponseHints)
+  {
+    update_best(lower.find(hint));
+  }
+
+  return best_pos.has_value() ? line.substr(*best_pos) : line;
 }
 
 bool IsPrintableAsciiText(std::string_view text)
@@ -164,38 +192,40 @@ bool UnicoreResponseRouter::ProcessLine(
   ++metrics_.lines_seen;
 
   const std::string trimmed = TrimLineEnding(line);
-  if (trimmed.empty() || !IsPrintableAsciiText(trimmed))
+  const std::string normalized =
+      std::string(TrimLeadingResponseNoise(std::string_view(trimmed)));
+  if (normalized.empty() || !IsPrintableAsciiText(normalized))
   {
     ++metrics_.malformed_lines;
     return false;
   }
 
-  if (MatchesNegativeResponse(trimmed))
+  if (MatchesNegativeResponse(normalized))
   {
     queued_responses_.push_back(
-        BuildResponse(ReceiverCommandResponseKind::kTextError, timestamp_ns, trimmed));
+        BuildResponse(ReceiverCommandResponseKind::kTextError, timestamp_ns, normalized));
     ++metrics_.error_responses_seen;
     ++metrics_.responses_generated;
     return true;
   }
 
-  if (MatchesOkResponse(trimmed) || MatchesCommandAcceptedResponse(trimmed) ||
-      MatchesVersionResponse(trimmed))
+  if (MatchesOkResponse(normalized) || MatchesCommandAcceptedResponse(normalized) ||
+      MatchesVersionResponse(normalized))
   {
     queued_responses_.push_back(
-        BuildResponse(ReceiverCommandResponseKind::kTextOk, timestamp_ns, trimmed));
+        BuildResponse(ReceiverCommandResponseKind::kTextOk, timestamp_ns, normalized));
     ++metrics_.ok_responses_seen;
     ++metrics_.responses_generated;
     return true;
   }
 
-  if (StartsWith(trimmed, "$command,") || StartsWith(trimmed, "<"))
+  if (StartsWith(normalized, "$command,") || StartsWith(normalized, "<"))
   {
     ++metrics_.malformed_lines;
     return false;
   }
 
-  if (IsIgnoredTelemetryLine(trimmed) || StartsWith(trimmed, "#"))
+  if (IsIgnoredTelemetryLine(normalized) || StartsWith(normalized, "#"))
   {
     ++metrics_.ignored_lines;
     return false;

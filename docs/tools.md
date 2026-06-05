@@ -559,6 +559,9 @@ Current behavior:
 - warns when the `base` profile is not production-ready for live execution
 - executes one command at a time over a Linux serial port
 - waits synchronously for one matching response at a time
+- on mixed Unicore binary/ASCII streams, resynchronizes to recognized
+  `$command,...,response: OK*` tokens even when prefix noise shares the same
+  buffered line
 - supports a simple per-command `--timeout-ms` loop without threads
 - stops on the first rejected command, dispatch failure, read failure, or timeout
 
@@ -584,8 +587,21 @@ Examples:
 gnss_config_apply --receiver auto --profile rover
 gnss_config_apply --receiver auto --device /dev/ttyACM0 --profile rover --apply-mode runtime-only --confirm
 gnss_config_apply --family ublox --device /dev/ttyACM0 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover --apply-mode runtime-only --confirm --timeout-ms 5000
 gnss_config_apply --receiver auto --profile rover --apply-mode persistent
 ```
+
+Hardware notes from the `v0.6-4` operator validation pass:
+
+- a u-blox F9P at `921600` completed the runtime-only rover apply with the
+  default `1000 ms` timeout budget
+- a Unicore UM982 at `921600` completed the same runtime-only rover apply after
+  the mixed-stream response-router fix above, using `--timeout-ms 5000`
+- the UM982 rover profile enables `RTCMSTATUSA ONCHANGED`; short read-only
+  captures may therefore show the accepted apply response but still not show an
+  emitted `RTCMSTATUSA` record until receiver-side correction state changes
+- persistent apply and any save-to-flash workflow remain intentionally guarded
+  out of this CLI path
 
 Text output includes:
 

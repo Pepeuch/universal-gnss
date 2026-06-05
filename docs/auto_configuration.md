@@ -410,6 +410,26 @@ Implemented in `v0.6-3`:
 - `base` plans are reported, but live execution stays gated when the planner does
   not mark them ready
 
+Validated in `v0.6-4` on real hardware:
+
+- discovery cleanly identified a u-blox F9P and a Unicore UM982 from stable
+  `/dev/serial/by-id/*` paths at `921600`
+- dry-run planning remained runtime-only for both receivers and reported zero
+  persistent commands
+- confirmed runtime-only rover apply completed on the F9P without any
+  persistent save/write step
+- UM982 runtime-only rover apply exposed a mixed-stream response-matching gap:
+  valid `$command,...,response: OK*` acknowledgements can appear with binary or
+  printable prefix noise on the same buffered line
+- the Unicore response router was tightened to resynchronize on recognized
+  response tokens inside mixed binary/ASCII lines
+- after that router fix, confirmed UM982 runtime-only rover apply completed with
+  `--timeout-ms 5000`
+- short passive post-apply captures still may not show `RTCMSTATUSA` because
+  the portable rover helper enables it with `ONCHANGED` semantics rather than a
+  fixed periodic rate
+- persistent apply remains intentionally out of scope for this validation pass
+
 ### 5. ROS2 integration
 
 ROS2 should not invent its own vendor config logic.
