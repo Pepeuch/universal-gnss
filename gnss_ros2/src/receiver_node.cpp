@@ -1214,6 +1214,61 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
+  void AppendParserStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/parser_counters";
+    status.hardware_id = hardware_id_;
+
+    const auto& session_metrics = session_->metrics();
+    if (session_metrics.malformed_records > 0u)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "Parser anomalies observed";
+    }
+    else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "Parser healthy";
+    }
+
+    status.values.push_back(MakeKeyValue(
+        "selected_session",
+        session_metrics.selected_session_kind.has_value()
+            ? universal_gnss_driver::ToString(*session_metrics.selected_session_kind)
+            : "undecided"));
+    status.values.push_back(MakeKeyValue(
+        "malformed_records_total", std::to_string(session_metrics.malformed_records)));
+    status.values.push_back(MakeKeyValue(
+        "unknown_records_total", std::to_string(session_metrics.unknown_records)));
+    status.values.push_back(MakeKeyValue(
+        "runtime_updates", std::to_string(session_metrics.runtime_updates)));
+
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
+    {
+      status.values.push_back(
+          MakeKeyValue("unicore_lines_seen", std::to_string(unicore_metrics->lines_seen)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_ascii_records_seen",
+          std::to_string(unicore_metrics->ascii_records_seen)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_binary_frames_seen",
+          std::to_string(unicore_metrics->binary_frames_seen)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_records_parsed", std::to_string(unicore_metrics->records_parsed)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_records_rejected", std::to_string(unicore_metrics->records_rejected)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_malformed_lines", std::to_string(unicore_metrics->malformed_lines)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_malformed_frames", std::to_string(unicore_metrics->malformed_frames)));
+      status.values.push_back(MakeKeyValue(
+          "unicore_unknown_records", std::to_string(unicore_metrics->unknown_records)));
+    }
+
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void PublishNow()
   {
     auto state = session_->current_state();
@@ -1235,6 +1290,7 @@ struct ReceiverNode::Impl
     last_diagnostics_message_->header.frame_id = config_.frame_id;
     AppendDiscoveryStatus(*last_diagnostics_message_);
     AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
+    AppendParserStatus(*last_diagnostics_message_);
 
     if (CanPublishFixMessage(state))
     {

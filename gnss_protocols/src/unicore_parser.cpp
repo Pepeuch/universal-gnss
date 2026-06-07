@@ -100,6 +100,17 @@ bool TryParseUnsigned(std::string_view text, unsigned int& value)
   return true;
 }
 
+bool LooksUnsignedIntegerField(std::string_view text)
+{
+  text = TrimField(text);
+  if (text.empty())
+  {
+    return false;
+  }
+
+  return text.find_first_of(".eE") == std::string_view::npos;
+}
+
 bool TryParseUnsignedAutoBase(std::string_view text, unsigned int& value)
 {
   text = TrimField(text);
@@ -1222,14 +1233,40 @@ ParserResult<UnicoreBestNavRecord> ParseUnicoreBestNav(const UnicoreFrame& frame
       ParseOptionalFloat(fields[7], record.latitude_std_m) == OptionalFieldStatus::kInvalid ||
       ParseOptionalFloat(fields[8], record.longitude_std_m) == OptionalFieldStatus::kInvalid ||
       ParseOptionalFloat(fields[9], record.altitude_std_m) == OptionalFieldStatus::kInvalid ||
-      ParseOptionalFloat(fields[11], record.diff_age_s) == OptionalFieldStatus::kInvalid ||
-      ParseOptionalFloat(fields[12], record.solution_age_s) == OptionalFieldStatus::kInvalid ||
-      ParseOptionalUnsigned16(fields[13], record.tracked_satellites) ==
-          OptionalFieldStatus::kInvalid ||
-      ParseOptionalUnsigned16(fields[14], record.used_satellites) ==
-          OptionalFieldStatus::kInvalid)
+      ParseOptionalFloat(fields[11], record.diff_age_s) == OptionalFieldStatus::kInvalid)
+   {
+     return InvalidResult<UnicoreBestNavRecord>();
+   }
+
+  const bool has_shifted_um98x_satellite_tail =
+      field_count > 21u &&
+      LooksUnsignedIntegerField(fields[12]) &&
+      LooksUnsignedIntegerField(fields[13]) &&
+      ParseSolutionStatus(fields[20]) != UnicoreSolutionStatus::kUnknown &&
+      ParsePositionType(fields[21]) != UnicorePositionType::kUnknown;
+
+  if (has_shifted_um98x_satellite_tail)
   {
-    return InvalidResult<UnicoreBestNavRecord>();
+    record.solution_age_s.reset();
+    if (ParseOptionalUnsigned16(fields[12], record.tracked_satellites) ==
+            OptionalFieldStatus::kInvalid ||
+        ParseOptionalUnsigned16(fields[13], record.used_satellites) ==
+            OptionalFieldStatus::kInvalid)
+    {
+      return InvalidResult<UnicoreBestNavRecord>();
+    }
+  }
+  else
+  {
+    if (ParseOptionalFloat(fields[12], record.solution_age_s) ==
+            OptionalFieldStatus::kInvalid ||
+        ParseOptionalUnsigned16(fields[13], record.tracked_satellites) ==
+            OptionalFieldStatus::kInvalid ||
+        ParseOptionalUnsigned16(fields[14], record.used_satellites) ==
+            OptionalFieldStatus::kInvalid)
+    {
+      return InvalidResult<UnicoreBestNavRecord>();
+    }
   }
 
   return ParserResult<UnicoreBestNavRecord>::RecordReady(record);

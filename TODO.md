@@ -41,6 +41,40 @@ Implemented:
 5. Quectel
 6. Septentrio
 
+## Post-v0.6 — MowgliNext Validation
+
+### Integration Validation
+
+- [ ] Validate Universal GNSS → navsat_to_absolute_pose
+- [ ] Validate Universal GNSS → localization_monitor
+- [ ] Validate Universal GNSS → Nav2
+- [ ] Validate Universal GNSS → mower bringup stack
+
+### Runtime Validation
+
+- [ ] 30 min continuous runtime test
+- [ ] 1 h continuous runtime test
+- [ ] 2 h continuous runtime test
+- [ ] Monitor memory usage
+- [ ] Monitor CPU usage
+- [ ] Monitor diagnostics stability
+
+### Fault Injection
+
+- [ ] GNSS disconnect / reconnect test
+- [ ] NTRIP disconnect / reconnect test
+- [ ] Receiver restart test
+- [ ] USB serial port renumbering test
+- [ ] F9P ↔ UM982 swap without software changes
+
+### Navigation Validation
+
+- [ ] Static accuracy validation
+- [ ] Short waypoint mission
+- [ ] Long waypoint mission
+- [ ] Full Nav2 mission validation
+- [ ] Verify localization stability during RTK Float/Fixed transitions
+
 ## v0.6 — Operational Bringup
 
 ### Auto Configuration
@@ -93,6 +127,10 @@ Implemented:
 
 ### Transport / NTRIP
 
+- [ ] TLS (ssl)
+- [ ] Client certificate authentication
+- [ ] Custom CA certificate support
+- [ ] RTCM ROS message package selection (rtcm_msgs / mavros_msgs)
 - [ ] UDP transport
 - [ ] TLS adapter/support
 - [ ] correction age estimation
