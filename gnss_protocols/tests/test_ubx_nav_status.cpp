@@ -201,6 +201,11 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
                  !HasValueAvailable(no_carrier_state, GnssCapability::kRtkMode) &&
                  !no_carrier_state.rtk_mode.has_value(),
              "missing carrSoln validity should leave RTK mode supported but unknown");
+  ctx.Expect(HasValueAvailable(no_carrier_state, GnssCapability::kDifferentialCorrections) &&
+                 HasValueAvailable(no_carrier_state, GnssCapability::kCorrectionsActive) &&
+                 no_carrier_state.differential_corrections == std::optional<bool>(true) &&
+                 no_carrier_state.corrections_active == std::optional<bool>(true),
+             "explicit diffSoln should expose known true correction state even without carrSoln");
   ctx.Expect(!HasCapability(no_carrier_state, GnssCapability::kHorizontalAccuracy) &&
                  !HasCapability(no_carrier_state, GnssCapability::kSatellitesUsed) &&
                  !HasCapability(no_carrier_state, GnssCapability::kInterferenceState),
@@ -225,6 +230,9 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   ctx.Expect(fixed_state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
                  HasValueAvailable(fixed_state, GnssCapability::kRtkMode),
              "valid carrier solution 2 should map to RTK fixed");
+  ctx.Expect(fixed_state.differential_corrections == std::optional<bool>(true) &&
+                 fixed_state.corrections_active == std::optional<bool>(true),
+             "diffSoln should mark the solution as known corrected and active");
   ctx.Expect(!fixed_state.latitude_deg.has_value() && !fixed_state.horizontal_accuracy_m.has_value(),
              "NAV-STATUS should not invent position or accuracy values");
   ctx.Expect(!HasCapability(fixed_state, GnssCapability::kMeanCn0) &&
@@ -247,6 +255,9 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   ctx.Expect(!dead_reckoning_state.fix_valid &&
                  dead_reckoning_state.fix_type == GnssFixType::kDeadReckoning,
              "gpsFix=dead reckoning should map conservatively");
+  ctx.Expect(dead_reckoning_state.differential_corrections == std::optional<bool>(false) &&
+                 dead_reckoning_state.corrections_active == std::optional<bool>(false),
+             "cleared diffSoln should expose known false correction state");
 }
 
 }  // namespace

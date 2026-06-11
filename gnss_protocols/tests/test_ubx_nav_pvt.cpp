@@ -191,6 +191,9 @@ void TestRtkFloatAndFixedMapping(TestContext& ctx)
   ctx.Expect(float_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
                                      universal_gnss::GnssRtkMode::kFloat),
              "carrier solution 1 should map to RTK float");
+  ctx.Expect(float_state.differential_corrections == std::optional<bool>(false) &&
+                 float_state.corrections_active == std::optional<bool>(false),
+             "carrier-solution-only RTK mode should not invent corrected-solution state");
 
   auto fixed_payload = MakeNavPvtPayload();
   fixed_payload[21u] = static_cast<std::uint8_t>(0x01u | (2u << 6));
@@ -208,6 +211,9 @@ void TestRtkFloatAndFixedMapping(TestContext& ctx)
              "carrier solution 2 should map to RTK fixed");
   ctx.Expect(fixed_state.fix_type == GnssFixType::kFix,
              "carrier solution should not replace the generic fix type mapping");
+  ctx.Expect(fixed_state.differential_corrections == std::optional<bool>(false) &&
+                 fixed_state.corrections_active == std::optional<bool>(false),
+             "carrier-solution-only RTK mode should keep corrected-solution state false");
 }
 
 void TestNoFixMapping(TestContext& ctx)
@@ -232,6 +238,9 @@ void TestNoFixMapping(TestContext& ctx)
   ctx.Expect(state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
                                    universal_gnss::GnssRtkMode::kNone),
              "no carrier solution should map to explicit RTK none");
+  ctx.Expect(state.differential_corrections == std::optional<bool>(false) &&
+                 state.corrections_active == std::optional<bool>(false),
+             "cleared diffSoln should expose known false correction state");
 }
 
 void TestMalformedOrWrongFrames(TestContext& ctx)
@@ -277,12 +286,14 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
   ctx.Expect(HasCapability(state, GnssCapability::kRtkMode) &&
                  HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
                  HasCapability(state, GnssCapability::kVerticalAccuracy) &&
-                 HasCapability(state, GnssCapability::kSatellitesUsed),
+                 HasCapability(state, GnssCapability::kSatellitesUsed) &&
+                 HasCapability(state, GnssCapability::kHeadingAccuracy),
              "runtime mapping should advertise supported NAV-PVT optional fields");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kRtkMode) &&
                  HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
                  HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
-                 HasValueAvailable(state, GnssCapability::kSatellitesUsed),
+                 HasValueAvailable(state, GnssCapability::kSatellitesUsed) &&
+                 HasValueAvailable(state, GnssCapability::kHeadingAccuracy),
              "runtime mapping should expose present NAV-PVT optional values");
   ctx.Expect(state.horizontal_accuracy_m == std::optional<float>(0.25f) &&
                  state.vertical_accuracy_m == std::optional<float>(0.5f) &&
@@ -290,8 +301,10 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
              "runtime mapping should convert accuracy and numSV");
   ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
                  HasValueAvailable(state, GnssCapability::kHeading) &&
-                 state.heading_deg.has_value() && NearlyEqual(*state.heading_deg, 123.45678),
-             "runtime mapping should expose heading only when headVehValid is set");
+                 state.heading_deg.has_value() && NearlyEqual(*state.heading_deg, 123.45678) &&
+                 state.heading_accuracy_deg.has_value() &&
+                 NearlyEqual(*state.heading_accuracy_deg, 0.05),
+             "runtime mapping should expose heading and heading accuracy only when headVehValid is set");
 }
 
 }  // namespace

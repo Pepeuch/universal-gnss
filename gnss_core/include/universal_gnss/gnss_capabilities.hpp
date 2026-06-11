@@ -25,6 +25,9 @@ enum class GnssCapability : GnssCapabilityFlags
   kDualAntennaHeading = 1u << 12,
   kInterferenceState = 1u << 13,
   kJammingState = 1u << 14,
+  kHeadingAccuracy = 1u << 15,
+  kDifferentialCorrections = 1u << 16,
+  kCorrectionsActive = 1u << 17,
 };
 
 static_assert(std::is_same<std::underlying_type<GnssCapability>::type, GnssCapabilityFlags>::value,

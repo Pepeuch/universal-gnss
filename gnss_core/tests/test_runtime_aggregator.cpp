@@ -228,6 +228,24 @@ void TestNoInventedRtkOrRfFields(TestContext& ctx)
              "aggregator should not invent jamming state");
 }
 
+void TestKnownFalseBooleanStateSurvivesAggregation(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+
+  GnssRuntimeState update;
+  update.timestamp_ns = 100;
+  SetCapability(update, GnssCapability::kCorrectionsActive);
+  SetOptionalValue(update, GnssCapability::kCorrectionsActive, update.corrections_active, false);
+
+  ctx.Expect(aggregator.Merge(update), "known false boolean update should merge");
+  ctx.Expect(HasCapability(aggregator.state(), GnssCapability::kCorrectionsActive),
+             "aggregate should retain corrections-active capability");
+  ctx.Expect(HasValueAvailable(aggregator.state(), GnssCapability::kCorrectionsActive),
+             "aggregate should retain a known false corrections-active value");
+  ctx.Expect(aggregator.state().corrections_active == std::optional<bool>(false),
+             "aggregate should preserve false without treating it as unknown");
+}
+
 void TestAggregateTimestampTracksNewestKnownSample(TestContext& ctx)
 {
   GnssRuntimeAggregator aggregator;
@@ -258,6 +276,7 @@ int main()
   TestResetClearsState(ctx);
   TestInvalidValueFlagsDoNotLeakIntoAggregate(ctx);
   TestNoInventedRtkOrRfFields(ctx);
+  TestKnownFalseBooleanStateSurvivesAggregation(ctx);
   TestAggregateTimestampTracksNewestKnownSample(ctx);
 
   if (ctx.failures != 0)

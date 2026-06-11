@@ -266,6 +266,11 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
   const bool has_max_cn0 = (message.value_flags & Msg::CAP_MAX_CN0) != 0u;
   const bool has_correction_age = (message.value_flags & Msg::CAP_CORRECTION_AGE) != 0u;
   const bool has_heading = (message.value_flags & Msg::CAP_HEADING) != 0u;
+  const bool has_heading_accuracy = (message.value_flags & Msg::CAP_HEADING_ACCURACY) != 0u;
+  const bool has_differential_corrections =
+      (message.value_flags & Msg::CAP_DIFFERENTIAL_CORRECTIONS) != 0u;
+  const bool has_corrections_active =
+      (message.value_flags & Msg::CAP_CORRECTIONS_ACTIVE) != 0u;
   const bool has_dual_antenna_heading =
       (message.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u;
   const bool has_interference_state =
@@ -292,6 +297,13 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
   AssignFlaggedOptional(message.max_cn0_db_hz, state.max_cn0_db_hz, has_max_cn0);
   AssignFlaggedOptional(message.correction_age_s, state.correction_age_s, has_correction_age);
   AssignFlaggedOptional(message.heading_deg, state.heading_deg, has_heading);
+  AssignFlaggedOptional(
+      message.heading_accuracy_deg, state.heading_accuracy_deg, has_heading_accuracy);
+  AssignFlaggedOptional(message.differential_corrections,
+                        state.differential_corrections,
+                        has_differential_corrections);
+  AssignFlaggedOptional(
+      message.corrections_active, state.corrections_active, has_corrections_active);
   AssignFlaggedOptional(
       message.dual_antenna_heading, state.dual_antenna_heading, has_dual_antenna_heading);
   AssignFlaggedOptional(
@@ -352,6 +364,15 @@ universal_gnss::GnssRuntimeState FromGnssStatusMessage(
   AssignOptionalField(state.heading_deg,
                       message.heading_deg,
                       (state.value_flags & Msg::CAP_HEADING) != 0u);
+  AssignOptionalField(state.heading_accuracy_deg,
+                      message.heading_accuracy_deg,
+                      (state.value_flags & Msg::CAP_HEADING_ACCURACY) != 0u);
+  AssignOptionalField(state.differential_corrections,
+                      message.differential_corrections,
+                      (state.value_flags & Msg::CAP_DIFFERENTIAL_CORRECTIONS) != 0u);
+  AssignOptionalField(state.corrections_active,
+                      message.corrections_active,
+                      (state.value_flags & Msg::CAP_CORRECTIONS_ACTIVE) != 0u);
   AssignOptionalField(state.dual_antenna_heading,
                       message.dual_antenna_heading,
                       (state.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u);

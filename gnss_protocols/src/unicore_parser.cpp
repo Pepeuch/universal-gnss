@@ -897,6 +897,43 @@ std::optional<universal_gnss::GnssRtkMode> MapRtkMode(const UnicorePositionType 
   }
 }
 
+std::optional<bool> MapDifferentialCorrections(const UnicorePositionType type)
+{
+  switch (type)
+  {
+    case UnicorePositionType::kPsrDiff:
+    case UnicorePositionType::kSbas:
+    case UnicorePositionType::kL1Float:
+    case UnicorePositionType::kIonoFreeFloat:
+    case UnicorePositionType::kNarrowFloat:
+    case UnicorePositionType::kL1Int:
+    case UnicorePositionType::kWideInt:
+    case UnicorePositionType::kNarrowInt:
+    case UnicorePositionType::kInsPsrDiff:
+    case UnicorePositionType::kInsRtkFloat:
+    case UnicorePositionType::kInsRtkFixed:
+      return true;
+    case UnicorePositionType::kNone:
+    case UnicorePositionType::kFixedPos:
+    case UnicorePositionType::kFixedHeight:
+    case UnicorePositionType::kDopplerVelocity:
+    case UnicorePositionType::kSingle:
+    case UnicorePositionType::kIns:
+    case UnicorePositionType::kInsPsrsp:
+      return false;
+    case UnicorePositionType::kPppConverging:
+    case UnicorePositionType::kPpp:
+    case UnicorePositionType::kUnknown:
+    default:
+      return std::nullopt;
+  }
+}
+
+std::optional<bool> MapCorrectionsActive(const UnicorePositionType type)
+{
+  return MapDifferentialCorrections(type);
+}
+
 void ApplyFixType(universal_gnss::GnssRuntimeState& state, const UnicorePositionType type)
 {
   const auto fix_type = MapFixType(type);
@@ -913,6 +950,28 @@ void ApplyRtkMode(universal_gnss::GnssRuntimeState& state, const UnicorePosition
   {
     universal_gnss::SetOptionalValue(
         state, universal_gnss::GnssCapability::kRtkMode, state.rtk_mode, *rtk_mode);
+  }
+}
+
+void ApplyCorrectionState(universal_gnss::GnssRuntimeState& state, const UnicorePositionType type)
+{
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDifferentialCorrections);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionsActive);
+
+  if (const auto differential_corrections = MapDifferentialCorrections(type);
+      differential_corrections.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kDifferentialCorrections,
+                                     state.differential_corrections,
+                                     *differential_corrections);
+  }
+  if (const auto corrections_active = MapCorrectionsActive(type); corrections_active.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kCorrectionsActive,
+                                     state.corrections_active,
+                                     *corrections_active);
   }
 }
 
@@ -1814,6 +1873,7 @@ universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtsln
 
   ApplyFixType(state, record.best_position_type);
   ApplyRtkMode(state, record.best_position_type);
+  ApplyCorrectionState(state, record.best_position_type);
   if (state.fix_valid)
   {
     state.latitude_deg = record.best_latitude_deg;
@@ -1858,6 +1918,7 @@ universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestN
     }
   }
   ApplyRtkMode(state, record.position_type);
+  ApplyCorrectionState(state, record.position_type);
   if (state.fix_valid)
   {
     state.latitude_deg = record.latitude_deg;
@@ -1892,6 +1953,7 @@ universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
     }
   }
   ApplyRtkMode(state, record.position_type);
+  ApplyCorrectionState(state, record.position_type);
   if (state.fix_valid)
   {
     state.latitude_deg = record.latitude_deg;
@@ -1916,6 +1978,7 @@ universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
 
   ApplyFixType(state, record.best_position_type);
   ApplyRtkMode(state, record.best_position_type);
+  ApplyCorrectionState(state, record.best_position_type);
   if (state.fix_valid)
   {
     state.latitude_deg = record.best_latitude_deg;
@@ -1953,6 +2016,7 @@ universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
 
   ApplyFixType(state, record.position_type);
   ApplyRtkMode(state, record.position_type);
+  ApplyCorrectionState(state, record.position_type);
   SetDualAntennaState(state, record.dual_antenna_status);
 
   universal_gnss::RefreshValueFlagsFromFields(state);

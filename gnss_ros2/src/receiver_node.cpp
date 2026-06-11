@@ -670,6 +670,7 @@ std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
 struct ReceiverNode::Impl
 {
   static constexpr std::chrono::seconds kStaleTimeout{3};
+  static constexpr std::chrono::seconds kParserHealthWindow{3};
 
   explicit Impl(ReceiverNode& owner,
                 std::unique_ptr<universal_gnss_transport::ByteSource> injected_source,
@@ -827,6 +828,13 @@ struct ReceiverNode::Impl
       last_runtime_update_time_ = now;
     }
 
+    const std::size_t malformed_records = session_->metrics().malformed_records;
+    if (malformed_records > last_malformed_record_count_)
+    {
+      last_malformed_record_time_ = now;
+    }
+    last_malformed_record_count_ = malformed_records;
+
     if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kOk)
     {
       transport_ready_ = transport_source_ != nullptr && transport_source_->IsOpen();
@@ -849,6 +857,8 @@ struct ReceiverNode::Impl
 
     const auto& state = session_->current_state();
     const auto& session_metrics = session_->metrics();
+    const auto now = SteadyClock::now();
+    const bool parser_issue_recent = HasRecentMalformedRecords(now);
 
     const bool receiver_rtcm_active =
         HasReceiverReportedRtcmCorrections();
@@ -863,7 +873,7 @@ struct ReceiverNode::Impl
         !HasKnownBoolField(
             state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected);
     summary.transport_healthy = transport_ready_;
-    summary.parser_healthy = session_metrics.malformed_records == 0u;
+    summary.parser_healthy = !parser_issue_recent;
 
     for (const auto& event : startup_events_)
     {
@@ -906,7 +916,6 @@ struct ReceiverNode::Impl
       }
     }
 
-    const auto now = SteadyClock::now();
     if (transport_source_ != nullptr && transport_source_->IsOpen())
     {
       if (!last_transport_activity_time_.has_value())
@@ -938,13 +947,14 @@ struct ReceiverNode::Impl
                                  "GNSS runtime state has not been updated recently"));
     }
 
-    if (session_metrics.malformed_records > 0u)
+    if (parser_issue_recent)
     {
       summary.AddEvent(MakeEvent(
           universal_gnss::GnssDiagnosticSeverity::kWarning,
           universal_gnss::GnssDiagnosticCategory::kParser,
           "malformed_records",
-          "Malformed records were observed while parsing receiver data"));
+          "Malformed records were observed recently while parsing receiver data"
+              " (count=" + std::to_string(session_metrics.malformed_records) + ")"));
     }
 
     if (HasKnownBoolField(
@@ -1319,6 +1329,12 @@ struct ReceiverNode::Impl
            (SteadyClock::now() - *last_runtime_update_time_ < kStaleTimeout);
   }
 
+  bool HasRecentMalformedRecords(const SteadyClock::time_point now) const
+  {
+    return last_malformed_record_time_.has_value() &&
+           (now - *last_malformed_record_time_ < kParserHealthWindow);
+  }
+
   const universal_gnss_driver::UbloxSessionMetrics* ActiveUbloxMetrics() const
   {
     if (session_ == nullptr ||
@@ -1421,6 +1437,7 @@ struct ReceiverNode::Impl
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
   std::optional<SteadyClock::time_point> last_runtime_update_time_{};
+  std::optional<SteadyClock::time_point> last_malformed_record_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
   std::optional<universal_gnss_transport::TransportStatus> last_logged_terminal_status_{};
@@ -1430,6 +1447,7 @@ struct ReceiverNode::Impl
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};
   std::size_t rtcm_forward_write_errors_{0u};
+  std::size_t last_malformed_record_count_{0u};
   bool transport_configured_{false};
   bool transport_ready_{false};
   bool using_injected_source_{false};

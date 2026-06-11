@@ -102,13 +102,20 @@ void TestPvtslnParsingAndRuntimeMapping(TestContext& ctx)
   ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
                  universal_gnss::HasCapability(state, GnssCapability::kVerticalAccuracy) &&
                  universal_gnss::HasCapability(state, GnssCapability::kCorrectionAge) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kDifferentialCorrections) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kCorrectionsActive) &&
                  universal_gnss::HasCapability(state, GnssCapability::kHeading),
              "PVTSLNA runtime mapping should advertise supported optional fields");
   ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kDifferentialCorrections) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionsActive) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kHeading),
              "PVTSLNA runtime mapping should expose present optional values");
+  ctx.Expect(state.differential_corrections == std::optional<bool>(true) &&
+                 state.corrections_active == std::optional<bool>(true),
+             "PVTSLNA RTK solutions should expose known true correction state");
   ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kInterferenceState) &&
                  !universal_gnss::HasCapability(state, GnssCapability::kJammingState),
              "PVTSLNA should not invent RF or jamming capabilities");
@@ -149,8 +156,59 @@ void TestBestNavParsingAndMapping(TestContext& ctx)
   ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
                  state.correction_age_s == 0.4f,
              "BESTNAVA runtime mapping should expose the documented differential age");
+  ctx.Expect(state.differential_corrections == std::optional<bool>(true) &&
+                 state.corrections_active == std::optional<bool>(true),
+             "BESTNAVA RTK float solutions should expose known true correction state");
   ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kHeading),
              "BESTNAVA should not invent heading capabilities");
+}
+
+void TestBestNavCorrectionStateSemantics(TestContext& ctx)
+{
+  const std::string single_line =
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,SINGLE,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+      "2.1970,\"0\",,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*00000000\r\n";
+  const auto single_result = ParseUnicoreBestNav(BuildAsciiFrame(single_line, 2223));
+  ctx.Expect(single_result.status == ParserStatus::kRecordReady && single_result.record.has_value(),
+             "single BESTNAVA line should parse successfully");
+  if (single_result.record.has_value())
+  {
+    const auto state = universal_gnss_protocols::UnicoreBestNavToRuntimeState(
+        *single_result.record);
+    ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
+                   state.rtk_mode == GnssRtkMode::kNone,
+               "SINGLE BESTNAVA should expose a plain GPS fix with explicit RTK none");
+    ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kDifferentialCorrections) &&
+                   universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionsActive) &&
+                   state.differential_corrections == std::optional<bool>(false) &&
+                   state.corrections_active == std::optional<bool>(false),
+               "plain SINGLE fixes should expose known false correction state");
+  }
+
+  const std::string psrdiff_line =
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,PSRDIFF,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+      "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*00000000\r\n";
+  const auto psrdiff_result = ParseUnicoreBestNav(BuildAsciiFrame(psrdiff_line, 2224));
+  ctx.Expect(psrdiff_result.status == ParserStatus::kRecordReady &&
+                 psrdiff_result.record.has_value(),
+             "PSRDIFF BESTNAVA line should parse successfully");
+  if (psrdiff_result.record.has_value())
+  {
+    const auto state = universal_gnss_protocols::UnicoreBestNavToRuntimeState(
+        *psrdiff_result.record);
+    ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
+                   state.rtk_mode == GnssRtkMode::kNone,
+               "PSRDIFF BESTNAVA should keep RTK mode NONE while still reporting a valid fix");
+    ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kDifferentialCorrections) &&
+                   universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionsActive) &&
+                   state.differential_corrections == std::optional<bool>(true) &&
+                   state.corrections_active == std::optional<bool>(true),
+               "PSRDIFF should expose known true correction state without pretending RTK");
+  }
 }
 
 void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
@@ -508,6 +566,7 @@ int main()
 
   TestPvtslnParsingAndRuntimeMapping(ctx);
   TestBestNavParsingAndMapping(ctx);
+  TestBestNavCorrectionStateSemantics(ctx);
   TestRtkStatusAndRtcmStatusParsing(ctx);
   TestSatsInfoParsingAndRuntimeMapping(ctx);
   TestBestSatParsingAndRuntimeMapping(ctx);

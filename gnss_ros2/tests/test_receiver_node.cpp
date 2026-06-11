@@ -840,6 +840,61 @@ TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
   EXPECT_EQ(FindDiagnosticValue(*summary, "stale_data"), std::optional<std::string>{"false"});
 }
 
+TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCount)
+{
+  const auto ubx = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
+  const std::vector<std::uint8_t> truncated_ubx(ubx.begin(), ubx.begin() + 8u);
+
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{
+          {universal_gnss_transport::TransportStatus::kOk,
+           universal_gnss_transport::TransportError::kNone,
+           truncated_ubx,
+           true},
+          {universal_gnss_transport::TransportStatus::kEndOfStream,
+           universal_gnss_transport::TransportError::kNone,
+           {},
+           false},
+      });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  EXPECT_FALSE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& initial_diagnostics = *node.last_diagnostics_message();
+  const auto* initial_summary =
+      FindDiagnosticStatusByName(initial_diagnostics, "universal_gnss/summary");
+  const auto* initial_malformed =
+      FindDiagnosticStatusByName(initial_diagnostics, "universal_gnss/malformed_records");
+
+  ASSERT_NE(initial_summary, nullptr);
+  ASSERT_NE(initial_malformed, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*initial_summary, "parser_healthy"),
+            std::optional<std::string>{"false"});
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3100));
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& recovered_diagnostics = *node.last_diagnostics_message();
+  const auto* recovered_summary =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/summary");
+  const auto* recovered_malformed =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/malformed_records");
+
+  ASSERT_NE(recovered_summary, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*recovered_summary, "parser_healthy"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(recovered_malformed, nullptr);
+}
+
 TEST_F(ReceiverNodeTest, ReportsTransportReadErrorAndSuppressesStaleFix)
 {
   auto source = std::make_unique<ScriptedByteSource>(

@@ -34,6 +34,9 @@ uint32 CAP_HEADING=2048
 uint32 CAP_DUAL_ANTENNA_HEADING=4096
 uint32 CAP_INTERFERENCE_STATE=8192
 uint32 CAP_JAMMING_STATE=16384
+uint32 CAP_HEADING_ACCURACY=32768
+uint32 CAP_DIFFERENTIAL_CORRECTIONS=65536
+uint32 CAP_CORRECTIONS_ACTIVE=131072
 
 builtin_interfaces/Time stamp
 bool fix_valid
@@ -55,6 +58,9 @@ float32 mean_cn0_db_hz
 float32 max_cn0_db_hz
 float32 correction_age_s
 float32 heading_deg
+float32 heading_accuracy_deg
+bool differential_corrections
+bool corrections_active
 bool dual_antenna_heading
 bool interference_detected
 bool jamming_detected

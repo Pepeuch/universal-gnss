@@ -107,6 +107,9 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
   SetCapability(state, GnssCapability::kSatellitesUsed);
   SetCapability(state, GnssCapability::kCorrectionAge);
   SetCapability(state, GnssCapability::kMeanCn0);
+  SetCapability(state, GnssCapability::kHeadingAccuracy);
+  SetCapability(state, GnssCapability::kDifferentialCorrections);
+  SetCapability(state, GnssCapability::kCorrectionsActive);
   SetCapability(state, GnssCapability::kDualAntennaHeading);
   SetCapability(state, GnssCapability::kJammingState);
 
@@ -121,6 +124,17 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
              "correction_age_s should be assignable when capability exists");
   ctx.Expect(SetOptionalValue(state, GnssCapability::kMeanCn0, state.mean_cn0_db_hz, 41.5f),
              "mean_cn0_db_hz should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg, 0.7f),
+             "heading_accuracy_deg should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(state,
+                              GnssCapability::kDifferentialCorrections,
+                              state.differential_corrections,
+                              true),
+             "differential_corrections should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kCorrectionsActive, state.corrections_active, false),
+             "corrections_active should preserve a known false value");
   ctx.Expect(SetOptionalValue(
                  state, GnssCapability::kDualAntennaHeading, state.dual_antenna_heading, true),
              "dual_antenna_heading should be assignable when capability exists");
@@ -139,6 +153,12 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
              "value_flags should expose correction age availability");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kMeanCn0),
              "value_flags should expose mean CN0 availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kHeadingAccuracy),
+             "value_flags should expose heading accuracy availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kDifferentialCorrections),
+             "value_flags should expose differential-correction availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kCorrectionsActive),
+             "value_flags should expose a known false corrections-active state");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kDualAntennaHeading),
              "value_flags should expose dual antenna state availability");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kJammingState),
@@ -153,7 +173,7 @@ void TestCapabilityBitsFitInUint32(TestContext& ctx)
              "GnssCapability bits must fit in uint32_t");
   ctx.Expect(sizeof(GnssCapabilityFlags) == sizeof(std::uint32_t),
              "GnssCapabilityFlags must fit in uint32_t");
-  ctx.Expect(ToFlag(GnssCapability::kJammingState) != 0u,
+  ctx.Expect(ToFlag(GnssCapability::kCorrectionsActive) != 0u,
              "highest currently defined capability bit should be non-zero");
 }
 

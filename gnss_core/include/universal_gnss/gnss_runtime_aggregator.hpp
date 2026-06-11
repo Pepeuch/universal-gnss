@@ -146,6 +146,27 @@ public:
               applied;
     applied = MergeCapabilityField(update.timestamp_ns,
                                    effective_value_flags,
+                                   GnssCapability::kHeadingAccuracy,
+                                   FieldSlot::kHeadingAccuracy,
+                                   update.heading_accuracy_deg,
+                                   state_.heading_accuracy_deg) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kDifferentialCorrections,
+                                   FieldSlot::kDifferentialCorrections,
+                                   update.differential_corrections,
+                                   state_.differential_corrections) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kCorrectionsActive,
+                                   FieldSlot::kCorrectionsActive,
+                                   update.corrections_active,
+                                   state_.corrections_active) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
                                    GnssCapability::kDualAntennaHeading,
                                    FieldSlot::kDualAntennaHeading,
                                    update.dual_antenna_heading,
@@ -195,6 +216,9 @@ private:
     kMaxCn0,
     kCorrectionAge,
     kHeading,
+    kHeadingAccuracy,
+    kDifferentialCorrections,
+    kCorrectionsActive,
     kDualAntennaHeading,
     kInterferenceState,
     kJammingState,

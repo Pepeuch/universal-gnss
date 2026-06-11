@@ -38,6 +38,9 @@ struct GnssRuntimeState
   std::optional<float> correction_age_s{};
 
   std::optional<float> heading_deg{};
+  std::optional<float> heading_accuracy_deg{};
+  std::optional<bool> differential_corrections{};
+  std::optional<bool> corrections_active{};
   std::optional<bool> dual_antenna_heading{};
   std::optional<bool> interference_detected{};
   std::optional<bool> jamming_detected{};
@@ -174,6 +177,21 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
   if (HasCapability(state, GnssCapability::kHeading) && state.heading_deg.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kHeading);
+  }
+  if (HasCapability(state, GnssCapability::kHeadingAccuracy) &&
+      state.heading_accuracy_deg.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kHeadingAccuracy);
+  }
+  if (HasCapability(state, GnssCapability::kDifferentialCorrections) &&
+      state.differential_corrections.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kDifferentialCorrections);
+  }
+  if (HasCapability(state, GnssCapability::kCorrectionsActive) &&
+      state.corrections_active.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kCorrectionsActive);
   }
   if (HasCapability(state, GnssCapability::kDualAntennaHeading) &&
       state.dual_antenna_heading.has_value())
