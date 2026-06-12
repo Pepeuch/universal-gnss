@@ -129,8 +129,7 @@ void UnicoreSession::FeedBytes(const std::uint8_t* data,
   metrics_.bytes_seen += size;
   for (std::size_t i = 0u; i < size; ++i)
   {
-    HandleFramerResult(framer_.PushByte(data[i], timestamp_ns));
-    HandleBinaryFramerResult(binary_framer_.PushByte(data[i], timestamp_ns));
+    FeedByte(data[i], timestamp_ns);
   }
 }
 
@@ -165,6 +164,7 @@ void UnicoreSession::Reset()
   ascii_startup_malformed_suppressed_ = false;
   binary_startup_malformed_suppressed_ = false;
   finalizing_ = false;
+  active_framer_ = ActiveFramer::kIdle;
 }
 
 const universal_gnss::GnssRuntimeState& UnicoreSession::current_state() const
@@ -182,6 +182,54 @@ const UnicoreSessionConfig& UnicoreSession::config() const
   return config_;
 }
 
+void UnicoreSession::FeedByte(const std::uint8_t byte,
+                              const std::optional<std::int64_t> timestamp_ns)
+{
+  bool retry = true;
+  while (retry)
+  {
+    retry = false;
+
+    ActiveFramer route = active_framer_;
+    if (route == ActiveFramer::kIdle)
+    {
+      if (IsBinarySyncByte(byte))
+      {
+        route = ActiveFramer::kBinary;
+        active_framer_ = route;
+      }
+      else if (IsAsciiSyncByte(byte))
+      {
+        route = ActiveFramer::kAscii;
+        active_framer_ = route;
+      }
+      else
+      {
+        return;
+      }
+    }
+
+    if (route == ActiveFramer::kAscii)
+    {
+      const auto result = framer_.PushByte(byte, timestamp_ns);
+      HandleFramerResult(result);
+      if (RouteFinished(result.status))
+      {
+        active_framer_ = ActiveFramer::kIdle;
+      }
+      continue;
+    }
+
+    const auto result = binary_framer_.PushByte(byte, timestamp_ns);
+    HandleBinaryFramerResult(result);
+    if (RouteFinished(result.status))
+    {
+      active_framer_ = ActiveFramer::kIdle;
+      retry = ShouldRetryAsAscii(byte, result.status, route);
+    }
+  }
+}
+
 bool UnicoreSession::ShouldSuppressStartupAsciiMalformed()
 {
   if (finalizing_ || ascii_seen_valid_record_ || ascii_startup_malformed_suppressed_)
@@ -193,6 +241,36 @@ bool UnicoreSession::ShouldSuppressStartupAsciiMalformed()
   return true;
 }
 
+bool UnicoreSession::RouteFinished(const ParserStatus status) const
+{
+  switch (status)
+  {
+    case ParserStatus::kNeedMoreData:
+      return false;
+
+    case ParserStatus::kSkipped:
+      return true;
+
+    case ParserStatus::kIdle:
+    case ParserStatus::kRecordReady:
+    case ParserStatus::kInvalidData:
+    case ParserStatus::kTruncated:
+    case ParserStatus::kOverflow:
+      return true;
+  }
+
+  return true;
+}
+
+bool UnicoreSession::ShouldRetryAsAscii(const std::uint8_t byte,
+                                        const ParserStatus status,
+                                        const ActiveFramer active_framer) const
+{
+  return active_framer == ActiveFramer::kBinary &&
+         status == ParserStatus::kSkipped &&
+         IsAsciiSyncByte(byte);
+}
+
 bool UnicoreSession::ShouldSuppressStartupBinaryMalformed()
 {
   if (finalizing_ || binary_seen_valid_frame_ || binary_startup_malformed_suppressed_)
@@ -202,6 +280,16 @@ bool UnicoreSession::ShouldSuppressStartupBinaryMalformed()
 
   binary_startup_malformed_suppressed_ = true;
   return true;
+}
+
+bool UnicoreSession::IsAsciiSyncByte(const std::uint8_t byte)
+{
+  return byte == '#' || byte == '$' || byte == '%';
+}
+
+bool UnicoreSession::IsBinarySyncByte(const std::uint8_t byte)
+{
+  return byte == universal_gnss_protocols::kUnicoreBinarySync1;
 }
 
 void UnicoreSession::HandleFramerResult(

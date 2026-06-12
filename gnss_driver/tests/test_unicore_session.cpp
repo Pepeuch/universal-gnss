@@ -186,6 +186,19 @@ std::vector<std::uint8_t> MakePvtslnBPayload()
   return payload;
 }
 
+std::vector<std::uint8_t> MakeBestNavBPayloadWithEmbeddedAsciiSync()
+{
+  auto payload = MakeBestNavBPayload();
+  constexpr const char* kEmbeddedNoise = "#FOOBARA,97,GPS,FINE,1,2,0,0,0,0;payload\r\n";
+  const std::string text = kEmbeddedNoise;
+  const std::size_t offset = 72u;
+  for (std::size_t i = 0u; i < text.size() && offset + i < payload.size(); ++i)
+  {
+    payload[offset + i] = static_cast<std::uint8_t>(text[i]);
+  }
+  return payload;
+}
+
 void TestBestNavUpdatesRuntimeState(TestContext& ctx)
 {
   UnicoreSession session;
@@ -462,6 +475,57 @@ void TestMalformedBinaryFrameAfterSyncCounts(TestContext& ctx)
              "malformed binary frames after initial sync should still be counted");
 }
 
+void TestStrayBinarySyncCanFallbackIntoAsciiFrame(TestContext& ctx)
+{
+  UnicoreSession session;
+  std::string bytes;
+  bytes.push_back(static_cast<char>(universal_gnss_protocols::kUnicoreBinarySync1));
+  bytes += kBestNavLine;
+  session.FeedBytes(
+      reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size(), 9800);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.lines_seen == 1u &&
+                 metrics.ascii_records_seen == 1u &&
+                 metrics.records_parsed == 1u &&
+                 metrics.runtime_updates == 1u &&
+                 metrics.unknown_records == 0u &&
+                 metrics.records_rejected == 0u &&
+                 metrics.malformed_frames == 0u,
+             "a stray binary sync byte ahead of a real ASCII frame should not hide the ASCII record");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9800) &&
+                 state.fix_valid &&
+                 state.latitude_deg == std::optional<double>(40.0789588272),
+             "binary fallback should still preserve the first-byte timestamp and runtime state");
+}
+
+void TestBinaryPayloadDoesNotLeakIntoAsciiFramer(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayloadWithEmbeddedAsciiSync()),
+                    9900);
+  session.FeedString(kBestNavLine, 10000);
+
+  const auto& metrics = session.metrics();
+  const auto& state = session.current_state();
+  ctx.Expect(metrics.binary_frames_seen == 1u &&
+                 metrics.lines_seen == 1u &&
+                 metrics.ascii_records_seen == 1u &&
+                 metrics.records_parsed == 2u &&
+                 metrics.runtime_updates == 2u &&
+                 metrics.unknown_records == 0u &&
+                 metrics.records_rejected == 0u &&
+                 metrics.malformed_lines == 0u &&
+                 metrics.malformed_frames == 0u,
+             "binary payload bytes that look like ASCII sync should stay isolated inside the binary framer");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(10000) &&
+                 state.fix_valid &&
+                 state.fix_type == GnssFixType::kRtkFloat &&
+                 state.latitude_deg == std::optional<double>(40.0789588272),
+             "mixed binary and ASCII runtime records should still converge on the final parsed state");
+}
+
 void TestFinalizeAndReset(TestContext& ctx)
 {
   UnicoreSession session;
@@ -504,6 +568,8 @@ int main()
   TestStartupBinaryResyncSuppressesFirstMalformedFrame(ctx);
   TestStartupAsciiResyncSuppressesFirstMalformedLine(ctx);
   TestMalformedBinaryFrameAfterSyncCounts(ctx);
+  TestStrayBinarySyncCanFallbackIntoAsciiFrame(ctx);
+  TestBinaryPayloadDoesNotLeakIntoAsciiFramer(ctx);
   TestFinalizeAndReset(ctx);
 
   if (ctx.failures != 0)

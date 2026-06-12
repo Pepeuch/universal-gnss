@@ -64,8 +64,23 @@ public:
   const UnicoreSessionConfig& config() const;
 
 private:
+  enum class ActiveFramer
+  {
+    kIdle = 0,
+    kAscii,
+    kBinary,
+  };
+
+  void FeedByte(std::uint8_t byte, std::optional<std::int64_t> timestamp_ns);
   bool ShouldSuppressStartupAsciiMalformed();
   bool ShouldSuppressStartupBinaryMalformed();
+  bool RouteFinished(universal_gnss_protocols::ParserStatus status) const;
+  bool ShouldRetryAsAscii(
+      std::uint8_t byte,
+      universal_gnss_protocols::ParserStatus status,
+      ActiveFramer active_framer) const;
+  static bool IsAsciiSyncByte(std::uint8_t byte);
+  static bool IsBinarySyncByte(std::uint8_t byte);
   void HandleFramerResult(
       const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>&
           result);
@@ -85,6 +100,7 @@ private:
   bool ascii_startup_malformed_suppressed_{false};
   bool binary_startup_malformed_suppressed_{false};
   bool finalizing_{false};
+  ActiveFramer active_framer_{ActiveFramer::kIdle};
 };
 
 }  // namespace universal_gnss_driver
