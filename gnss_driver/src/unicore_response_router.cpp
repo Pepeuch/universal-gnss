@@ -37,13 +37,15 @@ constexpr std::array<const char*, 22u> kIgnoredTelemetryPrefixes{
     "#OBSVMCMPB",
 };
 
-constexpr std::array<const char*, 10u> kIgnoredNmeaPrefixes{
+constexpr std::array<const char*, 12u> kIgnoredNmeaPrefixes{
     "$GPGGA",
     "$GNGGA",
     "$GPGSV",
     "$GLGSV",
     "$GAGSV",
     "$GBGSV",
+    "$GPGST",
+    "$GNGST",
     "$GNHPR",
     "$GPHPR",
     "$GNHPR2",

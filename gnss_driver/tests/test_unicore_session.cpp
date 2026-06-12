@@ -9,6 +9,7 @@
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_driver/unicore_session.hpp"
+#include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
 namespace
@@ -39,6 +40,28 @@ struct TestContext
 bool NearlyEqual(const double lhs, const double rhs, const double tolerance = 1e-6)
 {
   return std::fabs(lhs - rhs) <= tolerance;
+}
+
+std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload,
+                                            const bool valid_checksum = true)
+{
+  std::vector<std::uint8_t> bytes;
+  bytes.push_back(static_cast<std::uint8_t>('$'));
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+  bytes.push_back(static_cast<std::uint8_t>('*'));
+
+  std::uint8_t checksum = universal_gnss_protocols::ComputeNmeaChecksum(payload);
+  if (!valid_checksum)
+  {
+    checksum ^= 0x01u;
+  }
+
+  constexpr char kHexDigits[] = "0123456789ABCDEF";
+  bytes.push_back(static_cast<std::uint8_t>(kHexDigits[(checksum >> 4u) & 0x0Fu]));
+  bytes.push_back(static_cast<std::uint8_t>(kHexDigits[checksum & 0x0Fu]));
+  bytes.push_back(static_cast<std::uint8_t>('\r'));
+  bytes.push_back(static_cast<std::uint8_t>('\n'));
+  return bytes;
 }
 
 constexpr const char* kBestNavLine =
@@ -273,6 +296,41 @@ void TestSatsInfoUpdatesTrackedAndCn0(TestContext& ctx)
              "SATSINFOA should update CN0 summaries");
 }
 
+void TestNmeaGsvUpdatesVisibleAndCn0AcrossTalkers(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      5800);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"),
+      5801);
+  session.FeedBytes(
+      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"),
+      5802);
+
+  const auto& state = session.current_state();
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.records_parsed == 3u &&
+                 metrics.runtime_observations == 3u &&
+                 metrics.runtime_updates == 3u,
+             "mixed Unicore NMEA GSV sentences should count as parsed runtime observations");
+  ctx.Expect(HasCapability(state, GnssCapability::kSatellitesVisible) &&
+                 HasCapability(state, GnssCapability::kSatellitesTracked) &&
+                 HasCapability(state, GnssCapability::kMeanCn0) &&
+                 HasCapability(state, GnssCapability::kMaxCn0) &&
+                 HasValueAvailable(state, GnssCapability::kSatellitesVisible) &&
+                 HasValueAvailable(state, GnssCapability::kSatellitesTracked) &&
+                 HasValueAvailable(state, GnssCapability::kMeanCn0) &&
+                 HasValueAvailable(state, GnssCapability::kMaxCn0) &&
+                 state.satellites_tracked == std::optional<std::uint16_t>(12u) &&
+                 state.satellites_visible == std::optional<std::uint16_t>(14u) &&
+                 state.mean_cn0_db_hz.has_value() &&
+                 std::fabs(*state.mean_cn0_db_hz - 37.5f) < 1e-6f &&
+                 state.max_cn0_db_hz == std::optional<float>(43.0f),
+             "GSV routing should aggregate conservative tracked counts, visible satellites, and CN0 across recent talkers");
+}
+
 void TestBestSatUpdatesTrackedAndUsedOnly(TestContext& ctx)
 {
   UnicoreSession session;
@@ -291,6 +349,53 @@ void TestBestSatUpdatesTrackedAndUsedOnly(TestContext& ctx)
                  !HasCapability(state, GnssCapability::kSatellitesVisible) &&
                  state.fix_type == GnssFixType::kUnknown,
              "BESTSATA should not invent CN0, visibility, or fix state");
+}
+
+void TestNmeaFallbackDoesNotOverrideRichUnicoreState(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedString(kBestNavLine, 6000);
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123519,4807.111,N,01131.999,E,1,08,1.5,100.1,M,46.9,M,,"),
+      6001);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,9.9,8.8,7.7"),
+      6002);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.fix_valid &&
+                 state.fix_type == GnssFixType::kRtkFloat &&
+                 state.latitude_deg == std::optional<double>(40.0789588272) &&
+                 state.longitude_deg == std::optional<double>(116.2365102982) &&
+                 state.altitude_m == std::optional<double>(65.8312) &&
+                 state.horizontal_accuracy_m.has_value() &&
+                 std::fabs(*state.horizontal_accuracy_m - 1.2221f) < 1e-6f &&
+                 state.vertical_accuracy_m.has_value() &&
+                 std::fabs(*state.vertical_accuracy_m - 2.1970f) < 1e-6f,
+             "NMEA fallback sentences should not overwrite richer Unicore fix, position, or accuracy");
+}
+
+void TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"),
+      6100);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
+      6101);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.fix_valid &&
+                 state.fix_type == GnssFixType::kFix &&
+                 state.latitude_deg.has_value() &&
+                 state.longitude_deg.has_value() &&
+                 state.altitude_m == std::optional<double>(545.4) &&
+                 state.hdop == std::optional<float>(0.9f) &&
+                 state.satellites_used == std::optional<std::uint16_t>(8u) &&
+                 state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 state.vertical_accuracy_m == std::optional<float>(1.1f),
+             "NMEA fallback should populate fix and accuracy only when Unicore state is still missing");
 }
 
 void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
@@ -558,7 +663,10 @@ int main()
   TestPvtslnUpdatesHeading(ctx);
   TestRtkStatusUpdatesDualAntenna(ctx);
   TestSatsInfoUpdatesTrackedAndCn0(ctx);
+  TestNmeaGsvUpdatesVisibleAndCn0AcrossTalkers(ctx);
   TestBestSatUpdatesTrackedAndUsedOnly(ctx);
+  TestNmeaFallbackDoesNotOverrideRichUnicoreState(ctx);
+  TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
   TestRtcmStatusParsesWithoutRuntimeUpdate(ctx);
   TestUnknownAndMalformedRecords(ctx);

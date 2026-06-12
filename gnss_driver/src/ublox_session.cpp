@@ -39,10 +39,9 @@ struct ProbeResult
 };
 
 template <typename FramerT, typename RecordT>
-ProbeResult<RecordT> ProbeAtOffset(
-    FramerT& framer,
-    const std::vector<UbloxSession::BufferedByte>& bytes,
-    const std::size_t start_offset)
+ProbeResult<RecordT> ProbeAtOffset(FramerT& framer,
+                                   const std::vector<UbloxSession::BufferedByte>& bytes,
+                                   const std::size_t start_offset)
 {
   framer.Reset();
   for (std::size_t index = start_offset; index < bytes.size(); ++index)
@@ -105,6 +104,7 @@ void ParseAndMergeFrame(const ParseFn& parse_fn,
   }
 
   ++metrics.frames_parsed;
+  ++metrics.runtime_observations;
   if (aggregator.Merge(map_fn(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -378,6 +378,7 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     }
 
     ++metrics_.frames_parsed;
+    ++metrics_.runtime_observations;
     if (config_.enable_nmea_runtime_updates &&
         aggregator_.Merge(universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record)))
     {
@@ -396,6 +397,7 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     }
 
     ++metrics_.frames_parsed;
+    ++metrics_.runtime_observations;
     if (config_.enable_nmea_runtime_updates &&
         aggregator_.Merge(universal_gnss_protocols::NmeaRmcToRuntimeState(*parsed.record)))
     {
@@ -414,6 +416,7 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     }
 
     ++metrics_.frames_parsed;
+    ++metrics_.runtime_observations;
     if (config_.enable_nmea_runtime_updates &&
         aggregator_.Merge(universal_gnss_protocols::NmeaGsaToRuntimeState(*parsed.record)))
     {
@@ -432,6 +435,7 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     }
 
     ++metrics_.frames_parsed;
+    ++metrics_.runtime_observations;
     if (config_.enable_nmea_runtime_updates)
     {
       universal_gnss::GnssRuntimeState update;
@@ -452,6 +456,7 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
   }
 
   ++metrics_.frames_parsed;
+  ++metrics_.runtime_observations;
   if (config_.enable_nmea_runtime_updates &&
       aggregator_.Merge(universal_gnss_protocols::NmeaGstToRuntimeState(*parsed.record)))
   {

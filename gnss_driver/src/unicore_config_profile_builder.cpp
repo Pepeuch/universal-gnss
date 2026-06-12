@@ -99,6 +99,10 @@ const char* ToOutputMessageName(const UnicoreOutputMessageKind message)
   {
     case UnicoreOutputMessageKind::kGpgga:
       return "GPGGA";
+    case UnicoreOutputMessageKind::kGpgsv:
+      return "GPGSV";
+    case UnicoreOutputMessageKind::kGpgst:
+      return "GPGST";
     case UnicoreOutputMessageKind::kPvtslna:
       return "PVTSLNA";
     case UnicoreOutputMessageKind::kBestnava:
@@ -279,6 +283,14 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
                   command);
   }
 
+  if (profile.clear_current_port_outputs)
+  {
+    AppendCommand(result.commands,
+                  ReceiverCommandKind::kSetProtocolOutputs,
+                  ReceiverCommandSafetyLevel::kRuntime,
+                  "UNLOG");
+  }
+
   for (const auto& output : profile.output_messages)
   {
     AppendCommand(result.commands,
@@ -308,8 +320,11 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   profile.rtk_timeout_s = 10u;
   profile.rtk_reliability = UnicoreRtkReliability{3, 1};
   profile.dgps_timeout_s = 600u;
+  profile.clear_current_port_outputs = true;
   profile.output_messages = {
       {UnicoreOutputMessageKind::kGpgga, 0.2},
+      {UnicoreOutputMessageKind::kGpgsv, 1.0},
+      {UnicoreOutputMessageKind::kGpgst, 1.0},
       {UnicoreOutputMessageKind::kPvtslna, 0.2},
       {UnicoreOutputMessageKind::kBestnava, 0.2},
       {UnicoreOutputMessageKind::kRtkstatusa, 1.0},

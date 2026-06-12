@@ -1,15 +1,13 @@
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <cerrno>
 #include <memory>
 #include <optional>
+#include <string>
 #include <thread>
 #include <utility>
-#include <string>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
@@ -17,6 +15,7 @@
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
+#include <gtest/gtest.h>
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 #include "universal_gnss_ros2/ntrip_node.hpp"
 #include <sys/socket.h>
@@ -49,6 +48,11 @@ void AppendBytes(std::vector<std::uint8_t>& destination, const std::vector<std::
   destination.insert(destination.end(), source.begin(), source.end());
 }
 
+std::vector<std::uint8_t> BuildBytes(const std::string& text)
+{
+  return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
 std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
                                          const bool valid_crc = true)
 {
@@ -64,8 +68,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -77,7 +80,9 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -124,15 +129,17 @@ public:
   {
     universal_gnss_transport::TransportStatus status{
         universal_gnss_transport::TransportStatus::kOk};
-    universal_gnss_transport::TransportError error{
-        universal_gnss_transport::TransportError::kNone};
+    universal_gnss_transport::TransportError error{universal_gnss_transport::TransportError::kNone};
     std::vector<std::uint8_t> payload{};
     bool keep_open{true};
   };
 
-  explicit ScriptedByteSource(std::vector<Action> actions) : actions_(std::move(actions)) {}
+  explicit ScriptedByteSource(std::vector<Action> actions) : actions_(std::move(actions))
+  {
+  }
 
-  universal_gnss_transport::ReadResult Read(std::uint8_t* destination, std::size_t capacity) override
+  universal_gnss_transport::ReadResult Read(std::uint8_t* destination,
+                                            std::size_t capacity) override
   {
     if (!open_)
     {
@@ -169,9 +176,15 @@ public:
             universal_gnss_transport::TransportError::kNone};
   }
 
-  bool IsOpen() const override { return open_; }
+  bool IsOpen() const override
+  {
+    return open_;
+  }
 
-  void Close() override { open_ = false; }
+  void Close() override
+  {
+    open_ = false;
+  }
 
 private:
   std::vector<Action> actions_{};
@@ -238,10 +251,11 @@ universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
   result.selected_baud = baud;
   result.detected_family = family;
   result.confidence = confidence;
-  result.discovery_score =
-      confidence == universal_gnss_driver::ReceiverProbeConfidence::kHigh ? 100 :
-      confidence == universal_gnss_driver::ReceiverProbeConfidence::kMedium ? 20 :
-      confidence == universal_gnss_driver::ReceiverProbeConfidence::kLow ? 10 : 0;
+  result.discovery_score = confidence == universal_gnss_driver::ReceiverProbeConfidence::kHigh ? 100
+                           : confidence == universal_gnss_driver::ReceiverProbeConfidence::kMedium
+                               ? 20
+                           : confidence == universal_gnss_driver::ReceiverProbeConfidence::kLow ? 10
+                                                                                                : 0;
   result.evidence.bytes_read = 128u;
   if (family == universal_gnss_driver::ReceiverDetectedFamily::kUblox)
   {
@@ -291,7 +305,8 @@ TEST_F(ReceiverNodeTest, ExplicitSerialConfigDoesNotRunDiscovery)
   bool discovery_called = false;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     discovery_called = true;
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
   };
@@ -315,11 +330,13 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
   bool captured_include_platform = false;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     captured_path = explicit_path;
     captured_include_platform = config.include_platform_uarts;
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u,
+        MakeDiscoveryResult("/dev/serial/by-id/f9p",
+                            921600u,
                             universal_gnss_driver::ReceiverDetectedFamily::kUblox,
                             universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
   };
@@ -348,10 +365,8 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
             std::optional<std::string>{"true"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "path"),
             std::optional<std::string>{"/dev/serial/by-id/f9p"});
-  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "baud"),
-            std::optional<std::string>{"921600"});
-  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"),
-            std::optional<std::string>{"ublox"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "baud"), std::optional<std::string>{"921600"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"), std::optional<std::string>{"ublox"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "confidence"),
             std::optional<std::string>{"high"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "detected_family"),
@@ -372,11 +387,13 @@ TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
   std::vector<std::uint32_t> captured_bauds;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     captured_path = explicit_path;
     captured_bauds = config.baud_candidates;
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+        MakeDiscoveryResult("/dev/ttyAMA2",
+                            921600u,
                             universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
                             universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
   };
@@ -400,7 +417,8 @@ TEST_F(ReceiverNodeTest, DiscoveryFailureIsReportedClearly)
 {
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
   };
 
@@ -430,9 +448,11 @@ TEST_F(ReceiverNodeTest, LowConfidenceDiscoveryIsRejected)
 {
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyS1", 921600u,
+        MakeDiscoveryResult("/dev/ttyS1",
+                            921600u,
                             universal_gnss_driver::ReceiverDetectedFamily::kUnknown,
                             universal_gnss_driver::ReceiverProbeConfidence::kLow)};
   };
@@ -451,12 +471,15 @@ TEST_F(ReceiverNodeTest, LowConfidenceDiscoveryIsRejected)
 
 TEST_F(ReceiverNodeTest, GenericNmeaDiscoveryRequiresExplicitOptIn)
 {
-  auto make_discovery = []() {
+  auto make_discovery = []()
+  {
     return [](const universal_gnss_driver::ReceiverProbeConfig&,
               const std::optional<std::string>&,
-              const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+              const universal_gnss_driver::ReceiverDiscoveryPaths&)
+    {
       return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-          MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+          MakeDiscoveryResult("/dev/ttyAMA2",
+                              921600u,
                               universal_gnss_driver::ReceiverDetectedFamily::kNmea,
                               universal_gnss_driver::ReceiverProbeConfidence::kMedium)};
     };
@@ -499,8 +522,7 @@ TEST_F(ReceiverNodeTest, GenericNmeaDiscoveryRequiresExplicitOptIn)
         FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/discovery");
     ASSERT_NE(discovery_status, nullptr);
     EXPECT_EQ(discovery_status->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
-    EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"),
-              std::optional<std::string>{"nmea"});
+    EXPECT_EQ(FindDiagnosticValue(*discovery_status, "family"), std::optional<std::string>{"nmea"});
   }
 }
 
@@ -510,12 +532,14 @@ TEST_F(ReceiverNodeTest, DiscoveryReceivesPlatformUartOptInAndKnownBaud)
   std::vector<std::uint32_t> captured_bauds;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
+  {
     include_platform_uarts = config.include_platform_uarts;
     captured_bauds = config.baud_candidates;
     EXPECT_EQ(explicit_path, std::optional<std::string>{"/dev/ttyAMA2"});
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyAMA2", 921600u,
+        MakeDiscoveryResult("/dev/ttyAMA2",
+                            921600u,
                             universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
                             universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
   };
@@ -606,8 +630,9 @@ TEST_F(ReceiverNodeTest, ReceiverConsumesRtcmPublishedByNtripNode)
       std::size_t offset = 0u;
       while (offset < data.size())
       {
-        const ssize_t bytes_written =
-            ::write(peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
+        const ssize_t bytes_written = ::write(peer_fd_,
+                                              data.data() + static_cast<std::ptrdiff_t>(offset),
+                                              data.size() - offset);
         if (bytes_written < 0)
         {
           if (errno == EINTR)
@@ -698,8 +723,8 @@ TEST_F(ReceiverNodeTest, ReceiverConsumesRtcmPublishedByNtripNode)
 
   receiver.PublishNow();
   ASSERT_TRUE(receiver.last_diagnostics_message().has_value());
-  const auto* forwarding =
-      FindDiagnosticStatusByName(*receiver.last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  const auto* forwarding = FindDiagnosticStatusByName(*receiver.last_diagnostics_message(),
+                                                      "universal_gnss/rtcm_forwarding");
   ASSERT_NE(forwarding, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
             std::optional<std::string>{"1"});
@@ -709,12 +734,12 @@ TEST_F(ReceiverNodeTest, ReceiverConsumesRtcmPublishedByNtripNode)
 TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
 {
   std::vector<std::uint8_t> stream;
-  AppendBytes(
-      stream,
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
+  AppendBytes(stream,
+              BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
   AppendBytes(stream, BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"));
   AppendBytes(stream,
-              BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
+              BuildNmeaSentence(
+                  "GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
   AppendBytes(stream, BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"));
 
   rclcpp::NodeOptions options;
@@ -753,8 +778,7 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_EQ(status.satellites_visible, 8u);
   EXPECT_FLOAT_EQ(status.max_cn0_db_hz, 43.0f);
   EXPECT_FALSE(diagnostics.status.empty());
-  EXPECT_TRUE(
-      diagnostics.header.stamp.sec != 0 || diagnostics.header.stamp.nanosec != 0u);
+  EXPECT_TRUE(diagnostics.header.stamp.sec != 0 || diagnostics.header.stamp.nanosec != 0u);
   EXPECT_EQ(diagnostics.header.frame_id, "gnss");
 }
 
@@ -782,9 +806,7 @@ TEST_F(ReceiverNodeTest, SemanticOnlyVtgAndZdaDoNotInventRuntimeFields)
   EXPECT_FALSE(node.last_fix_message().has_value());
   EXPECT_TRUE(std::isnan(status.latitude_deg));
   EXPECT_TRUE(std::isnan(status.heading_deg));
-  EXPECT_EQ(status.capability_flags &
-                universal_gnss_ros2::msg::GnssStatus::CAP_HEADING,
-            0u);
+  EXPECT_EQ(status.capability_flags & universal_gnss_ros2::msg::GnssStatus::CAP_HEADING, 0u);
 }
 
 TEST_F(ReceiverNodeTest, RejectsInvalidReceiverFamily)
@@ -794,7 +816,8 @@ TEST_F(ReceiverNodeTest, RejectsInvalidReceiverFamily)
       std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "mystery")});
 
   auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
-  EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options), std::invalid_argument);
+  EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
+               std::invalid_argument);
 }
 
 TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
@@ -810,8 +833,7 @@ TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
 
   {
     rclcpp::NodeOptions options;
-    options.parameter_overrides(
-        std::vector<rclcpp::Parameter>{rclcpp::Parameter("frame_id", "")});
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{rclcpp::Parameter("frame_id", "")});
     auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
     EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
                  std::invalid_argument);
@@ -820,8 +842,7 @@ TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
 
 TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
 {
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{{}});
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{{}});
   universal_gnss_ros2::ReceiverNode node(std::move(source));
 
   EXPECT_FALSE(node.StepOnce());
@@ -836,7 +857,8 @@ TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
   ASSERT_NE(summary, nullptr);
   ASSERT_NE(no_data, nullptr);
   EXPECT_EQ(no_data->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
-  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"), std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"),
+            std::optional<std::string>{"false"});
   EXPECT_EQ(FindDiagnosticValue(*summary, "stale_data"), std::optional<std::string>{"false"});
 }
 
@@ -845,17 +867,16 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
   const auto ubx = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
   const std::vector<std::uint8_t> truncated_ubx(ubx.begin(), ubx.begin() + 8u);
 
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{
-          {universal_gnss_transport::TransportStatus::kOk,
-           universal_gnss_transport::TransportError::kNone,
-           truncated_ubx,
-           true},
-          {universal_gnss_transport::TransportStatus::kEndOfStream,
-           universal_gnss_transport::TransportError::kNone,
-           {},
-           false},
-      });
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       truncated_ubx,
+       true},
+      {universal_gnss_transport::TransportStatus::kEndOfStream,
+       universal_gnss_transport::TransportError::kNone,
+       {},
+       false},
+  });
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
@@ -890,24 +911,195 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
       FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/malformed_records");
 
   ASSERT_NE(recovered_summary, nullptr);
+  ASSERT_NE(recovered_malformed, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*recovered_summary, "parser_healthy"),
             std::optional<std::string>{"true"});
-  EXPECT_EQ(recovered_malformed, nullptr);
+  EXPECT_EQ(recovered_malformed->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(recovered_malformed->message, "Diagnostic condition cleared");
+}
+
+TEST_F(ReceiverNodeTest, PublishesRuntimeStaleRecoveryStatusWhenFreshObservationsResume)
+{
+  const std::string best_nav =
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
+      "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+  const std::string unknown_rtk_status =
+      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+      "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0*f06a8a06\r\n";
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(best_nav),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(unknown_rtk_status),
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3100));
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& stale_diagnostics = *node.last_diagnostics_message();
+  const auto* stale =
+      FindDiagnosticStatusByName(stale_diagnostics, "universal_gnss/runtime_state_stale");
+  ASSERT_NE(stale, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::STALE);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& recovered_diagnostics = *node.last_diagnostics_message();
+  const auto* recovered_summary =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/summary");
+  const auto* recovered_stale =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/runtime_state_stale");
+
+  ASSERT_NE(recovered_summary, nullptr);
+  ASSERT_NE(recovered_stale, nullptr);
+  EXPECT_EQ(recovered_stale->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(recovered_stale->message, "Diagnostic condition cleared");
+  EXPECT_EQ(FindDiagnosticValue(*recovered_summary, "stale_data"),
+            std::optional<std::string>{"false"});
+}
+
+TEST_F(ReceiverNodeTest, RefreshesRuntimeFreshnessOnRuntimeObservationsWithoutStateMutation)
+{
+  const std::string best_nav =
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
+      "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+  const std::string unknown_rtk_status =
+      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+      "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0*f06a8a06\r\n";
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(best_nav),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(unknown_rtk_status),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(unknown_rtk_status),
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_fix_message().has_value());
+
+  EXPECT_TRUE(node.StepOnce());
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3100));
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* summary = FindDiagnosticStatusByName(diagnostics, "universal_gnss/summary");
+  const auto* stale = FindDiagnosticStatusByName(diagnostics, "universal_gnss/runtime_state_stale");
+  const auto* parser = FindDiagnosticStatusByName(diagnostics, "universal_gnss/parser_counters");
+
+  ASSERT_NE(summary, nullptr);
+  ASSERT_NE(parser, nullptr);
+  EXPECT_EQ(stale, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*summary, "stale_data"), std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*parser, "runtime_observations"), std::optional<std::string>{"3"});
+  EXPECT_EQ(FindDiagnosticValue(*parser, "runtime_updates"), std::optional<std::string>{"2"});
+  EXPECT_TRUE(node.last_fix_message().has_value());
+}
+
+TEST_F(ReceiverNodeTest, KeepsRuntimeStaleWhenOnlySemanticTrafficContinues)
+{
+  const std::string best_nav =
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
+      "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+  const std::string rtcm_status =
+      "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+      "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(best_nav),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(rtcm_status),
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_fix_message().has_value());
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3100));
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* summary = FindDiagnosticStatusByName(diagnostics, "universal_gnss/summary");
+  const auto* stale = FindDiagnosticStatusByName(diagnostics, "universal_gnss/runtime_state_stale");
+  const auto* parser = FindDiagnosticStatusByName(diagnostics, "universal_gnss/parser_counters");
+
+  ASSERT_NE(summary, nullptr);
+  ASSERT_NE(stale, nullptr);
+  ASSERT_NE(parser, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::STALE);
+  EXPECT_EQ(FindDiagnosticValue(*summary, "stale_data"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*parser, "runtime_observations"), std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*parser, "runtime_updates"), std::optional<std::string>{"1"});
+  EXPECT_FALSE(node.last_fix_message().has_value());
 }
 
 TEST_F(ReceiverNodeTest, ReportsTransportReadErrorAndSuppressesStaleFix)
 {
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{
-          {universal_gnss_transport::TransportStatus::kOk,
-           universal_gnss_transport::TransportError::kNone,
-           BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-           true},
-          {universal_gnss_transport::TransportStatus::kError,
-           universal_gnss_transport::TransportError::kReadFailure,
-           {},
-           true},
-      });
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+       true},
+      {universal_gnss_transport::TransportStatus::kError,
+       universal_gnss_transport::TransportError::kReadFailure,
+       {},
+       true},
+  });
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
@@ -932,7 +1124,8 @@ TEST_F(ReceiverNodeTest, ReportsTransportReadErrorAndSuppressesStaleFix)
   ASSERT_NE(summary, nullptr);
   ASSERT_NE(read_error, nullptr);
   EXPECT_EQ(read_error->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
-  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"), std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"),
+            std::optional<std::string>{"false"});
 }
 
 TEST_F(ReceiverNodeTest, StaysAliveOnSerialOpenFailureAndReportsDiagnostic)
@@ -958,7 +1151,8 @@ TEST_F(ReceiverNodeTest, StaysAliveOnSerialOpenFailureAndReportsDiagnostic)
   ASSERT_NE(summary, nullptr);
   ASSERT_NE(open_failed, nullptr);
   EXPECT_EQ(open_failed->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
-  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"), std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*summary, "transport_healthy"),
+            std::optional<std::string>{"false"});
 }
 
 TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmAcceptanceFromUbloxStream)

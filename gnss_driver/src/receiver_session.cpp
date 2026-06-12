@@ -6,8 +6,8 @@
 
 #include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
 namespace universal_gnss_driver
@@ -17,10 +17,10 @@ namespace
 {
 
 using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
 
@@ -226,8 +226,7 @@ const NmeaSessionMetrics& ReceiverSession::nmea_metrics() const
 void ReceiverSession::InitializeSelectionFromConfig()
 {
   if (config_.kind == ReceiverSessionKind::kUblox ||
-      config_.kind == ReceiverSessionKind::kUnicore ||
-      config_.kind == ReceiverSessionKind::kNmea)
+      config_.kind == ReceiverSessionKind::kUnicore || config_.kind == ReceiverSessionKind::kNmea)
   {
     metrics_.selected_session_kind = config_.kind;
     metrics_.selection_locked = true;
@@ -295,9 +294,9 @@ void ReceiverSession::TrimPendingBytesIfNeeded()
 
   const std::size_t bytes_to_drop =
       pending_auto_detect_bytes_.size() - config_.max_auto_detect_buffer_bytes;
-  pending_auto_detect_bytes_.erase(
-      pending_auto_detect_bytes_.begin(),
-      pending_auto_detect_bytes_.begin() + static_cast<std::ptrdiff_t>(bytes_to_drop));
+  pending_auto_detect_bytes_.erase(pending_auto_detect_bytes_.begin(),
+                                   pending_auto_detect_bytes_.begin() +
+                                       static_cast<std::ptrdiff_t>(bytes_to_drop));
 }
 
 void ReceiverSession::TrySelectSessionFromPendingBytes()
@@ -331,16 +330,17 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
       ubx_framer,
       pending_auto_detect_bytes_,
       ReceiverSessionKind::kUblox,
-      [](const UbxFrame& frame) {
+      [](const UbxFrame& frame)
+      {
         return frame.checksum_status == universal_gnss_protocols::ChecksumStatus::kValid;
       });
 
   UnicoreFrameFramer unicore_framer(config_.unicore.max_frame_length_bytes);
-  const auto unicore_candidate = DetectVendorCandidate<UnicoreFrameFramer, UnicoreFrame>(
-      unicore_framer,
-      pending_auto_detect_bytes_,
-      ReceiverSessionKind::kUnicore,
-      IsSupportedUnicoreCandidate);
+  const auto unicore_candidate =
+      DetectVendorCandidate<UnicoreFrameFramer, UnicoreFrame>(unicore_framer,
+                                                              pending_auto_detect_bytes_,
+                                                              ReceiverSessionKind::kUnicore,
+                                                              IsSupportedUnicoreCandidate);
 
   UnicoreBinaryFrameFramer unicore_binary_framer(config_.unicore.max_binary_frame_length_bytes);
   const auto unicore_binary_candidate =
@@ -402,6 +402,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   if (metrics_.selected_session_kind == ReceiverSessionKind::kUblox)
   {
     const auto& child = ublox_session_.metrics();
+    metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records = child.malformed_frames + child.frames_rejected;
     metrics_.unknown_records = child.unknown_frames;
@@ -411,6 +412,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   if (metrics_.selected_session_kind == ReceiverSessionKind::kUnicore)
   {
     const auto& child = unicore_session_.metrics();
+    metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records =
         child.malformed_lines + child.malformed_frames + child.records_rejected;
@@ -421,12 +423,14 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   if (metrics_.selected_session_kind == ReceiverSessionKind::kNmea)
   {
     const auto& child = nmea_session_.metrics();
+    metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records = child.malformed_sentences + child.records_rejected;
     metrics_.unknown_records = child.unknown_sentences;
     return;
   }
 
+  metrics_.runtime_observations = 0u;
   metrics_.runtime_updates = 0u;
   metrics_.malformed_records = 0u;
   metrics_.unknown_records = 0u;

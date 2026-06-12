@@ -1,11 +1,11 @@
 #include "universal_gnss_ros2/receiver_node.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cctype>
 #include <cerrno>
-#include <cstdint>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -31,8 +31,8 @@
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include "universal_gnss_ros2/navsat_fix_adapter.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
-#include "universal_gnss_transport/tcp_client_transport.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
+#include "universal_gnss_transport/tcp_client_transport.hpp"
 
 namespace universal_gnss_ros2
 {
@@ -79,9 +79,13 @@ using SteadyClock = std::chrono::steady_clock;
 
 std::string ToLowerCopy(std::string value)
 {
-  std::transform(value.begin(), value.end(), value.begin(), [](const unsigned char ch) {
-    return static_cast<char>(std::tolower(ch));
-  });
+  std::transform(value.begin(),
+                 value.end(),
+                 value.begin(),
+                 [](const unsigned char ch)
+                 {
+                   return static_cast<char>(std::tolower(ch));
+                 });
   return value;
 }
 
@@ -275,8 +279,7 @@ bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
   }
 
   return universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
-         state.rtk_mode.has_value() &&
-         *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
+         state.rtk_mode.has_value() && *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
          *state.rtk_mode != universal_gnss::GnssRtkMode::kUnknown;
 }
 
@@ -327,7 +330,8 @@ ReceiverNode::DiscoveryFunction MakeDefaultDiscoveryFunction()
 {
   return [](const universal_gnss_driver::ReceiverProbeConfig& config,
             const std::optional<std::string>& explicit_path,
-            const universal_gnss_driver::ReceiverDiscoveryPaths& paths) {
+            const universal_gnss_driver::ReceiverDiscoveryPaths& paths)
+  {
     return universal_gnss_driver::DiscoverReceivers(config, explicit_path, paths);
   };
 }
@@ -354,7 +358,8 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
       config.serial_device_auto ? std::nullopt : std::optional<std::string>{config.serial_device};
 
   auto results = discovery_function(probe_config, explicit_path, {});
-  const auto meets_threshold = [](const universal_gnss_driver::ReceiverProbeResult& result) {
+  const auto meets_threshold = [](const universal_gnss_driver::ReceiverProbeResult& result)
+  {
     return result.confidence == universal_gnss_driver::ReceiverProbeConfidence::kHigh ||
            result.confidence == universal_gnss_driver::ReceiverProbeConfidence::kMedium;
   };
@@ -388,8 +393,7 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
     {
       message << " (best candidate path=" << results.front().path
               << ", family=" << universal_gnss_driver::ToString(results.front().detected_family)
-              << ", confidence="
-              << universal_gnss_driver::ToString(results.front().confidence)
+              << ", confidence=" << universal_gnss_driver::ToString(results.front().confidence)
               << ", score=" << results.front().discovery_score
               << ", reason=" << results.front().reason << ")";
     }
@@ -430,7 +434,8 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
   }
 
   RCLCPP_INFO(node.get_logger(),
-              "Receiver discovery selected path=%s baud=%u family=%s confidence=%s score=%d reason=%s evidence=%s",
+              "Receiver discovery selected path=%s baud=%u family=%s confidence=%s score=%d "
+              "reason=%s evidence=%s",
               config.serial_device.c_str(),
               config.serial_baud,
               config.receiver_family_name.c_str(),
@@ -451,8 +456,9 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.serial_device = node.declare_parameter<std::string>("serial_device", "");
   rcl_interfaces::msg::ParameterDescriptor serial_baud_descriptor;
   serial_baud_descriptor.dynamic_typing = true;
-  node.declare_parameter(
-      "serial_baud", rclcpp::ParameterValue(std::string("115200")), serial_baud_descriptor);
+  node.declare_parameter("serial_baud",
+                         rclcpp::ParameterValue(std::string("115200")),
+                         serial_baud_descriptor);
   const auto serial_baud_parameter = node.get_parameter("serial_baud");
   config.tcp_host = node.declare_parameter<std::string>("tcp_host", "");
   const auto tcp_port = node.declare_parameter<std::int64_t>("tcp_port", 0);
@@ -471,8 +477,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   if (config.receiver_family_name != "auto" && config.receiver_family_name != "ublox" &&
       config.receiver_family_name != "unicore" && config.receiver_family_name != "nmea")
   {
-    ThrowInvalidParameter(
-        node, "receiver_family", "expected one of: auto, nmea, ublox, unicore");
+    ThrowInvalidParameter(node, "receiver_family", "expected one of: auto, nmea, ublox, unicore");
   }
 
   if (config.transport_name == "serial")
@@ -492,8 +497,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   {
     const auto serial_baud = serial_baud_parameter.as_int();
     if (serial_baud <= 0 ||
-        serial_baud >
-            static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+        serial_baud > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
     {
       ThrowInvalidParameter(node, "serial_baud", "must be in the 1..4294967295 range");
     }
@@ -508,22 +512,22 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
     }
     else if (!ParseUnsigned32Text(serial_baud_text, config.serial_baud) || config.serial_baud == 0u)
     {
-      ThrowInvalidParameter(
-          node, "serial_baud", "expected a positive integer baud rate or the string 'auto'");
+      ThrowInvalidParameter(node,
+                            "serial_baud",
+                            "expected a positive integer baud rate or the string 'auto'");
     }
   }
   else
   {
-    ThrowInvalidParameter(
-        node, "serial_baud", "expected a positive integer baud rate or the string 'auto'");
+    ThrowInvalidParameter(node,
+                          "serial_baud",
+                          "expected a positive integer baud rate or the string 'auto'");
   }
 
   if (discovery_timeout_ms <= 0 ||
-      discovery_timeout_ms >
-          static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+      discovery_timeout_ms > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
   {
-    ThrowInvalidParameter(
-        node, "discovery_timeout_ms", "must be in the 1..4294967295 range");
+    ThrowInvalidParameter(node, "discovery_timeout_ms", "must be in the 1..4294967295 range");
   }
   config.discovery_timeout_ms = static_cast<std::uint32_t>(discovery_timeout_ms);
 
@@ -548,7 +552,9 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   if (!using_injected_source && config.transport_kind == ReceiverTransportKind::kSerial &&
       config.serial_device.empty())
   {
-    ThrowInvalidParameter(node, "serial_device", "must be set to a device path or 'auto' when transport=serial");
+    ThrowInvalidParameter(node,
+                          "serial_device",
+                          "must be set to a device path or 'auto' when transport=serial");
   }
 
   if (config.transport_kind == ReceiverTransportKind::kTcp)
@@ -574,8 +580,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
 }
 
 std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
-    const ReceiverNodeConfig& config,
-    std::vector<universal_gnss::GnssDiagnosticEvent>& events)
+    const ReceiverNodeConfig& config, std::vector<universal_gnss::GnssDiagnosticEvent>& events)
 {
   using universal_gnss_transport::ByteSource;
   using universal_gnss_transport::TransportError;
@@ -610,11 +615,11 @@ std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
     const TransportError error = transport->Open(serial_config);
     if (error != TransportError::kNone)
     {
-      events.push_back(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kError,
-          universal_gnss::GnssDiagnosticCategory::kTransport,
-          "serial_open_failed",
-          "Failed to open serial transport: " + std::string(ToString(error))));
+      events.push_back(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                    universal_gnss::GnssDiagnosticCategory::kTransport,
+                    "serial_open_failed",
+                    "Failed to open serial transport: " + std::string(ToString(error))));
       return nullptr;
     }
 
@@ -696,14 +701,14 @@ struct ReceiverNode::Impl
     session_ = std::make_unique<universal_gnss_driver::ReceiverSession>(config_.session);
 
     fix_publisher_ = owner_.create_publisher<sensor_msgs::msg::NavSatFix>("fix", 10);
-    status_publisher_ =
-        owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
+    status_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
     rtcm_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
         "rtcm",
         rclcpp::QoS(rclcpp::KeepLast(50)).reliable(),
-        [this](const universal_gnss_ros2::msg::RtcmFrame& message) {
+        [this](const universal_gnss_ros2::msg::RtcmFrame& message)
+        {
           this->OnRtcmMessage(message);
         });
 
@@ -741,9 +746,11 @@ struct ReceiverNode::Impl
       runner_.emplace(*transport_source_, *session_, runner_config);
     }
 
-    timer_ = owner_.create_wall_timer(ComputePublishPeriod(config_.publish_rate_hz), [this]() {
-      this->OnTimer();
-    });
+    timer_ = owner_.create_wall_timer(ComputePublishPeriod(config_.publish_rate_hz),
+                                      [this]()
+                                      {
+                                        this->OnTimer();
+                                      });
   }
 
   void OnTimer()
@@ -767,13 +774,14 @@ struct ReceiverNode::Impl
     }
 
     const auto write_all = [&](const std::uint8_t* data,
-                               const std::size_t size) -> universal_gnss_transport::WriteResult {
+                               const std::size_t size) -> universal_gnss_transport::WriteResult
+    {
       universal_gnss_transport::WriteResult final_result{};
       std::size_t offset = 0u;
       while (offset < size)
       {
-        const auto result = transport_sink_->Write(
-            data + static_cast<std::ptrdiff_t>(offset), size - offset);
+        const auto result =
+            transport_sink_->Write(data + static_cast<std::ptrdiff_t>(offset), size - offset);
         final_result.bytes_written += result.bytes_written;
         final_result.status = result.status;
         final_result.error = result.error;
@@ -813,7 +821,7 @@ struct ReceiverNode::Impl
     }
 
     const std::size_t bytes_before = runner_->metrics().bytes_read;
-    const std::size_t runtime_updates_before = session_->metrics().runtime_updates;
+    const std::size_t runtime_observations_before = session_->metrics().runtime_observations;
     const bool advanced = runner_->StepOnce();
     const auto now = SteadyClock::now();
     const auto& runner_metrics = runner_->metrics();
@@ -823,9 +831,9 @@ struct ReceiverNode::Impl
       last_transport_activity_time_ = now;
     }
 
-    if (session_->metrics().runtime_updates > runtime_updates_before)
+    if (session_->metrics().runtime_observations > runtime_observations_before)
     {
-      last_runtime_update_time_ = now;
+      last_runtime_observation_time_ = now;
     }
 
     const std::size_t malformed_records = session_->metrics().malformed_records;
@@ -860,18 +868,18 @@ struct ReceiverNode::Impl
     const auto now = SteadyClock::now();
     const bool parser_issue_recent = HasRecentMalformedRecords(now);
 
-    const bool receiver_rtcm_active =
-        HasReceiverReportedRtcmCorrections();
+    const bool receiver_rtcm_active = HasReceiverReportedRtcmCorrections();
 
     summary.fix_valid = state.fix_valid;
     summary.rtk_available = HasRtkAvailability(state);
     summary.correction_available = HasCorrectionAvailability(state) || receiver_rtcm_active;
     summary.receiver_healthy =
         !HasKnownBoolField(state,
-                          universal_gnss::GnssCapability::kInterferenceState,
-                          state.interference_detected) &&
-        !HasKnownBoolField(
-            state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected);
+                           universal_gnss::GnssCapability::kInterferenceState,
+                           state.interference_detected) &&
+        !HasKnownBoolField(state,
+                           universal_gnss::GnssCapability::kJammingState,
+                           state.jamming_detected);
     summary.transport_healthy = transport_ready_;
     summary.parser_healthy = !parser_issue_recent;
 
@@ -891,11 +899,10 @@ struct ReceiverNode::Impl
       if (runner_metrics.read_errors > 0u)
       {
         summary.transport_healthy = false;
-        summary.AddEvent(MakeEvent(
-            universal_gnss::GnssDiagnosticSeverity::kError,
-            universal_gnss::GnssDiagnosticCategory::kTransport,
-            "transport_read_error",
-            "Receiver transport reported read errors"));
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                                   universal_gnss::GnssDiagnosticCategory::kTransport,
+                                   "transport_read_error",
+                                   "Receiver transport reported read errors"));
       }
       if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kEndOfStream ||
           runner_metrics.eof_seen)
@@ -939,26 +946,29 @@ struct ReceiverNode::Impl
       }
     }
 
-    if (last_runtime_update_time_.has_value() && now - *last_runtime_update_time_ >= kStaleTimeout)
+    if (last_runtime_observation_time_.has_value() &&
+        now - *last_runtime_observation_time_ >= kStaleTimeout)
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
                                  universal_gnss::GnssDiagnosticCategory::kRuntime,
                                  "runtime_state_stale",
-                                 "GNSS runtime state has not been updated recently"));
+                                 "GNSS runtime observations have not been received recently"));
     }
 
     if (parser_issue_recent)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kParser,
-          "malformed_records",
-          "Malformed records were observed recently while parsing receiver data"
-              " (count=" + std::to_string(session_metrics.malformed_records) + ")"));
+      summary.AddEvent(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                    universal_gnss::GnssDiagnosticCategory::kParser,
+                    "malformed_records",
+                    "Malformed records were observed recently while parsing receiver data"
+                    " (count=" +
+                        std::to_string(session_metrics.malformed_records) + ")"));
     }
 
-    if (HasKnownBoolField(
-            state, universal_gnss::GnssCapability::kInterferenceState, state.interference_detected))
+    if (HasKnownBoolField(state,
+                          universal_gnss::GnssCapability::kInterferenceState,
+                          state.interference_detected))
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
                                  universal_gnss::GnssDiagnosticCategory::kReceiver,
@@ -966,8 +976,9 @@ struct ReceiverNode::Impl
                                  "Receiver reported RF interference"));
     }
 
-    if (HasKnownBoolField(
-            state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected))
+    if (HasKnownBoolField(state,
+                          universal_gnss::GnssCapability::kJammingState,
+                          state.jamming_detected))
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
                                  universal_gnss::GnssDiagnosticCategory::kReceiver,
@@ -977,67 +988,66 @@ struct ReceiverNode::Impl
 
     if (transport_sink_ == nullptr)
     {
-      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
-                                 universal_gnss::GnssDiagnosticCategory::kTransport,
-                                 "rtcm_forwarding_unavailable",
-                                 "Receiver transport is read-only; RTCM forwarding is unavailable"));
+      summary.AddEvent(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                    universal_gnss::GnssDiagnosticCategory::kTransport,
+                    "rtcm_forwarding_unavailable",
+                    "Receiver transport is read-only; RTCM forwarding is unavailable"));
     }
     else if (rtcm_forwarded_frames_ > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kOk,
-          universal_gnss::GnssDiagnosticCategory::kCorrection,
-          "rtcm_forwarding_active",
-          "RTCM corrections are being forwarded to the live receiver transport"));
+      summary.AddEvent(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                    universal_gnss::GnssDiagnosticCategory::kCorrection,
+                    "rtcm_forwarding_active",
+                    "RTCM corrections are being forwarded to the live receiver transport"));
     }
 
     if (rtcm_forward_write_errors_ > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kCorrection,
-          "rtcm_forwarding_error",
-          last_rtcm_forward_failure_message_.value_or("RTCM forwarding reported write errors")));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "rtcm_forwarding_error",
+                                 last_rtcm_forward_failure_message_.value_or(
+                                     "RTCM forwarding reported write errors")));
     }
 
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
     {
       if (ublox_metrics->receiver_rtcm_messages_used > 0u)
       {
-        summary.AddEvent(MakeEvent(
-            universal_gnss::GnssDiagnosticSeverity::kOk,
-            universal_gnss::GnssDiagnosticCategory::kCorrection,
-            "receiver_rtcm_active",
-            "Receiver reported accepted RTCM corrections"));
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                   "receiver_rtcm_active",
+                                   "Receiver reported accepted RTCM corrections"));
       }
 
       if (ublox_metrics->receiver_rtcm_messages_not_used > 0u)
       {
-        summary.AddEvent(MakeEvent(
-            universal_gnss::GnssDiagnosticSeverity::kWarning,
-            universal_gnss::GnssDiagnosticCategory::kCorrection,
-            "receiver_rtcm_not_used",
-            "Receiver reported RTCM messages that were received but not used"));
+        summary.AddEvent(
+            MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                      universal_gnss::GnssDiagnosticCategory::kCorrection,
+                      "receiver_rtcm_not_used",
+                      "Receiver reported RTCM messages that were received but not used"));
       }
 
       if (ublox_metrics->receiver_rtcm_crc_failed > 0u)
       {
-        summary.AddEvent(MakeEvent(
-            universal_gnss::GnssDiagnosticSeverity::kWarning,
-            universal_gnss::GnssDiagnosticCategory::kCorrection,
-            "receiver_rtcm_crc_failed",
-            "Receiver reported RTCM messages that failed receiver-side CRC validation"));
+        summary.AddEvent(
+            MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                      universal_gnss::GnssDiagnosticCategory::kCorrection,
+                      "receiver_rtcm_crc_failed",
+                      "Receiver reported RTCM messages that failed receiver-side CRC validation"));
       }
     }
 
-    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr &&
-        unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics();
+        unicore_metrics != nullptr && unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kOk,
-          universal_gnss::GnssDiagnosticCategory::kCorrection,
-          "receiver_rtcm_active",
-          "Receiver reported RTCM correction status"));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "receiver_rtcm_active",
+                                 "Receiver reported RTCM correction status"));
     }
 
     return summary;
@@ -1075,8 +1085,7 @@ struct ReceiverNode::Impl
         MakeKeyValue("forwarding_supported", transport_sink_ != nullptr ? "true" : "false"));
     status.values.push_back(
         MakeKeyValue("forwarded_frame_count", std::to_string(rtcm_forwarded_frames_)));
-    status.values.push_back(
-        MakeKeyValue("forwarded_bytes", std::to_string(rtcm_forwarded_bytes_)));
+    status.values.push_back(MakeKeyValue("forwarded_bytes", std::to_string(rtcm_forwarded_bytes_)));
     status.values.push_back(
         MakeKeyValue("write_error_count", std::to_string(rtcm_forward_write_errors_)));
     status.values.push_back(
@@ -1086,41 +1095,44 @@ struct ReceiverNode::Impl
                          : "false"));
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
     {
-      status.values.push_back(MakeKeyValue(
-          "receiver_rtcm_messages_seen", std::to_string(ublox_metrics->receiver_rtcm_messages_seen)));
-      status.values.push_back(MakeKeyValue(
-          "receiver_rtcm_messages_used", std::to_string(ublox_metrics->receiver_rtcm_messages_used)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_messages_seen",
+                       std::to_string(ublox_metrics->receiver_rtcm_messages_seen)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_messages_used",
+                       std::to_string(ublox_metrics->receiver_rtcm_messages_used)));
       status.values.push_back(
           MakeKeyValue("receiver_rtcm_messages_not_used",
                        std::to_string(ublox_metrics->receiver_rtcm_messages_not_used)));
-      status.values.push_back(MakeKeyValue(
-          "receiver_rtcm_crc_failed", std::to_string(ublox_metrics->receiver_rtcm_crc_failed)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_crc_failed",
+                       std::to_string(ublox_metrics->receiver_rtcm_crc_failed)));
       if (ublox_metrics->last_receiver_rtcm_message_type.has_value())
       {
-        status.values.push_back(MakeKeyValue(
-            "receiver_last_message_type",
-            std::to_string(*ublox_metrics->last_receiver_rtcm_message_type)));
+        status.values.push_back(
+            MakeKeyValue("receiver_last_message_type",
+                         std::to_string(*ublox_metrics->last_receiver_rtcm_message_type)));
       }
     }
     if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
     {
-      status.values.push_back(MakeKeyValue(
-          "receiver_rtcm_status_messages_seen",
-          std::to_string(unicore_metrics->receiver_rtcm_status_messages_seen)));
-      status.values.push_back(MakeKeyValue(
-          "receiver_rtcm_status_message_count",
-          std::to_string(unicore_metrics->receiver_rtcm_status_message_count)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_status_messages_seen",
+                       std::to_string(unicore_metrics->receiver_rtcm_status_messages_seen)));
+      status.values.push_back(
+          MakeKeyValue("receiver_rtcm_status_message_count",
+                       std::to_string(unicore_metrics->receiver_rtcm_status_message_count)));
       if (unicore_metrics->receiver_last_rtcm_message_type.has_value())
       {
-        status.values.push_back(MakeKeyValue(
-            "receiver_last_message_type",
-            std::to_string(*unicore_metrics->receiver_last_rtcm_message_type)));
+        status.values.push_back(
+            MakeKeyValue("receiver_last_message_type",
+                         std::to_string(*unicore_metrics->receiver_last_rtcm_message_type)));
       }
       if (unicore_metrics->receiver_last_rtcm_base_station_id.has_value())
       {
-        status.values.push_back(MakeKeyValue(
-            "receiver_last_base_station_id",
-            std::to_string(*unicore_metrics->receiver_last_rtcm_base_station_id)));
+        status.values.push_back(
+            MakeKeyValue("receiver_last_base_station_id",
+                         std::to_string(*unicore_metrics->receiver_last_rtcm_base_station_id)));
       }
       if (unicore_metrics->receiver_last_rtcm_satellites_in_message.has_value())
       {
@@ -1144,8 +1156,7 @@ struct ReceiverNode::Impl
     }
     if (last_rtcm_forward_failure_message_.has_value())
     {
-      status.values.push_back(
-          MakeKeyValue("last_failure", *last_rtcm_forward_failure_message_));
+      status.values.push_back(MakeKeyValue("last_failure", *last_rtcm_forward_failure_message_));
     }
 
     diagnostics.status.push_back(std::move(status));
@@ -1173,14 +1184,15 @@ struct ReceiverNode::Impl
       status.message = "Receiver discovery failed";
     }
 
-    status.values.push_back(MakeKeyValue(
-        "attempted", discovery_status_.attempted ? "true" : "false"));
-    status.values.push_back(MakeKeyValue(
-        "succeeded", discovery_status_.succeeded ? "true" : "false"));
-    status.values.push_back(MakeKeyValue(
-        "include_platform_uarts", config_.discovery_include_platform_uarts ? "true" : "false"));
-    status.values.push_back(MakeKeyValue(
-        "allow_generic_nmea", config_.discovery_allow_generic_nmea ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("attempted", discovery_status_.attempted ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("succeeded", discovery_status_.succeeded ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("include_platform_uarts",
+                     config_.discovery_include_platform_uarts ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("allow_generic_nmea",
+                                         config_.discovery_allow_generic_nmea ? "true" : "false"));
     status.values.push_back(
         MakeKeyValue("timeout_ms", std::to_string(config_.discovery_timeout_ms)));
     status.values.push_back(
@@ -1193,22 +1205,21 @@ struct ReceiverNode::Impl
       status.values.push_back(MakeKeyValue("detected_device", result.path));
       if (result.selected_baud.has_value())
       {
-        status.values.push_back(
-            MakeKeyValue("baud", std::to_string(*result.selected_baud)));
+        status.values.push_back(MakeKeyValue("baud", std::to_string(*result.selected_baud)));
         status.values.push_back(
             MakeKeyValue("detected_baud", std::to_string(*result.selected_baud)));
       }
       status.values.push_back(
           MakeKeyValue("family", universal_gnss_driver::ToString(result.detected_family)));
-      status.values.push_back(MakeKeyValue(
-          "detected_family", universal_gnss_driver::ToString(result.detected_family)));
+      status.values.push_back(
+          MakeKeyValue("detected_family", universal_gnss_driver::ToString(result.detected_family)));
       status.values.push_back(
           MakeKeyValue("confidence", universal_gnss_driver::ToString(result.confidence)));
       status.values.push_back(
           MakeKeyValue("discovery_confidence", std::to_string(result.discovery_score)));
       status.values.push_back(MakeKeyValue("discovery_reason", result.reason));
-      status.values.push_back(MakeKeyValue(
-          "evidence", BuildDiscoveryEvidenceSummary(result.evidence)));
+      status.values.push_back(
+          MakeKeyValue("evidence", BuildDiscoveryEvidenceSummary(result.evidence)));
       if (result.stable_id.has_value())
       {
         status.values.push_back(MakeKeyValue("stable_id", *result.stable_id));
@@ -1217,8 +1228,7 @@ struct ReceiverNode::Impl
 
     if (discovery_status_.failure_reason.has_value())
     {
-      status.values.push_back(
-          MakeKeyValue("failure_reason", *discovery_status_.failure_reason));
+      status.values.push_back(MakeKeyValue("failure_reason", *discovery_status_.failure_reason));
     }
 
     diagnostics.status.push_back(std::move(status));
@@ -1242,38 +1252,38 @@ struct ReceiverNode::Impl
       status.message = "Parser healthy";
     }
 
-    status.values.push_back(MakeKeyValue(
-        "selected_session",
-        session_metrics.selected_session_kind.has_value()
-            ? universal_gnss_driver::ToString(*session_metrics.selected_session_kind)
-            : "undecided"));
-    status.values.push_back(MakeKeyValue(
-        "malformed_records_total", std::to_string(session_metrics.malformed_records)));
-    status.values.push_back(MakeKeyValue(
-        "unknown_records_total", std::to_string(session_metrics.unknown_records)));
-    status.values.push_back(MakeKeyValue(
-        "runtime_updates", std::to_string(session_metrics.runtime_updates)));
+    status.values.push_back(
+        MakeKeyValue("selected_session",
+                     session_metrics.selected_session_kind.has_value()
+                         ? universal_gnss_driver::ToString(*session_metrics.selected_session_kind)
+                         : "undecided"));
+    status.values.push_back(
+        MakeKeyValue("malformed_records_total", std::to_string(session_metrics.malformed_records)));
+    status.values.push_back(
+        MakeKeyValue("unknown_records_total", std::to_string(session_metrics.unknown_records)));
+    status.values.push_back(
+        MakeKeyValue("runtime_observations", std::to_string(session_metrics.runtime_observations)));
+    status.values.push_back(
+        MakeKeyValue("runtime_updates", std::to_string(session_metrics.runtime_updates)));
 
     if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
     {
       status.values.push_back(
           MakeKeyValue("unicore_lines_seen", std::to_string(unicore_metrics->lines_seen)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_ascii_records_seen",
-          std::to_string(unicore_metrics->ascii_records_seen)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_binary_frames_seen",
-          std::to_string(unicore_metrics->binary_frames_seen)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_records_parsed", std::to_string(unicore_metrics->records_parsed)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_records_rejected", std::to_string(unicore_metrics->records_rejected)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_malformed_lines", std::to_string(unicore_metrics->malformed_lines)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_malformed_frames", std::to_string(unicore_metrics->malformed_frames)));
-      status.values.push_back(MakeKeyValue(
-          "unicore_unknown_records", std::to_string(unicore_metrics->unknown_records)));
+      status.values.push_back(MakeKeyValue("unicore_ascii_records_seen",
+                                           std::to_string(unicore_metrics->ascii_records_seen)));
+      status.values.push_back(MakeKeyValue("unicore_binary_frames_seen",
+                                           std::to_string(unicore_metrics->binary_frames_seen)));
+      status.values.push_back(
+          MakeKeyValue("unicore_records_parsed", std::to_string(unicore_metrics->records_parsed)));
+      status.values.push_back(MakeKeyValue("unicore_records_rejected",
+                                           std::to_string(unicore_metrics->records_rejected)));
+      status.values.push_back(MakeKeyValue("unicore_malformed_lines",
+                                           std::to_string(unicore_metrics->malformed_lines)));
+      status.values.push_back(MakeKeyValue("unicore_malformed_frames",
+                                           std::to_string(unicore_metrics->malformed_frames)));
+      status.values.push_back(MakeKeyValue("unicore_unknown_records",
+                                           std::to_string(unicore_metrics->unknown_records)));
     }
 
     diagnostics.status.push_back(std::move(status));
@@ -1290,8 +1300,9 @@ struct ReceiverNode::Impl
     last_status_message_ = ToGnssStatusMessage(state);
 
     auto summary = BuildHealthSummary();
-    last_diagnostics_message_ =
-        ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
+    last_diagnostics_message_ = ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
+    AppendResolvedDiagnosticEvents(*last_diagnostics_message_, summary, state.timestamp_ns);
+    last_active_events_ = summary.events;
     if (last_diagnostics_message_->header.stamp.sec == 0 &&
         last_diagnostics_message_->header.stamp.nanosec == 0u)
     {
@@ -1317,6 +1328,34 @@ struct ReceiverNode::Impl
     diagnostics_publisher_->publish(*last_diagnostics_message_);
   }
 
+  void AppendResolvedDiagnosticEvents(
+      diagnostic_msgs::msg::DiagnosticArray& diagnostics,
+      const universal_gnss::GnssHealthSummary& summary,
+      const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns) const
+  {
+    for (const auto& previous_event : last_active_events_)
+    {
+      const bool still_active = std::any_of(
+          summary.events.begin(),
+          summary.events.end(),
+          [&](const universal_gnss::GnssDiagnosticEvent& current_event)
+          {
+            return current_event.code == previous_event.code;
+          });
+      if (still_active)
+      {
+        continue;
+      }
+
+      auto cleared_event = previous_event;
+      cleared_event.severity = universal_gnss::GnssDiagnosticSeverity::kOk;
+      cleared_event.message = "Diagnostic condition cleared";
+      cleared_event.timestamp_ns = timestamp_ns;
+      diagnostics.status.push_back(
+          ToDiagnosticStatusMessage(cleared_event, "universal_gnss", hardware_id_));
+    }
+  }
+
   bool publishers_ready() const
   {
     return fix_publisher_ != nullptr && status_publisher_ != nullptr &&
@@ -1325,8 +1364,8 @@ struct ReceiverNode::Impl
 
   bool HasFreshRuntimeState() const
   {
-    return last_runtime_update_time_.has_value() &&
-           (SteadyClock::now() - *last_runtime_update_time_ < kStaleTimeout);
+    return last_runtime_observation_time_.has_value() &&
+           (SteadyClock::now() - *last_runtime_observation_time_ < kStaleTimeout);
   }
 
   bool HasRecentMalformedRecords(const SteadyClock::time_point now) const
@@ -1337,9 +1376,8 @@ struct ReceiverNode::Impl
 
   const universal_gnss_driver::UbloxSessionMetrics* ActiveUbloxMetrics() const
   {
-    if (session_ == nullptr ||
-        session_->metrics().selected_session_kind !=
-            universal_gnss_driver::ReceiverSessionKind::kUblox)
+    if (session_ == nullptr || session_->metrics().selected_session_kind !=
+                                   universal_gnss_driver::ReceiverSessionKind::kUblox)
     {
       return nullptr;
     }
@@ -1349,9 +1387,8 @@ struct ReceiverNode::Impl
 
   const universal_gnss_driver::UnicoreSessionMetrics* ActiveUnicoreMetrics() const
   {
-    if (session_ == nullptr ||
-        session_->metrics().selected_session_kind !=
-            universal_gnss_driver::ReceiverSessionKind::kUnicore)
+    if (session_ == nullptr || session_->metrics().selected_session_kind !=
+                                   universal_gnss_driver::ReceiverSessionKind::kUnicore)
     {
       return nullptr;
     }
@@ -1361,14 +1398,14 @@ struct ReceiverNode::Impl
 
   bool HasReceiverReportedRtcmCorrections() const
   {
-    if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr &&
-        ublox_metrics->receiver_rtcm_messages_used > 0u)
+    if (const auto* ublox_metrics = ActiveUbloxMetrics();
+        ublox_metrics != nullptr && ublox_metrics->receiver_rtcm_messages_used > 0u)
     {
       return true;
     }
 
-    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr &&
-        unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics();
+        unicore_metrics != nullptr && unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
     {
       return true;
     }
@@ -1408,8 +1445,7 @@ struct ReceiverNode::Impl
         RCLCPP_WARN(owner_.get_logger(), "GNSS transport closed");
         break;
       case universal_gnss_transport::TransportStatus::kError:
-        RCLCPP_ERROR(
-            owner_.get_logger(), "GNSS transport read error: %s", ToString(error));
+        RCLCPP_ERROR(owner_.get_logger(), "GNSS transport read error: %s", ToString(error));
         break;
       case universal_gnss_transport::TransportStatus::kOk:
       default:
@@ -1436,7 +1472,7 @@ struct ReceiverNode::Impl
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
-  std::optional<SteadyClock::time_point> last_runtime_update_time_{};
+  std::optional<SteadyClock::time_point> last_runtime_observation_time_{};
   std::optional<SteadyClock::time_point> last_malformed_record_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
@@ -1444,6 +1480,7 @@ struct ReceiverNode::Impl
   std::optional<std::string> last_rtcm_forward_failure_message_{};
   universal_gnss_transport::TransportError last_logged_transport_error_{
       universal_gnss_transport::TransportError::kNone};
+  universal_gnss::GnssDiagnosticEvents last_active_events_{};
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};
   std::size_t rtcm_forward_write_errors_{0u};
@@ -1456,17 +1493,16 @@ struct ReceiverNode::Impl
 ReceiverNode::ReceiverNode(const rclcpp::NodeOptions& options)
     : rclcpp::Node("universal_gnss_receiver", options),
       impl_(std::make_unique<Impl>(*this,
-                                  std::unique_ptr<universal_gnss_transport::ByteSource>{},
-                                  MakeDefaultDiscoveryFunction()))
+                                   std::unique_ptr<universal_gnss_transport::ByteSource>{},
+                                   MakeDefaultDiscoveryFunction()))
 {
 }
 
-ReceiverNode::ReceiverNode(DiscoveryFunction discovery_function,
-                           const rclcpp::NodeOptions& options)
+ReceiverNode::ReceiverNode(DiscoveryFunction discovery_function, const rclcpp::NodeOptions& options)
     : rclcpp::Node("universal_gnss_receiver", options),
       impl_(std::make_unique<Impl>(*this,
-                                  std::unique_ptr<universal_gnss_transport::ByteSource>{},
-                                  std::move(discovery_function)))
+                                   std::unique_ptr<universal_gnss_transport::ByteSource>{},
+                                   std::move(discovery_function)))
 {
 }
 
@@ -1517,14 +1553,13 @@ const std::optional<sensor_msgs::msg::NavSatFix>& ReceiverNode::last_fix_message
   return impl_->last_fix_message_;
 }
 
-const std::optional<universal_gnss_ros2::msg::GnssStatus>& ReceiverNode::last_status_message()
-    const
+const std::optional<universal_gnss_ros2::msg::GnssStatus>& ReceiverNode::last_status_message() const
 {
   return impl_->last_status_message_;
 }
 
-const std::optional<diagnostic_msgs::msg::DiagnosticArray>&
-ReceiverNode::last_diagnostics_message() const
+const std::optional<diagnostic_msgs::msg::DiagnosticArray>& ReceiverNode::last_diagnostics_message()
+    const
 {
   return impl_->last_diagnostics_message_;
 }

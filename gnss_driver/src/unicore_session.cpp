@@ -1,8 +1,15 @@
 #include "universal_gnss_driver/unicore_session.hpp"
 
+#include <algorithm>
+#include <limits>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <utility>
 
+#include "universal_gnss/gnss_runtime_state.hpp"
+#include "universal_gnss_protocols/nmea_framer.hpp"
+#include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
 
@@ -12,9 +19,171 @@ namespace universal_gnss_driver
 namespace
 {
 
+using universal_gnss::ClearOptionalValue;
+using universal_gnss::GnssCapability;
+using universal_gnss::GnssFixType;
+using universal_gnss::GnssRuntimeState;
+using universal_gnss::SetCapability;
+using universal_gnss::SetOptionalValue;
+using universal_gnss_protocols::ChecksumStatus;
+using universal_gnss_protocols::NmeaGsvRecord;
+using universal_gnss_protocols::NmeaSentence;
+using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
+
+constexpr std::int64_t kGsvTalkerFreshnessWindowNs = 5'000'000'000ll;
+
+bool IsSupportedNmeaSentenceType(const NmeaSentence& sentence)
+{
+  return universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV") ||
+         universal_gnss_protocols::IsNmeaSentenceType(sentence, "GGA") ||
+         universal_gnss_protocols::IsNmeaGst(sentence);
+}
+
+bool IsTextSyncByte(const std::uint8_t byte)
+{
+  return byte == '$' || byte == '!' || byte == '#' || byte == '%';
+}
+
+bool HasBinarySyncAt(const std::vector<UnicoreBufferedByte>& bytes, const std::size_t offset)
+{
+  return offset + 2u < bytes.size() &&
+         bytes[offset].value == universal_gnss_protocols::kUnicoreBinarySync1 &&
+         bytes[offset + 1u].value == universal_gnss_protocols::kUnicoreBinarySync2 &&
+         bytes[offset + 2u].value == universal_gnss_protocols::kUnicoreBinarySync3;
+}
+
+bool IsPlausibleTextRecordStart(const std::vector<UnicoreBufferedByte>& bytes,
+                                const std::size_t offset)
+{
+  if (offset >= bytes.size() || !IsTextSyncByte(bytes[offset].value) || offset + 1u >= bytes.size())
+  {
+    return false;
+  }
+
+  const std::size_t max_probe = std::min<std::size_t>(bytes.size(), offset + 20u);
+  bool saw_separator = false;
+  for (std::size_t index = offset + 1u; index < max_probe; ++index)
+  {
+    const char c = static_cast<char>(bytes[index].value);
+    if (c == ',' || c == ';' || c == '*' || c == ' ')
+    {
+      saw_separator = true;
+      break;
+    }
+
+    const bool valid = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+    if (!valid)
+    {
+      return false;
+    }
+  }
+
+  return saw_separator;
+}
+
+std::optional<std::size_t> FindEmbeddedResyncOffset(const std::vector<UnicoreBufferedByte>& bytes,
+                                                    const std::size_t start_offset)
+{
+  for (std::size_t offset = start_offset + 1u; offset < bytes.size(); ++offset)
+  {
+    if (bytes[offset].value == '\n')
+    {
+      return std::nullopt;
+    }
+
+    if (HasBinarySyncAt(bytes, offset) || IsPlausibleTextRecordStart(bytes, offset))
+    {
+      return offset;
+    }
+  }
+
+  return std::nullopt;
+}
+
+void PruneNmeaGgaFallback(const GnssRuntimeState& current_state, GnssRuntimeState& update)
+{
+  if (current_state.fix_type != GnssFixType::kUnknown)
+  {
+    update.fix_valid = false;
+    update.fix_type = GnssFixType::kUnknown;
+  }
+  if (current_state.latitude_deg.has_value())
+  {
+    update.latitude_deg.reset();
+  }
+  if (current_state.longitude_deg.has_value())
+  {
+    update.longitude_deg.reset();
+  }
+  if (current_state.altitude_m.has_value())
+  {
+    update.altitude_m.reset();
+  }
+  if (current_state.hdop.has_value())
+  {
+    ClearOptionalValue(update, GnssCapability::kHdop, update.hdop);
+  }
+  if (current_state.satellites_used.has_value())
+  {
+    ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+  }
+}
+
+void PruneNmeaGstFallback(const GnssRuntimeState& current_state, GnssRuntimeState& update)
+{
+  if (current_state.horizontal_accuracy_m.has_value())
+  {
+    ClearOptionalValue(
+        update, GnssCapability::kHorizontalAccuracy, update.horizontal_accuracy_m);
+  }
+  if (current_state.vertical_accuracy_m.has_value())
+  {
+    ClearOptionalValue(update, GnssCapability::kVerticalAccuracy, update.vertical_accuracy_m);
+  }
+}
+
+template <typename RecordT>
+struct ProbeResult
+{
+  ParserStatus status{ParserStatus::kIdle};
+  std::optional<RecordT> record{};
+  std::size_t bytes_consumed{0u};
+};
+
+template <typename FramerT, typename RecordT>
+ProbeResult<RecordT> ProbeAtOffset(FramerT& framer,
+                                   const std::vector<UnicoreBufferedByte>& bytes,
+                                   const std::size_t start_offset)
+{
+  framer.Reset();
+  for (std::size_t index = start_offset; index < bytes.size(); ++index)
+  {
+    auto parser_result = framer.PushByte(bytes[index].value, bytes[index].timestamp_ns);
+    if (parser_result.status == ParserStatus::kNeedMoreData ||
+        parser_result.status == ParserStatus::kIdle)
+    {
+      continue;
+    }
+
+    return ProbeResult<RecordT>{
+        parser_result.status,
+        std::move(parser_result.record),
+        (index - start_offset) + 1u,
+    };
+  }
+
+  auto finalize_result = framer.Finalize();
+  return ProbeResult<RecordT>{
+      finalize_result.status,
+      std::move(finalize_result.record),
+      bytes.size() - start_offset,
+  };
+}
 
 template <typename ParseFn, typename MapFn>
 bool ParseAndMergeRecord(const UnicoreFrame& frame,
@@ -31,6 +200,7 @@ bool ParseAndMergeRecord(const UnicoreFrame& frame,
   }
 
   ++metrics.records_parsed;
+  ++metrics.runtime_observations;
   if (aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -54,6 +224,7 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
   }
 
   ++metrics.records_parsed;
+  ++metrics.runtime_observations;
   if (aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -63,9 +234,7 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
 }
 
 template <typename ParseFn>
-void ParseRecordOnly(const UnicoreFrame& frame,
-                     ParseFn&& parse_fn,
-                     UnicoreSessionMetrics& metrics)
+void ParseRecordOnly(const UnicoreFrame& frame, ParseFn&& parse_fn, UnicoreSessionMetrics& metrics)
 {
   const auto parsed = std::forward<ParseFn>(parse_fn)(frame);
   if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
@@ -97,10 +266,9 @@ void ParseRtcmStatusRecord(const UnicoreFrame& frame, UnicoreSessionMetrics& met
 
 bool IsSupportedRecordName(const std::string_view name)
 {
-  return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" ||
-         name == "RTCMSTATUSA" || name == "BESTSATA" || name == "SATSINFOA" ||
-         name == "JAMSTATUSA" || name == "FREQJAMSTATUSA" || name == "HWSTATUSA" ||
-         name == "AGCA";
+  return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" || name == "RTCMSTATUSA" ||
+         name == "BESTSATA" || name == "SATSINFOA" || name == "JAMSTATUSA" ||
+         name == "FREQJAMSTATUSA" || name == "HWSTATUSA" || name == "AGCA";
 }
 
 bool IsSupportedBinaryMessageId(const std::uint16_t message_id)
@@ -110,12 +278,7 @@ bool IsSupportedBinaryMessageId(const std::uint16_t message_id)
 
 }  // namespace
 
-UnicoreSession::UnicoreSession(UnicoreSessionConfig config)
-    : config_(config),
-      framer_(config.max_frame_length_bytes),
-      binary_framer_(config.max_binary_frame_length_bytes)
-{
-}
+UnicoreSession::UnicoreSession(UnicoreSessionConfig config) : config_(config) {}
 
 void UnicoreSession::FeedBytes(const std::uint8_t* data,
                                const std::size_t size,
@@ -129,8 +292,9 @@ void UnicoreSession::FeedBytes(const std::uint8_t* data,
   metrics_.bytes_seen += size;
   for (std::size_t i = 0u; i < size; ++i)
   {
-    FeedByte(data[i], timestamp_ns);
+    buffer_.push_back(UnicoreBufferedByte{data[i], timestamp_ns});
   }
+  ProcessBufferedData(false);
 }
 
 void UnicoreSession::FeedBytes(const std::vector<std::uint8_t>& bytes,
@@ -147,24 +311,19 @@ void UnicoreSession::FeedString(const std::string_view text,
 
 void UnicoreSession::Finalize()
 {
-  finalizing_ = true;
-  HandleFramerResult(framer_.Finalize());
-  HandleBinaryFramerResult(binary_framer_.Finalize());
-  finalizing_ = false;
+  ProcessBufferedData(true);
 }
 
 void UnicoreSession::Reset()
 {
-  framer_.Reset();
-  binary_framer_.Reset();
+  buffer_.clear();
   aggregator_.Reset();
   metrics_ = UnicoreSessionMetrics{};
   ascii_seen_valid_record_ = false;
   binary_seen_valid_frame_ = false;
   ascii_startup_malformed_suppressed_ = false;
   binary_startup_malformed_suppressed_ = false;
-  finalizing_ = false;
-  active_framer_ = ActiveFramer::kIdle;
+  gsv_talker_states_.clear();
 }
 
 const universal_gnss::GnssRuntimeState& UnicoreSession::current_state() const
@@ -182,57 +341,219 @@ const UnicoreSessionConfig& UnicoreSession::config() const
   return config_;
 }
 
-void UnicoreSession::FeedByte(const std::uint8_t byte,
-                              const std::optional<std::int64_t> timestamp_ns)
+void UnicoreSession::ProcessBufferedData(const bool finalizing)
 {
-  bool retry = true;
-  while (retry)
+  std::size_t offset = 0u;
+  while (offset < buffer_.size())
   {
-    retry = false;
+    std::size_t next_offset = offset;
+    bool keep_tail = false;
+    bool consumed = false;
 
-    ActiveFramer route = active_framer_;
-    if (route == ActiveFramer::kIdle)
+    const std::uint8_t byte = buffer_[offset].value;
+    if (byte == '$' || byte == '!')
     {
-      if (IsBinarySyncByte(byte))
-      {
-        route = ActiveFramer::kBinary;
-        active_framer_ = route;
-      }
-      else if (IsAsciiSyncByte(byte))
-      {
-        route = ActiveFramer::kAscii;
-        active_framer_ = route;
-      }
-      else
-      {
-        return;
-      }
+      consumed = ConsumeNmeaAtOffset(offset, finalizing, next_offset, keep_tail);
+    }
+    else if (byte == '#' || byte == '%')
+    {
+      consumed = ConsumeAsciiAtOffset(offset, finalizing, next_offset, keep_tail);
+    }
+    else if (byte == universal_gnss_protocols::kUnicoreBinarySync1)
+    {
+      consumed = ConsumeBinaryAtOffset(offset, finalizing, next_offset, keep_tail);
     }
 
-    if (route == ActiveFramer::kAscii)
+    if (!consumed)
     {
-      const auto result = framer_.PushByte(byte, timestamp_ns);
-      HandleFramerResult(result);
-      if (RouteFinished(result.status))
-      {
-        active_framer_ = ActiveFramer::kIdle;
-      }
-      continue;
+      next_offset = offset + 1u;
     }
 
-    const auto result = binary_framer_.PushByte(byte, timestamp_ns);
-    HandleBinaryFramerResult(result);
-    if (RouteFinished(result.status))
+    offset = next_offset;
+    if (keep_tail)
     {
-      active_framer_ = ActiveFramer::kIdle;
-      retry = ShouldRetryAsAscii(byte, result.status, route);
+      break;
     }
   }
+
+  if (offset > 0u)
+  {
+    buffer_.erase(buffer_.begin(), buffer_.begin() + static_cast<std::ptrdiff_t>(offset));
+  }
+}
+
+bool UnicoreSession::ConsumeNmeaAtOffset(const std::size_t start_offset,
+                                         const bool finalizing,
+                                         std::size_t& next_offset,
+                                         bool& keep_tail)
+{
+  if (const auto resync_offset = FindEmbeddedResyncOffset(buffer_, start_offset);
+      resync_offset.has_value())
+  {
+    if (!ShouldSuppressStartupAsciiMalformed())
+    {
+      ++metrics_.malformed_lines;
+    }
+    next_offset = *resync_offset;
+    return true;
+  }
+
+  NmeaSentenceFramer framer(config_.max_frame_length_bytes);
+  const ProbeResult<NmeaSentence> probe =
+      ProbeAtOffset<NmeaSentenceFramer, NmeaSentence>(framer, buffer_, start_offset);
+
+  if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
+  {
+    ++metrics_.lines_seen;
+    if (probe.record->checksum_status != ChecksumStatus::kValid)
+    {
+      ++metrics_.records_rejected;
+    }
+    else
+    {
+      ascii_seen_valid_record_ = true;
+      ++metrics_.ascii_records_seen;
+      HandleNmeaSentence(*probe.record);
+    }
+    next_offset = start_offset + probe.bytes_consumed;
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kTruncated)
+  {
+    if (finalizing)
+    {
+      ++metrics_.malformed_lines;
+      next_offset = buffer_.size();
+    }
+    else
+    {
+      keep_tail = true;
+      next_offset = start_offset;
+    }
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kInvalidData || probe.status == ParserStatus::kOverflow)
+  {
+    if (!ShouldSuppressStartupAsciiMalformed())
+    {
+      ++metrics_.malformed_lines;
+    }
+  }
+
+  next_offset = start_offset + 1u;
+  return true;
+}
+
+bool UnicoreSession::ConsumeAsciiAtOffset(const std::size_t start_offset,
+                                          const bool finalizing,
+                                          std::size_t& next_offset,
+                                          bool& keep_tail)
+{
+  if (const auto resync_offset = FindEmbeddedResyncOffset(buffer_, start_offset);
+      resync_offset.has_value())
+  {
+    if (!ShouldSuppressStartupAsciiMalformed())
+    {
+      ++metrics_.malformed_lines;
+    }
+    next_offset = *resync_offset;
+    return true;
+  }
+
+  UnicoreFrameFramer framer(config_.max_frame_length_bytes);
+  const ProbeResult<UnicoreFrame> probe =
+      ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, buffer_, start_offset);
+
+  if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
+  {
+    ++metrics_.lines_seen;
+    ascii_seen_valid_record_ = true;
+    if (!probe.record->message_name.empty())
+    {
+      ++metrics_.ascii_records_seen;
+    }
+    HandleFrame(*probe.record);
+    next_offset = start_offset + probe.bytes_consumed;
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kTruncated)
+  {
+    if (finalizing)
+    {
+      ++metrics_.malformed_lines;
+      next_offset = buffer_.size();
+    }
+    else
+    {
+      keep_tail = true;
+      next_offset = start_offset;
+    }
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kInvalidData || probe.status == ParserStatus::kOverflow)
+  {
+    if (!ShouldSuppressStartupAsciiMalformed())
+    {
+      ++metrics_.malformed_lines;
+    }
+  }
+
+  next_offset = start_offset + 1u;
+  return true;
+}
+
+bool UnicoreSession::ConsumeBinaryAtOffset(const std::size_t start_offset,
+                                           const bool finalizing,
+                                           std::size_t& next_offset,
+                                           bool& keep_tail)
+{
+  UnicoreBinaryFrameFramer framer(config_.max_binary_frame_length_bytes);
+  const ProbeResult<UnicoreBinaryFrame> probe =
+      ProbeAtOffset<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(framer, buffer_, start_offset);
+
+  if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
+  {
+    ++metrics_.binary_frames_seen;
+    binary_seen_valid_frame_ = true;
+    HandleBinaryFrame(*probe.record);
+    next_offset = start_offset + probe.bytes_consumed;
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kTruncated)
+  {
+    if (finalizing)
+    {
+      ++metrics_.malformed_frames;
+      next_offset = buffer_.size();
+    }
+    else
+    {
+      keep_tail = true;
+      next_offset = start_offset;
+    }
+    return true;
+  }
+
+  if (probe.status == ParserStatus::kInvalidData || probe.status == ParserStatus::kOverflow)
+  {
+    if (!ShouldSuppressStartupBinaryMalformed())
+    {
+      ++metrics_.malformed_frames;
+    }
+  }
+
+  next_offset = start_offset + 1u;
+  return true;
 }
 
 bool UnicoreSession::ShouldSuppressStartupAsciiMalformed()
 {
-  if (finalizing_ || ascii_seen_valid_record_ || ascii_startup_malformed_suppressed_)
+  if (ascii_seen_valid_record_ || ascii_startup_malformed_suppressed_)
   {
     return false;
   }
@@ -241,130 +562,15 @@ bool UnicoreSession::ShouldSuppressStartupAsciiMalformed()
   return true;
 }
 
-bool UnicoreSession::RouteFinished(const ParserStatus status) const
-{
-  switch (status)
-  {
-    case ParserStatus::kNeedMoreData:
-      return false;
-
-    case ParserStatus::kSkipped:
-      return true;
-
-    case ParserStatus::kIdle:
-    case ParserStatus::kRecordReady:
-    case ParserStatus::kInvalidData:
-    case ParserStatus::kTruncated:
-    case ParserStatus::kOverflow:
-      return true;
-  }
-
-  return true;
-}
-
-bool UnicoreSession::ShouldRetryAsAscii(const std::uint8_t byte,
-                                        const ParserStatus status,
-                                        const ActiveFramer active_framer) const
-{
-  return active_framer == ActiveFramer::kBinary &&
-         status == ParserStatus::kSkipped &&
-         IsAsciiSyncByte(byte);
-}
-
 bool UnicoreSession::ShouldSuppressStartupBinaryMalformed()
 {
-  if (finalizing_ || binary_seen_valid_frame_ || binary_startup_malformed_suppressed_)
+  if (binary_seen_valid_frame_ || binary_startup_malformed_suppressed_)
   {
     return false;
   }
 
   binary_startup_malformed_suppressed_ = true;
   return true;
-}
-
-bool UnicoreSession::IsAsciiSyncByte(const std::uint8_t byte)
-{
-  return byte == '#' || byte == '$' || byte == '%';
-}
-
-bool UnicoreSession::IsBinarySyncByte(const std::uint8_t byte)
-{
-  return byte == universal_gnss_protocols::kUnicoreBinarySync1;
-}
-
-void UnicoreSession::HandleFramerResult(
-    const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreFrame>& result)
-{
-  switch (result.status)
-  {
-    case ParserStatus::kRecordReady:
-      ++metrics_.lines_seen;
-      if (!result.record.has_value())
-      {
-        if (!ShouldSuppressStartupAsciiMalformed())
-        {
-          ++metrics_.malformed_lines;
-        }
-        return;
-      }
-      ascii_seen_valid_record_ = true;
-      if (!result.record->message_name.empty())
-      {
-        ++metrics_.ascii_records_seen;
-      }
-      HandleFrame(*result.record);
-      return;
-
-    case ParserStatus::kOverflow:
-    case ParserStatus::kTruncated:
-      if (!ShouldSuppressStartupAsciiMalformed())
-      {
-        ++metrics_.malformed_lines;
-      }
-      return;
-
-    case ParserStatus::kIdle:
-    case ParserStatus::kNeedMoreData:
-    case ParserStatus::kSkipped:
-    case ParserStatus::kInvalidData:
-      return;
-  }
-}
-
-void UnicoreSession::HandleBinaryFramerResult(
-    const universal_gnss_protocols::ParserResult<universal_gnss_protocols::UnicoreBinaryFrame>&
-        result)
-{
-  switch (result.status)
-  {
-    case ParserStatus::kRecordReady:
-      ++metrics_.binary_frames_seen;
-      if (!result.record.has_value())
-      {
-        if (!ShouldSuppressStartupBinaryMalformed())
-        {
-          ++metrics_.malformed_frames;
-        }
-        return;
-      }
-      binary_seen_valid_frame_ = true;
-      HandleBinaryFrame(*result.record);
-      return;
-
-    case ParserStatus::kOverflow:
-    case ParserStatus::kTruncated:
-    case ParserStatus::kInvalidData:
-      if (!ShouldSuppressStartupBinaryMalformed())
-      {
-        ++metrics_.malformed_frames;
-      }
-      return;
-
-    case ParserStatus::kIdle:
-    case ParserStatus::kNeedMoreData:
-    case ParserStatus::kSkipped:
-      return;
-  }
 }
 
 void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
@@ -383,34 +589,31 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
   if (frame.message_name == "PVTSLNA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicorePvtsln,
-        universal_gnss_protocols::UnicorePvtslnToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicorePvtsln,
+                        universal_gnss_protocols::UnicorePvtslnToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
   if (frame.message_name == "BESTNAVA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreBestNav,
-        universal_gnss_protocols::UnicoreBestNavToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreBestNav,
+                        universal_gnss_protocols::UnicoreBestNavToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
   if (frame.message_name == "RTKSTATUSA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreRtkStatus,
-        universal_gnss_protocols::UnicoreRtkStatusToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreRtkStatus,
+                        universal_gnss_protocols::UnicoreRtkStatusToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
@@ -422,45 +625,41 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
   if (frame.message_name == "SATSINFOA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreSatsInfo,
-        universal_gnss_protocols::UnicoreSatsInfoToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreSatsInfo,
+                        universal_gnss_protocols::UnicoreSatsInfoToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
   if (frame.message_name == "BESTSATA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreBestSat,
-        universal_gnss_protocols::UnicoreBestSatToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreBestSat,
+                        universal_gnss_protocols::UnicoreBestSatToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
   if (frame.message_name == "JAMSTATUSA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreJamStatus,
-        universal_gnss_protocols::UnicoreJamStatusToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreJamStatus,
+                        universal_gnss_protocols::UnicoreJamStatusToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
   if (frame.message_name == "FREQJAMSTATUSA")
   {
-    ParseAndMergeRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreFreqJamStatus,
-        universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeRecord(frame,
+                        universal_gnss_protocols::ParseUnicoreFreqJamStatus,
+                        universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState,
+                        aggregator_,
+                        metrics_);
     return;
   }
 
@@ -473,6 +672,204 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
   ParseRecordOnly(frame, universal_gnss_protocols::ParseUnicoreAgc, metrics_);
 }
 
+void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
+{
+  if (sentence.checksum_status != ChecksumStatus::kValid)
+  {
+    ++metrics_.records_rejected;
+    return;
+  }
+
+  if (!IsSupportedNmeaSentenceType(sentence))
+  {
+    ++metrics_.unknown_records;
+    return;
+  }
+
+  if (universal_gnss_protocols::IsNmeaSentenceType(sentence, "GGA"))
+  {
+    const auto parsed = universal_gnss_protocols::ParseNmeaGga(sentence);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.records_rejected;
+      return;
+    }
+
+    ++metrics_.records_parsed;
+    ++metrics_.runtime_observations;
+
+    GnssRuntimeState update = universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record);
+    PruneNmeaGgaFallback(aggregator_.state(), update);
+    if (aggregator_.Merge(update))
+    {
+      ++metrics_.runtime_updates;
+    }
+    return;
+  }
+
+  if (universal_gnss_protocols::IsNmeaGst(sentence))
+  {
+    const auto parsed = universal_gnss_protocols::ParseNmeaGst(sentence);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.records_rejected;
+      return;
+    }
+
+    ++metrics_.records_parsed;
+    ++metrics_.runtime_observations;
+
+    GnssRuntimeState update = universal_gnss_protocols::NmeaGstToRuntimeState(*parsed.record);
+    PruneNmeaGstFallback(aggregator_.state(), update);
+    if (aggregator_.Merge(update))
+    {
+      ++metrics_.runtime_updates;
+    }
+    return;
+  }
+
+  const auto parsed = universal_gnss_protocols::ParseNmeaGsv(sentence);
+  if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+  {
+    ++metrics_.records_rejected;
+    return;
+  }
+
+  ++metrics_.records_parsed;
+  ++metrics_.runtime_observations;
+
+  const NmeaGsvRecord& record = *parsed.record;
+  auto it = std::find_if(gsv_talker_states_.begin(),
+                         gsv_talker_states_.end(),
+                         [&](const UnicoreNmeaGsvTalkerState& state) {
+                           return state.talker == sentence.talker;
+                         });
+  if (it == gsv_talker_states_.end())
+  {
+    it = gsv_talker_states_.emplace(gsv_talker_states_.end());
+    it->talker = sentence.talker;
+  }
+
+  const bool stale_cycle = sentence.timestamp_ns.has_value() && it->last_timestamp_ns.has_value() &&
+                           *sentence.timestamp_ns - *it->last_timestamp_ns >
+                               kGsvTalkerFreshnessWindowNs;
+  const bool invalid_message_count =
+      record.total_messages == 0u ||
+      record.total_messages > UnicoreNmeaGsvTalkerState::kMaxMessages;
+  if (record.message_index <= 1u || stale_cycle || invalid_message_count ||
+      it->total_messages != record.total_messages)
+  {
+    it->total_messages = invalid_message_count ? 1u : record.total_messages;
+    it->satellites_in_view = record.satellites_in_view;
+    it->tracked_satellites = 0u;
+    it->last_timestamp_ns = sentence.timestamp_ns;
+    it->seen_messages.fill(false);
+    it->cn0_sum = 0.0f;
+    it->cn0_count = 0u;
+    it->cn0_max = 0.0f;
+  }
+
+  it->satellites_in_view = record.satellites_in_view;
+  it->last_timestamp_ns = sentence.timestamp_ns;
+
+  if (record.message_index >= 1u &&
+      record.message_index <= UnicoreNmeaGsvTalkerState::kMaxMessages)
+  {
+    const std::size_t index = static_cast<std::size_t>(record.message_index - 1u);
+    if (!it->seen_messages[index])
+    {
+      it->seen_messages[index] = true;
+      const std::uint32_t tracked_next_total =
+          static_cast<std::uint32_t>(it->tracked_satellites) + record.satellite_count;
+      it->tracked_satellites =
+          static_cast<std::uint16_t>(std::min<std::uint32_t>(
+              tracked_next_total, std::numeric_limits<std::uint16_t>::max()));
+      for (std::size_t satellite_index = 0u; satellite_index < record.satellite_count;
+           ++satellite_index)
+      {
+        const auto& satellite = record.satellites[satellite_index];
+        if (!satellite.cn0_db_hz.has_value())
+        {
+          continue;
+        }
+
+        it->cn0_sum += *satellite.cn0_db_hz;
+        it->cn0_max =
+            (it->cn0_count == 0u || *satellite.cn0_db_hz > it->cn0_max) ? *satellite.cn0_db_hz
+                                                                         : it->cn0_max;
+        ++it->cn0_count;
+      }
+    }
+  }
+
+  GnssRuntimeState update;
+  update.timestamp_ns = sentence.timestamp_ns;
+  SetCapability(update, GnssCapability::kSatellitesTracked);
+  SetCapability(update, GnssCapability::kSatellitesVisible);
+  SetCapability(update, GnssCapability::kMeanCn0);
+  SetCapability(update, GnssCapability::kMaxCn0);
+
+  std::uint16_t satellites_tracked_total = 0u;
+  std::uint16_t satellites_visible_total = 0u;
+  float cn0_sum_total = 0.0f;
+  std::size_t cn0_count_total = 0u;
+  float cn0_max_total = 0.0f;
+  bool cn0_seen = false;
+
+  for (const auto& talker_state : gsv_talker_states_)
+  {
+    const bool talker_is_fresh =
+        !sentence.timestamp_ns.has_value() || !talker_state.last_timestamp_ns.has_value() ||
+        (*sentence.timestamp_ns - *talker_state.last_timestamp_ns) <= kGsvTalkerFreshnessWindowNs;
+    if (!talker_is_fresh)
+    {
+      continue;
+    }
+
+    const std::uint32_t tracked_next_total =
+        static_cast<std::uint32_t>(satellites_tracked_total) + talker_state.tracked_satellites;
+    satellites_tracked_total =
+        static_cast<std::uint16_t>(std::min<std::uint32_t>(tracked_next_total,
+                                                           std::numeric_limits<std::uint16_t>::max()));
+
+    const std::uint32_t next_total =
+        static_cast<std::uint32_t>(satellites_visible_total) + talker_state.satellites_in_view;
+    satellites_visible_total =
+        static_cast<std::uint16_t>(std::min<std::uint32_t>(next_total,
+                                                           std::numeric_limits<std::uint16_t>::max()));
+
+    cn0_sum_total += talker_state.cn0_sum;
+    cn0_count_total += talker_state.cn0_count;
+    if (talker_state.cn0_count > 0u)
+    {
+      cn0_max_total = cn0_seen ? std::max(cn0_max_total, talker_state.cn0_max) : talker_state.cn0_max;
+      cn0_seen = true;
+    }
+  }
+
+  SetOptionalValue(update,
+                   GnssCapability::kSatellitesTracked,
+                   update.satellites_tracked,
+                   satellites_tracked_total);
+  SetOptionalValue(update,
+                   GnssCapability::kSatellitesVisible,
+                   update.satellites_visible,
+                   satellites_visible_total);
+  if (cn0_count_total > 0u)
+  {
+    SetOptionalValue(update,
+                     GnssCapability::kMeanCn0,
+                     update.mean_cn0_db_hz,
+                     cn0_sum_total / static_cast<float>(cn0_count_total));
+    SetOptionalValue(update, GnssCapability::kMaxCn0, update.max_cn0_db_hz, cn0_max_total);
+  }
+
+  if (aggregator_.Merge(update))
+  {
+    ++metrics_.runtime_updates;
+  }
+}
+
 void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
 {
   if (!IsSupportedBinaryMessageId(frame.message_id))
@@ -483,21 +880,19 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
 
   if (frame.message_id == 2118u)
   {
-    ParseAndMergeBinaryRecord(
-        frame,
-        universal_gnss_protocols::ParseUnicoreBestNavB,
-        universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
-        aggregator_,
-        metrics_);
+    ParseAndMergeBinaryRecord(frame,
+                              universal_gnss_protocols::ParseUnicoreBestNavB,
+                              universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
+                              aggregator_,
+                              metrics_);
     return;
   }
 
-  ParseAndMergeBinaryRecord(
-      frame,
-      universal_gnss_protocols::ParseUnicorePvtslnB,
-      universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
-      aggregator_,
-      metrics_);
+  ParseAndMergeBinaryRecord(frame,
+                            universal_gnss_protocols::ParseUnicorePvtslnB,
+                            universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
+                            aggregator_,
+                            metrics_);
 }
 
 }  // namespace universal_gnss_driver

@@ -32,6 +32,7 @@ void ParseAndMergeSentence(const NmeaSentence& sentence,
   }
 
   ++metrics.records_parsed;
+  ++metrics.runtime_observations;
   if (enable_runtime_updates && aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -134,8 +135,7 @@ void NmeaSession::HandleFramerResult(
   {
     case ParserStatus::kRecordReady:
       ++metrics_.sentences_seen;
-      if (!result.record.has_value() ||
-          result.record->checksum_status != ChecksumStatus::kValid)
+      if (!result.record.has_value() || result.record->checksum_status != ChecksumStatus::kValid)
       {
         ++metrics_.malformed_sentences;
         return;
@@ -208,6 +208,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     }
 
     ++metrics_.records_parsed;
+    ++metrics_.runtime_observations;
     if (config_.enable_runtime_updates)
     {
       universal_gnss::GnssRuntimeState update;
