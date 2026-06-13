@@ -20,6 +20,25 @@ class ByteDuplex;
 namespace universal_gnss_tools
 {
 
+class ConfigApplyTransportHooks
+{
+public:
+  virtual ~ConfigApplyTransportHooks() = default;
+
+  virtual bool ProbeReceiverPath(
+      const std::string& device_path,
+      const std::vector<std::uint32_t>& baud_candidates,
+      std::uint32_t read_timeout_ms,
+      universal_gnss_driver::ReceiverProbeResult& probe_result,
+      std::string& error_message) = 0;
+
+  virtual bool ReopenTransport(universal_gnss_transport::ByteDuplex& transport,
+                               const std::string& device_path,
+                               std::uint32_t baud_rate,
+                               std::uint32_t read_timeout_ms,
+                               std::string& error_message) = 0;
+};
+
 enum class ConfigApplyStatus : std::uint8_t
 {
   kOk = 0,
@@ -85,7 +104,8 @@ struct ConfigApplyResult
 ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options);
 
 ConfigApplyResult ExecuteConfigApply(universal_gnss_transport::ByteDuplex& transport,
-                                     const ConfigApplyOptions& options);
+                                     const ConfigApplyOptions& options,
+                                     ConfigApplyTransportHooks* hooks = nullptr);
 
 std::string FormatConfigApplyText(const ConfigApplyResult& result);
 

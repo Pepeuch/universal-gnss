@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -24,9 +25,15 @@ using universal_gnss_driver::ReceiverTransportType;
 using universal_gnss_driver::TryGetUbxCommandMessageIdentity;
 using universal_gnss_tools::ConfigApplyOptions;
 using universal_gnss_tools::ConfigApplyStatus;
+using universal_gnss_tools::ConfigApplyTransportHooks;
 using universal_gnss_tools::ExecuteConfigApply;
 using universal_gnss_tools::PrepareConfigApply;
+using universal_gnss_transport::ByteDuplex;
 using universal_gnss_transport::MemoryByteDuplex;
+using universal_gnss_transport::ReadResult;
+using universal_gnss_transport::TransportError;
+using universal_gnss_transport::TransportStatus;
+using universal_gnss_transport::WriteResult;
 
 struct TestContext
 {
@@ -119,6 +126,220 @@ std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
   return text;
 }
 
+std::string BuildUnicoreVersionResponse()
+{
+  return "#VERSIONA,UM982*00\r\n";
+}
+
+class ScriptedByteDuplex final : public ByteDuplex
+{
+public:
+  explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {})
+      : input_(std::move(input))
+  {
+  }
+
+  ReadResult Read(std::uint8_t* destination, const std::size_t capacity) override
+  {
+    if (!open_)
+    {
+      return ReadResult{0u, TransportStatus::kClosed, TransportError::kClosed};
+    }
+
+    if (capacity == 0u)
+    {
+      return ReadResult{};
+    }
+
+    if (destination == nullptr)
+    {
+      return ReadResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
+    }
+
+    if (read_offset_ >= input_.size())
+    {
+      return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
+    }
+
+    const auto available = input_.size() - read_offset_;
+    const auto bytes_to_copy = std::min(capacity, available);
+    std::copy_n(
+        input_.data() + static_cast<std::ptrdiff_t>(read_offset_),
+        static_cast<std::ptrdiff_t>(bytes_to_copy),
+        destination);
+    read_offset_ += bytes_to_copy;
+    return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
+  }
+
+  WriteResult Write(const std::uint8_t* data, const std::size_t size) override
+  {
+    if (!open_)
+    {
+      return WriteResult{0u, TransportStatus::kClosed, TransportError::kClosed};
+    }
+
+    if (size == 0u)
+    {
+      return WriteResult{};
+    }
+
+    if (data == nullptr)
+    {
+      return WriteResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
+    }
+
+    written_.insert(
+        written_.end(),
+        data,
+        data + static_cast<std::ptrdiff_t>(size));
+    return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
+  }
+
+  bool IsOpen() const override
+  {
+    return open_;
+  }
+
+  void Close() override
+  {
+    open_ = false;
+  }
+
+  void Reopen(std::vector<std::uint8_t> input)
+  {
+    input_ = std::move(input);
+    read_offset_ = 0u;
+    open_ = true;
+  }
+
+  const std::vector<std::uint8_t>& written_bytes() const
+  {
+    return written_;
+  }
+
+private:
+  std::vector<std::uint8_t> input_{};
+  std::vector<std::uint8_t> written_{};
+  std::size_t read_offset_{0u};
+  bool open_{true};
+};
+
+class ScriptedConfigApplyHooks final : public ConfigApplyTransportHooks
+{
+public:
+  struct ProbeStep
+  {
+    std::string device_path{};
+    std::vector<std::uint32_t> baud_candidates{};
+    ReceiverProbeResult result{};
+  };
+
+  struct ReopenStep
+  {
+    std::string device_path{};
+    std::uint32_t baud_rate{0u};
+    std::uint32_t read_timeout_ms{0u};
+    std::vector<std::uint8_t> input{};
+  };
+
+  explicit ScriptedConfigApplyHooks(ScriptedByteDuplex& transport)
+      : transport_(transport)
+  {
+  }
+
+  bool ProbeReceiverPath(const std::string& device_path,
+                         const std::vector<std::uint32_t>& baud_candidates,
+                         const std::uint32_t read_timeout_ms,
+                         ReceiverProbeResult& probe_result,
+                         std::string& error_message) override
+  {
+    (void)read_timeout_ms;
+
+    if (probe_index_ >= probe_steps_.size())
+    {
+      failure_ = "unexpected probe request";
+      error_message = failure_;
+      return false;
+    }
+
+    const auto& expected = probe_steps_[probe_index_++];
+    if (device_path != expected.device_path || baud_candidates != expected.baud_candidates)
+    {
+      failure_ = "probe request did not match the scripted recovery workflow";
+      error_message = failure_;
+      return false;
+    }
+
+    probe_result = expected.result;
+    error_message.clear();
+    return true;
+  }
+
+  bool ReopenTransport(ByteDuplex& transport,
+                       const std::string& device_path,
+                       const std::uint32_t baud_rate,
+                       const std::uint32_t read_timeout_ms,
+                       std::string& error_message) override
+  {
+    if (&transport != &transport_)
+    {
+      failure_ = "reopen request targeted an unexpected transport instance";
+      error_message = failure_;
+      return false;
+    }
+
+    if (reopen_index_ >= reopen_steps_.size())
+    {
+      failure_ = "unexpected transport reopen request";
+      error_message = failure_;
+      return false;
+    }
+
+    const auto& expected = reopen_steps_[reopen_index_++];
+    if (device_path != expected.device_path ||
+        baud_rate != expected.baud_rate ||
+        (expected.read_timeout_ms != 0u && read_timeout_ms != expected.read_timeout_ms))
+    {
+      failure_ = "reopen request did not match the scripted recovery workflow";
+      error_message = failure_;
+      return false;
+    }
+
+    transport_.Reopen(expected.input);
+    error_message.clear();
+    return true;
+  }
+
+  void AddProbeStep(ProbeStep step)
+  {
+    probe_steps_.push_back(std::move(step));
+  }
+
+  void AddReopenStep(ReopenStep step)
+  {
+    reopen_steps_.push_back(std::move(step));
+  }
+
+  bool AllStepsConsumed() const
+  {
+    return probe_index_ == probe_steps_.size() &&
+           reopen_index_ == reopen_steps_.size();
+  }
+
+  const std::string& failure() const
+  {
+    return failure_;
+  }
+
+private:
+  ScriptedByteDuplex& transport_;
+  std::vector<ProbeStep> probe_steps_{};
+  std::vector<ReopenStep> reopen_steps_{};
+  std::size_t probe_index_{0u};
+  std::size_t reopen_index_{0u};
+  std::string failure_{};
+};
+
 void TestDryRunDoesNotWrite(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -208,7 +429,7 @@ void TestNmeaWriteProfileRejected(TestContext& ctx)
              "generic NMEA receivers should reject write-side portable profiles for apply");
 }
 
-void TestPersistentGuarded(TestContext& ctx)
+void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -219,17 +440,17 @@ void TestPersistentGuarded(TestContext& ctx)
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation &&
                  result.execution_confirmed &&
-                 result.plan.summary.persistent_commands == 1u &&
-                 result.error_message.find("persistent live apply remains guarded") !=
-                     std::string::npos,
-             "persistent live apply should remain guarded even after confirmation");
+                 result.plan.summary.commands_total == 17u &&
+                 result.plan.summary.factory_reset_commands == 1u &&
+                 result.plan.summary.persistent_commands == 1u,
+             "persistent Unicore apply should prepare a confirmed reset-first recovery workflow");
 }
 
-void TestFactoryResetGuarded(TestContext& ctx)
+void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -240,10 +461,14 @@ void TestFactoryResetGuarded(TestContext& ctx)
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation &&
-                 result.error_message.find("reconnect/probe") != std::string::npos,
-             "factory-reset live apply should stay explicitly guarded until reconnect/probe handling exists");
+                 result.execution_confirmed &&
+                 result.plan.summary.commands_total == 16u &&
+                 result.plan.summary.factory_reset_commands == 1u &&
+                 result.plan.summary.runtime_commands == 15u,
+             "factory_reset live apply should prepare the explicit reset/reprobe recovery sequence");
 }
 
 void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
@@ -266,14 +491,140 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  !result.dry_run &&
                  result.executed &&
-                 result.execution_summary.commands_total == 13u &&
-                 result.execution_summary.commands_completed == 13u &&
+                 result.execution_summary.commands_total == 14u &&
+                 result.execution_summary.commands_completed == 14u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 13u &&
+                 result.execution_summary.responses_applied == 14u &&
                  result.execution_summary.final_status == "completed",
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only Unicore apply should write command bytes to the transport");
+}
+
+void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           first_probe_response.begin(),
+           first_probe_response.end())});
+  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           baud_recovery_responses.begin(),
+           baud_recovery_responses.end())});
+  const std::string second_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(
+           second_probe_response.begin(),
+           second_probe_response.end())});
+  const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(14u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(recovery_responses.begin(), recovery_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_total == 16u &&
+                 result.execution_summary.commands_completed == 16u &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.responses_applied == 14u &&
+                 result.execution_summary.final_status == "completed",
+             "factory_reset live apply should complete across the reset/reprobe recovery workflow");
+  ctx.Expect(hooks.AllStepsConsumed() &&
+                 hooks.failure().empty() &&
+                 written.find("FRESET\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+                 written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
+                 written.find("SAVECONFIG") == std::string::npos,
+             "factory_reset recovery apply should write reset and COM1 recovery commands without persisting the temporary rover profile");
+}
+
+void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           first_probe_response.begin(),
+           first_probe_response.end())});
+  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           baud_recovery_responses.begin(),
+           baud_recovery_responses.end())});
+  const std::string second_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(
+           second_probe_response.begin(),
+           second_probe_response.end())});
+  const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(15u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(
+           persistent_responses.begin(),
+           persistent_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_total == 17u &&
+                 result.execution_summary.commands_completed == 17u &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.responses_applied == 15u &&
+                 result.execution_summary.final_status == "completed",
+             "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
+  ctx.Expect(hooks.AllStepsConsumed() &&
+                 hooks.failure().empty() &&
+                 written.find("FRESET\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+                 written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
+                 written.find("SAVECONFIG\r\n") != std::string::npos,
+             "persistent Unicore recovery apply should restore COM1, replay the rover profile, and save it");
 }
 
 void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
@@ -312,9 +663,11 @@ int main()
   TestRuntimeOnlyRequiresConfirmation(ctx);
   TestUnknownReceiverRejected(ctx);
   TestNmeaWriteProfileRejected(ctx);
-  TestPersistentGuarded(ctx);
-  TestFactoryResetGuarded(ctx);
+  TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
+  TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
+  TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
 
   if (ctx.failures != 0)

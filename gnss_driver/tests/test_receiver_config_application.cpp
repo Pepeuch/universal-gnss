@@ -17,6 +17,7 @@ using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandResponse;
 using universal_gnss_driver::ReceiverCommandResponseKind;
+using universal_gnss_driver::ReceiverResponseKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverConfigApplication;
 using universal_gnss_driver::ReceiverConfigApplicationConfig;
@@ -59,6 +60,17 @@ ReceiverCommand MakeTextCommand(const std::string& payload,
   command.retry_policy.max_retries = max_retries;
   command.retry_policy.timeout_ms = timeout_ms;
   universal_gnss_driver::SetTextPayload(command, payload);
+  return command;
+}
+
+ReceiverCommand MakeResetCommand()
+{
+  ReceiverCommand command;
+  command.kind = ReceiverCommandKind::kReset;
+  command.expected_response = ReceiverResponseKind::kNone;
+  command.safety_level = ReceiverCommandSafetyLevel::kFactoryReset;
+  command.explicit_safety_confirmation = true;
+  universal_gnss_driver::SetTextPayload(command, "FRESET\r\n");
   return command;
 }
 
@@ -162,6 +174,30 @@ void TestMultiCommandSuccess(TestContext& ctx)
                  sink.written_bytes() ==
                      std::vector<std::uint8_t>({0x01u, 0x02u, 0x03u}),
              "multi-command success should dispatch both commands and update metrics");
+}
+
+void TestImmediateAckCommandCompletesWithoutResponse(TestContext& ctx)
+{
+  MemoryByteSink sink;
+  ReceiverConfigApplication application(sink);
+
+  const auto start = application.Start({MakeResetCommand()}, 3500);
+
+  ctx.Expect(start.state == ReceiverConfigApplicationState::kCompleted &&
+                 start.command_started &&
+                 start.command_finished &&
+                 application.state() == ReceiverConfigApplicationState::kCompleted &&
+                 application.current_index() == 1u,
+             "commands that expect no response should complete during the initial dispatch step");
+  ctx.Expect(application.metrics().commands_total == 1u &&
+                 application.metrics().commands_started == 1u &&
+                 application.metrics().commands_completed == 1u &&
+                 application.metrics().commands_failed == 0u &&
+                 application.metrics().responses_applied == 0u &&
+                 sink.written_bytes() ==
+                     std::vector<std::uint8_t>(
+                         {'F', 'R', 'E', 'S', 'E', 'T', '\r', '\n'}),
+             "immediate-ack commands should not wait for a response or fabricate response metrics");
 }
 
 void TestTextErrorFailsByDefault(TestContext& ctx)
@@ -330,6 +366,7 @@ int main()
   TestEmptyCommandListCompletesImmediately(ctx);
   TestOneCommandSuccess(ctx);
   TestMultiCommandSuccess(ctx);
+  TestImmediateAckCommandCompletesWithoutResponse(ctx);
   TestTextErrorFailsByDefault(ctx);
   TestContinueOnErrorAdvancesToNextCommand(ctx);
   TestTimeoutThenRetry(ctx);

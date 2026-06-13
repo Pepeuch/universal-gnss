@@ -239,11 +239,11 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
   const auto nmea_diag = nmea_driver.BuildDiagnosticsProfile();
   ctx.Expect(unicore_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
-                 unicore_rover.commands.size() == 13u,
+                 unicore_rover.commands.size() == 14u,
              "Unicore rover driver profile should delegate to the existing rover builder");
   ctx.Expect(unicore_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
-                 unicore_diag.commands.size() == 14u,
+                 unicore_diag.commands.size() == 15u,
              "Unicore diagnostics driver profile should delegate to the existing diagnostics builder");
   ctx.Expect(unicore_base.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
                  unicore_base.profile_kind == ReceiverConfigProfileKind::kBase,

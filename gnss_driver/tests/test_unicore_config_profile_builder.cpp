@@ -81,7 +81,7 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover helper should declare the rover config profile kind");
   ctx.Expect(profile.clear_current_port_outputs,
              "unicore rover helper should request a runtime output cleanup before re-enabling logs");
-  ctx.Expect(result.commands.size() == 13u,
+  ctx.Expect(result.commands.size() == 14u,
              "unicore rover helper should generate mode, config, and output-message commands");
 
   ExpectTextCommand(ctx,
@@ -96,21 +96,23 @@ void TestRoverProfileGeneration(TestContext& ctx)
                     "CONFIG NMEA0183 V411");
   ctx.Expect(ContainsText(result.commands[4], "CONFIG DGPS TIMEOUT 600"),
              "unicore rover helper should include the conservative DGPS timeout command");
-  ctx.Expect(ContainsText(result.commands[5], "UNLOG"),
+  ctx.Expect(ContainsText(result.commands[5], "CONFIG SIGNALGROUP 3 6"),
+             "unicore rover helper should configure the validated UM982 signal-group set");
+  ctx.Expect(ContainsText(result.commands[6], "UNLOG"),
              "unicore rover helper should clear the current port outputs before enabling the curated log set");
-  ctx.Expect(ContainsText(result.commands[6], "LOG GPGGA ONTIME 0.2"),
+  ctx.Expect(ContainsText(result.commands[7], "LOG GPGGA ONTIME 0.2"),
              "unicore rover helper should enable GPGGA with the documented ONTIME syntax");
-  ctx.Expect(ContainsText(result.commands[7], "GPGSV 1"),
+  ctx.Expect(ContainsText(result.commands[8], "GPGSV 1"),
              "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback stay available");
-  ctx.Expect(ContainsText(result.commands[8], "GPGST 1"),
+  ctx.Expect(ContainsText(result.commands[9], "GPGST 1"),
              "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
-  ctx.Expect(ContainsText(result.commands[9], "LOG PVTSLNA ONTIME 0.2"),
+  ctx.Expect(ContainsText(result.commands[10], "LOG PVTSLNA ONTIME 0.2"),
              "unicore rover helper should enable PVTSLNA with the practical ONTIME syntax");
-  ctx.Expect(ContainsText(result.commands[10], "BESTNAVA 0.2"),
+  ctx.Expect(ContainsText(result.commands[11], "BESTNAVA 0.2"),
              "unicore rover helper should emit BESTNAVA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[11], "RTKSTATUSA 1"),
+  ctx.Expect(ContainsText(result.commands[12], "RTKSTATUSA 1"),
              "unicore rover helper should emit RTKSTATUSA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[12], "RTCMSTATUSA ONCHANGED"),
+  ctx.Expect(ContainsText(result.commands[13], "RTCMSTATUSA ONCHANGED"),
              "unicore rover helper should emit RTCMSTATUSA with ONCHANGED syntax");
 }
 
@@ -120,7 +122,7 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 14u,
+                 result.commands.size() == 15u,
              "unicore diagnostics helper should extend the rover profile with one extra output command");
   ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA 1"),
              "unicore diagnostics helper should enable SATSINFOA at a stable 1 Hz period");
@@ -167,9 +169,31 @@ void TestPersistentAndSignalGroupSafety(TestContext& ctx)
     ExpectTextCommand(ctx,
                       result.commands.front(),
                       ReceiverCommandKind::kApplyConfigProfile,
-                      ReceiverCommandSafetyLevel::kPersistent,
+                      ReceiverCommandSafetyLevel::kRuntime,
                       "CONFIG SIGNALGROUP 3 6");
+
+    MemoryByteSink sink;
+    ReceiverCommandDispatcher dispatcher(sink);
+    const auto accepted = dispatcher.Dispatch(result.commands.front());
+    ctx.Expect(accepted.status == DispatchStatus::kSent,
+               "runtime signal-group commands should remain immediately dispatchable without a persistent confirmation gate");
   }
+}
+
+void TestCom1BaudCommandGeneration(TestContext& ctx)
+{
+  auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile();
+  profile.com1_baud_rate = 921600u;
+  const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                 result.commands.size() == 15u,
+             "unicore COM1 baud injection should prepend one extra runtime command");
+  ExpectTextCommand(ctx,
+                    result.commands.front(),
+                    ReceiverCommandKind::kApplyConfigProfile,
+                    ReceiverCommandSafetyLevel::kRuntime,
+                    "CONFIG COM1 921600 8 n 1");
 }
 
 void TestFactoryResetProfileGeneration(TestContext& ctx)
@@ -255,6 +279,7 @@ int main()
   TestRoverProfileGeneration(ctx);
   TestDiagnosticsProfileGeneration(ctx);
   TestPersistentAndSignalGroupSafety(ctx);
+  TestCom1BaudCommandGeneration(ctx);
   TestFactoryResetProfileGeneration(ctx);
   TestInvalidDeferredInputs(ctx);
   TestRuntimeDispatcherBehavior(ctx);

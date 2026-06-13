@@ -163,6 +163,49 @@ void ApplyFactoryResetWarningsAndRollback(ReceiverAutoConfigPlan& plan)
       "reconnect at 115200 bps, rediscover the receiver, and reapply a known-good profile";
 }
 
+void ApplyFactoryResetRecoveryWarningsAndRollback(ReceiverAutoConfigPlan& plan,
+                                                  const std::uint32_t recovery_baud)
+{
+  plan.validation.production_ready = true;
+  plan.validation.ready_to_execute =
+      plan.request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  plan.warnings.push_back(
+      "factory reset clears saved receiver configuration and restarts the receiver");
+  plan.warnings.push_back(
+      "Unicore FRESET resets the active serial baud rate to 115200 bps");
+  plan.warnings.push_back(
+      "live apply must reconnect/probe at 115200 bps with an active VERSIONA query, reconfigure COM1, then continue at " +
+      std::to_string(recovery_baud) + " bps");
+  plan.warnings.push_back(
+      "after FRESET the receiver may need about 30 seconds or slightly more before it starts responding again");
+
+  if (plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
+  {
+    plan.warnings.push_back(
+        "persistent Unicore profile apply performs FRESET first so the saved profile is rebuilt from a clean baseline");
+    plan.warnings.push_back(
+        "persistent recovery will finish with SAVECONFIG after the post-reset profile is restored");
+    plan.rollback_expectation.summary =
+        "factory reset clears saved receiver configuration before restoring a saved Unicore profile";
+    plan.rollback_expectation.operator_action =
+        "reconnect at " + std::to_string(recovery_baud) +
+        " bps and reapply a different saved profile if rollback is needed";
+  }
+  else
+  {
+    plan.warnings.push_back(
+        "runtime-only recovery re-enables a known-good rover profile after the reset but does not save it; the receiver will keep factory defaults after the next reboot");
+    plan.rollback_expectation.summary =
+        "factory reset permanently restores saved defaults before a temporary rover profile is re-applied";
+    plan.rollback_expectation.operator_action =
+        "reconnect at " + std::to_string(recovery_baud) +
+        " bps and rerun a persistent profile if factory defaults should not remain saved";
+  }
+
+  plan.rollback_expectation.changes_are_temporary = false;
+  plan.rollback_expectation.operator_action_required = true;
+}
+
 bool ProfileLeavesReceiverUnchanged(const ReceiverAutoConfigProfile profile)
 {
   return profile == ReceiverAutoConfigProfile::kRuntimeOnly;
@@ -172,6 +215,23 @@ bool ProfileSupportsRateOverride(const ReceiverAutoConfigProfile profile)
 {
   return profile == ReceiverAutoConfigProfile::kRoverHighPrecision ||
          profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug;
+}
+
+std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& request)
+{
+  if (request.config_baud.has_value())
+  {
+    return *request.config_baud;
+  }
+
+  if (request.discovery_result.has_value() &&
+      request.discovery_result->selected_baud.has_value() &&
+      *request.discovery_result->selected_baud != 0u)
+  {
+    return *request.discovery_result->selected_baud;
+  }
+
+  return 921600u;
 }
 
 ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(
@@ -398,24 +458,20 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     return plan;
   }
 
-  if (request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset &&
-      request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
+  if (!ValidateConfigBaud(request, plan))
   {
-    plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode;
-    plan.validation.profile_supported = true;
-    plan.validation.apply_mode_supported = false;
-    plan.error_message =
-        "factory_reset profile does not support persistent apply because the reset itself already clears saved configuration";
-    plan.unsupported_reason = plan.error_message;
-    ApplyFactoryResetWarningsAndRollback(plan);
     return plan;
   }
 
-  if (request.config_baud.has_value())
+  const bool requires_clean_reset_workflow =
+      request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset ||
+      request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
+
+  if (request.config_baud.has_value() && !requires_clean_reset_workflow)
   {
     plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
     plan.error_message =
-        "Unicore auto-configuration planning does not support baud overrides because the portable builder does not emit baud commands";
+        "Unicore auto-configuration planning only supports baud overrides through the clean reset/recovery workflow";
     return plan;
   }
 
@@ -436,10 +492,56 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(persistence);
       break;
     case ReceiverAutoConfigProfile::kFactoryReset:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
       break;
     case ReceiverAutoConfigProfile::kRuntimeOnly:
       break;
+  }
+
+  if (requires_clean_reset_workflow)
+  {
+    const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
+    plan.request.config_baud = recovery_baud;
+    profile.com1_baud_rate = recovery_baud;
+
+    if (request.rate_hz.has_value() &&
+        ProfileSupportsRateOverride(request.requested_profile))
+    {
+      const double period_s = 1.0 / *request.rate_hz;
+      for (auto& output : profile.output_messages)
+      {
+        if (IsPeriodicUnicoreMessage(output.message))
+        {
+          output.period_s = period_s;
+        }
+      }
+    }
+
+    const auto reset_result = UnicoreConfigProfileBuilder::Build(
+        UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile());
+    if (reset_result.status != UnicoreConfigProfileBuildStatus::kOk)
+    {
+      plan.status = ReceiverAutoConfigPlanStatus::kBuildError;
+      plan.error_message = reset_result.error_message;
+      return plan;
+    }
+
+    const auto recovery_result = UnicoreConfigProfileBuilder::Build(profile);
+    if (recovery_result.status != UnicoreConfigProfileBuildStatus::kOk)
+    {
+      plan.status = ReceiverAutoConfigPlanStatus::kBuildError;
+      plan.error_message = recovery_result.error_message;
+      return plan;
+    }
+
+    plan.commands = reset_result.commands;
+    plan.commands.insert(
+        plan.commands.end(),
+        recovery_result.commands.begin(),
+        recovery_result.commands.end());
+    SummarizeCommands(plan);
+    ApplyFactoryResetRecoveryWarningsAndRollback(plan, recovery_baud);
+    return plan;
   }
 
   if (request.rate_hz.has_value() &&

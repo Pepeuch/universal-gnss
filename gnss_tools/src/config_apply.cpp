@@ -1,5 +1,6 @@
 #include "universal_gnss_tools/config_apply.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -8,6 +9,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,6 +43,9 @@ using universal_gnss_driver::ReceiverConfigApplicationResult;
 using universal_gnss_driver::ReceiverConfigApplicationState;
 using universal_gnss_driver::ReceiverCommandResponseMatchMetadata;
 using universal_gnss_driver::ReceiverCommandTimestampNs;
+using universal_gnss_driver::ReceiverDetectedFamily;
+using universal_gnss_driver::ReceiverProbeConfidence;
+using universal_gnss_driver::ReceiverProbeResult;
 using universal_gnss_driver::UbloxResponseRouter;
 using universal_gnss_driver::UbloxRoutedResponse;
 using universal_gnss_driver::UnicoreResponseRouter;
@@ -51,6 +56,13 @@ using universal_gnss_transport::ByteDuplex;
 using universal_gnss_transport::TransportStatus;
 
 using Clock = std::chrono::steady_clock;
+
+constexpr std::uint32_t kUnicoreFactoryResetRecoveryWindowMs = 45000u;
+constexpr std::uint32_t kUnicoreBaudSwitchRecoveryWindowMs = 10000u;
+constexpr std::uint32_t kProbeAttemptReadTimeoutMs = 250u;
+constexpr auto kRecoveryProbeRetrySleep = std::chrono::milliseconds(500);
+constexpr auto kUnicoreRecoveryQueryRetry = std::chrono::milliseconds(1000);
+constexpr std::string_view kUnicoreRecoveryQuery = "VERSIONA\r\n";
 
 ConfigApplyStatus MapPlanStatus(const ConfigPlanStatus status)
 {
@@ -290,11 +302,23 @@ void PopulateExecutionSummaryFromPlan(ConfigApplyResult& result)
   result.execution_summary.commands_total = result.plan.summary.commands_total;
 }
 
+bool IsUnicorePlan(const ConfigPlanResult& plan)
+{
+  return plan.vendor == "unicore";
+}
+
+bool PlanUsesUnicoreRecoveryWorkflow(const ConfigPlanResult& plan)
+{
+  return IsUnicorePlan(plan) && plan.summary.factory_reset_commands > 0u;
+}
+
 bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
                                const ConfigApplyOptions& options)
 {
   const bool execution_requested = ApplyModeRequestsExecution(options.apply_mode);
   const bool has_planned_commands = result.plan.summary.commands_total > 0u;
+  const bool uses_unicore_recovery_workflow =
+      PlanUsesUnicoreRecoveryWorkflow(result.plan);
   result.requires_runtime_confirmation =
       execution_requested && result.plan.summary.runtime_commands > 0u;
   result.requires_persistent_confirmation =
@@ -304,7 +328,8 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
   result.execution_confirmed =
       !execution_requested || !has_planned_commands || options.confirm;
 
-  if (result.plan.summary.factory_reset_commands > 0u)
+  if (result.plan.summary.factory_reset_commands > 0u &&
+      !uses_unicore_recovery_workflow)
   {
     result.status = ConfigApplyStatus::kSafetyRejected;
     result.error_message =
@@ -339,11 +364,14 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
 
   if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
-    result.status = ConfigApplyStatus::kSafetyRejected;
-    result.error_message =
-        "persistent live apply remains guarded in gnss_config_apply; review the plan and use manual rollback-capable vendor workflows if needed";
-    result.execution_summary.final_status = "safety_rejected";
-    return false;
+    if (!uses_unicore_recovery_workflow)
+    {
+      result.status = ConfigApplyStatus::kSafetyRejected;
+      result.error_message =
+          "persistent live apply remains guarded in gnss_config_apply; review the plan and use manual rollback-capable vendor workflows if needed";
+      result.execution_summary.final_status = "safety_rejected";
+      return false;
+    }
   }
 
   return true;
@@ -370,6 +398,244 @@ std::vector<ReceiverCommand> BuildExecutableCommands(const ConfigPlanResult& pla
   }
 
   return commands;
+}
+
+std::vector<ReceiverCommand> BuildExecutableCommands(
+    const std::vector<ConfigPlanCommand>& plan_commands,
+    const ConfigApplyOptions& options)
+{
+  std::vector<ReceiverCommand> commands;
+  commands.reserve(plan_commands.size());
+
+  for (const auto& plan_command : plan_commands)
+  {
+    ReceiverCommand command = plan_command.command;
+    command.retry_policy.timeout_ms = options.timeout_ms;
+
+    if (command.safety_level == ReceiverCommandSafetyLevel::kPersistent ||
+        command.safety_level == ReceiverCommandSafetyLevel::kFactoryReset)
+    {
+      command.explicit_safety_confirmation = options.confirm;
+    }
+
+    commands.push_back(std::move(command));
+  }
+
+  return commands;
+}
+
+std::uint32_t ResolveTransportReadTimeoutMs(const ConfigApplyOptions& options)
+{
+  return options.timeout_ms > 100u ? 100u
+                                   : (options.timeout_ms == 0u ? 1u : options.timeout_ms);
+}
+
+std::optional<std::size_t> FindFirstFactoryResetCommandIndex(
+    const std::vector<ConfigPlanCommand>& commands)
+{
+  for (std::size_t index = 0u; index < commands.size(); ++index)
+  {
+    if (commands[index].command.safety_level == ReceiverCommandSafetyLevel::kFactoryReset ||
+        commands[index].command.kind ==
+            universal_gnss_driver::ReceiverCommandKind::kReset)
+    {
+      return index;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool IsUnicoreCom1BaudCommand(const ConfigPlanCommand& command)
+{
+  return command.command.payload.kind == ReceiverCommandPayloadKind::kText &&
+         TrimTrailingCrLf(command.command.payload.text).rfind("CONFIG COM1 ", 0u) == 0u;
+}
+
+std::optional<std::size_t> FindFirstUnicoreBaudCommandIndex(
+    const std::vector<ConfigPlanCommand>& commands,
+    const std::size_t begin_index)
+{
+  for (std::size_t index = begin_index; index < commands.size(); ++index)
+  {
+    if (IsUnicoreCom1BaudCommand(commands[index]))
+    {
+      return index;
+    }
+  }
+
+  return std::nullopt;
+}
+
+std::vector<ConfigPlanCommand> SlicePlanCommands(
+    const std::vector<ConfigPlanCommand>& commands,
+    const std::size_t begin_index,
+    const std::size_t end_index)
+{
+  if (begin_index >= end_index || begin_index >= commands.size())
+  {
+    return {};
+  }
+
+  const auto bounded_end = std::min(end_index, commands.size());
+  return std::vector<ConfigPlanCommand>(
+      commands.begin() + static_cast<std::ptrdiff_t>(begin_index),
+      commands.begin() + static_cast<std::ptrdiff_t>(bounded_end));
+}
+
+std::uint32_t ResolveUnicoreRecoveryBaud(const ConfigApplyResult& result)
+{
+  if (result.plan.baud.has_value() && *result.plan.baud != 0u)
+  {
+    return *result.plan.baud;
+  }
+
+  if (result.transport_baud_rate != 0u)
+  {
+    return result.transport_baud_rate;
+  }
+
+  if (result.plan.detected_baud.has_value() && *result.plan.detected_baud != 0u)
+  {
+    return *result.plan.detected_baud;
+  }
+
+  return 921600u;
+}
+
+std::string DescribeTransportFailure(const TransportStatus status,
+                                     const universal_gnss_transport::TransportError error)
+{
+  std::ostringstream stream;
+  stream << "transport status=" << static_cast<int>(status) <<
+      " error=" << static_cast<int>(error);
+  return stream.str();
+}
+
+bool ReopenTransportUntilReady(ConfigApplyTransportHooks& hooks,
+                               ByteDuplex& transport,
+                               ConfigApplyResult& result,
+                               const std::string& device_path,
+                               const std::uint32_t baud_rate,
+                               const std::uint32_t read_timeout_ms,
+                               const std::uint32_t window_ms,
+                               const std::string& waiting_message,
+                               std::string& error_message)
+{
+  result.progress_log.push_back(waiting_message);
+
+  const auto deadline =
+      Clock::now() + std::chrono::milliseconds(static_cast<int>(window_ms));
+
+  do
+  {
+    if (hooks.ReopenTransport(
+            transport,
+            device_path,
+            baud_rate,
+            read_timeout_ms,
+            error_message))
+    {
+      return true;
+    }
+
+    static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+    std::this_thread::sleep_for(kRecoveryProbeRetrySleep);
+  } while (Clock::now() < deadline);
+
+  if (error_message.empty())
+  {
+    error_message = "receiver transport could not be reopened before the recovery timeout";
+  }
+  return false;
+}
+
+bool WaitForUnicoreActiveResponse(ByteDuplex& transport,
+                                  ConfigApplyResult& result,
+                                  const std::uint32_t baud_rate,
+                                  const std::uint32_t window_ms,
+                                  const std::string& waiting_message,
+                                  std::string& error_message)
+{
+  result.progress_log.push_back(waiting_message);
+
+  UnicoreResponseRouter router;
+  std::vector<std::uint8_t> read_buffer(256u, 0u);
+  const auto deadline =
+      Clock::now() + std::chrono::milliseconds(static_cast<int>(window_ms));
+  auto next_query_time = Clock::now();
+
+  while (Clock::now() < deadline)
+  {
+    const auto now = Clock::now();
+    if (now >= next_query_time)
+    {
+      const auto write_result =
+          transport.Write(reinterpret_cast<const std::uint8_t*>(kUnicoreRecoveryQuery.data()),
+                          kUnicoreRecoveryQuery.size());
+      if (write_result.status == TransportStatus::kClosed ||
+          write_result.status == TransportStatus::kError ||
+          write_result.bytes_written != kUnicoreRecoveryQuery.size())
+      {
+        error_message =
+            "failed to send active Unicore recovery query at " +
+            std::to_string(baud_rate) + " bps: " +
+            DescribeTransportFailure(write_result.status, write_result.error);
+        return false;
+      }
+
+      next_query_time = now + kUnicoreRecoveryQueryRetry;
+    }
+
+    const auto read_result = transport.Read(read_buffer.data(), read_buffer.size());
+    if (read_result.status == TransportStatus::kClosed ||
+        read_result.status == TransportStatus::kError)
+    {
+      error_message =
+          "failed while waiting for an active Unicore recovery response at " +
+          std::to_string(baud_rate) + " bps: " +
+          DescribeTransportFailure(read_result.status, read_result.error);
+      return false;
+    }
+
+    if (read_result.bytes_read == 0u)
+    {
+      std::this_thread::sleep_for(kRecoveryProbeRetrySleep);
+      continue;
+    }
+
+    router.FeedBytes(
+        std::string_view(
+            reinterpret_cast<const char*>(read_buffer.data()),
+            read_result.bytes_read),
+        NowTimestampNs());
+
+    ReceiverCommandResponse response;
+    while (router.PopResponse(response))
+    {
+      if (response.kind == ReceiverCommandResponseKind::kTextOk)
+      {
+        result.progress_log.push_back(
+            "Active VERSIONA query confirmed Unicore response at " +
+            std::to_string(baud_rate) + " bps");
+        error_message.clear();
+        return true;
+      }
+
+      if (response.kind == ReceiverCommandResponseKind::kTextError)
+      {
+        error_message =
+            "receiver returned an explicit error while handling the active Unicore recovery query: " +
+            response.message;
+        return false;
+      }
+    }
+  }
+
+  error_message =
+      "receiver reopened at " + std::to_string(baud_rate) +
+      " bps but did not answer VERSIONA before the recovery timeout";
+  return false;
 }
 
 std::string MakeCommandProgressPrefix(const std::size_t index,
@@ -445,6 +711,82 @@ void NoteApplicationProgress(ConfigApplyResult& result,
             total,
             succeeded ? "completed" : "failed") +
         " - " + plan.commands[plan_index].description + suffix);
+  }
+}
+
+void NoteApplicationProgress(ConfigApplyResult& result,
+                             const std::vector<ConfigPlanCommand>& commands,
+                             const ReceiverConfigApplicationResult& application_result,
+                             const std::size_t command_index_offset,
+                             const std::size_t overall_command_total)
+{
+  const std::size_t total = commands.size();
+  if (total == 0u)
+  {
+    return;
+  }
+
+  const std::size_t display_index =
+      application_result.command_index < total
+          ? (command_index_offset + application_result.command_index + 1u)
+          : std::min(overall_command_total, command_index_offset + total);
+
+  if (application_result.command_started && application_result.command_index < total)
+  {
+    const auto& command = commands[application_result.command_index];
+    result.progress_log.push_back(
+        MakeCommandProgressPrefix(display_index, overall_command_total, "dispatching") +
+        " - " + command.description);
+  }
+
+  if (application_result.retry_dispatched && application_result.command_index < total)
+  {
+    const auto& command = commands[application_result.command_index];
+    result.progress_log.push_back(
+        MakeCommandProgressPrefix(display_index, overall_command_total, "retrying") +
+        " - " + command.description);
+  }
+
+  if (application_result.command_finished)
+  {
+    std::size_t phase_index = application_result.command_index;
+    if (application_result.advanced_to_next_command && application_result.command_index > 0u)
+    {
+      phase_index = application_result.command_index - 1u;
+    }
+    else if (application_result.state == ReceiverConfigApplicationState::kCompleted &&
+             total > 0u)
+    {
+      phase_index = total - 1u;
+    }
+
+    if (phase_index >= total)
+    {
+      phase_index = total > 0u ? (total - 1u) : 0u;
+    }
+
+    std::string suffix;
+    if (!application_result.error_message.empty())
+    {
+      suffix = ": " + application_result.error_message;
+    }
+    else if (application_result.engine_result.has_value() &&
+             !application_result.engine_result->error_message.empty())
+    {
+      suffix = ": " + application_result.engine_result->error_message;
+    }
+
+    const bool succeeded =
+        application_result.state == ReceiverConfigApplicationState::kRunning ||
+        application_result.state == ReceiverConfigApplicationState::kCompleted;
+    const auto global_index = command_index_offset + phase_index + 1u;
+
+    result.progress_log.push_back(
+        MakeCommandProgressPrefix(
+            global_index,
+            overall_command_total,
+            succeeded ? "completed" : "failed") +
+        " - " + commands[phase_index].description + suffix);
   }
 }
 
@@ -601,6 +943,376 @@ bool ProcessUnicoreBytes(ConfigApplyResult& result,
   return ApplyQueuedUnicoreResponses(result, plan, application, router);
 }
 
+struct CommandPhaseOutcome
+{
+  ConfigApplyStatus status{ConfigApplyStatus::kOk};
+  ConfigApplyExecutionSummary summary{};
+  std::string error_message{};
+};
+
+CommandPhaseOutcome ExecuteUnicoreCommandPhase(
+    ConfigApplyResult& result,
+    ByteDuplex& transport,
+    const std::vector<ConfigPlanCommand>& commands,
+    const ConfigApplyOptions& options,
+    const std::size_t command_index_offset)
+{
+  CommandPhaseOutcome outcome;
+  outcome.summary.commands_total = commands.size();
+  if (commands.empty())
+  {
+    outcome.summary.final_status = "completed";
+    return outcome;
+  }
+
+  ReceiverConfigApplicationConfig application_config;
+  ReceiverConfigApplication application(transport, application_config);
+  UnicoreResponseRouter unicore_router;
+
+  auto executable_commands = BuildExecutableCommands(commands, options);
+  auto application_result = application.Start(executable_commands, NowTimestampNs());
+  NoteApplicationProgress(
+      result,
+      commands,
+      application_result,
+      command_index_offset,
+      result.plan.summary.commands_total);
+
+  std::vector<std::uint8_t> read_buffer(256u, 0u);
+  while (application.state() == ReceiverConfigApplicationState::kRunning ||
+         application.state() == ReceiverConfigApplicationState::kWaitingForResponse)
+  {
+    if (application.state() == ReceiverConfigApplicationState::kRunning)
+    {
+      application_result = application.Step(NowTimestampNs());
+      NoteApplicationProgress(
+          result,
+          commands,
+          application_result,
+          command_index_offset,
+          result.plan.summary.commands_total);
+    }
+
+    if (application.state() == ReceiverConfigApplicationState::kCompleted ||
+        application.state() == ReceiverConfigApplicationState::kFailed)
+    {
+      break;
+    }
+
+    if (application.state() != ReceiverConfigApplicationState::kWaitingForResponse)
+    {
+      continue;
+    }
+
+    while (application.state() == ReceiverConfigApplicationState::kWaitingForResponse &&
+           unicore_router.pending_response_count() > 0u)
+    {
+      ReceiverCommandResponse response;
+      if (!unicore_router.PopResponse(response))
+      {
+        break;
+      }
+
+      application_result = application.ApplyResponse(response);
+      NoteApplicationProgress(
+          result,
+          commands,
+          application_result,
+          command_index_offset,
+          result.plan.summary.commands_total);
+    }
+
+    if (application.state() == ReceiverConfigApplicationState::kCompleted ||
+        application.state() == ReceiverConfigApplicationState::kFailed)
+    {
+      break;
+    }
+
+    const auto read_result = transport.Read(read_buffer.data(), read_buffer.size());
+    if (read_result.status == TransportStatus::kError ||
+        read_result.status == TransportStatus::kClosed)
+    {
+      outcome.status = ConfigApplyStatus::kReadFailed;
+      outcome.error_message = "transport read failed while waiting for a response";
+      result.progress_log.push_back("Read failed while waiting for receiver response");
+      break;
+    }
+
+    if (read_result.bytes_read > 0u)
+    {
+      const auto timestamp_ns = NowTimestampNs();
+      const std::string_view text(
+          reinterpret_cast<const char*>(read_buffer.data()), read_result.bytes_read);
+      unicore_router.FeedBytes(text, timestamp_ns);
+
+      while (application.state() == ReceiverConfigApplicationState::kWaitingForResponse &&
+             unicore_router.pending_response_count() > 0u)
+      {
+        ReceiverCommandResponse response;
+        if (!unicore_router.PopResponse(response))
+        {
+          break;
+        }
+
+        application_result = application.ApplyResponse(response);
+        NoteApplicationProgress(
+            result,
+            commands,
+            application_result,
+            command_index_offset,
+            result.plan.summary.commands_total);
+      }
+    }
+
+    if (application.state() == ReceiverConfigApplicationState::kCompleted ||
+        application.state() == ReceiverConfigApplicationState::kFailed)
+    {
+      break;
+    }
+
+    application_result = application.CheckTimeout(NowTimestampNs());
+    NoteApplicationProgress(
+        result,
+        commands,
+        application_result,
+        command_index_offset,
+        result.plan.summary.commands_total);
+  }
+
+  outcome.summary.commands_completed = application.metrics().commands_completed;
+  outcome.summary.commands_failed = application.metrics().commands_failed;
+  outcome.summary.commands_retried = application.metrics().commands_retried;
+  outcome.summary.responses_applied = application.metrics().responses_applied;
+
+  if (outcome.status == ConfigApplyStatus::kReadFailed)
+  {
+    outcome.summary.final_status = ToString(outcome.status);
+    return outcome;
+  }
+
+  if (application.state() == ReceiverConfigApplicationState::kCompleted)
+  {
+    outcome.summary.final_status = "completed";
+    return outcome;
+  }
+
+  outcome.status = application_result.engine_result.has_value() &&
+                           application_result.engine_result->status ==
+                               universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::
+                                   kRejected
+                       ? ConfigApplyStatus::kRejected
+                       : MapApplicationFailureStatus(application_result);
+  outcome.error_message = !application_result.error_message.empty()
+                              ? application_result.error_message
+                              : (application_result.engine_result.has_value()
+                                     ? application_result.engine_result->error_message
+                                     : std::string{"configuration apply failed"});
+  outcome.summary.final_status = ToString(outcome.status);
+  return outcome;
+}
+
+ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(
+    ByteDuplex& transport,
+    const ConfigApplyOptions& options,
+    ConfigApplyResult result,
+    ConfigApplyTransportHooks& hooks)
+{
+  const auto reset_index = FindFirstFactoryResetCommandIndex(result.plan.commands);
+  const auto baud_index =
+      reset_index.has_value()
+          ? FindFirstUnicoreBaudCommandIndex(result.plan.commands, *reset_index + 1u)
+          : std::nullopt;
+
+  if (!reset_index.has_value() || !baud_index.has_value() || *baud_index <= *reset_index)
+  {
+    result.status = ConfigApplyStatus::kBuildError;
+    result.error_message =
+        "Unicore recovery workflow could not identify the reset and COM1 baud commands";
+    result.execution_summary.final_status = "build_error";
+    return result;
+  }
+
+  const auto recovery_baud = ResolveUnicoreRecoveryBaud(result);
+  const auto transport_read_timeout_ms = ResolveTransportReadTimeoutMs(options);
+
+  const auto reset_phase = SlicePlanCommands(result.plan.commands, 0u, *reset_index + 1u);
+  const auto baud_phase =
+      SlicePlanCommands(result.plan.commands, *reset_index + 1u, *baud_index + 1u);
+  const auto profile_phase =
+      SlicePlanCommands(result.plan.commands, *baud_index + 1u, result.plan.commands.size());
+
+  result.dry_run = false;
+  result.executed = true;
+  result.execution_summary.commands_total = result.plan.summary.commands_total;
+
+  auto phase = ExecuteUnicoreCommandPhase(result, transport, reset_phase, options, 0u);
+  result.execution_summary.commands_completed += phase.summary.commands_completed;
+  result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.commands_retried += phase.summary.commands_retried;
+  result.execution_summary.responses_applied += phase.summary.responses_applied;
+  if (phase.status != ConfigApplyStatus::kOk)
+  {
+    result.status = phase.status;
+    result.error_message = phase.error_message;
+    result.execution_summary.final_status = phase.summary.final_status;
+    return result;
+  }
+
+  static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+
+  std::string transport_error;
+  if (!ReopenTransportUntilReady(
+          hooks,
+          transport,
+          result,
+          result.device_path,
+          115200u,
+          transport_read_timeout_ms,
+          kUnicoreFactoryResetRecoveryWindowMs,
+          "Waiting for Unicore receiver restart after FRESET (up to 45 s)",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  result.progress_log.push_back("Reopened transport at 115200 bps after FRESET");
+  if (!WaitForUnicoreActiveResponse(
+          transport,
+          result,
+          115200u,
+          kUnicoreFactoryResetRecoveryWindowMs,
+          "Waiting for an active Unicore response at 115200 bps after FRESET",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+  if (!ReopenTransportUntilReady(
+          hooks,
+          transport,
+          result,
+          result.device_path,
+          115200u,
+          transport_read_timeout_ms,
+          kUnicoreBaudSwitchRecoveryWindowMs,
+          "Reopening transport at 115200 bps for COM1 recovery",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  result.progress_log.push_back("Reopened transport at 115200 bps for COM1 recovery");
+  phase = ExecuteUnicoreCommandPhase(
+      result, transport, baud_phase, options, reset_phase.size());
+  result.execution_summary.commands_completed += phase.summary.commands_completed;
+  result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.commands_retried += phase.summary.commands_retried;
+  result.execution_summary.responses_applied += phase.summary.responses_applied;
+  if (phase.status != ConfigApplyStatus::kOk)
+  {
+    result.status = phase.status;
+    result.error_message = phase.error_message;
+    result.execution_summary.final_status = phase.summary.final_status;
+    return result;
+  }
+
+  static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+  if (!ReopenTransportUntilReady(
+          hooks,
+          transport,
+          result,
+          result.device_path,
+          recovery_baud,
+          transport_read_timeout_ms,
+          kUnicoreBaudSwitchRecoveryWindowMs,
+          "Waiting for Unicore receiver to reopen at " +
+              std::to_string(recovery_baud) + " bps after COM1 reconfiguration",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  result.progress_log.push_back(
+      "Reopened transport at " + std::to_string(recovery_baud) +
+      " bps after COM1 recovery");
+  if (!WaitForUnicoreActiveResponse(
+          transport,
+          result,
+          recovery_baud,
+          kUnicoreBaudSwitchRecoveryWindowMs,
+          "Waiting for an active Unicore response at " +
+              std::to_string(recovery_baud) + " bps after COM1 recovery",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+  if (!ReopenTransportUntilReady(
+          hooks,
+          transport,
+          result,
+          result.device_path,
+          recovery_baud,
+          transport_read_timeout_ms,
+          kUnicoreBaudSwitchRecoveryWindowMs,
+          "Reopening transport at " + std::to_string(recovery_baud) +
+              " bps for post-reset profile apply",
+          transport_error))
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+
+  result.progress_log.push_back(
+      "Reopened transport at " + std::to_string(recovery_baud) +
+      " bps for post-reset profile apply");
+  phase = ExecuteUnicoreCommandPhase(
+      result,
+      transport,
+      profile_phase,
+      options,
+      reset_phase.size() + baud_phase.size());
+  result.execution_summary.commands_completed += phase.summary.commands_completed;
+  result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.commands_retried += phase.summary.commands_retried;
+  result.execution_summary.responses_applied += phase.summary.responses_applied;
+  if (phase.status != ConfigApplyStatus::kOk)
+  {
+    result.status = phase.status;
+    result.error_message = phase.error_message;
+    result.execution_summary.final_status = phase.summary.final_status;
+    return result;
+  }
+
+  result.transport_baud_rate = recovery_baud;
+  result.status = ConfigApplyStatus::kOk;
+  result.execution_summary.final_status = "completed";
+  result.progress_log.push_back(
+      "Verified receiver is reachable again at " + std::to_string(recovery_baud) +
+      " bps after post-reset profile apply");
+  result.error_message.clear();
+  return result;
+}
+
 ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& options)
 {
   ReceiverAutoConfigRequest request;
@@ -708,7 +1420,8 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
 }
 
 ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
-                                     const ConfigApplyOptions& options)
+                                     const ConfigApplyOptions& options,
+                                     ConfigApplyTransportHooks* hooks)
 {
   ConfigApplyResult result = PrepareConfigApply(options);
   if (result.status != ConfigApplyStatus::kOk ||
@@ -737,6 +1450,20 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
 
   result.dry_run = false;
   result.executed = true;
+
+  if (PlanUsesUnicoreRecoveryWorkflow(result.plan))
+  {
+    if (hooks == nullptr)
+    {
+      result.status = ConfigApplyStatus::kTransportUnavailable;
+      result.error_message =
+          "Unicore reset/recovery apply requires transport hooks for reprobe and reopen";
+      result.execution_summary.final_status = "transport_unavailable";
+      return result;
+    }
+
+    return ExecuteUnicoreRecoveryWorkflow(transport, options, std::move(result), *hooks);
+  }
 
   ReceiverConfigApplicationConfig application_config;
   ReceiverConfigApplication application(transport, application_config);

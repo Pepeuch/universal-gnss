@@ -46,8 +46,7 @@ generic profiles:
 - `factory_reset`
   - represent a receiver factory-reset workflow when the vendor support is
     known
-  - remain guarded for live execution until reconnect / re-probe handling is
-    robust
+  - requires reconnect / active probe handling before normal profile apply resumes
 
 Legacy aliases are still accepted by the current CLIs:
 
@@ -60,7 +59,7 @@ Current receiver-family support:
   - `runtime_only`
   - `rover_high_precision`
   - `rover_high_precision_debug`
-  - `factory_reset` planning/preview support with guarded live execution
+  - `factory_reset` planning/preview/live recovery apply
 - u-blox
   - `runtime_only`
   - `rover_high_precision`
@@ -463,8 +462,8 @@ For `v1`, support:
 - `rover_high_precision`
 - `rover_high_precision_debug`
 - persistent through `SAVECONFIG`
-- `factory_reset` planning/preview support via `FRESET`, with live execution
-  guarded until reconnect / re-probe handling exists
+- `factory_reset` planning/preview support via `FRESET`, with live
+  reset/recovery execution through the reconnect / active probe workflow
 
 Keep base explicitly unsupported until the config/profile layer can model it
 honestly.
@@ -484,11 +483,10 @@ Implemented in `v0.6-3`:
   `--family auto`, or `--baud auto` is used
 - the CLI prints the portable plan/report before any live-write decision
 - runtime-only live writes require explicit `--confirm` / `--yes`
-- persistent apply remains guarded in the CLI even when a persistent plan can be
-  generated
+- persistent apply is modeled as an operator-driven workflow with manual
+  rollback expectations
 - generic NMEA apply is limited to the `runtime_only` no-op profile
-- `factory_reset` plans can be previewed/planned when supported, but live
-  execution stays guarded until reconnect / re-probe handling is implemented
+- `factory_reset` plans can be previewed/planned when supported
 
 Validated in `v0.6-4` on real hardware:
 
@@ -508,10 +506,14 @@ Validated in `v0.6-4` on real hardware:
   response tokens inside mixed binary/ASCII lines
 - after that router fix, confirmed UM982 runtime-only
   `rover_high_precision` apply completed with `--timeout-ms 5000`
+- follow-up UM982 persistent validation confirmed the full
+  `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600 ->
+  rover_high_precision -> SAVECONFIG` recovery workflow
+- that same validation also promoted `CONFIG SIGNALGROUP 3 6` into the portable
+  UM982 rover profile
 - short passive post-apply captures still may not show `RTCMSTATUSA` because
   the portable `rover_high_precision` helper enables it with `ONCHANGED`
   semantics rather than a fixed periodic rate
-- persistent apply remains intentionally out of scope for this validation pass
 
 ### 5. ROS2 integration
 
@@ -587,7 +589,7 @@ Auto Configuration `v1` should be intentionally modest:
 - u-blox `runtime_only`, `rover_high_precision`, and
   `rover_high_precision_debug`
 - Unicore `runtime_only`, `rover_high_precision`,
-  `rover_high_precision_debug`, and guarded `factory_reset`
+  `rover_high_precision_debug`, and `factory_reset`
 - shared CLI integration
 - ROS2 plan/report integration
 

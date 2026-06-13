@@ -593,18 +593,20 @@ Current behavior:
 - accepts the same portable profile names and legacy aliases as
   `gnss_profile_preview`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
-- keeps persistent live apply guarded in `v0.6-3`; it reports the plan but does not send the writes
+- supports Unicore persistent live apply through the reset/recovery workflow
 - allows `runtime_only` live apply as a no-op when the selected family/profile
   generates no receiver commands
 - rejects unknown receivers for apply
 - supports generic NMEA only through the `runtime_only` no-op profile
-- keeps live `factory_reset` guarded until reconnect / re-probe handling is
-  robust
+- supports Unicore live `factory_reset` through the same reset/recovery flow
 - executes one command at a time over a Linux serial port
 - waits synchronously for one matching response at a time
 - on mixed Unicore binary/ASCII streams, resynchronizes to recognized
   `$command,...,response: OK*` tokens even when prefix noise shares the same
   buffered line
+- after Unicore `FRESET`, actively queries `VERSIONA` at `115200`, restores
+  `COM1` with the explicit `CONFIG COM1 <baud> 8 n 1` form, then verifies the
+  receiver again at the restored baud before replaying the profile
 - supports a simple per-command `--timeout-ms` loop without threads
 - stops on the first rejected command, dispatch failure, read failure, or timeout
 
@@ -613,7 +615,7 @@ Current scope:
 - `ublox`: `runtime_only`, `rover_high_precision`,
   `rover_high_precision_debug`; `factory_reset` unsupported/stub
 - `unicore`: `runtime_only`, `rover_high_precision`,
-  `rover_high_precision_debug`, guarded `factory_reset`
+  `rover_high_precision_debug`, `factory_reset`
 - `nmea`: `runtime_only` only
 - Linux POSIX serial only
 
@@ -624,8 +626,7 @@ Current non-goals:
 - NTRIP integration
 - background retry scheduling
 - interactive prompts
-- live factory-reset execution before reconnect / re-probe handling is robust
-- persistent live apply from this CLI while rollback remains manual and vendor-specific
+- fully automatic rollback after persistent receiver writes
 
 Examples:
 
@@ -648,11 +649,13 @@ Hardware notes from the `v0.6-4` operator validation pass:
   short read-only
   captures may therefore show the accepted apply response but still not show an
   emitted `RTCMSTATUSA` record until receiver-side correction state changes
-- Unicore `factory_reset` planning documents that `FRESET` returns the receiver
-  to `115200 bps`; live execution remains intentionally guarded until the CLI
-  can reconnect and rediscover the receiver automatically afterwards
-- persistent apply and any save-to-flash workflow remain intentionally guarded
-  out of this CLI path
+- the validated UM982 persistent workflow now performs
+  `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600`
+  before replaying the rover profile and finishing with `SAVECONFIG`
+- the UM982 rover profile now includes `CONFIG SIGNALGROUP 3 6`
+- after a full Unicore reset/recovery apply, the receiver may need a couple of
+  minutes to reacquire satellites and corrections even though the GNSS runtime
+  is already healthy and publishing at `5 Hz`
 
 Text output includes:
 
@@ -778,8 +781,8 @@ The tools stay compact on purpose.
 - `gnss_ntrip_monitor` prints compact live status instead of becoming a daemon
 - `gnss_profile_preview` is preview-only and never touches receiver I/O
 - `gnss_config_plan` is dry-run only and never performs command dispatch
-- `gnss_config_apply` is guarded and only performs live runtime-only writes after
-  explicit operator confirmation
+- `gnss_config_apply` remains operator-confirmed and only performs live writes
+  after explicit confirmation
 - `--json` provides a small machine-readable object without freezing a large
   schema yet
 - most tools are currently offline and file/stdin oriented only
@@ -791,7 +794,7 @@ Still intentionally deferred:
 - richer live stream readers
 - socket readers
 - live playback timing
-- richer live config execution workflows beyond the current guarded
+- richer live config execution workflows beyond the current
   `gnss_config_apply` path
 - a real `gnss_config_plan --execute` path
 - background config daemons

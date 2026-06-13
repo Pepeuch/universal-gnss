@@ -17,11 +17,21 @@ namespace
 {
 
 using universal_gnss_driver::DiscoverReceivers;
+using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
+using universal_gnss_driver::ProbeReceiverPort;
+
+#if defined(__linux__)
+using universal_gnss_tools::ConfigApplyTransportHooks;
+using universal_gnss_transport::ByteDuplex;
+using universal_gnss_transport::PosixSerialConfig;
+using universal_gnss_transport::PosixSerialTransport;
+using universal_gnss_transport::TransportError;
+#endif
 
 struct CliOptions
 {
@@ -54,7 +64,7 @@ void PrintUsage(const char* program_name)
       << " --family nmea --profile runtime_only\n"
       << "Notes:\n"
       << "  no live writes occur unless --confirm or --yes is present\n"
-      << "  persistent mode remains guarded and is not the default workflow\n"
+      << "  Unicore persistent/factory_reset apply uses a reset/reprobe workflow; other persistent workflows remain guarded\n"
       << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
@@ -219,6 +229,62 @@ bool LiveApplyRequested(const universal_gnss_tools::ConfigApplyOptions& options)
 {
   return options.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
 }
+
+#if defined(__linux__)
+
+class PosixSerialConfigApplyHooks final : public ConfigApplyTransportHooks
+{
+public:
+  bool ProbeReceiverPath(const std::string& device_path,
+                         const std::vector<std::uint32_t>& baud_candidates,
+                         const std::uint32_t read_timeout_ms,
+                         ReceiverProbeResult& probe_result,
+                         std::string& error_message) override
+  {
+    ReceiverProbeConfig config;
+    config.baud_candidates = baud_candidates;
+    config.read_timeout_ms = read_timeout_ms;
+
+    probe_result =
+        ProbeReceiverPort(MakeExplicitReceiverPortCandidate(device_path), config);
+    error_message.clear();
+    return true;
+  }
+
+  bool ReopenTransport(ByteDuplex& transport,
+                       const std::string& device_path,
+                       const std::uint32_t baud_rate,
+                       const std::uint32_t read_timeout_ms,
+                       std::string& error_message) override
+  {
+    auto* posix_transport = dynamic_cast<PosixSerialTransport*>(&transport);
+    if (posix_transport == nullptr)
+    {
+      error_message =
+          "recovery workflow requires a POSIX serial transport instance";
+      return false;
+    }
+
+    posix_transport->Close();
+
+    PosixSerialConfig serial_config;
+    serial_config.device_path = device_path;
+    serial_config.baud_rate = baud_rate;
+    serial_config.read_timeout_ms = read_timeout_ms;
+    const auto open_error = posix_transport->Open(serial_config);
+    if (open_error != TransportError::kNone)
+    {
+      error_message =
+          "failed to reopen serial transport during the recovery workflow";
+      return false;
+    }
+
+    error_message.clear();
+    return true;
+  }
+};
+
+#endif
 
 }  // namespace
 
@@ -443,8 +509,8 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  universal_gnss_transport::PosixSerialTransport transport;
-  universal_gnss_transport::PosixSerialConfig serial_config;
+  PosixSerialTransport transport;
+  PosixSerialConfig serial_config;
   serial_config.device_path = prepared.device_path;
   serial_config.baud_rate = prepared.transport_baud_rate;
   serial_config.read_timeout_ms = cli_options.apply.timeout_ms > 100u
@@ -464,7 +530,9 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  const auto result = universal_gnss_tools::ExecuteConfigApply(transport, cli_options.apply);
+  PosixSerialConfigApplyHooks hooks;
+  const auto result =
+      universal_gnss_tools::ExecuteConfigApply(transport, cli_options.apply, &hooks);
   PrintResult(result, cli_options.json_output);
   return result.status == universal_gnss_tools::ConfigApplyStatus::kOk ? EXIT_SUCCESS
                                                                         : EXIT_FAILURE;

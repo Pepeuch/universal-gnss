@@ -21,16 +21,17 @@ That current `v0.6.0` posture covers:
 - serial auto-discovery with stable `/dev/serial/by-id` preference
 - score-based auto-discovery hardening for vendor detection and serial noise rejection
 - Auto Configuration planner/report coverage
-- guarded operator-driven runtime-only apply
+- operator-driven runtime-only apply plus Unicore reset/recovery persistent apply
 - portable receiver profile surface:
   - `runtime_only`
   - `rover_high_precision`
   - `rover_high_precision_debug`
-  - guarded `factory_reset`
+  - `factory_reset`
 - legacy alias compatibility for `rover` and `diagnostics`
 - explicit confirmation gating for live writes
-- persistent apply guarded out of the default workflow
+- persistent apply remains operator-driven and manual-rollback-aware
 - real F9P and UM982 runtime-only apply validation
+- real UM982 `FRESET -> 115200 -> 921600 -> profile -> SAVECONFIG` recovery validation
 - UM982 live apply timeout guidance around `5000 ms`
 - real ZED-F9P and UM982 validation on ROS2 Kilted
 - local NTRIP caster validation
@@ -179,10 +180,10 @@ Implemented and validated scope:
     - added discovery-aware `--receiver auto` / `--family auto` / `--baud auto`
       apply targeting
     - required explicit operator confirmation for runtime-only live writes
-    - kept persistent live apply guarded while still surfacing plan warnings and
-      manual rollback expectations
+    - kept persistent live apply operator-driven while still surfacing plan
+      warnings and manual rollback expectations
     - exposed portable profiles as `runtime_only`, `rover_high_precision`,
-      `rover_high_precision_debug`, and guarded `factory_reset`
+      `rover_high_precision_debug`, and `factory_reset`
     - kept legacy `rover` and `diagnostics` aliases accepted by the CLIs
   - `v0.6-4` runtime-only hardware validation completed:
     - confirmed runtime-only `rover_high_precision` apply on the F9P
@@ -191,7 +192,12 @@ Implemented and validated scope:
     - validated stable `/dev/serial/by-id/*` device targeting
     - captured and fixed a mixed-stream Unicore response-matching gap
     - documented UM982 operator timeout guidance around `--timeout-ms 5000`
-  - implementation reuses the existing guarded apply path instead of creating a
+  - `v0.6-5` Unicore reset/recovery validation completed:
+    - validated `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 ->
+      VERSIONA@921600 -> rover_high_precision -> SAVECONFIG`
+    - promoted `CONFIG SIGNALGROUP 3 6` into the portable UM982 rover profile
+    - verified live restart back into `GNSS_SERIAL_BAUD=921600` afterwards
+  - implementation reuses the existing apply path instead of creating a
     second live-write mechanism
   - vendor-specific persistence semantics are explicit in plan/apply output
   - post-discovery configuration policy is implemented for operator-driven use
@@ -216,15 +222,16 @@ Out of scope for `v0.6`:
 Release verdict:
 
 - ready for `v0.6.0`
-- persistent apply remains intentionally guarded beyond the default release
-  workflow
+- persistent apply remains intentionally operator-driven beyond the default
+  release workflow
 
 Carry-over follow-up immediately after `v0.6.0`:
 
 - keep the module-level receiver-profile API plus
   `gnss_profile_preview`, `gnss_config_plan`, and `gnss_config_apply` CLIs as
   the source of truth for downstream integrations
-- post-reset reconnect / probe loop for guarded `factory_reset`
+- post-reset reconnect / probe loop for receivers beyond the current Unicore
+  recovery path
 - complete u-blox portable receiver-profile implementation for reset and future
   profile growth
 - live receiver identity / model / firmware metadata in discovery, planner,

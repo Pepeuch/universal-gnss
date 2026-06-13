@@ -367,6 +367,12 @@ std::string DescribeUnicoreTextCommand(std::string text)
     return "set NMEA0183 version to " + text.substr(std::string("CONFIG NMEA0183 ").size());
   }
 
+  if (StartsWith(text, "CONFIG COM1 "))
+  {
+    return "set COM1 serial parameters to " +
+           text.substr(std::string("CONFIG COM1 ").size());
+  }
+
   if (StartsWith(text, "CONFIG RTK TIMEOUT "))
   {
     return "set RTK timeout to " + text.substr(std::string("CONFIG RTK TIMEOUT ").size()) + " s";

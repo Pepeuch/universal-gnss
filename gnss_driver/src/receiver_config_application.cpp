@@ -94,6 +94,23 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::Step(
 
   ++metrics_.commands_started;
 
+  if (engine_result.status == ReceiverCommandTransactionEngineStepStatus::kAcknowledged)
+  {
+    ++metrics_.commands_completed;
+    ++current_index_;
+
+    const bool has_more_commands = current_index_ < commands_.size();
+    state_ = has_more_commands ? ReceiverConfigApplicationState::kRunning
+                               : ReceiverConfigApplicationState::kCompleted;
+
+    ReceiverConfigApplicationResult result = BuildResult();
+    result.command_started = true;
+    result.command_finished = true;
+    result.advanced_to_next_command = has_more_commands;
+    result.engine_result = engine_result;
+    return result;
+  }
+
   if (engine_result.status != ReceiverCommandTransactionEngineStepStatus::kDispatched)
   {
     return FailApplication(engine_result, "failed to dispatch configuration command");

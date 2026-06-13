@@ -74,6 +74,17 @@ EngineStepResult ReceiverCommandTransactionEngine::StartTransaction(
   transaction.mark_sent(timestamp_ns);
   current_transaction_ = transaction;
   ++metrics_.commands_dispatched;
+
+  if (command.expected_response == ReceiverResponseKind::kNone)
+  {
+    current_transaction_->mark_ack(timestamp_ns);
+    completed_transaction_ = *current_transaction_;
+    current_transaction_.reset();
+    ++metrics_.transactions_acknowledged;
+    result.status = ReceiverCommandTransactionEngineStepStatus::kAcknowledged;
+    return result;
+  }
+
   result.status = ReceiverCommandTransactionEngineStepStatus::kDispatched;
   return result;
 }

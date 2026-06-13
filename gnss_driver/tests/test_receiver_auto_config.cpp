@@ -162,12 +162,12 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 rover_plan.validation.generated_command_count == 13u &&
-                 rover_plan.validation.runtime_command_count == 13u,
+                 rover_plan.validation.generated_command_count == 14u &&
+                 rover_plan.validation.runtime_command_count == 14u,
              "Unicore rover_high_precision planning should preserve the validated runtime profile");
   ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 debug_plan.validation.generated_command_count == 14u &&
-                 debug_plan.validation.runtime_command_count == 14u,
+                 debug_plan.validation.generated_command_count == 15u &&
+                 debug_plan.validation.runtime_command_count == 15u,
              "Unicore rover_high_precision_debug planning should add the extra diagnostics log only");
 }
 
@@ -179,14 +179,16 @@ void TestUnicoreFactoryResetPlan(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 1u &&
+                 plan.validation.generated_command_count == 16u &&
+                 plan.validation.runtime_command_count == 15u &&
                  plan.validation.factory_reset_command_count == 1u,
-             "Unicore factory_reset planning should generate exactly one factory-reset command");
-  ctx.Expect(!plan.validation.production_ready &&
-                 !plan.validation.ready_to_execute &&
+             "Unicore factory_reset planning should expand into reset plus runtime recovery commands");
+  ctx.Expect(plan.validation.production_ready &&
+                 plan.validation.ready_to_execute &&
                  ContainsWarning(plan, "115200") &&
-                 ContainsWarning(plan, "reconnect/probe"),
-             "Unicore factory_reset planning should stay guarded and document the baud reset");
+                 ContainsWarning(plan, "reconnect/probe") &&
+                 ContainsWarning(plan, "30 seconds"),
+             "Unicore factory_reset planning should document the reset recovery workflow and restart delay");
 }
 
 void TestRuntimeOnlyPersistentModeRejected(TestContext& ctx)
@@ -209,13 +211,31 @@ void TestPersistentApplyWarnings(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kPersistent);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 14u &&
-                 plan.validation.persistent_command_count == 1u,
-             "persistent Unicore rover_high_precision planning should append only SAVECONFIG");
-  ctx.Expect(ContainsWarning(plan, "persistent apply") &&
+                 plan.validation.generated_command_count == 17u &&
+                 plan.validation.runtime_command_count == 15u &&
+                 plan.validation.persistent_command_count == 1u &&
+                 plan.validation.factory_reset_command_count == 1u,
+             "persistent Unicore rover_high_precision planning should rebuild the saved profile from a clean reset baseline");
+  ctx.Expect(ContainsWarning(plan, "FRESET") &&
                  ContainsWarning(plan, "SAVECONFIG") &&
+                 ContainsWarning(plan, "clean baseline") &&
                  plan.rollback_expectation.operator_action_required,
-             "persistent portable planning should surface explicit warnings and manual rollback expectations");
+             "persistent portable planning should surface reset-first warnings and manual rollback expectations");
+}
+
+void TestUnicorePersistentBaudOverride(TestContext& ctx)
+{
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore),
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kPersistent,
+      921600u);
+
+  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 plan.request.config_baud == std::optional<std::uint32_t>{921600u} &&
+                 !plan.commands.empty() &&
+                 plan.commands[1].payload.text.find("CONFIG COM1 921600") != std::string::npos,
+             "persistent Unicore planning should accept a baud override only through the clean reset workflow");
 }
 
 void TestNmeaProfiles(TestContext& ctx)
@@ -272,6 +292,7 @@ int main()
   TestUnicoreFactoryResetPlan(ctx);
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);
+  TestUnicorePersistentBaudOverride(ctx);
   TestNmeaProfiles(ctx);
   TestUnknownReceiverRejected(ctx);
 

@@ -19,6 +19,7 @@ using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandResponse;
 using universal_gnss_driver::ReceiverCommandResponseKind;
+using universal_gnss_driver::ReceiverResponseKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverCommandTransactionEngine;
 using universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus;
@@ -66,6 +67,17 @@ ReceiverCommand MakeUbxCfgCommand(const std::uint8_t max_retries = 0u,
   }
 
   return MakeBinaryRuntimeCommand(builder_result.frame, max_retries, timeout_ms);
+}
+
+ReceiverCommand MakeResetCommand()
+{
+  ReceiverCommand command;
+  command.kind = ReceiverCommandKind::kReset;
+  command.expected_response = ReceiverResponseKind::kNone;
+  command.safety_level = ReceiverCommandSafetyLevel::kFactoryReset;
+  command.explicit_safety_confirmation = true;
+  universal_gnss_driver::SetTextPayload(command, "FRESET\r\n");
+  return command;
 }
 
 void TestSuccessfulDispatchCreatesCurrentTransaction(TestContext& ctx)
@@ -122,6 +134,31 @@ void TestAckResponseMarksTransactionAcknowledged(TestContext& ctx)
                  engine.metrics().transactions_acknowledged == 1u &&
                  engine.metrics().responses_unmatched == 0u,
              "ACK acceptance should update response and acknowledgement counters");
+}
+
+void TestNoResponseCommandsAcknowledgeImmediately(TestContext& ctx)
+{
+  MemoryByteSink sink;
+  ReceiverCommandTransactionEngine engine(sink);
+
+  const auto result = engine.StartTransaction(MakeResetCommand(), 1150);
+
+  ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kAcknowledged &&
+                 result.dispatch_result.has_value(),
+             "no-response commands should acknowledge immediately after dispatch");
+  ctx.Expect(!engine.current_transaction().has_value() &&
+                 engine.completed_transaction().has_value() &&
+                 engine.completed_transaction()->state ==
+                     ReceiverCommandTransactionState::kAcknowledged &&
+                 engine.completed_transaction()->sent_timestamp_ns ==
+                     std::optional<std::int64_t>(1150),
+             "immediate-ack commands should complete without leaving a current transaction pending");
+  ctx.Expect(engine.metrics().transactions_created == 1u &&
+                 engine.metrics().transactions_acknowledged == 1u &&
+                 sink.written_bytes() ==
+                     std::vector<std::uint8_t>(
+                         {'F', 'R', 'E', 'S', 'E', 'T', '\r', '\n'}),
+             "immediate-ack commands should still write bytes and update acknowledgement metrics");
 }
 
 void TestNakResponseMarksTransactionRejected(TestContext& ctx)
@@ -313,6 +350,7 @@ int main()
 
   TestSuccessfulDispatchCreatesCurrentTransaction(ctx);
   TestAckResponseMarksTransactionAcknowledged(ctx);
+  TestNoResponseCommandsAcknowledgeImmediately(ctx);
   TestNakResponseMarksTransactionRejected(ctx);
   TestUnmatchedResponseIncrementsCounter(ctx);
   TestTimeoutMarksTransactionTimedOut(ctx);

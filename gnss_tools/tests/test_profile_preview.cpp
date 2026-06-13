@@ -61,16 +61,17 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 13u,
+                 result.commands.size() == 14u,
              "Unicore rover_high_precision preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 13u &&
-                 result.summary.runtime_commands == 13u &&
+  ctx.Expect(result.summary.commands_total == 14u &&
+                 result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
              "Unicore rover_high_precision preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
                  result.commands.front().description == "set receiver mode to rover",
              "Unicore rover_high_precision preview should decode the MODE ROVER description");
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
+                 text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
                  text.find("GPGSV 1") != std::string::npos,
              "Unicore rover_high_precision preview text should expose human-readable text commands");
@@ -114,10 +115,11 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
 
   const auto unicore_result = BuildProfilePreview(unicore_options);
   ctx.Expect(unicore_result.status == ProfilePreviewStatus::kOk &&
-                 unicore_result.summary.commands_total == 15u &&
-                 unicore_result.summary.runtime_commands == 14u &&
-                 unicore_result.summary.persistent_commands == 1u,
-             "persistent Unicore previews should add only SAVECONFIG as a persistent command");
+                 unicore_result.summary.commands_total == 18u &&
+                 unicore_result.summary.runtime_commands == 16u &&
+                 unicore_result.summary.persistent_commands == 1u &&
+                 unicore_result.summary.factory_reset_commands == 1u,
+             "persistent Unicore previews should expose the reset-first recovery workflow plus SAVECONFIG");
 }
 
 void TestFactoryResetPreview(TestContext& ctx)
@@ -130,14 +132,15 @@ void TestFactoryResetPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 1u &&
+                 result.commands.size() == 16u &&
+                 result.summary.runtime_commands == 15u &&
                  result.summary.factory_reset_commands == 1u,
-             "Unicore factory_reset preview should generate one factory-reset command");
+             "Unicore factory_reset preview should expose reset plus runtime recovery commands");
   ctx.Expect(!result.commands.empty() &&
-                 result.commands.front().description.find("115200") != std::string::npos,
-             "factory_reset preview should describe the baud-reset implication");
-  ctx.Expect(text.find("command: FRESET") != std::string::npos,
-             "factory_reset preview text should expose the exact command");
+                 result.commands.front().description.find("115200") != std::string::npos &&
+                 text.find("command: FRESET") != std::string::npos &&
+                 text.find("CONFIG COM1 921600") != std::string::npos,
+             "factory_reset preview should document baud recovery and expose the recovery commands");
 }
 
 void TestJsonFormatting(TestContext& ctx)

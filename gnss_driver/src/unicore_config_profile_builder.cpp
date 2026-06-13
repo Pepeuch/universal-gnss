@@ -45,6 +45,11 @@ std::string FormatTextCommand(const std::string& command)
   return command + kCrLf;
 }
 
+std::string BuildCom1Command(const std::uint32_t baud_rate)
+{
+  return "CONFIG COM1 " + std::to_string(baud_rate) + " 8 n 1";
+}
+
 ReceiverCommand MakeTextCommand(const ReceiverCommandKind kind,
                                 const ReceiverCommandSafetyLevel safety_level,
                                 const ReceiverResponseKind expected_response,
@@ -172,6 +177,7 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
   if (profile.factory_reset)
   {
     if (profile.mode != UnicoreMode::kUnspecified ||
+        profile.com1_baud_rate.has_value() ||
         profile.nmea_version.has_value() ||
         profile.rtk_timeout_s.has_value() ||
         profile.dgps_timeout_s.has_value() ||
@@ -195,6 +201,13 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
     result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
     result.error_message =
         "base and survey orchestration are deferred from the portable Unicore config builder";
+    return false;
+  }
+
+  if (profile.com1_baud_rate.has_value() && *profile.com1_baud_rate == 0u)
+  {
+    result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
+    result.error_message = "unicore COM1 baud rate must be non-zero";
     return false;
   }
 
@@ -263,6 +276,15 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     return result;
   }
 
+  if (profile.com1_baud_rate.has_value())
+  {
+    AppendCommand(result.commands,
+                  ReceiverCommandKind::kApplyConfigProfile,
+                  ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kNone,
+                  BuildCom1Command(*profile.com1_baud_rate));
+  }
+
   AppendCommand(result.commands,
                 ReceiverCommandKind::kApplyConfigProfile,
                 ReceiverCommandSafetyLevel::kRuntime,
@@ -317,7 +339,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     }
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
-                  ReceiverCommandSafetyLevel::kPersistent,
+                  ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
                   command);
   }
@@ -362,6 +384,7 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   profile.rtk_timeout_s = 10u;
   profile.rtk_reliability = UnicoreRtkReliability{3, 1};
   profile.dgps_timeout_s = 600u;
+  profile.signal_config = UnicoreSignalConfig{{3u, 6u}};
   profile.clear_current_port_outputs = true;
   profile.output_messages = {
       {UnicoreOutputMessageKind::kGpgga, 0.2},

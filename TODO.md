@@ -18,12 +18,13 @@ Implemented:
 - `gnss_discover` CLI
 - `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
 - Auto Configuration planner/report layer
-- guarded operator-driven runtime-only apply for u-blox and Unicore
+- operator-driven runtime-only apply for u-blox and Unicore
+- operator-driven Unicore persistent / `factory_reset` reset-recovery apply
 - portable receiver profile surface:
   - `runtime_only`
   - `rover_high_precision`
   - `rover_high_precision_debug`
-  - guarded `factory_reset`
+  - `factory_reset`
 - legacy alias compatibility for `rover` and `diagnostics`
 - module-level receiver profile API plus standalone preview/plan/apply CLIs as
   the intended downstream integration surface
@@ -97,7 +98,7 @@ Implemented:
 - [x] keep the module-level receiver profile API plus standalone
   preview/plan/apply CLIs as the source of truth for downstream integrations
 - [x] make vendor-specific persistence semantics explicit in plan/apply output
-- [ ] post-reset reconnect / probe loop for guarded `factory_reset`
+- [x] post-reset reconnect / active probe loop for Unicore `factory_reset`
 - [ ] complete u-blox `factory_reset` and future portable profile coverage
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [x] explicit policy for runtime-only vs persistent apply

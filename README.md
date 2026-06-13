@@ -44,9 +44,10 @@ Current release guidance:
 
 - live receiver writes do not occur unless `gnss_config_apply` is given
   explicit `--confirm` or `--yes`
-- persistent apply is guarded and is not the default workflow
-- `factory_reset` remains guarded for live execution until reconnect /
-  re-probe handling is robust
+- Unicore persistent apply is available through the reset/recovery workflow and
+  remains an operator-driven path with manual rollback expectations
+- Unicore `factory_reset` live execution now uses the same reconnect / active
+  probe recovery workflow
 - stable `/dev/serial/by-id/*` paths are recommended over transient
   `/dev/ttyACM*` and `/dev/ttyUSB*` names whenever they exist
 - UM982 runtime-only live apply should use an operator timeout around
@@ -66,8 +67,7 @@ The current portable receiver-configuration surface is:
     correction diagnostics where supported
 - `factory_reset`
   - model a receiver factory-reset workflow where the vendor support is known
-  - remain guarded for live execution until reconnect and re-probe handling is
-    robust
+  - requires explicit reconnect/recovery handling before normal profile apply resumes
 
 Legacy aliases are still accepted by the current CLIs:
 
@@ -80,7 +80,7 @@ Current receiver-family support:
   - `runtime_only`
   - `rover_high_precision`
   - `rover_high_precision_debug`
-  - `factory_reset` planning/preview support with guarded live execution
+  - `factory_reset` planning/preview/live recovery apply
 - u-blox
   - `runtime_only`
   - `rover_high_precision`
@@ -93,8 +93,8 @@ Safety note:
 
 - receiver factory reset may change the active baud rate
 - the current Unicore `FRESET` path returns the receiver to `115200 bps`
-- live reset/apply remains guarded until Universal GNSS can reconnect and
-  rediscover the receiver automatically after the reset
+- the current Unicore recovery workflow uses an active `VERSIONA` query plus
+  explicit `CONFIG COM1 921600 8 n 1` recovery before continuing the profile
 
 Universal GNSS currently exposes this receiver-profile surface through:
 
@@ -156,7 +156,7 @@ Current implemented layers:
   - `gnss_replay` CLI for semantic offline runtime replay
   - `gnss_profile_preview` CLI for offline receiver command/profile review
   - `gnss_config_plan` CLI for dry-run receiver config application planning
-  - `gnss_config_apply` CLI for guarded operator-driven receiver config application
+  - `gnss_config_apply` CLI for operator-driven receiver config application
   - `gnss_serial_monitor` CLI for live Linux serial monitoring
   - `gnss_ntrip_monitor` CLI for live NTRIP caster testing
 - `gnss_ros2`
@@ -239,7 +239,7 @@ merge rules that combine partial protocol/runtime updates into one coherent
 `GnssRuntimeState`.
 
 See [docs/tools.md](docs/tools.md) for the current offline inspection CLIs,
-profile preview, config-plan, guarded config-apply usage examples, runtime
+profile preview, config-plan, config-apply usage examples, runtime
 replay usage examples, and the live serial / NTRIP monitors.
 
 See [docs/transport.md](docs/transport.md) for the current portable byte-stream

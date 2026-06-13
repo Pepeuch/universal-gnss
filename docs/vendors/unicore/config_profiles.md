@@ -61,11 +61,13 @@ What was intentionally not copied:
 
 Current runtime-safe command families:
 
+- `CONFIG COM1 <baud> 8 n 1`
 - `MODE ROVER`
 - `CONFIG NMEA0183 V410|V411`
 - `CONFIG RTK TIMEOUT <seconds>`
 - `CONFIG RTK RELIABILITY <a> <b>`
 - `CONFIG DGPS TIMEOUT <seconds>`
+- `CONFIG SIGNALGROUP ...`
 - `UNLOG`
 - output enable commands for:
   - `GPGGA`
@@ -80,7 +82,6 @@ Current runtime-safe command families:
 Current safety-gated commands:
 
 - `SAVECONFIG`
-- `CONFIG SIGNALGROUP ...`
 - `FRESET`
 
 ## Output Syntax Policy
@@ -116,6 +117,7 @@ Current `rover_high_precision` helper generates:
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
+- `CONFIG SIGNALGROUP 3 6`
 - `UNLOG`
 - `LOG GPGGA ONTIME 0.2`
 - `GPGSV 1`
@@ -166,7 +168,6 @@ Factory-reset commands are emitted with
 Current persistent-impact commands are:
 
 - `SAVECONFIG`
-- `CONFIG SIGNALGROUP ...`
 
 Current factory-reset commands are:
 
@@ -178,10 +179,11 @@ This means:
 - dispatch still does
 - the existing `ReceiverCommandDispatcher` rejects those commands until
   `explicit_safety_confirmation` is set
-- live `factory_reset` execution remains guarded at the portable apply layer
-  until reconnect / re-probe handling is implemented
 - the current Unicore `FRESET` path returns the receiver to `115200 bps`, so
-  downstream tooling must be prepared to reconnect at the factory baud
+  downstream tooling must reconnect at the factory baud, confirm a live
+  `VERSIONA` response, recover `COM1` with the explicit
+  `CONFIG COM1 <baud> 8 n 1` form, and then verify reachability again at the
+  restored baud before continuing
 
 ## Conservative response routing
 

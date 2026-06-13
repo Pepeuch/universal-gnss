@@ -71,6 +71,7 @@ struct UnicoreConfigProfile
   ReceiverConfigProfileKind config_kind{ReceiverConfigProfileKind::kRover};
   bool factory_reset{false};
   UnicoreMode mode{UnicoreMode::kUnspecified};
+  std::optional<std::uint32_t> com1_baud_rate{};
   std::optional<UnicoreNmeaVersion> nmea_version{};
   std::optional<std::uint32_t> rtk_timeout_s{};
   std::optional<std::uint32_t> dgps_timeout_s{};

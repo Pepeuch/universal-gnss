@@ -60,11 +60,12 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "UM98x",
              "Unicore rover_high_precision_debug plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 14u &&
-                 result.summary.runtime_commands == 14u &&
+  ctx.Expect(result.summary.commands_total == 15u &&
+                 result.summary.runtime_commands == 15u &&
                  result.summary.persistent_commands == 0u,
              "Unicore rover_high_precision_debug plan should report the expected default command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
+                 text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
                  text.find("SATSINFOA 1") != std::string::npos,
              "Unicore rover_high_precision_debug plan text should show the ASCII command sequence");
@@ -108,10 +109,11 @@ void TestPersistentSafetySummary(TestContext& ctx)
 
   const auto unicore_result = BuildConfigPlan(unicore_options);
   ctx.Expect(unicore_result.status == ConfigPlanStatus::kOk &&
+                 unicore_result.summary.factory_reset_commands == 1u &&
                  unicore_result.summary.persistent_commands == 1u &&
-                 unicore_result.summary.commands_requiring_confirmation == 1u &&
+                 unicore_result.summary.commands_requiring_confirmation == 2u &&
                  unicore_result.summary.requires_explicit_safety_confirmation,
-             "persistent Unicore plans should flag SAVECONFIG for confirmation");
+             "persistent Unicore plans should require confirmation for reset plus SAVECONFIG");
 }
 
 void TestFactoryResetPlan(TestContext& ctx)
@@ -125,12 +127,14 @@ void TestFactoryResetPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.summary.factory_reset_commands == 1u &&
-                 !result.production_ready &&
-                 !result.ready_to_execute,
-             "factory_reset plans should remain guarded while still exposing the command sequence");
+                 result.summary.runtime_commands == 15u &&
+                 result.production_ready &&
+                 result.ready_to_execute,
+             "factory_reset plans should expose the production-ready recovery sequence so operators can review it before execution");
   ctx.Expect(text.find("115200") != std::string::npos &&
-                 text.find("reconnect/probe") != std::string::npos,
-             "factory_reset plan text should document the baud reset and reconnect requirement");
+                 text.find("reconnect/probe") != std::string::npos &&
+                 text.find("CONFIG COM1 921600") != std::string::npos,
+             "factory_reset plan text should document the baud reset, reprobe requirement, and COM1 recovery");
 }
 
 void TestJsonFormatting(TestContext& ctx)
