@@ -40,11 +40,13 @@ enum class UnicorePersistenceTarget : std::uint8_t
 enum class UnicoreOutputMessageKind : std::uint8_t
 {
   kGpgga = 0,
-  kPvtslna = 1,
-  kBestnava = 2,
-  kRtkstatusa = 3,
-  kRtcmstatusa = 4,
-  kSatsinfoa = 5,
+  kGpgsv = 1,
+  kGpgst = 2,
+  kPvtslna = 3,
+  kBestnava = 4,
+  kRtkstatusa = 5,
+  kRtcmstatusa = 6,
+  kSatsinfoa = 7,
 };
 
 struct UnicoreRtkReliability
@@ -73,6 +75,7 @@ struct UnicoreConfigProfile
   std::optional<std::uint32_t> dgps_timeout_s{};
   std::optional<UnicoreRtkReliability> rtk_reliability{};
   std::optional<UnicoreSignalConfig> signal_config{};
+  bool clear_current_port_outputs{false};
   std::vector<UnicoreOutputMessageRate> output_messages{};
   UnicorePersistenceTarget persistence{UnicorePersistenceTarget::kRuntimeOnly};
 };

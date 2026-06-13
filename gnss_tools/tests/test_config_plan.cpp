@@ -60,11 +60,12 @@ void TestUnicoreDiagnosticsPlan(TestContext& ctx)
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "UM98x",
              "Unicore diagnostics plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 11u &&
-                 result.summary.runtime_commands == 11u &&
+  ctx.Expect(result.summary.commands_total == 14u &&
+                 result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
              "Unicore diagnostics plan should report the expected default command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
+                 text.find("UNLOG") != std::string::npos &&
                  text.find("SATSINFOA 1") != std::string::npos,
              "Unicore diagnostics plan text should show the ASCII command sequence");
 }

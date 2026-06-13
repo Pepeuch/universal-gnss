@@ -24,6 +24,7 @@ struct NmeaSessionMetrics
   std::size_t sentences_seen{0u};
   std::size_t records_parsed{0u};
   std::size_t records_rejected{0u};
+  std::size_t runtime_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t semantic_only_records{0u};
   std::size_t unknown_sentences{0u};
@@ -42,8 +43,7 @@ public:
   void FeedBytes(const std::vector<std::uint8_t>& bytes,
                  std::optional<std::int64_t> timestamp_ns = std::nullopt);
 
-  void FeedString(std::string_view text,
-                  std::optional<std::int64_t> timestamp_ns = std::nullopt);
+  void FeedString(std::string_view text, std::optional<std::int64_t> timestamp_ns = std::nullopt);
 
   void Finalize();
 
@@ -57,8 +57,7 @@ public:
 
 private:
   void HandleFramerResult(
-      const universal_gnss_protocols::ParserResult<universal_gnss_protocols::NmeaSentence>&
-          result);
+      const universal_gnss_protocols::ParserResult<universal_gnss_protocols::NmeaSentence>& result);
   void HandleSentence(const universal_gnss_protocols::NmeaSentence& sentence);
 
   NmeaSessionConfig config_{};

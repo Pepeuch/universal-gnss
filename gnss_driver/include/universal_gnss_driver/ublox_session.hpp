@@ -29,6 +29,7 @@ struct UbloxSessionMetrics
   std::size_t rtcm_frames_seen{0u};
   std::size_t frames_parsed{0u};
   std::size_t frames_rejected{0u};
+  std::size_t runtime_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t unknown_frames{0u};
   std::size_t malformed_frames{0u};
@@ -58,8 +59,7 @@ public:
   void FeedBytes(const std::vector<std::uint8_t>& bytes,
                  std::optional<std::int64_t> timestamp_ns = std::nullopt);
 
-  void FeedString(std::string_view text,
-                  std::optional<std::int64_t> timestamp_ns = std::nullopt);
+  void FeedString(std::string_view text, std::optional<std::int64_t> timestamp_ns = std::nullopt);
 
   void Finalize();
 

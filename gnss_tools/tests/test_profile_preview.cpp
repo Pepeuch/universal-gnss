@@ -61,18 +61,19 @@ void TestUnicoreRoverPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 10u,
+                 result.commands.size() == 13u,
              "Unicore rover preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 10u &&
-                 result.summary.runtime_commands == 10u &&
+  ctx.Expect(result.summary.commands_total == 13u &&
+                 result.summary.runtime_commands == 13u &&
                  result.summary.persistent_commands == 0u,
              "Unicore rover preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
                  result.commands.front().description == "set receiver mode to rover",
              "Unicore rover preview should decode the MODE ROVER description");
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
-                 text.find("LOG GPGGA ONTIME 0.2") != std::string::npos,
-             "Unicore rover preview text should expose human-readable text commands");
+                 text.find("UNLOG") != std::string::npos &&
+                 text.find("GPGSV 1") != std::string::npos,
+                 "Unicore rover preview text should expose human-readable text commands");
 }
 
 void TestPersistentSummaryGeneration(TestContext& ctx)
@@ -96,8 +97,8 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
 
   const auto unicore_result = BuildProfilePreview(unicore_options);
   ctx.Expect(unicore_result.status == ProfilePreviewStatus::kOk &&
-                 unicore_result.summary.commands_total == 12u &&
-                 unicore_result.summary.runtime_commands == 11u &&
+                 unicore_result.summary.commands_total == 15u &&
+                 unicore_result.summary.runtime_commands == 14u &&
                  unicore_result.summary.persistent_commands == 1u,
              "persistent Unicore previews should add only SAVECONFIG as a persistent command");
 }

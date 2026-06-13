@@ -124,8 +124,8 @@ void TestUnicoreRoverRuntimeOnlyPlan(TestContext& ctx)
              "Unicore rover runtime-only planning should succeed");
   ctx.Expect(plan.vendor == universal_gnss_driver::ReceiverVendor::kUnicore &&
                  plan.receiver_family_name == "UM98x" &&
-                 plan.validation.generated_command_count == 10u &&
-                 plan.validation.runtime_command_count == 10u,
+                 plan.validation.generated_command_count == 13u &&
+                 plan.validation.runtime_command_count == 13u,
              "Unicore rover planning should generate the expected runtime command counts");
 }
 
@@ -167,7 +167,7 @@ void TestPersistentApplyWarnings(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kPersistent);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 11u &&
+                 plan.validation.generated_command_count == 14u &&
                  plan.validation.persistent_command_count == 1u,
              "persistent Unicore planning should include SAVECONFIG");
   ctx.Expect(ContainsWarning(plan, "persistent apply") &&

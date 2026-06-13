@@ -28,6 +28,15 @@ Current parsed Unicore messages:
 - `HWSTATUSA`
 - `AGCA`
 
+Current mixed NMEA sentences accepted on a Unicore runtime stream:
+
+- `GSV` for conservative tracked-from-parsed-entries counts, visible satellite
+  counts, and CN0 enrichment
+- `GGA` as conservative fix/position fallback only when richer Unicore state is
+  still missing
+- `GST` as conservative accuracy fallback only when richer Unicore state is
+  still missing
+
 Not implemented yet:
 
 - broader binary `N4` semantic decode beyond `BESTNAVB` and `PVTSLNB`
@@ -77,6 +86,17 @@ The first portable consumer of these mappings now exists in
 - parse supported messages
 - turn them into partial `GnssRuntimeState` updates
 - merge them through `GnssRuntimeAggregator`
+
+When a Unicore receiver emits a mixed stream of proprietary records and NMEA,
+the session keeps the richer proprietary runtime sources authoritative:
+
+- `BESTNAVA`, `BESTNAVB`, `PVTSLNA`, `PVTSLNB`, and `RTKSTATUSA` remain the
+  primary fix / RTK / position / heading sources
+- `GSV` is used to fill conservative `satellites_tracked` (from parsed
+  per-satellite entries), `satellites_visible`, and CN0 metrics when the
+  current proprietary satellite summaries are missing or sparse
+- `GGA` and `GST` are fallback-only and do not override already-known richer
+  Unicore fix, position, or accuracy fields
 
 That session layer is transport-agnostic. It does not configure the receiver,
 open serial ports, publish ROS topics, or manage reconnects.
@@ -262,6 +282,9 @@ Current conservative rules:
 - `SATSINFOA` does not currently claim `satellites_used`
 - no RTK, correction-age, or RF state is inferred from signal-strength data
 - no constellation-specific aggregate fields are projected into core yet
+
+That means `satellites_visible` is expected to come from mixed-stream `GSV`
+when the receiver is configured to emit it.
 
 ## BESTSATA
 
