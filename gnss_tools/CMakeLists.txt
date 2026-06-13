@@ -29,6 +29,17 @@ target_link_libraries(
 
 target_compile_features(universal_gnss_tools PUBLIC cxx_std_17)
 
+set(
+  UNIVERSAL_GNSS_TOOLS_CLI_TARGETS
+  rtcm_inspect
+  gnss_inspect
+  gnss_replay
+  gnss_quality_report
+  gnss_export
+  gnss_profile_preview
+  gnss_config_plan
+)
+
 add_executable(
   rtcm_inspect
   src/rtcm_inspect.cpp
@@ -152,7 +163,27 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       universal_gnss_ntrip
       universal_gnss_tools
   )
+
+  list(
+    APPEND
+    UNIVERSAL_GNSS_TOOLS_CLI_TARGETS
+    gnss_discover
+    gnss_config_apply
+    gnss_serial_monitor
+    gnss_ntrip_monitor
+  )
 endif()
+
+install(
+  TARGETS
+    universal_gnss_tools
+    ${UNIVERSAL_GNSS_TOOLS_CLI_TARGETS}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY include/ DESTINATION include)
 
 if(BUILD_TESTING)
   add_executable(
