@@ -520,6 +520,32 @@ void TestReplayUnicoreJammingEnrichesRfStateOnly(TestContext& ctx)
              "JAMSTATUSA replay should enrich the final state with interference/jamming only");
 }
 
+void TestReplayEmbeddedUnicoreTextResyncRecoversBestNav(TestContext& ctx)
+{
+  const std::string corrupted_prefix =
+      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;TRUNCATED";
+  std::vector<std::uint8_t> bytes(corrupted_prefix.begin(), corrupted_prefix.end());
+  Append(bytes, BuildUnicoreLine(
+                    "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+                    "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+                    "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+                    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+  const auto& final_state = result.final_state;
+
+  ctx.Expect(result.summary.recognized_records == 1u &&
+                 result.summary.runtime_updates == 1u &&
+                 result.summary.malformed_events == 1u &&
+                 result.summary.noise_bytes == corrupted_prefix.size(),
+             "replay should resynchronize past a truncated embedded Unicore prefix");
+  ctx.Expect(final_state.fix_valid &&
+                 final_state.fix_type == universal_gnss::GnssFixType::kRtkFloat &&
+                 final_state.latitude_deg == std::optional<double>(40.0789588272) &&
+                 final_state.longitude_deg == std::optional<double>(116.2365102982),
+             "replay should preserve the recovered BESTNAVA runtime state after embedded resync");
+}
+
 void TestReplayUnicoreBestSatEnrichesSatelliteCountsOnly(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes;
@@ -760,6 +786,7 @@ int main()
   TestReplayNmeaGstOnlyDoesNotInventFixOrPosition(ctx);
   TestReplayUbxNavDopEnrichesDopOnly(ctx);
   TestReplayUnicoreJammingEnrichesRfStateOnly(ctx);
+  TestReplayEmbeddedUnicoreTextResyncRecoversBestNav(ctx);
   TestReplayUnicoreBestSatEnrichesSatelliteCountsOnly(ctx);
   TestReplayUnicoreBinaryAndAsciiRouting(ctx);
   TestReplayMergesMixedRuntimeState(ctx);

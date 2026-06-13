@@ -67,8 +67,8 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
                  text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
-                 text.find("SATSINFOA 1") != std::string::npos,
-             "Unicore rover_high_precision_debug plan text should show the ASCII command sequence");
+                 text.find("LOG PVTSLNA ONTIME 0.2") != std::string::npos,
+             "Unicore rover_high_precision_debug plan text should show the verbose PVTSLNA command sequence");
 }
 
 void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
@@ -127,7 +127,7 @@ void TestFactoryResetPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.summary.factory_reset_commands == 1u &&
-                 result.summary.runtime_commands == 15u &&
+                 result.summary.runtime_commands == 16u &&
                  result.production_ready &&
                  result.ready_to_execute,
              "factory_reset plans should expose the production-ready recovery sequence so operators can review it before execution");

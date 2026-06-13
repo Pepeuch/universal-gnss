@@ -61,10 +61,10 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 14u,
+                 result.commands.size() == 15u,
              "Unicore rover_high_precision preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 14u &&
-                 result.summary.runtime_commands == 14u &&
+  ctx.Expect(result.summary.commands_total == 15u &&
+                 result.summary.runtime_commands == 15u &&
                  result.summary.persistent_commands == 0u,
              "Unicore rover_high_precision preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
@@ -73,7 +73,8 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
                  text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
-                 text.find("GPGSV 1") != std::string::npos,
+                 text.find("LOG PVTSLNA ONTIME 1") != std::string::npos &&
+                 text.find("SATSINFOA 1") != std::string::npos,
              "Unicore rover_high_precision preview text should expose human-readable text commands");
 }
 
@@ -132,8 +133,8 @@ void TestFactoryResetPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 16u &&
-                 result.summary.runtime_commands == 15u &&
+                 result.commands.size() == 17u &&
+                 result.summary.runtime_commands == 16u &&
                  result.summary.factory_reset_commands == 1u,
              "Unicore factory_reset preview should expose reset plus runtime recovery commands");
   ctx.Expect(!result.commands.empty() &&

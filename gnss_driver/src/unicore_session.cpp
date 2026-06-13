@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "universal_gnss/gnss_runtime_state.hpp"
+#include "universal_gnss_protocols/mixed_stream_resync.hpp"
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
@@ -42,67 +43,6 @@ bool IsSupportedNmeaSentenceType(const NmeaSentence& sentence)
   return universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV") ||
          universal_gnss_protocols::IsNmeaSentenceType(sentence, "GGA") ||
          universal_gnss_protocols::IsNmeaGst(sentence);
-}
-
-bool IsTextSyncByte(const std::uint8_t byte)
-{
-  return byte == '$' || byte == '!' || byte == '#' || byte == '%';
-}
-
-bool HasBinarySyncAt(const std::vector<UnicoreBufferedByte>& bytes, const std::size_t offset)
-{
-  return offset + 2u < bytes.size() &&
-         bytes[offset].value == universal_gnss_protocols::kUnicoreBinarySync1 &&
-         bytes[offset + 1u].value == universal_gnss_protocols::kUnicoreBinarySync2 &&
-         bytes[offset + 2u].value == universal_gnss_protocols::kUnicoreBinarySync3;
-}
-
-bool IsPlausibleTextRecordStart(const std::vector<UnicoreBufferedByte>& bytes,
-                                const std::size_t offset)
-{
-  if (offset >= bytes.size() || !IsTextSyncByte(bytes[offset].value) || offset + 1u >= bytes.size())
-  {
-    return false;
-  }
-
-  const std::size_t max_probe = std::min<std::size_t>(bytes.size(), offset + 20u);
-  bool saw_separator = false;
-  for (std::size_t index = offset + 1u; index < max_probe; ++index)
-  {
-    const char c = static_cast<char>(bytes[index].value);
-    if (c == ',' || c == ';' || c == '*' || c == ' ')
-    {
-      saw_separator = true;
-      break;
-    }
-
-    const bool valid = (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
-    if (!valid)
-    {
-      return false;
-    }
-  }
-
-  return saw_separator;
-}
-
-std::optional<std::size_t> FindEmbeddedResyncOffset(const std::vector<UnicoreBufferedByte>& bytes,
-                                                    const std::size_t start_offset)
-{
-  for (std::size_t offset = start_offset + 1u; offset < bytes.size(); ++offset)
-  {
-    if (bytes[offset].value == '\n')
-    {
-      return std::nullopt;
-    }
-
-    if (HasBinarySyncAt(bytes, offset) || IsPlausibleTextRecordStart(bytes, offset))
-    {
-      return offset;
-    }
-  }
-
-  return std::nullopt;
 }
 
 void PruneNmeaGgaFallback(const GnssRuntimeState& current_state,
@@ -411,7 +351,10 @@ bool UnicoreSession::ConsumeNmeaAtOffset(const std::size_t start_offset,
                                          std::size_t& next_offset,
                                          bool& keep_tail)
 {
-  if (const auto resync_offset = FindEmbeddedResyncOffset(buffer_, start_offset);
+  if (const auto resync_offset = universal_gnss_protocols::FindEmbeddedMixedRecordResyncOffset(
+          buffer_.size(),
+          [&](const std::size_t index) { return buffer_[index].value; },
+          start_offset);
       resync_offset.has_value())
   {
     if (!ShouldSuppressStartupAsciiMalformed())
@@ -475,7 +418,10 @@ bool UnicoreSession::ConsumeAsciiAtOffset(const std::size_t start_offset,
                                           std::size_t& next_offset,
                                           bool& keep_tail)
 {
-  if (const auto resync_offset = FindEmbeddedResyncOffset(buffer_, start_offset);
+  if (const auto resync_offset = universal_gnss_protocols::FindEmbeddedMixedRecordResyncOffset(
+          buffer_.size(),
+          [&](const std::size_t index) { return buffer_[index].value; },
+          start_offset);
       resync_offset.has_value())
   {
     if (!ShouldSuppressStartupAsciiMalformed())

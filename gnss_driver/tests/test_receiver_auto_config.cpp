@@ -162,13 +162,17 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 rover_plan.validation.generated_command_count == 14u &&
-                 rover_plan.validation.runtime_command_count == 14u,
+                 rover_plan.validation.generated_command_count == 15u &&
+                 rover_plan.validation.runtime_command_count == 15u,
              "Unicore rover_high_precision planning should preserve the validated runtime profile");
   ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  debug_plan.validation.generated_command_count == 15u &&
                  debug_plan.validation.runtime_command_count == 15u,
-             "Unicore rover_high_precision_debug planning should add the extra diagnostics log only");
+             "Unicore rover_high_precision_debug planning should keep the same lean command count");
+  ctx.Expect(rover_plan.commands[10].payload.text.find("LOG PVTSLNA ONTIME 1") != std::string::npos &&
+                 debug_plan.commands[10].payload.text.find("LOG PVTSLNA ONTIME 0.2") !=
+                     std::string::npos,
+             "Unicore debug planning should keep PVTSLNA at 5 Hz while the normal rover profile stays at 1 Hz");
 }
 
 void TestUnicoreFactoryResetPlan(TestContext& ctx)
@@ -179,8 +183,8 @@ void TestUnicoreFactoryResetPlan(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 16u &&
-                 plan.validation.runtime_command_count == 15u &&
+                 plan.validation.generated_command_count == 17u &&
+                 plan.validation.runtime_command_count == 16u &&
                  plan.validation.factory_reset_command_count == 1u,
              "Unicore factory_reset planning should expand into reset plus runtime recovery commands");
   ctx.Expect(plan.validation.production_ready &&
@@ -211,8 +215,8 @@ void TestPersistentApplyWarnings(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kPersistent);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 17u &&
-                 plan.validation.runtime_command_count == 15u &&
+                 plan.validation.generated_command_count == 18u &&
+                 plan.validation.runtime_command_count == 16u &&
                  plan.validation.persistent_command_count == 1u &&
                  plan.validation.factory_reset_command_count == 1u,
              "persistent Unicore rover_high_precision planning should rebuild the saved profile from a clean reset baseline");

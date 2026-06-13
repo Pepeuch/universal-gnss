@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "universal_gnss_protocols/nmea_framer.hpp"
+#include "universal_gnss_protocols/mixed_stream_resync.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
@@ -124,6 +125,27 @@ void AddNoiseBytes(const std::size_t count,
 void EndNoiseSpan(bool& in_noise_span)
 {
   in_noise_span = false;
+}
+
+bool ConsumeEmbeddedTextResyncAtOffset(const std::vector<std::uint8_t>& bytes,
+                                       const std::size_t start_offset,
+                                       GnssStreamInspectionResult& result,
+                                       std::size_t& next_offset,
+                                       bool& in_noise_span)
+{
+  const auto resync_offset = universal_gnss_protocols::FindEmbeddedMixedRecordResyncOffset(
+      bytes.size(),
+      [&](const std::size_t index) { return bytes[index]; },
+      start_offset);
+  if (!resync_offset.has_value())
+  {
+    return false;
+  }
+
+  ++result.summary.malformed_events;
+  AddNoiseBytes(*resync_offset - start_offset, result.summary, in_noise_span);
+  next_offset = *resync_offset;
+  return true;
 }
 
 std::string BuildNmeaIdentity(const NmeaSentence& sentence)
@@ -295,6 +317,12 @@ bool ConsumeNmeaAtOffset(const std::vector<std::uint8_t>& bytes,
                          bool& stop_scan,
                          bool& in_noise_span)
 {
+  if (ConsumeEmbeddedTextResyncAtOffset(
+          bytes, start_offset, result, next_offset, in_noise_span))
+  {
+    return true;
+  }
+
   NmeaSentenceFramer framer;
   const ProbeResult<NmeaSentence> probe =
       ProbeAtOffset<NmeaSentenceFramer, NmeaSentence>(framer, bytes, start_offset);
@@ -348,6 +376,12 @@ bool ConsumeUnicoreAtOffset(const std::vector<std::uint8_t>& bytes,
                             bool& stop_scan,
                             bool& in_noise_span)
 {
+  if (ConsumeEmbeddedTextResyncAtOffset(
+          bytes, start_offset, result, next_offset, in_noise_span))
+  {
+    return true;
+  }
+
   UnicoreFrameFramer framer;
   const ProbeResult<UnicoreFrame> probe =
       ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, start_offset);

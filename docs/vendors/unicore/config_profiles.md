@@ -119,13 +119,18 @@ Current `rover_high_precision` helper generates:
 - `CONFIG DGPS TIMEOUT 600`
 - `CONFIG SIGNALGROUP 3 6`
 - `UNLOG`
-- `LOG GPGGA ONTIME 0.2`
+- `LOG GPGGA ONTIME 1`
 - `GPGSV 1`
 - `GPGST 1`
-- `LOG PVTSLNA ONTIME 0.2`
+- `LOG PVTSLNA ONTIME 1`
 - `BESTNAVA 0.2`
 - `RTKSTATUSA 1`
 - `RTCMSTATUSA ONCHANGED`
+- `SATSINFOA 1`
+
+This keeps the primary rover state on `BESTNAVA` at 5 Hz while trimming the
+fallback/observability logs down to 1 Hz so live serial output stays lighter on
+UM982 deployments.
 
 If persistent mode is requested, the builder appends only:
 
@@ -138,9 +143,13 @@ Legacy CLI alias:
 ### `rover_high_precision_debug`
 
 Current `rover_high_precision_debug` helper extends
-`rover_high_precision` with:
+`rover_high_precision` by restoring the heavier heading/status log:
 
-- `SATSINFOA 1`
+- `LOG PVTSLNA ONTIME 0.2`
+
+This debug profile is intentionally higher-bandwidth than
+`rover_high_precision` and is meant for short-lived capture or troubleshooting
+sessions, not normal runtime.
 
 Legacy CLI alias:
 

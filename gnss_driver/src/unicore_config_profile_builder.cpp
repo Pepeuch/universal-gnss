@@ -255,6 +255,20 @@ void AppendCommand(std::vector<ReceiverCommand>& commands,
   }
 }
 
+void SetOutputPeriod(UnicoreConfigProfile& profile,
+                     const UnicoreOutputMessageKind message,
+                     const std::optional<double> period_s)
+{
+  for (auto& output : profile.output_messages)
+  {
+    if (output.message == message)
+    {
+      output.period_s = period_s;
+      return;
+    }
+  }
+}
+
 }  // namespace
 
 UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
@@ -387,13 +401,14 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   profile.signal_config = UnicoreSignalConfig{{3u, 6u}};
   profile.clear_current_port_outputs = true;
   profile.output_messages = {
-      {UnicoreOutputMessageKind::kGpgga, 0.2},
+      {UnicoreOutputMessageKind::kGpgga, 1.0},
       {UnicoreOutputMessageKind::kGpgsv, 1.0},
       {UnicoreOutputMessageKind::kGpgst, 1.0},
-      {UnicoreOutputMessageKind::kPvtslna, 0.2},
+      {UnicoreOutputMessageKind::kPvtslna, 1.0},
       {UnicoreOutputMessageKind::kBestnava, 0.2},
       {UnicoreOutputMessageKind::kRtkstatusa, 1.0},
       {UnicoreOutputMessageKind::kRtcmstatusa, std::nullopt},
+      {UnicoreOutputMessageKind::kSatsinfoa, 1.0},
   };
   profile.persistence = persistence;
   return profile;
@@ -404,8 +419,7 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile
 {
   UnicoreConfigProfile profile = BuildUnicoreRoverProfile(persistence);
   profile.config_kind = ReceiverConfigProfileKind::kDiagnosticsOutput;
-  profile.output_messages.push_back(
-      UnicoreOutputMessageRate{UnicoreOutputMessageKind::kSatsinfoa, 1.0});
+  SetOutputPeriod(profile, UnicoreOutputMessageKind::kPvtslna, 0.2);
   return profile;
 }
 

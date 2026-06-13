@@ -444,7 +444,7 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
                  result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation &&
                  result.execution_confirmed &&
-                 result.plan.summary.commands_total == 17u &&
+                 result.plan.summary.commands_total == 18u &&
                  result.plan.summary.factory_reset_commands == 1u &&
                  result.plan.summary.persistent_commands == 1u,
              "persistent Unicore apply should prepare a confirmed reset-first recovery workflow");
@@ -465,9 +465,9 @@ void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
                  result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation &&
                  result.execution_confirmed &&
-                 result.plan.summary.commands_total == 16u &&
+                 result.plan.summary.commands_total == 17u &&
                  result.plan.summary.factory_reset_commands == 1u &&
-                 result.plan.summary.runtime_commands == 15u,
+                 result.plan.summary.runtime_commands == 16u,
              "factory_reset live apply should prepare the explicit reset/reprobe recovery sequence");
 }
 
@@ -491,10 +491,10 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  !result.dry_run &&
                  result.executed &&
-                 result.execution_summary.commands_total == 14u &&
-                 result.execution_summary.commands_completed == 14u &&
+                 result.execution_summary.commands_total == 15u &&
+                 result.execution_summary.commands_completed == 15u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 14u &&
+                 result.execution_summary.responses_applied == 15u &&
                  result.execution_summary.final_status == "completed",
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
@@ -536,7 +536,7 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
        std::vector<std::uint8_t>(
            second_probe_response.begin(),
            second_probe_response.end())});
-  const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(14u);
+  const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(15u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        921600u,
@@ -547,10 +547,10 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_total == 16u &&
-                 result.execution_summary.commands_completed == 16u &&
+                 result.execution_summary.commands_total == 17u &&
+                 result.execution_summary.commands_completed == 17u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 14u &&
+                 result.execution_summary.responses_applied == 15u &&
                  result.execution_summary.final_status == "completed",
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
   ctx.Expect(hooks.AllStepsConsumed() &&
@@ -598,7 +598,7 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
        std::vector<std::uint8_t>(
            second_probe_response.begin(),
            second_probe_response.end())});
-  const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(15u);
+  const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(16u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        921600u,
@@ -611,10 +611,10 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_total == 17u &&
-                 result.execution_summary.commands_completed == 17u &&
+                 result.execution_summary.commands_total == 18u &&
+                 result.execution_summary.commands_completed == 18u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 15u &&
+                 result.execution_summary.responses_applied == 16u &&
                  result.execution_summary.final_status == "completed",
              "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
   ctx.Expect(hooks.AllStepsConsumed() &&

@@ -355,6 +355,34 @@ void TestUnicoreInspection(TestContext& ctx)
              "JSON output should include Unicore item and counters");
 }
 
+void TestEmbeddedUnicoreTextResync(TestContext& ctx)
+{
+  const std::string corrupted_prefix =
+      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;TRUNCATED";
+  std::vector<std::uint8_t> bytes(corrupted_prefix.begin(), corrupted_prefix.end());
+  Append(bytes,
+         BuildAsciiLine(
+             "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+             "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+             "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+             "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+
+  const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
+
+  ctx.Expect(result.summary.total_items_found == 1u &&
+                 result.summary.valid_items == 1u &&
+                 result.summary.invalid_items == 0u,
+             "embedded-text resync should still recover the later valid Unicore record");
+  ctx.Expect(result.summary.malformed_events == 1u &&
+                 result.summary.noise_bytes == corrupted_prefix.size() &&
+                 result.summary.noise_spans == 1u,
+             "embedded-text resync should count the truncated prefix as one malformed noise span");
+  ctx.Expect(result.items.size() == 1u &&
+                 result.items.front().byte_offset == corrupted_prefix.size() &&
+                 result.items.front().identity == "BESTNAVA",
+             "embedded-text resync should restart parsing at the embedded BESTNAVA frame");
+}
+
 void TestUnicoreBinaryInspection(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes = {0x99u};
@@ -414,6 +442,7 @@ int main()
   TestSummaryOnlyAndFormatting(ctx);
   TestStreamInput(ctx);
   TestUnicoreInspection(ctx);
+  TestEmbeddedUnicoreTextResync(ctx);
   TestUnicoreBinaryInspection(ctx);
   TestFileBackedMixedInspection(ctx);
 

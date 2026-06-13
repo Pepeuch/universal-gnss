@@ -81,7 +81,7 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover helper should declare the rover config profile kind");
   ctx.Expect(profile.clear_current_port_outputs,
              "unicore rover helper should request a runtime output cleanup before re-enabling logs");
-  ctx.Expect(result.commands.size() == 14u,
+  ctx.Expect(result.commands.size() == 15u,
              "unicore rover helper should generate mode, config, and output-message commands");
 
   ExpectTextCommand(ctx,
@@ -100,20 +100,22 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover helper should configure the validated UM982 signal-group set");
   ctx.Expect(ContainsText(result.commands[6], "UNLOG"),
              "unicore rover helper should clear the current port outputs before enabling the curated log set");
-  ctx.Expect(ContainsText(result.commands[7], "LOG GPGGA ONTIME 0.2"),
-             "unicore rover helper should enable GPGGA with the documented ONTIME syntax");
+  ctx.Expect(ContainsText(result.commands[7], "LOG GPGGA ONTIME 1"),
+             "unicore rover helper should keep GPGGA available at a lighter 1 Hz rate");
   ctx.Expect(ContainsText(result.commands[8], "GPGSV 1"),
              "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback stay available");
   ctx.Expect(ContainsText(result.commands[9], "GPGST 1"),
              "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
-  ctx.Expect(ContainsText(result.commands[10], "LOG PVTSLNA ONTIME 0.2"),
-             "unicore rover helper should enable PVTSLNA with the practical ONTIME syntax");
+  ctx.Expect(ContainsText(result.commands[10], "LOG PVTSLNA ONTIME 1"),
+             "unicore rover helper should reduce PVTSLNA to a lighter 1 Hz fallback rate");
   ctx.Expect(ContainsText(result.commands[11], "BESTNAVA 0.2"),
              "unicore rover helper should emit BESTNAVA with direct-period syntax");
   ctx.Expect(ContainsText(result.commands[12], "RTKSTATUSA 1"),
              "unicore rover helper should emit RTKSTATUSA with direct-period syntax");
   ctx.Expect(ContainsText(result.commands[13], "RTCMSTATUSA ONCHANGED"),
              "unicore rover helper should emit RTCMSTATUSA with ONCHANGED syntax");
+  ctx.Expect(ContainsText(result.commands[14], "SATSINFOA 1"),
+             "unicore rover helper should keep SATSINFOA at 1 Hz for stable satellite observability");
 }
 
 void TestDiagnosticsProfileGeneration(TestContext& ctx)
@@ -123,9 +125,11 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
 
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
                  result.commands.size() == 15u,
-             "unicore diagnostics helper should extend the rover profile with one extra output command");
+             "unicore diagnostics helper should preserve the lean rover command count");
+  ctx.Expect(ContainsText(result.commands[10], "LOG PVTSLNA ONTIME 0.2"),
+             "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging");
   ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA 1"),
-             "unicore diagnostics helper should enable SATSINFOA at a stable 1 Hz period");
+             "unicore diagnostics helper should keep SATSINFOA at 1 Hz");
 }
 
 void TestPersistentAndSignalGroupSafety(TestContext& ctx)
@@ -187,7 +191,7 @@ void TestCom1BaudCommandGeneration(TestContext& ctx)
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 15u,
+                 result.commands.size() == 16u,
              "unicore COM1 baud injection should prepend one extra runtime command");
   ExpectTextCommand(ctx,
                     result.commands.front(),
