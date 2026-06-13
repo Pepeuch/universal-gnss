@@ -225,10 +225,10 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  !result.dry_run &&
                  result.executed &&
-                 result.execution_summary.commands_total == 10u &&
-                 result.execution_summary.commands_completed == 10u &&
+                 result.execution_summary.commands_total == 13u &&
+                 result.execution_summary.commands_completed == 13u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 10u &&
+                 result.execution_summary.responses_applied == 13u &&
                  result.execution_summary.final_status == "completed",
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
