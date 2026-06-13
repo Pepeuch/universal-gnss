@@ -44,6 +44,11 @@ std::string TrimTrailingCrLf(std::string text)
   return text;
 }
 
+bool StartsWith(const std::string_view text, const std::string_view prefix)
+{
+  return text.size() >= prefix.size() && text.compare(0u, prefix.size(), prefix) == 0;
+}
+
 std::string EscapeJson(std::string_view text)
 {
   std::ostringstream stream;
@@ -170,6 +175,71 @@ std::size_t CommandPayloadSize(const ReceiverCommand& command)
   }
 
   return 0u;
+}
+
+std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand& command)
+{
+  if (command.payload.kind != ReceiverCommandPayloadKind::kText)
+  {
+    return std::nullopt;
+  }
+
+  const std::string text = TrimTrailingCrLf(command.payload.text);
+  constexpr std::string_view kPrefix = "CONFIG COM1 ";
+  if (!StartsWith(text, kPrefix))
+  {
+    return std::nullopt;
+  }
+
+  const std::string_view remainder(text.data() + kPrefix.size(), text.size() - kPrefix.size());
+  const std::size_t separator = remainder.find(' ');
+  if (separator == std::string_view::npos || separator == 0u)
+  {
+    return std::nullopt;
+  }
+
+  try
+  {
+    std::size_t parsed = 0u;
+    const auto baud =
+        std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
+    if (parsed != separator)
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(baud);
+  }
+  catch (...)
+  {
+    return std::nullopt;
+  }
+}
+
+std::optional<std::uint32_t> ExtractPlannedUnicoreConfigBaud(
+    const std::vector<ConfigPlanCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (const auto baud = ParsePlannedUnicoreConfigBaud(command.command); baud.has_value())
+    {
+      return baud;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool HasFactoryResetCommand(const std::vector<ConfigPlanCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (command.command.kind == ReceiverCommandKind::kReset)
+    {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 std::optional<ReceiverDetectedFamily> ParseReceiverFamily(const std::string& vendor)
@@ -376,7 +446,7 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   }
   if (result.detected_baud.has_value())
   {
-    output << "Detected baud: " << *result.detected_baud << "\n";
+    output << "Current transport baud: " << *result.detected_baud << "\n";
   }
   if (result.discovery_confidence.has_value())
   {
@@ -402,7 +472,16 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   }
   if (result.baud.has_value())
   {
-    output << "Baud override: " << *result.baud << "\n";
+    output << "Config baud override: " << *result.baud << "\n";
+  }
+  if (HasFactoryResetCommand(result.commands))
+  {
+    output << "Factory reset baud: 115200\n";
+  }
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.commands);
+      target_baud.has_value())
+  {
+    output << "Target configured baud: " << *target_baud << "\n";
   }
   if (result.rate_hz.has_value())
   {
@@ -467,6 +546,27 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   if (result.baud.has_value())
   {
     output << *result.baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"target_configured_baud\": ";
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.commands);
+      target_baud.has_value())
+  {
+    output << *target_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"factory_reset_baud\": ";
+  if (HasFactoryResetCommand(result.commands))
+  {
+    output << 115200u;
   }
   else
   {

@@ -189,6 +189,11 @@ std::string TrimTrailingCrLf(std::string text)
   return text;
 }
 
+bool StartsWith(const std::string_view text, const std::string_view prefix)
+{
+  return text.size() >= prefix.size() && text.compare(0u, prefix.size(), prefix) == 0;
+}
+
 const char* CommandKindToString(const universal_gnss_driver::ReceiverCommandKind kind)
 {
   switch (kind)
@@ -252,6 +257,71 @@ ReceiverCommandTimestampNs NowTimestampNs()
 bool ApplyModeRequestsExecution(const ReceiverAutoConfigApplyMode apply_mode)
 {
   return apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+}
+
+std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand& command)
+{
+  if (command.payload.kind != ReceiverCommandPayloadKind::kText)
+  {
+    return std::nullopt;
+  }
+
+  const std::string text = TrimTrailingCrLf(command.payload.text);
+  constexpr std::string_view kPrefix = "CONFIG COM1 ";
+  if (!StartsWith(text, kPrefix))
+  {
+    return std::nullopt;
+  }
+
+  const std::string_view remainder(text.data() + kPrefix.size(), text.size() - kPrefix.size());
+  const std::size_t separator = remainder.find(' ');
+  if (separator == std::string_view::npos || separator == 0u)
+  {
+    return std::nullopt;
+  }
+
+  try
+  {
+    std::size_t parsed = 0u;
+    const auto baud =
+        std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
+    if (parsed != separator)
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(baud);
+  }
+  catch (...)
+  {
+    return std::nullopt;
+  }
+}
+
+std::optional<std::uint32_t> ExtractPlannedUnicoreConfigBaud(
+    const std::vector<ConfigPlanCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (const auto baud = ParsePlannedUnicoreConfigBaud(command.command); baud.has_value())
+    {
+      return baud;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool PlanHasFactoryResetCommand(const std::vector<ConfigPlanCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (command.command.kind == universal_gnss_driver::ReceiverCommandKind::kReset)
+    {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 std::string ResolveRequestedDevicePath(const ConfigApplyOptions& options)
@@ -485,6 +555,12 @@ std::vector<ConfigPlanCommand> SlicePlanCommands(
 
 std::uint32_t ResolveUnicoreRecoveryBaud(const ConfigApplyResult& result)
 {
+  if (const auto planned_baud = ExtractPlannedUnicoreConfigBaud(result.plan.commands);
+      planned_baud.has_value() && *planned_baud != 0u)
+  {
+    return *planned_baud;
+  }
+
   if (result.plan.baud.has_value() && *result.plan.baud != 0u)
   {
     return *result.plan.baud;
@@ -1608,7 +1684,7 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   }
   if (result.plan.detected_baud.has_value())
   {
-    output << "Detected baud: " << *result.plan.detected_baud << "\n";
+    output << "Detected receiver baud: " << *result.plan.detected_baud << "\n";
   }
   if (result.plan.discovery_confidence.has_value())
   {
@@ -1624,7 +1700,16 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   }
   if (result.transport_baud_rate != 0u)
   {
-    output << "Transport baud: " << result.transport_baud_rate << "\n";
+    output << "Current transport baud: " << result.transport_baud_rate << "\n";
+  }
+  if (PlanHasFactoryResetCommand(result.plan.commands))
+  {
+    output << "Factory reset baud: 115200\n";
+  }
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.plan.commands);
+      target_baud.has_value())
+  {
+    output << "Target configured baud: " << *target_baud << "\n";
   }
   if (result.plan.baud.has_value())
   {
@@ -1697,6 +1782,27 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   if (result.plan.baud.has_value())
   {
     output << *result.plan.baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"target_configured_baud\": ";
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.plan.commands);
+      target_baud.has_value())
+  {
+    output << *target_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"factory_reset_baud\": ";
+  if (PlanHasFactoryResetCommand(result.plan.commands))
+  {
+    output << 115200u;
   }
   else
   {

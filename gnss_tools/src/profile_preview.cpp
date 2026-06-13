@@ -196,6 +196,71 @@ std::size_t CommandPayloadSize(const ReceiverCommand& command)
   return 0u;
 }
 
+std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand& command)
+{
+  if (command.payload.kind != ReceiverCommandPayloadKind::kText)
+  {
+    return std::nullopt;
+  }
+
+  const std::string text = TrimTrailingCrLf(command.payload.text);
+  constexpr std::string_view kPrefix = "CONFIG COM1 ";
+  if (!StartsWith(text, kPrefix))
+  {
+    return std::nullopt;
+  }
+
+  const std::string_view remainder(text.data() + kPrefix.size(), text.size() - kPrefix.size());
+  const std::size_t separator = remainder.find(' ');
+  if (separator == std::string_view::npos || separator == 0u)
+  {
+    return std::nullopt;
+  }
+
+  try
+  {
+    std::size_t parsed = 0u;
+    const auto baud =
+        std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
+    if (parsed != separator)
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(baud);
+  }
+  catch (...)
+  {
+    return std::nullopt;
+  }
+}
+
+std::optional<std::uint32_t> ExtractPlannedUnicoreConfigBaud(
+    const std::vector<ProfilePreviewCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (const auto baud = ParsePlannedUnicoreConfigBaud(command.command); baud.has_value())
+    {
+      return baud;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool HasFactoryResetCommand(const std::vector<ProfilePreviewCommand>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (command.command.kind == ReceiverCommandKind::kReset)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 std::string FormatHexBytes(const std::vector<std::uint8_t>& bytes)
 {
   std::ostringstream stream;
@@ -630,7 +695,16 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
   }
   if (result.baud.has_value())
   {
-    output << "Baud override: " << *result.baud << "\n";
+    output << "Config baud override: " << *result.baud << "\n";
+  }
+  if (HasFactoryResetCommand(result.commands))
+  {
+    output << "Factory reset baud: 115200\n";
+  }
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.commands);
+      target_baud.has_value())
+  {
+    output << "Target configured baud: " << *target_baud << "\n";
   }
   if (result.rate_hz.has_value())
   {
@@ -682,6 +756,27 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   if (result.baud.has_value())
   {
     output << *result.baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "  \"target_configured_baud\": ";
+  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.commands);
+      target_baud.has_value())
+  {
+    output << *target_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "  \"factory_reset_baud\": ";
+  if (HasFactoryResetCommand(result.commands))
+  {
+    output << 115200u;
   }
   else
   {

@@ -230,16 +230,30 @@ void TestPersistentApplyWarnings(TestContext& ctx)
 void TestUnicorePersistentBaudOverride(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore),
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
       ReceiverAutoConfigProfile::kRoverHighPrecision,
       ReceiverAutoConfigApplyMode::kPersistent,
-      921600u);
+      460800u);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.request.config_baud == std::optional<std::uint32_t>{921600u} &&
+                 plan.request.config_baud == std::optional<std::uint32_t>{460800u} &&
+                 !plan.commands.empty() &&
+                 plan.commands[1].payload.text.find("CONFIG COM1 460800") != std::string::npos,
+             "persistent Unicore planning should accept a baud override only through the clean reset workflow");
+}
+
+void TestUnicorePersistentDefaultTargetBaud(TestContext& ctx)
+{
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore),
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kPersistent);
+
+  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 !plan.request.config_baud.has_value() &&
                  !plan.commands.empty() &&
                  plan.commands[1].payload.text.find("CONFIG COM1 921600") != std::string::npos,
-             "persistent Unicore planning should accept a baud override only through the clean reset workflow");
+             "persistent Unicore planning should default the post-reset target baud to 921600 when no override is provided");
 }
 
 void TestNmeaProfiles(TestContext& ctx)
@@ -297,6 +311,7 @@ int main()
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);
   TestUnicorePersistentBaudOverride(ctx);
+  TestUnicorePersistentDefaultTargetBaud(ctx);
   TestNmeaProfiles(ctx);
   TestUnknownReceiverRejected(ctx);
 

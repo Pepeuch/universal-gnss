@@ -224,13 +224,6 @@ std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& reques
     return *request.config_baud;
   }
 
-  if (request.discovery_result.has_value() &&
-      request.discovery_result->selected_baud.has_value() &&
-      *request.discovery_result->selected_baud != 0u)
-  {
-    return *request.discovery_result->selected_baud;
-  }
-
   return 921600u;
 }
 
@@ -501,7 +494,6 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   if (requires_clean_reset_workflow)
   {
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
-    plan.request.config_baud = recovery_baud;
     profile.com1_baud_rate = recovery_baud;
 
     if (request.rate_hz.has_value() &&

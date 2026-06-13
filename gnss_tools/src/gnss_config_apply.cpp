@@ -47,7 +47,7 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>]\n"
+      << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>] [--config-baud <value>]\n"
       << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
       << "       [--apply-mode <dry-run|runtime-only|persistent>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
@@ -61,10 +61,13 @@ void PrintUsage(const char* program_name)
       << "  " << program_name
       << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision_debug --apply-mode runtime-only --confirm --timeout-ms 5000\n"
       << "  " << program_name
+      << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --apply-mode persistent --config-baud 460800 --confirm\n"
+      << "  " << program_name
       << " --family nmea --profile runtime_only\n"
       << "Notes:\n"
       << "  no live writes occur unless --confirm or --yes is present\n"
       << "  Unicore persistent/factory_reset apply uses a reset/reprobe workflow; other persistent workflows remain guarded\n"
+      << "  --baud selects the current transport baud; --config-baud selects the post-reset receiver baud\n"
       << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
@@ -353,6 +356,18 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
       }
       cli_options.apply.transport_baud_rate = baud;
+      continue;
+    }
+    if (argument == "--config-baud")
+    {
+      std::uint32_t baud = 0u;
+      if (!ParseUnsigned(require_value("--config-baud"), baud))
+      {
+        std::cerr << "error: invalid --config-baud value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      cli_options.apply.config_baud = baud;
       continue;
     }
     if (argument == "--family")

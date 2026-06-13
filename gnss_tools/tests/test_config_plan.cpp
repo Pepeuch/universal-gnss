@@ -71,6 +71,31 @@ void TestUnicoreDebugPlan(TestContext& ctx)
              "Unicore rover_high_precision_debug plan text should show the verbose PVTSLNA command sequence");
 }
 
+void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
+{
+  ConfigPlanOptions options;
+  options.vendor = "unicore";
+  options.profile = "rover_high_precision";
+  options.persistent = true;
+  options.baud = 460800u;
+
+  const auto result = BuildConfigPlan(options);
+  const std::string text = FormatConfigPlanText(result);
+
+  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
+                 result.baud == std::optional<std::uint32_t>{460800u} &&
+                 result.summary.commands_total == 18u &&
+                 result.summary.runtime_commands == 16u &&
+                 result.summary.persistent_commands == 1u &&
+                 result.summary.factory_reset_commands == 1u,
+             "persistent Unicore plans should preserve a distinct target config baud override");
+  ctx.Expect(text.find("Config baud override: 460800") != std::string::npos &&
+                 text.find("Factory reset baud: 115200") != std::string::npos &&
+                 text.find("Target configured baud: 460800") != std::string::npos &&
+                 text.find("CONFIG COM1 460800 8 n 1") != std::string::npos,
+             "persistent Unicore plan text should distinguish override, factory baud, and target COM1 baud");
+}
+
 void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -191,6 +216,7 @@ int main()
 
   TestUbloxRoverHighPrecisionPlan(ctx);
   TestUnicoreDebugPlan(ctx);
+  TestUnicorePersistentTargetBaudPlan(ctx);
   TestRuntimeOnlyNoOpPlan(ctx);
   TestPersistentSafetySummary(ctx);
   TestFactoryResetPlan(ctx);

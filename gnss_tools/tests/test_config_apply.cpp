@@ -450,6 +450,37 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
              "persistent Unicore apply should prepare a confirmed reset-first recovery workflow");
 }
 
+void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+  const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.plan.baud == std::optional<std::uint32_t>{460800u} &&
+                 result.plan.summary.commands_total == 18u &&
+                 result.plan.summary.runtime_commands == 16u &&
+                 result.plan.summary.persistent_commands == 1u &&
+                 result.plan.summary.factory_reset_commands == 1u &&
+                 result.plan.commands.size() > 1u &&
+                 result.plan.commands[1].command.payload.text.find("CONFIG COM1 460800 8 n 1") !=
+                     std::string::npos,
+             "persistent Unicore apply should preserve a distinct target config baud override in the prepared plan");
+  ctx.Expect(text.find("Detected receiver baud: 921600") != std::string::npos &&
+                 text.find("Current transport baud: 921600") != std::string::npos &&
+                 text.find("Factory reset baud: 115200") != std::string::npos &&
+                 text.find("Target configured baud: 460800") != std::string::npos &&
+                 text.find("Config baud override: 460800") != std::string::npos,
+             "prepared Unicore apply text should distinguish detected, current, factory, and target baud values");
+}
+
 void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -627,6 +658,70 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
              "persistent Unicore recovery apply should restore COM1, replay the rover profile, and save it");
 }
 
+void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           first_probe_response.begin(),
+           first_probe_response.end())});
+  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(
+           baud_recovery_responses.begin(),
+           baud_recovery_responses.end())});
+  const std::string second_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       460800u,
+       100u,
+       std::vector<std::uint8_t>(
+           second_probe_response.begin(),
+           second_probe_response.end())});
+  const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(16u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       460800u,
+       100u,
+       std::vector<std::uint8_t>(
+           persistent_responses.begin(),
+           persistent_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.transport_baud_rate == 460800u &&
+                 result.execution_summary.commands_total == 18u &&
+                 result.execution_summary.commands_completed == 18u &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.responses_applied == 16u &&
+                 result.execution_summary.final_status == "completed",
+             "persistent Unicore apply should finish at the overridden target config baud");
+  ctx.Expect(hooks.AllStepsConsumed() &&
+                 hooks.failure().empty() &&
+                 written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
+                 written.find("CONFIG COM1 921600 8 n 1\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") != std::string::npos,
+             "persistent Unicore recovery apply should switch COM1 to the overridden target baud before saving");
+}
+
 void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -664,10 +759,12 @@ int main()
   TestUnknownReceiverRejected(ctx);
   TestNmeaWriteProfileRejected(ctx);
   TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
+  TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
   TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(ctx);
+  TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
 
   if (ctx.failures != 0)

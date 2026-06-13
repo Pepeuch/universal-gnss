@@ -123,6 +123,31 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
              "persistent Unicore previews should expose the reset-first recovery workflow plus SAVECONFIG");
 }
 
+void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
+{
+  ProfilePreviewOptions options;
+  options.vendor = "unicore";
+  options.profile = "rover_high_precision";
+  options.persistent = true;
+  options.baud = 460800u;
+
+  const auto result = BuildProfilePreview(options);
+  const std::string text = FormatProfilePreviewText(result);
+
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
+                 result.baud == std::optional<std::uint32_t>{460800u} &&
+                 result.summary.commands_total == 18u &&
+                 result.summary.runtime_commands == 16u &&
+                 result.summary.persistent_commands == 1u &&
+                 result.summary.factory_reset_commands == 1u,
+             "persistent Unicore previews should preserve a distinct target config baud override");
+  ctx.Expect(text.find("Config baud override: 460800") != std::string::npos &&
+                 text.find("Factory reset baud: 115200") != std::string::npos &&
+                 text.find("Target configured baud: 460800") != std::string::npos &&
+                 text.find("CONFIG COM1 460800 8 n 1") != std::string::npos,
+             "persistent Unicore preview text should distinguish override, factory baud, and target COM1 baud");
+}
+
 void TestFactoryResetPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
@@ -187,6 +212,7 @@ int main()
   TestUnicoreRoverHighPrecisionPreview(ctx);
   TestRuntimeOnlyPreview(ctx);
   TestPersistentSummaryGeneration(ctx);
+  TestUnicorePersistentTargetBaudPreview(ctx);
   TestFactoryResetPreview(ctx);
   TestJsonFormatting(ctx);
   TestInvalidUnicoreBaudOverride(ctx);

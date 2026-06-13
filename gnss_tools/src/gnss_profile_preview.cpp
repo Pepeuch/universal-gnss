@@ -12,13 +12,15 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " [--json] [--verbose] [--persistent] [--baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
+      << " [--json] [--verbose] [--persistent] [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
       << "  " << program_name << " ublox rover_high_precision\n"
       << "  " << program_name << " ublox rover_high_precision_debug --json\n"
       << "  " << program_name << " unicore factory_reset\n"
       << "  " << program_name << " unicore rover_high_precision --persistent\n"
-      << "  " << program_name << " nmea runtime_only\n";
+      << "  " << program_name << " nmea runtime_only\n"
+      << "Notes:\n"
+      << "  --baud remains accepted as a legacy alias for --config-baud\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)
@@ -85,11 +87,11 @@ int main(int argc, char** argv)
       continue;
     }
 
-    if (argument == "--baud")
+    if (argument == "--baud" || argument == "--config-baud")
     {
       if (index + 1 >= argc)
       {
-        std::cerr << "error: --baud requires a value\n";
+        std::cerr << "error: " << argument << " requires a value\n";
         PrintUsage(argv[0]);
         return EXIT_FAILURE;
       }
@@ -97,7 +99,7 @@ int main(int argc, char** argv)
       std::uint32_t baud = 0u;
       if (!ParseUnsigned(argv[++index], baud))
       {
-        std::cerr << "error: invalid --baud value\n";
+        std::cerr << "error: invalid " << argument << " value\n";
         PrintUsage(argv[0]);
         return EXIT_FAILURE;
       }
