@@ -115,6 +115,10 @@ private:
   bool binary_seen_valid_frame_{false};
   bool ascii_startup_malformed_suppressed_{false};
   bool binary_startup_malformed_suppressed_{false};
+  bool seen_valid_nmea_gga_{false};
+  bool seen_valid_nmea_gsv_{false};
+  std::optional<std::int64_t> last_nmea_gga_timestamp_ns_{};
+  std::optional<std::int64_t> last_nmea_gsv_timestamp_ns_{};
   std::vector<UnicoreNmeaGsvTalkerState> gsv_talker_states_{};
 };
 

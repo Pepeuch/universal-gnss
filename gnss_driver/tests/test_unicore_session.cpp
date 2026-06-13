@@ -398,6 +398,37 @@ void TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(TestCo
              "NMEA fallback should populate fix and accuracy only when Unicore state is still missing");
 }
 
+void TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,17,0.9,545.4,M,46.9,M,,"),
+      6200);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
+      6201);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"),
+      6202);
+  session.FeedBytes(
+      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"),
+      6203);
+  session.FeedString(kBestNavLine, 6204);
+  session.FeedString(kPvtslnLine, 6205);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.fix_valid &&
+                 state.fix_type == GnssFixType::kRtkFixed &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
+                 state.latitude_deg == std::optional<double>(40.07898130522) &&
+                 state.longitude_deg == std::optional<double>(116.23663134427),
+             "later PVTSLNA should still update the rich fix and position fields");
+  ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(17u) &&
+                 state.satellites_tracked == std::optional<std::uint16_t>(17u) &&
+                 state.satellites_visible == std::optional<std::uint16_t>(17u),
+             "recent mixed NMEA GGA/GSV satellite counts should remain physically coherent over position-message tails");
+}
+
 void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
 {
   UnicoreSession session;
@@ -667,6 +698,7 @@ int main()
   TestBestSatUpdatesTrackedAndUsedOnly(ctx);
   TestNmeaFallbackDoesNotOverrideRichUnicoreState(ctx);
   TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(ctx);
+  TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
   TestRtcmStatusParsesWithoutRuntimeUpdate(ctx);
   TestUnknownAndMalformedRecords(ctx);

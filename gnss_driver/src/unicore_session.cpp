@@ -105,7 +105,9 @@ std::optional<std::size_t> FindEmbeddedResyncOffset(const std::vector<UnicoreBuf
   return std::nullopt;
 }
 
-void PruneNmeaGgaFallback(const GnssRuntimeState& current_state, GnssRuntimeState& update)
+void PruneNmeaGgaFallback(const GnssRuntimeState& current_state,
+                          const bool preserve_satellites_used,
+                          GnssRuntimeState& update)
 {
   if (current_state.fix_type != GnssFixType::kUnknown)
   {
@@ -128,7 +130,7 @@ void PruneNmeaGgaFallback(const GnssRuntimeState& current_state, GnssRuntimeStat
   {
     ClearOptionalValue(update, GnssCapability::kHdop, update.hdop);
   }
-  if (current_state.satellites_used.has_value())
+  if (!preserve_satellites_used && current_state.satellites_used.has_value())
   {
     ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
   }
@@ -145,6 +147,24 @@ void PruneNmeaGstFallback(const GnssRuntimeState& current_state, GnssRuntimeStat
   {
     ClearOptionalValue(update, GnssCapability::kVerticalAccuracy, update.vertical_accuracy_m);
   }
+}
+
+bool HasFreshMixedNmeaSample(const bool seen,
+                             const std::optional<std::int64_t>& last_timestamp_ns,
+                             const std::optional<std::int64_t>& update_timestamp_ns)
+{
+  if (!seen)
+  {
+    return false;
+  }
+
+  if (!update_timestamp_ns.has_value() || !last_timestamp_ns.has_value())
+  {
+    return true;
+  }
+
+  return *update_timestamp_ns >= *last_timestamp_ns &&
+         (*update_timestamp_ns - *last_timestamp_ns) <= kGsvTalkerFreshnessWindowNs;
 }
 
 template <typename RecordT>
@@ -323,6 +343,10 @@ void UnicoreSession::Reset()
   binary_seen_valid_frame_ = false;
   ascii_startup_malformed_suppressed_ = false;
   binary_startup_malformed_suppressed_ = false;
+  seen_valid_nmea_gga_ = false;
+  seen_valid_nmea_gsv_ = false;
+  last_nmea_gga_timestamp_ns_.reset();
+  last_nmea_gsv_timestamp_ns_.reset();
   gsv_talker_states_.clear();
 }
 
@@ -589,21 +613,67 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
   if (frame.message_name == "PVTSLNA")
   {
-    ParseAndMergeRecord(frame,
-                        universal_gnss_protocols::ParseUnicorePvtsln,
-                        universal_gnss_protocols::UnicorePvtslnToRuntimeState,
-                        aggregator_,
-                        metrics_);
+    const auto parsed = universal_gnss_protocols::ParseUnicorePvtsln(frame);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.records_rejected;
+      return;
+    }
+
+    ++metrics_.records_parsed;
+    ++metrics_.runtime_observations;
+
+    GnssRuntimeState update = universal_gnss_protocols::UnicorePvtslnToRuntimeState(*parsed.record);
+    if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
+                                last_nmea_gga_timestamp_ns_,
+                                update.timestamp_ns))
+    {
+      ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+    }
+    if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
+                                last_nmea_gsv_timestamp_ns_,
+                                update.timestamp_ns))
+    {
+      ClearOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
+    }
+
+    if (aggregator_.Merge(update))
+    {
+      ++metrics_.runtime_updates;
+    }
     return;
   }
 
   if (frame.message_name == "BESTNAVA")
   {
-    ParseAndMergeRecord(frame,
-                        universal_gnss_protocols::ParseUnicoreBestNav,
-                        universal_gnss_protocols::UnicoreBestNavToRuntimeState,
-                        aggregator_,
-                        metrics_);
+    const auto parsed = universal_gnss_protocols::ParseUnicoreBestNav(frame);
+    if (parsed.status != ParserStatus::kRecordReady || !parsed.record.has_value())
+    {
+      ++metrics_.records_rejected;
+      return;
+    }
+
+    ++metrics_.records_parsed;
+    ++metrics_.runtime_observations;
+
+    GnssRuntimeState update = universal_gnss_protocols::UnicoreBestNavToRuntimeState(*parsed.record);
+    if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
+                                last_nmea_gga_timestamp_ns_,
+                                update.timestamp_ns))
+    {
+      ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+    }
+    if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
+                                last_nmea_gsv_timestamp_ns_,
+                                update.timestamp_ns))
+    {
+      ClearOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
+    }
+
+    if (aggregator_.Merge(update))
+    {
+      ++metrics_.runtime_updates;
+    }
     return;
   }
 
@@ -697,9 +767,14 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
 
     ++metrics_.records_parsed;
     ++metrics_.runtime_observations;
+    seen_valid_nmea_gga_ = true;
+    last_nmea_gga_timestamp_ns_ = sentence.timestamp_ns;
 
     GnssRuntimeState update = universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record);
-    PruneNmeaGgaFallback(aggregator_.state(), update);
+    PruneNmeaGgaFallback(aggregator_.state(),
+                         HasFreshMixedNmeaSample(
+                             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, sentence.timestamp_ns),
+                         update);
     if (aggregator_.Merge(update))
     {
       ++metrics_.runtime_updates;
@@ -737,6 +812,8 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
 
   ++metrics_.records_parsed;
   ++metrics_.runtime_observations;
+  seen_valid_nmea_gsv_ = true;
+  last_nmea_gsv_timestamp_ns_ = sentence.timestamp_ns;
 
   const NmeaGsvRecord& record = *parsed.record;
   auto it = std::find_if(gsv_talker_states_.begin(),
@@ -845,6 +922,12 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
       cn0_max_total = cn0_seen ? std::max(cn0_max_total, talker_state.cn0_max) : talker_state.cn0_max;
       cn0_seen = true;
     }
+  }
+
+  if (aggregator_.state().satellites_used.has_value())
+  {
+    satellites_tracked_total = std::max(satellites_tracked_total, *aggregator_.state().satellites_used);
+    satellites_visible_total = std::max(satellites_visible_total, satellites_tracked_total);
   }
 
   SetOptionalValue(update,
