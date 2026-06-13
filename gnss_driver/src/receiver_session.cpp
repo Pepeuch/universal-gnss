@@ -404,7 +404,9 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     const auto& child = ublox_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
-    metrics_.malformed_records = child.malformed_frames + child.frames_rejected;
+    metrics_.malformed_records = child.malformed_frames;
+    metrics_.rejected_records = child.frames_rejected;
+    metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_frames;
     return;
   }
@@ -414,8 +416,9 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     const auto& child = unicore_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
-    metrics_.malformed_records =
-        child.malformed_lines + child.malformed_frames + child.records_rejected;
+    metrics_.malformed_records = child.malformed_lines + child.malformed_frames;
+    metrics_.rejected_records = child.records_rejected;
+    metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_records;
     return;
   }
@@ -425,7 +428,9 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     const auto& child = nmea_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
     metrics_.runtime_updates = child.runtime_updates;
-    metrics_.malformed_records = child.malformed_sentences + child.records_rejected;
+    metrics_.malformed_records = child.malformed_sentences;
+    metrics_.rejected_records = child.records_rejected;
+    metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_sentences;
     return;
   }
@@ -433,6 +438,8 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   metrics_.runtime_observations = 0u;
   metrics_.runtime_updates = 0u;
   metrics_.malformed_records = 0u;
+  metrics_.rejected_records = 0u;
+  metrics_.parser_anomalies = 0u;
   metrics_.unknown_records = 0u;
 }
 

@@ -82,6 +82,14 @@ RtcmMessageInfo MakeMessageInfo(const std::uint16_t message_type)
       info.is_msm = true;
       info.msm_constellation = RtcmConstellation::kGlonass;
       break;
+    case 1097u:
+      info.is_msm = true;
+      info.msm_constellation = RtcmConstellation::kGalileo;
+      break;
+    case 1127u:
+      info.is_msm = true;
+      info.msm_constellation = RtcmConstellation::kBeiDou;
+      break;
     default:
       break;
   }
@@ -258,6 +266,80 @@ void TestHealthStates(TestContext& ctx)
   ctx.Expect(error.HasErrors(), "missing required correction content should emit an error event");
 }
 
+void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 1100);
+  monitor.ObserveMessage(MakeMessageInfo(1087u), 1200);
+  monitor.ObserveMessage(MakeMessageInfo(1097u), 1300);
+  monitor.ObserveMessage(MakeMessageInfo(1127u), 1400);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 1500);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 10000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+  ctx.Expect(monitor.HasRequiredCorrectionMessages(options),
+             "portable RTK requirements should accept 1006 as the base-position message");
+  ctx.Expect(health.correction_available,
+             "complete portable RTCM content should report correction availability");
+  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
+             "complete portable RTCM content should clear the missing-message diagnostic");
+}
+
+void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1005u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 9000);
+  monitor.ObserveMessage(MakeMessageInfo(1087u), 9100);
+  monitor.ObserveMessage(MakeMessageInfo(1097u), 9200);
+  monitor.ObserveMessage(MakeMessageInfo(1127u), 9300);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 9400);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 12000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 2000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options),
+             "portable RTK requirements should expire base-position messages outside the recent window");
+  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kError,
+             "missing recent required RTCM content should remain an error after startup grace");
+}
+
+void TestPortableRtkRequirementsRespectStartupGrace(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1087u), 1100);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2500;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 10000;
+  options.startup_grace_ns = 5000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kInfo,
+             "startup grace should defer the missing required RTCM error while the stream is still collecting");
+  ctx.Expect(!health.HasErrors(),
+             "startup grace should avoid emitting a hard required-message error");
+}
+
 }  // namespace
 
 int main()
@@ -270,6 +352,9 @@ int main()
   TestBasePositionAndGlonassBiasTracking(ctx);
   TestInvalidFrameHandling(ctx);
   TestHealthStates(ctx);
+  TestPortableRtkRequirementsAccept1006(ctx);
+  TestPortableRtkRequirementsUseRecentObservationWindow(ctx);
+  TestPortableRtkRequirementsRespectStartupGrace(ctx);
 
   if (ctx.failures != 0)
   {

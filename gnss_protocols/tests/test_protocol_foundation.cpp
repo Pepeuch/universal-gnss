@@ -1,7 +1,9 @@
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -11,6 +13,7 @@
 #include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
 namespace
@@ -55,6 +58,30 @@ universal_gnss_protocols::ParserResult<RecordT> FeedBytes(
 std::vector<std::uint8_t> ToBytes(const std::string& text)
 {
   return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
+{
+  if (frame_without_crc.empty() || frame_without_crc.front() != '#')
+  {
+    std::cerr << "FAILED: invalid Unicore ASCII test vector\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+
+  std::ostringstream stream;
+  stream << frame_without_crc
+         << '*'
+         << std::hex
+         << std::nouppercase
+         << std::setw(8)
+         << std::setfill('0')
+         << crc
+         << "\r\n";
+  return stream.str();
 }
 
 void TestNmeaChecksumHelpers(TestContext& ctx)
@@ -186,16 +213,19 @@ void TestUbxFramerPartialHandlingAndChecksum(TestContext& ctx)
 void TestUnicoreFramerSyncRecovery(TestContext& ctx)
 {
   UnicoreFrameFramer framer;
+  const std::string ascii_frame = WithUnicoreAsciiCrc("#BESTPOSA,1,2,3");
   const auto result =
       FeedBytes<UnicoreFrameFramer, universal_gnss_protocols::UnicoreFrame>(
-          framer, ToBytes("noise#BESTPOSA,1,2,3*00\r\n"), 999);
+          framer, ToBytes("noise" + ascii_frame), 999);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
              "Unicore framer should recover after noise and emit a frame");
   ctx.Expect(result.record->message_name == "BESTPOSA",
              "Unicore framer should extract the message name");
-  ctx.Expect(result.record->checksum_status == ChecksumStatus::kNotChecked,
-             "Unicore framer should not invent checksum validation");
+  ctx.Expect(result.record->checksum_status == ChecksumStatus::kValid,
+             "Unicore framer should validate the documented ASCII CRC");
+  ctx.Expect(result.record->reported_crc32 == result.record->computed_crc32,
+             "Unicore framer should expose matching reported and computed CRC32 values");
 }
 
 }  // namespace

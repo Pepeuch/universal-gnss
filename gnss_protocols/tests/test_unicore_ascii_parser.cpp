@@ -1,8 +1,11 @@
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
 
@@ -39,6 +42,30 @@ struct TestContext
   }
 };
 
+std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
+{
+  if (frame_without_crc.empty() || frame_without_crc.front() != '#')
+  {
+    std::cerr << "FAILED: invalid Unicore ASCII test vector\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+
+  std::ostringstream stream;
+  stream << frame_without_crc
+         << '*'
+         << std::hex
+         << std::nouppercase
+         << std::setw(8)
+         << std::setfill('0')
+         << crc
+         << "\r\n";
+  return stream.str();
+}
+
 UnicoreFrame BuildAsciiFrame(const std::string& line,
                              const universal_gnss_protocols::ProtocolTimestampNs timestamp_ns = 0)
 {
@@ -64,12 +91,12 @@ UnicoreFrame BuildAsciiFrame(const std::string& line,
 
 void TestPvtslnParsingAndRuntimeMapping(TestContext& ctx)
 {
-  const std::string line =
+  const std::string line = WithUnicoreAsciiCrc(
       "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
       "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
       "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
       "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
-      "28,25,26*1e33c8cb\r\n";
+      "28,25,26");
 
   const auto result = ParseUnicorePvtsln(BuildAsciiFrame(line, 1111));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -123,11 +150,11 @@ void TestPvtslnParsingAndRuntimeMapping(TestContext& ctx)
 
 void TestBestNavParsingAndMapping(TestContext& ctx)
 {
-  const std::string line =
+  const std::string line = WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
       "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
 
   const auto result = ParseUnicoreBestNav(BuildAsciiFrame(line, 2222));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -165,11 +192,11 @@ void TestBestNavParsingAndMapping(TestContext& ctx)
 
 void TestBestNavCorrectionStateSemantics(TestContext& ctx)
 {
-  const std::string single_line =
+  const std::string single_line = WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
       "SOL_COMPUTED,SINGLE,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
       "2.1970,\"0\",,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*00000000\r\n";
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
   const auto single_result = ParseUnicoreBestNav(BuildAsciiFrame(single_line, 2223));
   ctx.Expect(single_result.status == ParserStatus::kRecordReady && single_result.record.has_value(),
              "single BESTNAVA line should parse successfully");
@@ -187,11 +214,11 @@ void TestBestNavCorrectionStateSemantics(TestContext& ctx)
                "plain SINGLE fixes should expose known false correction state");
   }
 
-  const std::string psrdiff_line =
+  const std::string psrdiff_line = WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
       "SOL_COMPUTED,PSRDIFF,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
       "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*00000000\r\n";
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
   const auto psrdiff_result = ParseUnicoreBestNav(BuildAsciiFrame(psrdiff_line, 2224));
   ctx.Expect(psrdiff_result.status == ParserStatus::kRecordReady &&
                  psrdiff_result.record.has_value(),
@@ -213,9 +240,9 @@ void TestBestNavCorrectionStateSemantics(TestContext& ctx)
 
 void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
 {
-  const std::string rtk_fixed_line =
+  const std::string rtk_fixed_line = WithUnicoreAsciiCrc(
       "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0*f06a8a06\r\n";
+      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0");
   const auto rtk_fixed_result = ParseUnicoreRtkStatus(BuildAsciiFrame(rtk_fixed_line, 3333));
   ctx.Expect(rtk_fixed_result.status == ParserStatus::kRecordReady &&
                  rtk_fixed_result.record.has_value(),
@@ -234,9 +261,9 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
                "RTKSTATUSA should map the documented within-limit dual-antenna flag");
   }
 
-  const std::string rtk_float_line =
+  const std::string rtk_float_line = WithUnicoreAsciiCrc(
       "#RTKSTATUSA,97,GPS,FINE,2190,365355000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,NARROW_FLOAT,5,0,2,10,0*11111111\r\n";
+      "0,0,0,0,0,0,0,0,0,0,0,NARROW_FLOAT,5,0,2,10,0");
   const auto rtk_float_result = ParseUnicoreRtkStatus(BuildAsciiFrame(rtk_float_line, 3334));
   ctx.Expect(rtk_float_result.status == ParserStatus::kRecordReady &&
                  rtk_float_result.record.has_value(),
@@ -252,9 +279,9 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
                "RTKSTATUSA should expose float RTK and a non-within-limit dual-antenna state");
   }
 
-  const std::string rtcm_line =
+  const std::string rtcm_line = WithUnicoreAsciiCrc(
       "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
-      "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+      "1124,21186,0,21,0,6,11,0,0,21");
   const auto rtcm_result = ParseUnicoreRtcmStatus(BuildAsciiFrame(rtcm_line, 4444));
   ctx.Expect(rtcm_result.status == ParserStatus::kRecordReady && rtcm_result.record.has_value(),
              "valid RTCMSTATUSA line should parse successfully");
@@ -275,12 +302,12 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
 
 void TestSatsInfoParsingAndRuntimeMapping(TestContext& ctx)
 {
-  const std::string line =
+  const std::string line = WithUnicoreAsciiCrc(
       "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
       "3,2,0,0,0,63,"
       "2,302,51,0,45,0,2,0,42,9,2,"
       "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
-      "5,225,14,1,50,0,1*abcdef12\r\n";
+      "5,225,14,1,50,0,1");
 
   const auto result = ParseUnicoreSatsInfo(BuildAsciiFrame(line, 5555));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -325,9 +352,9 @@ void TestSatsInfoParsingAndRuntimeMapping(TestContext& ctx)
 
 void TestBestSatParsingAndRuntimeMapping(TestContext& ctx)
 {
-  const std::string line =
+  const std::string line = WithUnicoreAsciiCrc(
       "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
-      "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000*12345678\r\n";
+      "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000");
 
   const auto result = ParseUnicoreBestSat(BuildAsciiFrame(line, 5656));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -383,8 +410,8 @@ void TestBestSatParsingAndRuntimeMapping(TestContext& ctx)
 
 void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
 {
-  const std::string jam_line =
-      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
+  const std::string jam_line = WithUnicoreAsciiCrc(
+      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0");
   const auto jam_result = ParseUnicoreJamStatus(BuildAsciiFrame(jam_line, 7777));
   ctx.Expect(jam_result.status == ParserStatus::kRecordReady && jam_result.record.has_value(),
              "valid JAMSTATUSA line should parse successfully");
@@ -416,8 +443,8 @@ void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
                "JAMSTATUSA diagnostic mapping should treat strong jamming as an error");
   }
 
-  const std::string freq_jam_line =
-      "#FREQJAMSTATUSA,97,GPS,FINE,2164,559464000,0,0,18,8;SINGLE,255,2,0,0,12,1,0,0*b0cdc7de\r\n";
+  const std::string freq_jam_line = WithUnicoreAsciiCrc(
+      "#FREQJAMSTATUSA,97,GPS,FINE,2164,559464000,0,0,18,8;SINGLE,255,2,0,0,12,1,0,0");
   const auto freq_jam_result = ParseUnicoreFreqJamStatus(BuildAsciiFrame(freq_jam_line, 7778));
   ctx.Expect(freq_jam_result.status == ParserStatus::kRecordReady &&
                  freq_jam_result.record.has_value(),
@@ -448,8 +475,8 @@ void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
                "FREQJAMSTATUSA diagnostics should surface strong per-band jamming");
   }
 
-  const std::string hw_status_line =
-      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,0,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+  const std::string hw_status_line = WithUnicoreAsciiCrc(
+      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,0,0.693,0.0,0x00,0,0x0377,0,0");
   const auto hw_status_result = ParseUnicoreHwStatus(BuildAsciiFrame(hw_status_line, 7779));
   ctx.Expect(hw_status_result.status == ParserStatus::kRecordReady &&
                  hw_status_result.record.has_value(),
@@ -471,8 +498,8 @@ void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
                "HWSTATUSA should conservatively warn only on invalid documented clock status");
   }
 
-  const std::string agc_line =
-      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1*634f1e4b\r\n";
+  const std::string agc_line = WithUnicoreAsciiCrc(
+      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1");
   const auto agc_result = universal_gnss_protocols::ParseUnicoreAgc(BuildAsciiFrame(agc_line, 7780));
   ctx.Expect(agc_result.status == ParserStatus::kRecordReady && agc_result.record.has_value(),
              "valid AGCA line should parse successfully");
@@ -491,17 +518,17 @@ void TestRfAndHardwareParsingAndMapping(TestContext& ctx)
 
 void TestMalformedAndMissingFields(TestContext& ctx)
 {
-  const std::string malformed_bestnav =
+  const std::string malformed_bestnav = WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312*abcd1234\r\n";
+      "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312");
   const auto malformed_result = ParseUnicoreBestNav(BuildAsciiFrame(malformed_bestnav));
   ctx.Expect(malformed_result.status == ParserStatus::kInvalidData,
              "malformed BESTNAVA numerics should be rejected");
 
-  const std::string partial_pvtsln =
+  const std::string partial_pvtsln = WithUnicoreAsciiCrc(
       "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
       "SINGLE,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.0000,"
-      "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28*12345678\r\n";
+      "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28");
   const auto partial_result = ParseUnicorePvtsln(BuildAsciiFrame(partial_pvtsln));
   ctx.Expect(partial_result.status == ParserStatus::kRecordReady &&
                  partial_result.record.has_value(),
@@ -514,22 +541,22 @@ void TestMalformedAndMissingFields(TestContext& ctx)
                "missing trailing optional fields should stay unset in runtime mapping");
   }
 
-  const std::string malformed_satsinfo =
+  const std::string malformed_satsinfo = WithUnicoreAsciiCrc(
       "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
-      "1,2,0,0,0,63,2,302,51,0,45,0,0*badc0de0\r\n";
+      "1,2,0,0,0,63,2,302,51,0,45,0,0");
   const auto malformed_satsinfo_result = ParseUnicoreSatsInfo(BuildAsciiFrame(malformed_satsinfo));
   ctx.Expect(malformed_satsinfo_result.status == ParserStatus::kInvalidData,
              "SATSINFOA should reject malformed essentials like a zero frequency count");
 
-  const std::string malformed_bestsat =
+  const std::string malformed_bestsat = WithUnicoreAsciiCrc(
       "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
-      "1,GPS,2,GOOD,zzzzzzzz*12345678\r\n";
+      "1,GPS,2,GOOD,zzzzzzzz");
   const auto malformed_bestsat_result = ParseUnicoreBestSat(BuildAsciiFrame(malformed_bestsat));
   ctx.Expect(malformed_bestsat_result.status == ParserStatus::kInvalidData,
              "BESTSATA should reject malformed hexadecimal signal masks");
 
-  const std::string empty_satsinfo =
-      "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;0,2,0,0,0,63*12345678\r\n";
+  const std::string empty_satsinfo = WithUnicoreAsciiCrc(
+      "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;0,2,0,0,0,63");
   const auto empty_satsinfo_result = ParseUnicoreSatsInfo(BuildAsciiFrame(empty_satsinfo, 6666));
   ctx.Expect(empty_satsinfo_result.status == ParserStatus::kRecordReady &&
                  empty_satsinfo_result.record.has_value(),
@@ -545,14 +572,14 @@ void TestMalformedAndMissingFields(TestContext& ctx)
                "empty SATSINFOA should keep tracked count but leave CN0 values unset");
   }
 
-  const std::string malformed_jam =
-      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,not_a_ratio,2,0,0*e31418ea\r\n";
+  const std::string malformed_jam = WithUnicoreAsciiCrc(
+      "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,not_a_ratio,2,0,0");
   const auto malformed_jam_result = ParseUnicoreJamStatus(BuildAsciiFrame(malformed_jam));
   ctx.Expect(malformed_jam_result.status == ParserStatus::kInvalidData,
              "JAMSTATUSA should reject malformed numeric essentials");
 
-  const std::string malformed_hw =
-      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,2,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+  const std::string malformed_hw = WithUnicoreAsciiCrc(
+      "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,2,0.693,0.0,0x00,0,0x0377,0,0");
   const auto malformed_hw_result = ParseUnicoreHwStatus(BuildAsciiFrame(malformed_hw));
   ctx.Expect(malformed_hw_result.status == ParserStatus::kInvalidData,
              "HWSTATUSA should reject unsupported clock validity values");

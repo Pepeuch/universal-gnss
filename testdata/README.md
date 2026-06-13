@@ -20,6 +20,9 @@ Guidelines:
 - No private field logs are stored here.
 - Coordinates and payloads are synthetic or sanitized test fixtures.
 - The mixed and binary files are sized for unit tests, not performance tests.
+- `unicore/basic_ascii.log` intentionally keeps `CRLF` line endings to mirror a
+  real serial text log. Regenerate it with the same `\r\n` framing used by the
+  canonical Unicore ASCII test helpers rather than normalizing it to bare `LF`.
 
 Regeneration:
 - There is no dedicated generator script checked in yet.

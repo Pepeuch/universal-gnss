@@ -71,6 +71,8 @@ struct UnicoreFrame
   ByteVector payload{};
   ByteVector raw_bytes{};
   ChecksumStatus checksum_status{ChecksumStatus::kNotChecked};
+  std::uint32_t reported_crc32{0};
+  std::uint32_t computed_crc32{0};
 };
 
 }  // namespace universal_gnss_protocols

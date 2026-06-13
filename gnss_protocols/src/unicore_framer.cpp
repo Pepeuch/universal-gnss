@@ -1,5 +1,10 @@
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
+#include <cctype>
+#include <string_view>
+
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
+
 namespace universal_gnss_protocols
 {
 
@@ -14,6 +19,38 @@ std::size_t TrimLineEnding(const std::vector<std::uint8_t>& buffer)
     --end;
   }
   return end;
+}
+
+std::uint8_t HexNibble(const char c)
+{
+  if (c >= '0' && c <= '9')
+  {
+    return static_cast<std::uint8_t>(c - '0');
+  }
+
+  const char upper = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  return static_cast<std::uint8_t>(10 + upper - 'A');
+}
+
+bool TryParseHex32(const std::string_view text, std::uint32_t& value)
+{
+  if (text.size() != 8u)
+  {
+    return false;
+  }
+
+  value = 0u;
+  for (const char c : text)
+  {
+    if (!std::isxdigit(static_cast<unsigned char>(c)))
+    {
+      return false;
+    }
+
+    value = static_cast<std::uint32_t>((value << 4u) | HexNibble(c));
+  }
+
+  return true;
 }
 
 }  // namespace
@@ -94,6 +131,40 @@ UnicoreFrame UnicoreFrameFramer::BuildFrame() const
       frame.message_name.push_back(c);
     }
   }
+
+  if (frame.sync_char != '#')
+  {
+    return frame;
+  }
+
+  const std::string_view payload_text(
+      reinterpret_cast<const char*>(frame.payload.data()),
+      frame.payload.size());
+  const std::size_t star = payload_text.rfind('*');
+  if (star == std::string_view::npos)
+  {
+    frame.checksum_status = ChecksumStatus::kMissing;
+    return frame;
+  }
+
+  if (star + 9u != payload_text.size())
+  {
+    frame.checksum_status = ChecksumStatus::kInvalid;
+    return frame;
+  }
+
+  if (!TryParseHex32(payload_text.substr(star + 1u, 8u), frame.reported_crc32))
+  {
+    frame.checksum_status = ChecksumStatus::kInvalid;
+    return frame;
+  }
+
+  frame.computed_crc32 = ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(payload_text.data()),
+      star);
+  frame.checksum_status =
+      frame.reported_crc32 == frame.computed_crc32 ? ChecksumStatus::kValid
+                                                   : ChecksumStatus::kInvalid;
 
   return frame;
 }

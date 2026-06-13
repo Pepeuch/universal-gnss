@@ -88,7 +88,60 @@ std::optional<ProtocolTimestampNs> ComputeAgeSince(
   return now_timestamp_ns - *last_seen_timestamp_ns;
 }
 
+bool HasSeenSince(const std::optional<ProtocolTimestampNs>& last_seen_timestamp_ns,
+                  const std::optional<ProtocolTimestampNs>& window_start_timestamp_ns)
+{
+  if (!last_seen_timestamp_ns.has_value())
+  {
+    return false;
+  }
+
+  return !window_start_timestamp_ns.has_value() ||
+         *last_seen_timestamp_ns >= *window_start_timestamp_ns;
+}
+
+std::optional<ProtocolTimestampNs> ComputeObservationWindowStart(
+    const RtcmCorrectionHealthOptions& options)
+{
+  if (!options.now_timestamp_ns.has_value() || options.required_observation_window_ns <= 0)
+  {
+    return std::nullopt;
+  }
+
+  return *options.now_timestamp_ns - options.required_observation_window_ns;
+}
+
+bool IsWithinStartupGrace(const RtcmCorrectionMonitor& monitor,
+                          const RtcmCorrectionHealthOptions& options)
+{
+  if (options.startup_grace_ns <= 0 || !options.now_timestamp_ns.has_value())
+  {
+    return false;
+  }
+
+  const auto first_valid_timestamp_ns = monitor.first_valid_frame_timestamp_ns();
+  if (!first_valid_timestamp_ns.has_value())
+  {
+    return false;
+  }
+
+  return *options.now_timestamp_ns - *first_valid_timestamp_ns < options.startup_grace_ns;
+}
+
 }  // namespace
+
+void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& options)
+{
+  options.required_msm_constellations = {
+      RtcmConstellation::kGps,
+      RtcmConstellation::kGlonass,
+      RtcmConstellation::kGalileo,
+      RtcmConstellation::kBeiDou,
+  };
+  options.require_any_msm = false;
+  options.require_base_position = true;
+  options.require_glonass_bias = true;
+}
 
 void RtcmCorrectionMonitor::Reset()
 {
@@ -96,6 +149,7 @@ void RtcmCorrectionMonitor::Reset()
   valid_frames_ = 0;
   invalid_frames_ = 0;
   last_frame_timestamp_ns_.reset();
+  first_valid_frame_timestamp_ns_.reset();
   message_type_activity_.clear();
   msm_constellation_activity_.clear();
   message_type_timestamps_.clear();
@@ -176,6 +230,11 @@ std::uint64_t RtcmCorrectionMonitor::invalid_frames() const
 std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::last_frame_timestamp_ns() const
 {
   return last_frame_timestamp_ns_;
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::first_valid_frame_timestamp_ns() const
+{
+  return first_valid_frame_timestamp_ns_;
 }
 
 const RtcmMessageTypeActivityMap& RtcmCorrectionMonitor::message_type_activity() const
@@ -277,24 +336,96 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     return false;
   }
 
-  if (!HasRequiredMessageTypes(options.required_message_types))
+  const auto window_start_timestamp_ns = ComputeObservationWindowStart(options);
+  const auto has_message_type = [&](const std::uint16_t message_type)
   {
-    return false;
+    if (!window_start_timestamp_ns.has_value())
+    {
+      return MessageCount(message_type) > 0u;
+    }
+    return HasSeenSince(LastSeenMessageTimestampNs(message_type), window_start_timestamp_ns);
+  };
+  const auto has_constellation = [&](const RtcmConstellation constellation)
+  {
+    if (!window_start_timestamp_ns.has_value())
+    {
+      return MsmConstellationCount(constellation) > 0u;
+    }
+    return HasSeenSince(LastSeenMsmConstellationTimestampNs(constellation),
+                        window_start_timestamp_ns);
+  };
+
+  for (const std::uint16_t message_type : options.required_message_types)
+  {
+    if (!has_message_type(message_type))
+    {
+      return false;
+    }
   }
 
-  if (options.require_any_msm && !HasSeenAnyMsmMessage())
+  for (const RtcmConstellation constellation : options.required_msm_constellations)
   {
-    return false;
+    if (!has_constellation(constellation))
+    {
+      return false;
+    }
   }
 
-  if (options.require_base_position && !HasSeenBasePositionMessage())
+  if (options.require_any_msm)
   {
-    return false;
+    if (!window_start_timestamp_ns.has_value())
+    {
+      if (!HasSeenAnyMsmMessage())
+      {
+        return false;
+      }
+    }
+    else
+    {
+      bool seen_recent_msm = false;
+      for (const auto& entry : msm_constellation_activity_)
+      {
+        if (HasSeenSince(entry.second.last_seen_timestamp_ns, window_start_timestamp_ns))
+        {
+          seen_recent_msm = true;
+          break;
+        }
+      }
+      if (!seen_recent_msm)
+      {
+        return false;
+      }
+    }
   }
 
-  if (options.require_glonass_bias && !HasSeenGlonassBias1230())
+  if (options.require_base_position)
   {
-    return false;
+    if (!window_start_timestamp_ns.has_value())
+    {
+      if (!HasSeenBasePositionMessage())
+      {
+        return false;
+      }
+    }
+    else if (!has_message_type(1005u) && !has_message_type(1006u))
+    {
+      return false;
+    }
+  }
+
+  if (options.require_glonass_bias)
+  {
+    if (!window_start_timestamp_ns.has_value())
+    {
+      if (!HasSeenGlonassBias1230())
+      {
+        return false;
+      }
+    }
+    else if (!has_message_type(1230u))
+    {
+      return false;
+    }
   }
 
   return true;
@@ -371,6 +502,11 @@ std::optional<double> RtcmCorrectionMonitor::MsmConstellationRateHz(
 void RtcmCorrectionMonitor::RecordValidMessage(const RtcmMessageInfo& info,
                                                std::optional<ProtocolTimestampNs> timestamp_ns)
 {
+  if (!first_valid_frame_timestamp_ns_.has_value() && timestamp_ns.has_value())
+  {
+    first_valid_frame_timestamp_ns_ = timestamp_ns;
+  }
+
   ++valid_frames_;
   AppendTimestamp(timestamp_ns, valid_frame_timestamps_);
 
@@ -405,15 +541,26 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
     const RtcmCorrectionHealthOptions& options)
 {
   universal_gnss::GnssHealthSummary summary;
-  summary.parser_healthy = monitor.valid_frames() > 0u;
+  summary.parser_healthy = monitor.invalid_frames() == 0u;
 
   const bool has_required_messages = monitor.HasRequiredCorrectionMessages(options);
-  if (!has_required_messages)
+  const bool within_startup_grace =
+      !has_required_messages && IsWithinStartupGrace(monitor, options);
+  if (!has_required_messages && !within_startup_grace)
   {
     summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kError,
                       universal_gnss::GnssDiagnosticCategory::kCorrection,
                       "rtcm.required_messages_missing",
                       "Required RTCM correction messages have not been observed",
+                      monitor.last_frame_timestamp_ns(),
+                      std::string("rtcm_correction_monitor")});
+  }
+  else if (within_startup_grace)
+  {
+    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kInfo,
+                      universal_gnss::GnssDiagnosticCategory::kCorrection,
+                      "rtcm.required_messages_pending",
+                      "Waiting for the complete RTCM correction message set during startup grace",
                       monitor.last_frame_timestamp_ns(),
                       std::string("rtcm_correction_monitor")});
   }

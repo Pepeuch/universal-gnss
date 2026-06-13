@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -676,6 +677,7 @@ struct ReceiverNode::Impl
 {
   static constexpr std::chrono::seconds kStaleTimeout{3};
   static constexpr std::chrono::seconds kParserHealthWindow{3};
+  static constexpr double kParserUnhealthyRateHz{1.0};
 
   explicit Impl(ReceiverNode& owner,
                 std::unique_ptr<universal_gnss_transport::ByteSource> injected_source,
@@ -836,12 +838,16 @@ struct ReceiverNode::Impl
       last_runtime_observation_time_ = now;
     }
 
-    const std::size_t malformed_records = session_->metrics().malformed_records;
-    if (malformed_records > last_malformed_record_count_)
-    {
-      last_malformed_record_time_ = now;
-    }
-    last_malformed_record_count_ = malformed_records;
+    RecordParserCounterDelta(
+        session_->metrics().malformed_records, last_malformed_record_count_, recent_malformed_times_, now);
+    RecordParserCounterDelta(
+        session_->metrics().rejected_records, last_rejected_record_count_, recent_rejected_times_, now);
+    RecordParserCounterDelta(
+        session_->metrics().parser_anomalies,
+        last_parser_anomaly_count_,
+        recent_parser_anomaly_times_,
+        now);
+    PruneParserHistory(now);
 
     if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kOk)
     {
@@ -866,7 +872,10 @@ struct ReceiverNode::Impl
     const auto& state = session_->current_state();
     const auto& session_metrics = session_->metrics();
     const auto now = SteadyClock::now();
-    const bool parser_issue_recent = HasRecentMalformedRecords(now);
+    const std::size_t recent_parser_anomalies = RecentParserEventCount(recent_parser_anomaly_times_, now);
+    const double recent_parser_anomaly_rate_hz =
+        RecentParserEventRateHz(recent_parser_anomaly_times_, now);
+    const bool parser_issue_recent = recent_parser_anomaly_rate_hz >= kParserUnhealthyRateHz;
 
     const bool receiver_rtcm_active = HasReceiverReportedRtcmCorrections();
 
@@ -957,13 +966,15 @@ struct ReceiverNode::Impl
 
     if (parser_issue_recent)
     {
+      std::ostringstream stream;
+      stream << "Malformed or rejected receiver records exceeded the recent parser anomaly threshold"
+             << " (recent_count=" << recent_parser_anomalies
+             << ", rate_hz=" << recent_parser_anomaly_rate_hz << ")";
       summary.AddEvent(
           MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
                     universal_gnss::GnssDiagnosticCategory::kParser,
                     "malformed_records",
-                    "Malformed records were observed recently while parsing receiver data"
-                    " (count=" +
-                        std::to_string(session_metrics.malformed_records) + ")"));
+                    stream.str()));
     }
 
     if (HasKnownBoolField(state,
@@ -1241,10 +1252,20 @@ struct ReceiverNode::Impl
     status.hardware_id = hardware_id_;
 
     const auto& session_metrics = session_->metrics();
-    if (session_metrics.malformed_records > 0u)
+    const auto now = SteadyClock::now();
+    const std::size_t recent_malformed_records =
+        RecentParserEventCount(recent_malformed_times_, now);
+    const std::size_t recent_rejected_records =
+        RecentParserEventCount(recent_rejected_times_, now);
+    const std::size_t recent_parser_anomalies =
+        RecentParserEventCount(recent_parser_anomaly_times_, now);
+    const double recent_parser_anomaly_rate_hz =
+        RecentParserEventRateHz(recent_parser_anomaly_times_, now);
+
+    if (recent_parser_anomaly_rate_hz >= kParserUnhealthyRateHz)
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
-      status.message = "Parser anomalies observed";
+      status.message = "Recent parser anomaly rate is elevated";
     }
     else
     {
@@ -1258,7 +1279,26 @@ struct ReceiverNode::Impl
                          ? universal_gnss_driver::ToString(*session_metrics.selected_session_kind)
                          : "undecided"));
     status.values.push_back(
+        MakeKeyValue("parser_health_window_s",
+                     std::to_string(kParserHealthWindow.count())));
+    status.values.push_back(
+        MakeKeyValue("parser_unhealthy_rate_threshold_hz",
+                     std::to_string(kParserUnhealthyRateHz)));
+    status.values.push_back(
+        MakeKeyValue("recent_parser_anomalies", std::to_string(recent_parser_anomalies)));
+    status.values.push_back(
+        MakeKeyValue("recent_parser_anomaly_rate_hz",
+                     FormatFloatingPointValue(recent_parser_anomaly_rate_hz)));
+    status.values.push_back(
+        MakeKeyValue("recent_malformed_records", std::to_string(recent_malformed_records)));
+    status.values.push_back(
+        MakeKeyValue("recent_rejected_records", std::to_string(recent_rejected_records)));
+    status.values.push_back(
         MakeKeyValue("malformed_records_total", std::to_string(session_metrics.malformed_records)));
+    status.values.push_back(
+        MakeKeyValue("rejected_records_total", std::to_string(session_metrics.rejected_records)));
+    status.values.push_back(
+        MakeKeyValue("parser_anomalies_total", std::to_string(session_metrics.parser_anomalies)));
     status.values.push_back(
         MakeKeyValue("unknown_records_total", std::to_string(session_metrics.unknown_records)));
     status.values.push_back(
@@ -1368,10 +1408,68 @@ struct ReceiverNode::Impl
            (SteadyClock::now() - *last_runtime_observation_time_ < kStaleTimeout);
   }
 
-  bool HasRecentMalformedRecords(const SteadyClock::time_point now) const
+  void RecordParserCounterDelta(const std::size_t current_count,
+                                std::size_t& last_count,
+                                std::deque<SteadyClock::time_point>& timestamps,
+                                const SteadyClock::time_point now)
   {
-    return last_malformed_record_time_.has_value() &&
-           (now - *last_malformed_record_time_ < kParserHealthWindow);
+    if (current_count < last_count)
+    {
+      last_count = current_count;
+      timestamps.clear();
+      return;
+    }
+
+    for (std::size_t index = last_count; index < current_count; ++index)
+    {
+      timestamps.push_back(now);
+    }
+
+    last_count = current_count;
+  }
+
+  void PruneParserHistory(const SteadyClock::time_point now)
+  {
+    PruneParserHistory(recent_malformed_times_, now);
+    PruneParserHistory(recent_rejected_times_, now);
+    PruneParserHistory(recent_parser_anomaly_times_, now);
+  }
+
+  void PruneParserHistory(std::deque<SteadyClock::time_point>& timestamps,
+                          const SteadyClock::time_point now)
+  {
+    while (!timestamps.empty() && now - timestamps.front() >= kParserHealthWindow)
+    {
+      timestamps.pop_front();
+    }
+  }
+
+  std::size_t RecentParserEventCount(const std::deque<SteadyClock::time_point>& timestamps,
+                                     const SteadyClock::time_point now) const
+  {
+    std::size_t count = 0u;
+    for (const auto timestamp : timestamps)
+    {
+      if (now - timestamp < kParserHealthWindow)
+      {
+        ++count;
+      }
+    }
+    return count;
+  }
+
+  double RecentParserEventRateHz(const std::deque<SteadyClock::time_point>& timestamps,
+                                 const SteadyClock::time_point now) const
+  {
+    return static_cast<double>(RecentParserEventCount(timestamps, now)) /
+           static_cast<double>(kParserHealthWindow.count());
+  }
+
+  std::string FormatFloatingPointValue(const double value) const
+  {
+    std::ostringstream stream;
+    stream << value;
+    return stream.str();
   }
 
   const universal_gnss_driver::UbloxSessionMetrics* ActiveUbloxMetrics() const
@@ -1473,7 +1571,6 @@ struct ReceiverNode::Impl
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
   std::optional<SteadyClock::time_point> last_runtime_observation_time_{};
-  std::optional<SteadyClock::time_point> last_malformed_record_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
   std::optional<universal_gnss_transport::TransportStatus> last_logged_terminal_status_{};
@@ -1485,6 +1582,11 @@ struct ReceiverNode::Impl
   std::size_t rtcm_forwarded_bytes_{0u};
   std::size_t rtcm_forward_write_errors_{0u};
   std::size_t last_malformed_record_count_{0u};
+  std::size_t last_rejected_record_count_{0u};
+  std::size_t last_parser_anomaly_count_{0u};
+  std::deque<SteadyClock::time_point> recent_malformed_times_{};
+  std::deque<SteadyClock::time_point> recent_rejected_times_{};
+  std::deque<SteadyClock::time_point> recent_parser_anomaly_times_{};
   bool transport_configured_{false};
   bool transport_ready_{false};
   bool using_injected_source_{false};

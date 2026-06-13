@@ -2,8 +2,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -12,6 +14,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
@@ -51,6 +54,31 @@ void AppendBytes(std::vector<std::uint8_t>& destination, const std::vector<std::
 std::vector<std::uint8_t> BuildBytes(const std::string& text)
 {
   return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
+{
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+
+  std::ostringstream stream;
+  stream << frame_without_crc
+         << '*'
+         << std::hex
+         << std::nouppercase
+         << std::setw(8)
+         << std::setfill('0')
+         << crc
+         << "\r\n";
+  return stream.str();
+}
+
+std::string BuildInvalidUnicoreAsciiFrame(const std::string& frame_without_crc)
+{
+  std::string frame = BuildUnicoreAsciiFrame(frame_without_crc);
+  frame[frame.size() - 4u] = frame[frame.size() - 4u] == '0' ? '1' : '0';
+  return frame;
 }
 
 std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
@@ -864,13 +892,21 @@ TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
 
 TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCount)
 {
-  const auto ubx = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
-  const std::vector<std::uint8_t> truncated_ubx(ubx.begin(), ubx.begin() + 8u);
+  const std::string malformed_line =
+      BuildInvalidUnicoreAsciiFrame("#BESTNAVA,97,GPS,FINE,1,2,0,0,18,16;SOL_COMPUTED,SINGLE,1,2,3");
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       truncated_ubx,
+       BuildBytes(malformed_line),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(malformed_line),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(malformed_line),
        true},
       {universal_gnss_transport::TransportStatus::kEndOfStream,
        universal_gnss_transport::TransportError::kNone,
@@ -880,10 +916,12 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
+  EXPECT_TRUE(node.StepOnce());
+  EXPECT_TRUE(node.StepOnce());
   EXPECT_TRUE(node.StepOnce());
   EXPECT_FALSE(node.StepOnce());
   node.PublishNow();
@@ -899,6 +937,11 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
   ASSERT_NE(initial_malformed, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*initial_summary, "parser_healthy"),
             std::optional<std::string>{"false"});
+  const auto* initial_parser_counters =
+      FindDiagnosticStatusByName(initial_diagnostics, "universal_gnss/parser_counters");
+  ASSERT_NE(initial_parser_counters, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*initial_parser_counters, "recent_parser_anomalies"),
+            std::optional<std::string>{"3"});
 
   std::this_thread::sleep_for(std::chrono::milliseconds(3100));
   node.PublishNow();
@@ -916,6 +959,49 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
             std::optional<std::string>{"true"});
   EXPECT_EQ(recovered_malformed->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(recovered_malformed->message, "Diagnostic condition cleared");
+}
+
+TEST_F(ReceiverNodeTest, IgnoresUnknownButValidUnicoreRecordsForParserHealth)
+{
+  const std::string unknown_line =
+      BuildUnicoreAsciiFrame("#FOOBARA,97,GPS,FINE,1,2,0,0,0,0;payload");
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildBytes(unknown_line),
+       true},
+      {universal_gnss_transport::TransportStatus::kEndOfStream,
+       universal_gnss_transport::TransportError::kNone,
+       {},
+       false},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  EXPECT_FALSE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+  const auto* summary = FindDiagnosticStatusByName(diagnostics, "universal_gnss/summary");
+  const auto* parser_counters =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss/parser_counters");
+
+  ASSERT_NE(summary, nullptr);
+  ASSERT_NE(parser_counters, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*summary, "parser_healthy"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(parser_counters->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(FindDiagnosticValue(*parser_counters, "unknown_records_total"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*parser_counters, "parser_anomalies_total"),
+            std::optional<std::string>{"0"});
 }
 
 TEST_F(ReceiverNodeTest, PublishesRuntimeStaleRecoveryStatusWhenFreshObservationsResume)

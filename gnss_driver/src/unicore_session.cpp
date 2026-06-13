@@ -605,6 +605,12 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
     return;
   }
 
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    ++metrics_.malformed_lines;
+    return;
+  }
+
   if (!IsSupportedRecordName(frame.message_name))
   {
     ++metrics_.unknown_records;

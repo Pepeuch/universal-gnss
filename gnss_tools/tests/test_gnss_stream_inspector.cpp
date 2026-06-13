@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -101,9 +102,43 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+std::string NormalizeUnicoreAsciiLine(std::string line)
+{
+  if (line.empty() || line.front() != '#')
+  {
+    return line;
+  }
+
+  while (!line.empty() && (line.back() == '\r' || line.back() == '\n'))
+  {
+    line.pop_back();
+  }
+
+  if (const std::size_t star = line.rfind('*'); star != std::string::npos)
+  {
+    line.resize(star);
+  }
+
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(line.data() + 1u),
+      line.size() - 1u);
+
+  std::ostringstream stream;
+  stream << line
+         << '*'
+         << std::hex
+         << std::nouppercase
+         << std::setw(8)
+         << std::setfill('0')
+         << crc
+         << "\r\n";
+  return stream.str();
+}
+
 std::vector<std::uint8_t> BuildAsciiLine(const std::string& line)
 {
-  return std::vector<std::uint8_t>(line.begin(), line.end());
+  const std::string normalized = NormalizeUnicoreAsciiLine(line);
+  return std::vector<std::uint8_t>(normalized.begin(), normalized.end());
 }
 
 void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)

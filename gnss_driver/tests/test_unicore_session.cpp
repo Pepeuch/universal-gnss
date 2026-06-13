@@ -1,8 +1,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -37,6 +39,30 @@ struct TestContext
   }
 };
 
+std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
+{
+  if (frame_without_crc.empty() || frame_without_crc.front() != '#')
+  {
+    std::cerr << "FAILED: invalid Unicore ASCII test vector\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+
+  std::ostringstream stream;
+  stream << frame_without_crc
+         << '*'
+         << std::hex
+         << std::nouppercase
+         << std::setw(8)
+         << std::setfill('0')
+         << crc
+         << "\r\n";
+  return stream.str();
+}
+
 bool NearlyEqual(const double lhs, const double rhs, const double tolerance = 1e-6)
 {
   return std::fabs(lhs - rhs) <= tolerance;
@@ -64,43 +90,43 @@ std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload,
   return bytes;
 }
 
-constexpr const char* kBestNavLine =
+const std::string kBestNavLine = WithUnicoreAsciiCrc(
     "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
     "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
     "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n";
+    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
 
-constexpr const char* kPvtslnLine =
+const std::string kPvtslnLine = WithUnicoreAsciiCrc(
     "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
     "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
     "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
     "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
-    "28,25,26*1e33c8cb\r\n";
+    "28,25,26");
 
-constexpr const char* kRtkStatusLine =
+const std::string kRtkStatusLine = WithUnicoreAsciiCrc(
     "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-    "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0*f06a8a06\r\n";
+    "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0");
 
-constexpr const char* kSatsInfoLine =
+const std::string kSatsInfoLine = WithUnicoreAsciiCrc(
     "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
     "3,2,0,0,0,63,"
     "2,302,51,0,45,0,2,0,42,9,2,"
     "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
-    "5,225,14,1,50,0,1*abcdef12\r\n";
+    "5,225,14,1,50,0,1");
 
-constexpr const char* kBestSatLine =
+const std::string kBestSatLine = WithUnicoreAsciiCrc(
     "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
-    "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000*12345678\r\n";
+    "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000");
 
-constexpr const char* kJamStatusLine =
-    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n";
+const std::string kJamStatusLine = WithUnicoreAsciiCrc(
+    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0");
 
-constexpr const char* kRtcmStatusLine =
+const std::string kRtcmStatusLine = WithUnicoreAsciiCrc(
     "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
-    "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+    "1124,21186,0,21,0,6,11,0,0,21");
 
-constexpr const char* kHwStatusLine =
-    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n";
+const std::string kHwStatusLine = WithUnicoreAsciiCrc(
+    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,0.693,0.0,0x00,0,0x0377,0,0");
 
 void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
 {
@@ -471,10 +497,10 @@ void TestRtcmStatusParsesWithoutRuntimeUpdate(TestContext& ctx)
 void TestUnknownAndMalformedRecords(TestContext& ctx)
 {
   UnicoreSession session;
-  session.FeedString("#FOOBARA,97,GPS,FINE,1,2,0,0,0,0;payload\r\n");
-  session.FeedString(
+  session.FeedString(WithUnicoreAsciiCrc("#FOOBARA,97,GPS,FINE,1,2,0,0,0,0;payload"));
+  session.FeedString(WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312*abcd1234\r\n");
+      "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312"));
 
   const auto& metrics = session.metrics();
   ctx.Expect(metrics.lines_seen == 2u && metrics.ascii_records_seen == 2u,
@@ -580,18 +606,21 @@ void TestStartupBinaryResyncSuppressesFirstMalformedFrame(TestContext& ctx)
 void TestStartupAsciiResyncSuppressesFirstMalformedLine(TestContext& ctx)
 {
   UnicoreSessionConfig config;
-  config.max_frame_length_bytes = 8u;
+  config.max_frame_length_bytes = 24u;
   UnicoreSession session(config);
 
-  session.FeedString("#TOO_LONG_LINE");
-  session.FeedString("#A;\r\n", 9500);
+  session.FeedString("#TOO_LONG_LINE_EXCEEDS_LIMIT");
+  session.FeedString(WithUnicoreAsciiCrc("#X;"), 9500);
 
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.malformed_lines == 0u &&
-                 metrics.lines_seen == 1u &&
-                 metrics.ascii_records_seen == 1u &&
-                 metrics.unknown_records == 1u,
-             "the first malformed ASCII fragment before sync should be suppressed once");
+  ctx.Expect(metrics.malformed_lines == 0u,
+             "startup ASCII resync should suppress the first malformed line");
+  ctx.Expect(metrics.lines_seen == 1u,
+             "startup ASCII resync should still count the later unknown line");
+  ctx.Expect(metrics.ascii_records_seen == 1u,
+             "startup ASCII resync should still expose the later ASCII record");
+  ctx.Expect(metrics.unknown_records == 1u,
+             "startup ASCII resync should route the later line as an unknown record");
 }
 
 void TestMalformedBinaryFrameAfterSyncCounts(TestContext& ctx)

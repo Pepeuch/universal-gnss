@@ -167,8 +167,9 @@ RtcmCorrectionHealthOptions BuildHealthOptions(const NtripMonitorOptions& option
   health_options.stale_after_ns =
       std::max<std::int64_t>(5000000000LL,
                              static_cast<std::int64_t>(options.read_timeout_ms) * 5000000LL);
-  health_options.require_any_msm = true;
-  health_options.require_base_position = true;
+  health_options.required_observation_window_ns = 30000000000LL;
+  health_options.startup_grace_ns = 30000000000LL;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(health_options);
   return health_options;
 }
 

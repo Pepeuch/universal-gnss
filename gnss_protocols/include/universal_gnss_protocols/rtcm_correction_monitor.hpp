@@ -27,10 +27,15 @@ struct RtcmCorrectionHealthOptions
   std::optional<ProtocolTimestampNs> now_timestamp_ns{};
   ProtocolTimestampNs stale_after_ns{0};
   std::vector<std::uint16_t> required_message_types{};
+  std::vector<RtcmConstellation> required_msm_constellations{};
+  ProtocolTimestampNs required_observation_window_ns{0};
+  ProtocolTimestampNs startup_grace_ns{0};
   bool require_any_msm{false};
   bool require_base_position{false};
   bool require_glonass_bias{false};
 };
+
+void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& options);
 
 class RtcmCorrectionMonitor
 {
@@ -46,6 +51,7 @@ public:
   std::uint64_t valid_frames() const;
   std::uint64_t invalid_frames() const;
   std::optional<ProtocolTimestampNs> last_frame_timestamp_ns() const;
+  std::optional<ProtocolTimestampNs> first_valid_frame_timestamp_ns() const;
 
   const RtcmMessageTypeActivityMap& message_type_activity() const;
   const RtcmMsmConstellationActivityMap& msm_constellation_activity() const;
@@ -94,6 +100,7 @@ private:
   std::uint64_t valid_frames_{0};
   std::uint64_t invalid_frames_{0};
   std::optional<ProtocolTimestampNs> last_frame_timestamp_ns_{};
+  std::optional<ProtocolTimestampNs> first_valid_frame_timestamp_ns_{};
 
   RtcmMessageTypeActivityMap message_type_activity_{};
   RtcmMsmConstellationActivityMap msm_constellation_activity_{};

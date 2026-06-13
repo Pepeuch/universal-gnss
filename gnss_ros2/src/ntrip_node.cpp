@@ -249,6 +249,10 @@ struct NtripNode::Impl
   static constexpr std::chrono::seconds kCorrectionStartupGrace{3};
   static constexpr universal_gnss_protocols::ProtocolTimestampNs kCorrectionStaleAfterNs =
       5000000000LL;
+  static constexpr universal_gnss_protocols::ProtocolTimestampNs
+      kCorrectionRequirementWindowNs = 30000000000LL;
+  static constexpr universal_gnss_protocols::ProtocolTimestampNs
+      kCorrectionRequirementStartupGraceNs = 30000000000LL;
 
   explicit Impl(NtripNode& owner, std::optional<int> adopted_socket_fd) : owner_(owner)
   {
@@ -550,8 +554,9 @@ struct NtripNode::Impl
     universal_gnss_protocols::RtcmCorrectionHealthOptions options;
     options.now_timestamp_ns = now_ns;
     options.stale_after_ns = kCorrectionStaleAfterNs;
-    options.require_any_msm = true;
-    options.require_base_position = true;
+    options.required_observation_window_ns = kCorrectionRequirementWindowNs;
+    options.startup_grace_ns = kCorrectionRequirementStartupGraceNs;
+    universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
     return options;
   }
 

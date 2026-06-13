@@ -733,6 +733,11 @@ std::optional<ParsedUnicoreMessage> ParseAsciiHeader(const UnicoreFrame& frame,
     return std::nullopt;
   }
 
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    return std::nullopt;
+  }
+
   if (frame.message_name != expected_name)
   {
     return std::nullopt;

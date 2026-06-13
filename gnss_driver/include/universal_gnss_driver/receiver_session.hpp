@@ -40,6 +40,8 @@ struct ReceiverSessionMetrics
   std::size_t runtime_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t malformed_records{0u};
+  std::size_t rejected_records{0u};
+  std::size_t parser_anomalies{0u};
   std::size_t unknown_records{0u};
 };
 
