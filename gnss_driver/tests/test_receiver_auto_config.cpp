@@ -9,6 +9,7 @@ namespace
 {
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
+using universal_gnss_driver::ParseReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
@@ -70,110 +71,171 @@ bool ContainsWarning(const universal_gnss_driver::ReceiverAutoConfigPlan& plan,
   return false;
 }
 
-void TestUbloxRoverRuntimeOnlyPlan(TestContext& ctx)
+void TestProfileParsingAndFormatting(TestContext& ctx)
+{
+  ctx.Expect(ParseReceiverAutoConfigProfile("runtime_only") ==
+                 std::optional<ReceiverAutoConfigProfile>{
+                     ReceiverAutoConfigProfile::kRuntimeOnly},
+             "runtime_only should parse to the new no-op portable profile");
+  ctx.Expect(ParseReceiverAutoConfigProfile("rover") ==
+                 std::optional<ReceiverAutoConfigProfile>{
+                     ReceiverAutoConfigProfile::kRoverHighPrecision},
+             "legacy rover alias should map to rover_high_precision");
+  ctx.Expect(ParseReceiverAutoConfigProfile("diagnostics") ==
+                 std::optional<ReceiverAutoConfigProfile>{
+                     ReceiverAutoConfigProfile::kRoverHighPrecisionDebug},
+             "legacy diagnostics alias should map to rover_high_precision_debug");
+  ctx.Expect(ParseReceiverAutoConfigProfile("factory-reset") ==
+                 std::optional<ReceiverAutoConfigProfile>{
+                     ReceiverAutoConfigProfile::kFactoryReset},
+             "factory-reset should parse as a supported portable alias");
+  ctx.Expect(std::string(
+                 universal_gnss_driver::ToString(
+                     ReceiverAutoConfigProfile::kRoverHighPrecisionDebug)) ==
+                 "rover_high_precision_debug",
+             "portable profile formatting should prefer the canonical generic profile names");
+}
+
+void TestUbloxRuntimeOnlyPlan(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kRover,
+      ReceiverAutoConfigProfile::kRuntimeOnly,
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk,
-             "u-blox rover runtime-only planning should succeed");
-  ctx.Expect(plan.vendor == universal_gnss_driver::ReceiverVendor::kUblox &&
-                 plan.receiver_family_name == "F9/F10" &&
-                 plan.detected_device == std::optional<std::string>("/dev/serial/by-id/f9p") &&
-                 plan.detected_baud == std::optional<std::uint32_t>(921600u),
-             "u-blox rover planning should preserve discovery context");
-  ctx.Expect(plan.validation.receiver_recognized &&
-                 plan.validation.config_supported &&
-                 plan.validation.profile_supported &&
-                 plan.validation.apply_mode_supported &&
+             "u-blox runtime_only planning should succeed");
+  ctx.Expect(plan.validation.generated_command_count == 0u &&
+                 plan.validation.runtime_command_count == 0u &&
+                 plan.validation.persistent_command_count == 0u &&
                  plan.validation.production_ready &&
                  plan.validation.ready_to_execute,
-             "u-blox rover planning should be recognized, supported, and ready to execute later");
-  ctx.Expect(plan.validation.generated_command_count == 13u &&
-                 plan.validation.runtime_command_count == 13u &&
-                 plan.validation.persistent_command_count == 0u,
-             "u-blox rover planning should report the expected runtime command counts");
-  ctx.Expect(plan.rollback_expectation.changes_are_temporary &&
-                 !plan.rollback_expectation.operator_action_required,
-             "runtime-only u-blox planning should report temporary changes");
+             "u-blox runtime_only planning should remain a supported no-op plan");
+  ctx.Expect(plan.rollback_expectation.summary ==
+                 "no receiver configuration changes are planned",
+             "runtime_only planning should report an explicit no-change rollback summary");
 }
 
-void TestUbloxDiagnosticsRuntimeOnlyPlan(TestContext& ctx)
+void TestUbloxRoverHighPrecisionPlans(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(
+  const auto rover_plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto debug_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kDiagnostics,
+      ReceiverAutoConfigProfile::kRoverHighPrecisionDebug,
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
-  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 23u &&
-                 plan.validation.runtime_command_count == 23u,
-             "u-blox diagnostics runtime-only planning should generate the expected command counts");
+  ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 rover_plan.validation.generated_command_count == 13u &&
+                 rover_plan.validation.runtime_command_count == 13u,
+             "u-blox rover_high_precision planning should preserve the validated rover command set");
+  ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 debug_plan.validation.generated_command_count == 23u &&
+                 debug_plan.validation.runtime_command_count == 23u,
+             "u-blox rover_high_precision_debug planning should preserve the existing diagnostics builder");
 }
 
-void TestUnicoreRoverRuntimeOnlyPlan(TestContext& ctx)
+void TestUbloxFactoryResetStub(TestContext& ctx)
+{
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
+      ReceiverAutoConfigProfile::kFactoryReset,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+
+  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedProfile &&
+                 !plan.validation.profile_supported &&
+                 plan.error_message.find("factory_reset") != std::string::npos,
+             "u-blox factory_reset should stay an explicit unsupported portable stub for now");
+}
+
+void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
+{
+  const auto rover_plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto debug_plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
+      ReceiverAutoConfigProfile::kRoverHighPrecisionDebug,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+
+  ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 rover_plan.validation.generated_command_count == 13u &&
+                 rover_plan.validation.runtime_command_count == 13u,
+             "Unicore rover_high_precision planning should preserve the validated runtime profile");
+  ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 debug_plan.validation.generated_command_count == 14u &&
+                 debug_plan.validation.runtime_command_count == 14u,
+             "Unicore rover_high_precision_debug planning should add the extra diagnostics log only");
+}
+
+void TestUnicoreFactoryResetPlan(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kRover,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
-
-  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk,
-             "Unicore rover runtime-only planning should succeed");
-  ctx.Expect(plan.vendor == universal_gnss_driver::ReceiverVendor::kUnicore &&
-                 plan.receiver_family_name == "UM98x" &&
-                 plan.validation.generated_command_count == 13u &&
-                 plan.validation.runtime_command_count == 13u,
-             "Unicore rover planning should generate the expected runtime command counts");
-}
-
-void TestNmeaRejectedCleanly(TestContext& ctx)
-{
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
-      ReceiverAutoConfigProfile::kRover,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
-
-  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
-                 plan.capabilities_known &&
-                 !plan.validation.config_supported &&
-                 !plan.unsupported_reason.empty(),
-             "generic NMEA planning should be rejected cleanly as unsupported");
-}
-
-void TestBaseMarkedNotProductionReady(TestContext& ctx)
-{
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kBase,
+      ReceiverAutoConfigProfile::kFactoryReset,
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 11u,
-             "u-blox base planning should still build a command sequence");
+                 plan.validation.generated_command_count == 1u &&
+                 plan.validation.factory_reset_command_count == 1u,
+             "Unicore factory_reset planning should generate exactly one factory-reset command");
   ctx.Expect(!plan.validation.production_ready &&
                  !plan.validation.ready_to_execute &&
-                 ContainsWarning(plan, "not yet production-ready"),
-             "base planning should be marked not production-ready");
+                 ContainsWarning(plan, "115200") &&
+                 ContainsWarning(plan, "reconnect/probe"),
+             "Unicore factory_reset planning should stay guarded and document the baud reset");
+}
+
+void TestRuntimeOnlyPersistentModeRejected(TestContext& ctx)
+{
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
+      ReceiverAutoConfigProfile::kRuntimeOnly,
+      ReceiverAutoConfigApplyMode::kPersistent);
+
+  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode &&
+                 !plan.validation.apply_mode_supported,
+             "runtime_only profiles should reject persistent apply requests cleanly");
 }
 
 void TestPersistentApplyWarnings(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kRover,
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
       ReceiverAutoConfigApplyMode::kPersistent);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  plan.validation.generated_command_count == 14u &&
                  plan.validation.persistent_command_count == 1u,
-             "persistent Unicore planning should include SAVECONFIG");
+             "persistent Unicore rover_high_precision planning should append only SAVECONFIG");
   ctx.Expect(ContainsWarning(plan, "persistent apply") &&
                  ContainsWarning(plan, "SAVECONFIG") &&
                  plan.rollback_expectation.operator_action_required,
-             "persistent planning should surface explicit warnings and manual rollback expectations");
+             "persistent portable planning should surface explicit warnings and manual rollback expectations");
+}
+
+void TestNmeaProfiles(TestContext& ctx)
+{
+  const auto runtime_only_plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
+      ReceiverAutoConfigProfile::kRuntimeOnly,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto config_plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+
+  ctx.Expect(runtime_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 runtime_only_plan.validation.generated_command_count == 0u,
+             "generic NMEA receivers should support the read-only runtime_only portable profile");
+  ctx.Expect(config_plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedProfile &&
+                 !config_plan.validation.profile_supported &&
+                 config_plan.error_message.find("runtime_only") != std::string::npos,
+             "generic NMEA receivers should reject write-side portable profiles with a clear reason");
 }
 
 void TestUnknownReceiverRejected(TestContext& ctx)
@@ -188,12 +250,12 @@ void TestUnknownReceiverRejected(TestContext& ctx)
 
   const auto plan = BuildReceiverAutoConfigPlan(
       unknown,
-      ReceiverAutoConfigProfile::kRover,
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
                  plan.unsupported_reason == "no_data",
-             "unknown receiver planning should be rejected with the discovery reason");
+             "unknown receiver planning should still be rejected with the discovery reason");
 }
 
 }  // namespace
@@ -202,12 +264,15 @@ int main()
 {
   TestContext ctx;
 
-  TestUbloxRoverRuntimeOnlyPlan(ctx);
-  TestUbloxDiagnosticsRuntimeOnlyPlan(ctx);
-  TestUnicoreRoverRuntimeOnlyPlan(ctx);
-  TestNmeaRejectedCleanly(ctx);
-  TestBaseMarkedNotProductionReady(ctx);
+  TestProfileParsingAndFormatting(ctx);
+  TestUbloxRuntimeOnlyPlan(ctx);
+  TestUbloxRoverHighPrecisionPlans(ctx);
+  TestUbloxFactoryResetStub(ctx);
+  TestUnicoreRoverHighPrecisionPlans(ctx);
+  TestUnicoreFactoryResetPlan(ctx);
+  TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);
+  TestNmeaProfiles(ctx);
   TestUnknownReceiverRejected(ctx);
 
   if (ctx.failures != 0)

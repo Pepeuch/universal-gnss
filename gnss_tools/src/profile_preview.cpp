@@ -12,8 +12,7 @@
 #include <string_view>
 #include <utility>
 
-#include "universal_gnss_driver/ublox_config_profile_builder.hpp"
-#include "universal_gnss_driver/unicore_config_profile_builder.hpp"
+#include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_protocols/ubx_cfg_builder.hpp"
 
 namespace universal_gnss_tools
@@ -26,16 +25,10 @@ using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
-using universal_gnss_driver::ReceiverConfigProfileKind;
-using universal_gnss_driver::UbloxConfigProfile;
-using universal_gnss_driver::UbloxConfigProfileBuilder;
-using universal_gnss_driver::UbloxConfigProfileBuildStatus;
-using universal_gnss_driver::UnicoreConfigProfile;
-using universal_gnss_driver::UnicoreConfigProfileBuilder;
-using universal_gnss_driver::UnicoreConfigProfileBuildStatus;
-using universal_gnss_driver::UnicoreOutputMessageKind;
-using universal_gnss_driver::UnicorePersistenceTarget;
-using universal_gnss_protocols::UbxCfgLayer;
+using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigPlan;
+using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
+using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
@@ -402,6 +395,11 @@ std::string DescribeUnicoreTextCommand(std::string text)
     return "save configuration to non-volatile memory";
   }
 
+  if (text == "FRESET")
+  {
+    return "factory reset receiver state and restart at 115200 bps";
+  }
+
   if (StartsWith(text, "LOG "))
   {
     const std::string_view remainder(text.c_str() + 4u, text.size() - 4u);
@@ -448,11 +446,6 @@ std::string DescribeCommand(const ReceiverCommand& command)
   return "preview configuration command";
 }
 
-bool IsPeriodicUnicoreMessage(const UnicoreOutputMessageKind message)
-{
-  return message != UnicoreOutputMessageKind::kRtcmstatusa;
-}
-
 ProfilePreviewResult MakeErrorResult(const ProfilePreviewOptions& options,
                                      const ProfilePreviewStatus status,
                                      const std::string& error_message)
@@ -495,142 +488,55 @@ void FinalizeSummary(ProfilePreviewResult& result)
   result.summary.commands_total = result.commands.size();
 }
 
-ProfilePreviewResult BuildUbloxPreview(const ProfilePreviewOptions& options)
+std::optional<ReceiverDetectedFamily> ParseReceiverFamily(const std::string& vendor)
 {
-  std::vector<UbxCfgLayer> layers{UbxCfgLayer::kRam};
-  auto safety_level = universal_gnss_driver::ReceiverCommandSafetyLevel::kRuntime;
-  if (options.persistent)
+  const std::string normalized = ToLowerCopy(vendor);
+  if (normalized == "ublox")
   {
-    safety_level = universal_gnss_driver::ReceiverCommandSafetyLevel::kPersistent;
-    layers.push_back(UbxCfgLayer::kBbr);
+    return ReceiverDetectedFamily::kUblox;
   }
-
-  UbloxConfigProfile profile;
-  const std::string normalized_profile = ToLowerCopy(options.profile);
-  if (normalized_profile == "rover")
+  if (normalized == "unicore")
   {
-    profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(safety_level, layers);
+    return ReceiverDetectedFamily::kUnicore;
   }
-  else if (normalized_profile == "diagnostics")
+  if (normalized == "nmea")
   {
-    profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(safety_level, layers);
+    return ReceiverDetectedFamily::kNmea;
   }
-  else if (normalized_profile == "base")
-  {
-    profile = UbloxConfigProfileBuilder::BuildUbloxBaseProfile(safety_level, layers);
-  }
-  else
-  {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kUnsupportedProfile, "unsupported u-blox profile");
-  }
-
-  if (options.baud.has_value())
-  {
-    if (*options.baud == 0u)
-    {
-      return MakeErrorResult(
-          options, ProfilePreviewStatus::kInvalidArgument, "baud must be non-zero");
-    }
-    profile.port.uart1_baudrate = *options.baud;
-  }
-
-  if (options.rate_hz.has_value())
-  {
-    if (!(*options.rate_hz > 0.0) || !std::isfinite(*options.rate_hz))
-    {
-      return MakeErrorResult(
-          options, ProfilePreviewStatus::kInvalidArgument, "rate-hz must be positive");
-    }
-    profile.measurement_rate_hz = *options.rate_hz;
-  }
-
-  const auto build_result = UbloxConfigProfileBuilder::Build(profile);
-  if (build_result.status != UbloxConfigProfileBuildStatus::kOk)
-  {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kBuildError, build_result.error_message);
-  }
-
-  ProfilePreviewResult result;
-  result.vendor = "ublox";
-  result.profile = normalized_profile;
-  result.persistent = options.persistent;
-  result.baud = options.baud;
-  result.rate_hz = options.rate_hz;
-  for (const auto& command : build_result.commands)
-  {
-    SummarizeCommand(result, command);
-  }
-  FinalizeSummary(result);
-  return result;
+  return std::nullopt;
 }
 
-ProfilePreviewResult BuildUnicorePreview(const ProfilePreviewOptions& options)
+ProfilePreviewStatus MapPlanStatus(const ReceiverAutoConfigPlanStatus status)
 {
-  if (options.baud.has_value())
+  switch (status)
   {
-    return MakeErrorResult(
-        options,
-        ProfilePreviewStatus::kInvalidArgument,
-        "unicore preview does not support --baud because the portable builder does not emit baud commands");
+    case ReceiverAutoConfigPlanStatus::kOk:
+      return ProfilePreviewStatus::kOk;
+    case ReceiverAutoConfigPlanStatus::kInvalidArgument:
+      return ProfilePreviewStatus::kInvalidArgument;
+    case ReceiverAutoConfigPlanStatus::kUnsupportedReceiver:
+      return ProfilePreviewStatus::kUnsupportedVendor;
+    case ReceiverAutoConfigPlanStatus::kUnsupportedProfile:
+    case ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode:
+      return ProfilePreviewStatus::kUnsupportedProfile;
+    case ReceiverAutoConfigPlanStatus::kBuildError:
+      return ProfilePreviewStatus::kBuildError;
   }
 
-  const auto persistence = options.persistent ? UnicorePersistenceTarget::kSaveConfig
-                                              : UnicorePersistenceTarget::kRuntimeOnly;
+  return ProfilePreviewStatus::kBuildError;
+}
 
-  UnicoreConfigProfile profile;
-  const std::string normalized_profile = ToLowerCopy(options.profile);
-  if (normalized_profile == "rover")
+std::string SelectPlanErrorMessage(const ReceiverAutoConfigPlan& plan)
+{
+  if (!plan.error_message.empty())
   {
-    profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
+    return plan.error_message;
   }
-  else if (normalized_profile == "diagnostics")
+  if (!plan.unsupported_reason.empty())
   {
-    profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(persistence);
+    return plan.unsupported_reason;
   }
-  else
-  {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kUnsupportedProfile, "unsupported Unicore profile");
-  }
-
-  if (options.rate_hz.has_value())
-  {
-    if (!(*options.rate_hz > 0.0) || !std::isfinite(*options.rate_hz))
-    {
-      return MakeErrorResult(
-          options, ProfilePreviewStatus::kInvalidArgument, "rate-hz must be positive");
-    }
-
-    const double period_s = 1.0 / *options.rate_hz;
-    for (auto& output : profile.output_messages)
-    {
-      if (IsPeriodicUnicoreMessage(output.message))
-      {
-        output.period_s = period_s;
-      }
-    }
-  }
-
-  const auto build_result = UnicoreConfigProfileBuilder::Build(profile);
-  if (build_result.status != UnicoreConfigProfileBuildStatus::kOk)
-  {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kBuildError, build_result.error_message);
-  }
-
-  ProfilePreviewResult result;
-  result.vendor = "unicore";
-  result.profile = normalized_profile;
-  result.persistent = options.persistent;
-  result.rate_hz = options.rate_hz;
-  for (const auto& command : build_result.commands)
-  {
-    SummarizeCommand(result, command);
-  }
-  FinalizeSummary(result);
-  return result;
+  return "preview planning failed";
 }
 
 }  // namespace
@@ -645,19 +551,55 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
         "both vendor and profile are required");
   }
 
-  const std::string normalized_vendor = ToLowerCopy(options.vendor);
-  if (normalized_vendor == "ublox")
+  const auto family = ParseReceiverFamily(options.vendor);
+  if (!family.has_value())
   {
-    return BuildUbloxPreview(options);
+    return MakeErrorResult(
+        options, ProfilePreviewStatus::kUnsupportedVendor, "unsupported vendor");
   }
 
-  if (normalized_vendor == "unicore")
+  const auto profile =
+      universal_gnss_driver::ParseReceiverAutoConfigProfile(options.profile);
+  if (!profile.has_value())
   {
-    return BuildUnicorePreview(options);
+    return MakeErrorResult(
+        options, ProfilePreviewStatus::kUnsupportedProfile, "unsupported configuration profile");
   }
 
-  return MakeErrorResult(
-      options, ProfilePreviewStatus::kUnsupportedVendor, "unsupported vendor");
+  universal_gnss_driver::ReceiverAutoConfigRequest request;
+  request.receiver_family = *family;
+  request.requested_profile = *profile;
+  request.apply_mode = options.persistent ? ReceiverAutoConfigApplyMode::kPersistent
+                                          : ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  request.config_baud = options.baud;
+  request.rate_hz = options.rate_hz;
+
+  const auto plan = universal_gnss_driver::BuildReceiverAutoConfigPlan(request);
+
+  ProfilePreviewResult result;
+  result.status = MapPlanStatus(plan.status);
+  result.vendor = ToLowerCopy(options.vendor);
+  result.profile =
+      plan.status == ReceiverAutoConfigPlanStatus::kOk
+          ? universal_gnss_driver::ToString(plan.request.requested_profile)
+          : ToLowerCopy(options.profile);
+  result.persistent = options.persistent;
+  result.baud = options.baud;
+  result.rate_hz = options.rate_hz;
+  result.error_message =
+      plan.status == ReceiverAutoConfigPlanStatus::kOk ? std::string{} : SelectPlanErrorMessage(plan);
+
+  if (plan.status != ReceiverAutoConfigPlanStatus::kOk)
+  {
+    return result;
+  }
+
+  for (const auto& command : plan.commands)
+  {
+    SummarizeCommand(result, command);
+  }
+  FinalizeSummary(result);
+  return result;
 }
 
 std::string DescribeProfilePreviewCommand(const ReceiverCommand& command)

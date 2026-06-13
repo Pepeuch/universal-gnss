@@ -45,10 +45,64 @@ Current release guidance:
 - live receiver writes do not occur unless `gnss_config_apply` is given
   explicit `--confirm` or `--yes`
 - persistent apply is guarded and is not the default workflow
+- `factory_reset` remains guarded for live execution until reconnect /
+  re-probe handling is robust
 - stable `/dev/serial/by-id/*` paths are recommended over transient
   `/dev/ttyACM*` and `/dev/ttyUSB*` names whenever they exist
 - UM982 runtime-only live apply should use an operator timeout around
   `--timeout-ms 5000`
+
+## Portable Receiver Profiles
+
+The current portable receiver-configuration surface is:
+
+- `runtime_only`
+  - do not change receiver configuration
+  - only open the receiver and parse its current output
+- `rover_high_precision`
+  - configure a conservative high-precision rover/runtime output profile
+- `rover_high_precision_debug`
+  - extend `rover_high_precision` with extra satellite / RF / hardware /
+    correction diagnostics where supported
+- `factory_reset`
+  - model a receiver factory-reset workflow where the vendor support is known
+  - remain guarded for live execution until reconnect and re-probe handling is
+    robust
+
+Legacy aliases are still accepted by the current CLIs:
+
+- `rover` -> `rover_high_precision`
+- `diagnostics` -> `rover_high_precision_debug`
+
+Current receiver-family support:
+
+- Unicore
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - `factory_reset` planning/preview support with guarded live execution
+- u-blox
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - `factory_reset` currently reported as unsupported by the portable planner
+- generic NMEA
+  - `runtime_only` only
+
+Safety note:
+
+- receiver factory reset may change the active baud rate
+- the current Unicore `FRESET` path returns the receiver to `115200 bps`
+- live reset/apply remains guarded until Universal GNSS can reconnect and
+  rediscover the receiver automatically after the reset
+
+Universal GNSS currently exposes this receiver-profile surface through:
+
+- the module-level planner/profile API in `gnss_driver`
+- the standalone `gnss_profile_preview`, `gnss_config_plan`, and
+  `gnss_config_apply` CLIs
+- downstream integration hooks for ROS2 nodes, launch files, and later
+  project-specific onboarding or UI layers
 
 ## Goals
 

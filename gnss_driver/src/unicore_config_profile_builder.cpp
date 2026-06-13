@@ -47,12 +47,13 @@ std::string FormatTextCommand(const std::string& command)
 
 ReceiverCommand MakeTextCommand(const ReceiverCommandKind kind,
                                 const ReceiverCommandSafetyLevel safety_level,
+                                const ReceiverResponseKind expected_response,
                                 const std::string& text_command)
 {
   ReceiverCommand command;
   command.kind = kind;
   command.target = kUnicoreTarget;
-  command.expected_response = ReceiverResponseKind::kTextPayload;
+  command.expected_response = expected_response;
   command.safety_level = safety_level;
   SetTextPayload(command, FormatTextCommand(text_command));
   return command;
@@ -168,6 +169,27 @@ bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
 bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
                      const UnicoreConfigProfile& profile)
 {
+  if (profile.factory_reset)
+  {
+    if (profile.mode != UnicoreMode::kUnspecified ||
+        profile.nmea_version.has_value() ||
+        profile.rtk_timeout_s.has_value() ||
+        profile.dgps_timeout_s.has_value() ||
+        profile.rtk_reliability.has_value() ||
+        profile.signal_config.has_value() ||
+        profile.clear_current_port_outputs ||
+        !profile.output_messages.empty() ||
+        profile.persistence != UnicorePersistenceTarget::kRuntimeOnly)
+    {
+      result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
+      result.error_message =
+          "unicore factory-reset profile cannot be combined with other portable config mutations";
+      return false;
+    }
+
+    return true;
+  }
+
   if (!SupportsRuntimeMode(profile.mode))
   {
     result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
@@ -211,11 +233,12 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
 void AppendCommand(std::vector<ReceiverCommand>& commands,
                    const ReceiverCommandKind kind,
                    const ReceiverCommandSafetyLevel safety_level,
+                   const ReceiverResponseKind expected_response,
                    const std::string& text_command)
 {
   if (!text_command.empty())
   {
-    commands.push_back(MakeTextCommand(kind, safety_level, text_command));
+    commands.push_back(MakeTextCommand(kind, safety_level, expected_response, text_command));
   }
 }
 
@@ -230,9 +253,20 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     return result;
   }
 
+  if (profile.factory_reset)
+  {
+    AppendCommand(result.commands,
+                  ReceiverCommandKind::kReset,
+                  ReceiverCommandSafetyLevel::kFactoryReset,
+                  ReceiverResponseKind::kNone,
+                  "FRESET");
+    return result;
+  }
+
   AppendCommand(result.commands,
                 ReceiverCommandKind::kApplyConfigProfile,
                 ReceiverCommandSafetyLevel::kRuntime,
+                ReceiverResponseKind::kTextPayload,
                 BuildModeCommand(profile.mode));
 
   if (profile.nmea_version.has_value())
@@ -240,6 +274,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
                   std::string("CONFIG NMEA0183 ") +
                       ToNmeaVersionString(*profile.nmea_version));
   }
@@ -249,6 +284,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
                   "CONFIG RTK TIMEOUT " + std::to_string(*profile.rtk_timeout_s));
   }
 
@@ -258,6 +294,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
         result.commands,
         ReceiverCommandKind::kApplyConfigProfile,
         ReceiverCommandSafetyLevel::kRuntime,
+        ReceiverResponseKind::kTextPayload,
         "CONFIG RTK RELIABILITY " + std::to_string(profile.rtk_reliability->primary) +
             " " + std::to_string(profile.rtk_reliability->secondary));
   }
@@ -267,6 +304,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
                   "CONFIG DGPS TIMEOUT " + std::to_string(*profile.dgps_timeout_s));
   }
 
@@ -280,6 +318,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kPersistent,
+                  ReceiverResponseKind::kTextPayload,
                   command);
   }
 
@@ -288,6 +327,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kSetProtocolOutputs,
                   ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
                   "UNLOG");
   }
 
@@ -296,6 +336,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kSetProtocolOutputs,
                   ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
                   BuildOutputCommand(output));
   }
 
@@ -304,6 +345,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     AppendCommand(result.commands,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kPersistent,
+                  ReceiverResponseKind::kTextPayload,
                   "SAVECONFIG");
   }
 
@@ -341,6 +383,13 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile
   profile.config_kind = ReceiverConfigProfileKind::kDiagnosticsOutput;
   profile.output_messages.push_back(
       UnicoreOutputMessageRate{UnicoreOutputMessageKind::kSatsinfoa, 1.0});
+  return profile;
+}
+
+UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile()
+{
+  UnicoreConfigProfile profile;
+  profile.factory_reset = true;
   return profile;
 }
 

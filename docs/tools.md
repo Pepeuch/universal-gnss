@@ -439,19 +439,33 @@ gnss_export --pretty log.bin
 
 It reuses:
 
+- the driver-level `ReceiverAutoConfig` planner/report layer
 - the portable `ReceiverCommand` model
-- the existing u-blox config profile builder
-- the existing Unicore config profile builder
 - lightweight command preview formatting helpers
 
 Current behavior:
 
 - generates prepared `ReceiverCommand` sequences without sending them
-- supports `ublox` profiles: `rover`, `diagnostics`, `base`
-- supports `unicore` profiles: `rover`, `diagnostics`
+- supports the current portable profile names:
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - `factory_reset`
+- keeps legacy aliases accepted:
+  - `rover` -> `rover_high_precision`
+  - `diagnostics` -> `rover_high_precision_debug`
+- current receiver-family support:
+  - `ublox`: `runtime_only`, `rover_high_precision`,
+    `rover_high_precision_debug`; `factory_reset` currently previews as an
+    unsupported/stub portable profile
+  - `unicore`: `runtime_only`, `rover_high_precision`,
+    `rover_high_precision_debug`, `factory_reset`
+  - `nmea`: `runtime_only` only
 - prints compact human-readable command previews by default
 - can emit JSON for scripting and review
 - can apply offline overrides like `--persistent`, `--baud`, and `--rate-hz`
+- shows `factory_reset` command counts and baud-reset implications when the
+  vendor support is known
 
 Current non-goals:
 
@@ -464,11 +478,11 @@ Current non-goals:
 Examples:
 
 ```text
-gnss_profile_preview ublox rover
-gnss_profile_preview ublox diagnostics --json
-gnss_profile_preview ublox base --persistent --rate-hz 1
-gnss_profile_preview unicore rover
-gnss_profile_preview unicore diagnostics --persistent --rate-hz 5
+gnss_profile_preview nmea runtime_only
+gnss_profile_preview ublox rover_high_precision
+gnss_profile_preview ublox rover_high_precision_debug --json
+gnss_profile_preview unicore rover_high_precision --persistent --rate-hz 5
+gnss_profile_preview unicore factory_reset
 ```
 
 Text output includes:
@@ -504,9 +518,19 @@ Current behavior:
 - reports whether the same plan would be ready for later manual execution
 - highlights whether explicit safety confirmation would be required before dispatch
 - marks persistent and factory-reset commands clearly in the sequence
-- supports `ublox` profiles: `rover`, `diagnostics`, `base`
-- supports `unicore` profiles: `rover`, `diagnostics`
-- rejects generic `nmea` as unsupported for live configuration planning
+- supports the same portable profile names and legacy aliases as
+  `gnss_profile_preview`
+- current receiver-family support:
+  - `ublox`: `runtime_only`, `rover_high_precision`,
+    `rover_high_precision_debug`; `factory_reset` currently reports as an
+    unsupported/stub portable profile
+  - `unicore`: `runtime_only`, `rover_high_precision`,
+    `rover_high_precision_debug`, `factory_reset`
+  - `nmea`: `runtime_only` only
+- supports generic `nmea runtime_only` as a zero-command read-only plan
+- rejects write-side portable profiles for generic NMEA with a clear reason
+- rejects `runtime_only --persistent` because that profile does not modify
+  receiver state
 - emits either compact text output or JSON
 
 Current non-goals:
@@ -520,11 +544,12 @@ Current non-goals:
 Examples:
 
 ```text
-gnss_config_plan ublox rover
-gnss_config_plan unicore diagnostics
-gnss_config_plan ublox rover --persistent
-gnss_config_plan ublox rover --rate-hz 5 --baud 921600
-gnss_config_plan unicore rover --json
+gnss_config_plan nmea runtime_only
+gnss_config_plan ublox rover_high_precision
+gnss_config_plan unicore rover_high_precision_debug
+gnss_config_plan ublox rover_high_precision --persistent
+gnss_config_plan ublox rover_high_precision --rate-hz 5 --baud 921600
+gnss_config_plan unicore factory_reset --json
 ```
 
 Text output includes:
@@ -565,10 +590,16 @@ Current behavior:
 - accepts `--baud auto` to reuse discovery-time baud detection for live apply
 - prefers stable `/dev/serial/by-id/*` paths when the operator provides one
 - prints the full plan/report before any live-write decision
+- accepts the same portable profile names and legacy aliases as
+  `gnss_profile_preview`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
 - keeps persistent live apply guarded in `v0.6-3`; it reports the plan but does not send the writes
-- rejects unknown receivers and generic NMEA receivers for apply
-- warns when the `base` profile is not production-ready for live execution
+- allows `runtime_only` live apply as a no-op when the selected family/profile
+  generates no receiver commands
+- rejects unknown receivers for apply
+- supports generic NMEA only through the `runtime_only` no-op profile
+- keeps live `factory_reset` guarded until reconnect / re-probe handling is
+  robust
 - executes one command at a time over a Linux serial port
 - waits synchronously for one matching response at a time
 - on mixed Unicore binary/ASCII streams, resynchronizes to recognized
@@ -579,8 +610,11 @@ Current behavior:
 
 Current scope:
 
-- `ublox` profiles: `rover`, `diagnostics`, `base`
-- `unicore` profiles: `rover`, `diagnostics`
+- `ublox`: `runtime_only`, `rover_high_precision`,
+  `rover_high_precision_debug`; `factory_reset` unsupported/stub
+- `unicore`: `runtime_only`, `rover_high_precision`,
+  `rover_high_precision_debug`, guarded `factory_reset`
+- `nmea`: `runtime_only` only
 - Linux POSIX serial only
 
 Current non-goals:
@@ -590,28 +624,33 @@ Current non-goals:
 - NTRIP integration
 - background retry scheduling
 - interactive prompts
-- factory-reset profile execution
+- live factory-reset execution before reconnect / re-probe handling is robust
 - persistent live apply from this CLI while rollback remains manual and vendor-specific
 
 Examples:
 
 ```text
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only --confirm
-gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile diagnostics --apply-mode runtime-only --confirm
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover --apply-mode runtime-only --confirm --timeout-ms 5000
-gnss_config_apply --receiver auto --profile rover --apply-mode persistent
+gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm
+gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --apply-mode runtime-only --confirm
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode persistent --confirm
 ```
 
 Hardware notes from the `v0.6-4` operator validation pass:
 
-- a u-blox F9P at `921600` completed the runtime-only rover apply with the
-  default `1000 ms` timeout budget
-- a Unicore UM982 at `921600` completed the same runtime-only rover apply after
-  the mixed-stream response-router fix above, using `--timeout-ms 5000`
-- the UM982 rover profile enables `RTCMSTATUSA ONCHANGED`; short read-only
+- a u-blox F9P at `921600` completed the runtime-only
+  `rover_high_precision` apply with the default `1000 ms` timeout budget
+- a Unicore UM982 at `921600` completed the same runtime-only
+  `rover_high_precision` apply after the mixed-stream response-router fix
+  above, using `--timeout-ms 5000`
+- the UM982 `rover_high_precision` profile enables `RTCMSTATUSA ONCHANGED`;
+  short read-only
   captures may therefore show the accepted apply response but still not show an
   emitted `RTCMSTATUSA` record until receiver-side correction state changes
+- Unicore `factory_reset` planning documents that `FRESET` returns the receiver
+  to `115200 bps`; live execution remains intentionally guarded until the CLI
+  can reconnect and rediscover the receiver automatically afterwards
 - persistent apply and any save-to-flash workflow remain intentionally guarded
   out of this CLI path
 

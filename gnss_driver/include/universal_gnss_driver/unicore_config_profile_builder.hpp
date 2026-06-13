@@ -69,6 +69,7 @@ struct UnicoreOutputMessageRate
 struct UnicoreConfigProfile
 {
   ReceiverConfigProfileKind config_kind{ReceiverConfigProfileKind::kRover};
+  bool factory_reset{false};
   UnicoreMode mode{UnicoreMode::kUnspecified};
   std::optional<UnicoreNmeaVersion> nmea_version{};
   std::optional<std::uint32_t> rtk_timeout_s{};
@@ -97,6 +98,8 @@ public:
 
   static UnicoreConfigProfile BuildUnicoreDiagnosticsProfile(
       UnicorePersistenceTarget persistence = UnicorePersistenceTarget::kRuntimeOnly);
+
+  static UnicoreConfigProfile BuildUnicoreFactoryResetProfile();
 };
 
 }  // namespace universal_gnss_driver

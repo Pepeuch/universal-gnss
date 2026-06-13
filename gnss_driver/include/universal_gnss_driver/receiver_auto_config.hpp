@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "universal_gnss_driver/receiver_capabilities.hpp"
@@ -15,9 +16,10 @@ namespace universal_gnss_driver
 
 enum class ReceiverAutoConfigProfile : std::uint8_t
 {
-  kRover = 0,
-  kBase = 1,
-  kDiagnostics = 2,
+  kRuntimeOnly = 0,
+  kRoverHighPrecision = 1,
+  kRoverHighPrecisionDebug = 2,
+  kFactoryReset = 3,
 };
 
 enum class ReceiverAutoConfigApplyMode : std::uint8_t
@@ -41,7 +43,8 @@ struct ReceiverAutoConfigRequest
 {
   ReceiverDetectedFamily receiver_family{ReceiverDetectedFamily::kUnknown};
   std::optional<ReceiverProbeResult> discovery_result{};
-  ReceiverAutoConfigProfile requested_profile{ReceiverAutoConfigProfile::kRover};
+  ReceiverAutoConfigProfile requested_profile{
+      ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
@@ -99,6 +102,9 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
     ReceiverAutoConfigApplyMode apply_mode,
     std::optional<std::uint32_t> config_baud = std::nullopt,
     std::optional<double> rate_hz = std::nullopt);
+
+std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
+    std::string_view profile);
 
 const char* ToString(ReceiverAutoConfigProfile profile);
 const char* ToString(ReceiverAutoConfigApplyMode apply_mode);

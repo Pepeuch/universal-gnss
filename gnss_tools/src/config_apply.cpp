@@ -294,19 +294,21 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
                                const ConfigApplyOptions& options)
 {
   const bool execution_requested = ApplyModeRequestsExecution(options.apply_mode);
+  const bool has_planned_commands = result.plan.summary.commands_total > 0u;
   result.requires_runtime_confirmation =
       execution_requested && result.plan.summary.runtime_commands > 0u;
   result.requires_persistent_confirmation =
       execution_requested &&
       (result.plan.summary.persistent_commands > 0u ||
        result.plan.summary.factory_reset_commands > 0u);
-  result.execution_confirmed = !execution_requested || options.confirm;
+  result.execution_confirmed =
+      !execution_requested || !has_planned_commands || options.confirm;
 
   if (result.plan.summary.factory_reset_commands > 0u)
   {
     result.status = ConfigApplyStatus::kSafetyRejected;
     result.error_message =
-        "factory-reset commands are not supported by gnss_config_apply";
+        "factory-reset live apply remains guarded until reconnect/probe handling is implemented";
     result.execution_summary.final_status = "safety_rejected";
     return false;
   }
@@ -712,6 +714,16 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
   if (result.status != ConfigApplyStatus::kOk ||
       !ApplyModeRequestsExecution(options.apply_mode))
   {
+    return result;
+  }
+
+  if (result.plan.commands.empty())
+  {
+    result.dry_run = false;
+    result.executed = true;
+    result.execution_summary.final_status = "completed";
+    result.progress_log.push_back(
+        "No receiver configuration commands were required for this profile");
     return result;
   }
 

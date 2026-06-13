@@ -38,20 +38,20 @@ void PrintUsage(const char* program_name)
   std::cout
       << "Usage: " << program_name
       << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>]\n"
-      << "       [--family <auto|ublox|unicore|nmea>] --profile <rover|diagnostics|base>\n"
+      << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
       << "       [--apply-mode <dry-run|runtime-only|persistent>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
       << "                --confirm-persistent, and positional <family> <profile>\n"
       << "Examples:\n"
       << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only\n"
+      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only\n"
       << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover --apply-mode runtime-only --confirm\n"
+      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm\n"
       << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover --apply-mode runtime-only --confirm --timeout-ms 5000\n"
+      << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision_debug --apply-mode runtime-only --confirm --timeout-ms 5000\n"
       << "  " << program_name
-      << " --receiver auto --profile rover --apply-mode persistent\n"
+      << " --family nmea --profile runtime_only\n"
       << "Notes:\n"
       << "  no live writes occur unless --confirm or --yes is present\n"
       << "  persistent mode remains guarded and is not the default workflow\n"
@@ -124,23 +124,13 @@ bool ParseFamily(const std::string& text, ReceiverDetectedFamily& family)
 
 bool ParseProfile(const std::string& text, ReceiverAutoConfigProfile& profile)
 {
-  const std::string normalized = ToLowerCopy(text);
-  if (normalized == "rover")
+  const auto parsed = universal_gnss_driver::ParseReceiverAutoConfigProfile(text);
+  if (!parsed.has_value())
   {
-    profile = ReceiverAutoConfigProfile::kRover;
-    return true;
+    return false;
   }
-  if (normalized == "diagnostics")
-  {
-    profile = ReceiverAutoConfigProfile::kDiagnostics;
-    return true;
-  }
-  if (normalized == "base")
-  {
-    profile = ReceiverAutoConfigProfile::kBase;
-    return true;
-  }
-  return false;
+  profile = *parsed;
+  return true;
 }
 
 bool ParseApplyMode(const std::string& text, ReceiverAutoConfigApplyMode& apply_mode)

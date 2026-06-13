@@ -1,8 +1,10 @@
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 
+#include <cctype>
 #include <cmath>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -22,6 +24,16 @@ namespace
 
 using universal_gnss_protocols::UbxCfgLayer;
 
+std::string ToLowerCopy(std::string_view text)
+{
+  std::string normalized(text);
+  for (char& c : normalized)
+  {
+    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  }
+  return normalized;
+}
+
 ReceiverCommandSafetyLevel ToSafetyLevel(const ReceiverAutoConfigApplyMode apply_mode)
 {
   return apply_mode == ReceiverAutoConfigApplyMode::kPersistent
@@ -33,16 +45,6 @@ ReceiverAutoConfigPlan MakeBasePlan(const ReceiverAutoConfigRequest& request)
 {
   ReceiverAutoConfigPlan plan;
   plan.request = request;
-  return plan;
-}
-
-ReceiverAutoConfigPlan MakeErrorPlan(const ReceiverAutoConfigRequest& request,
-                                     const ReceiverAutoConfigPlanStatus status,
-                                     const std::string& message)
-{
-  ReceiverAutoConfigPlan plan = MakeBasePlan(request);
-  plan.status = status;
-  plan.error_message = message;
   return plan;
 }
 
@@ -135,13 +137,110 @@ void ApplyRuntimeRollback(ReceiverAutoConfigPlan& plan)
       "reconnect or restart the receiver if temporary changes need to be cleared";
 }
 
-void ApplyBaseProfileWarning(ReceiverAutoConfigPlan& plan)
+void ApplyNoChangeRollback(ReceiverAutoConfigPlan& plan)
+{
+  plan.rollback_expectation.changes_are_temporary = true;
+  plan.rollback_expectation.operator_action_required = false;
+  plan.rollback_expectation.summary = "no receiver configuration changes are planned";
+  plan.rollback_expectation.operator_action = "none";
+}
+
+void ApplyFactoryResetWarningsAndRollback(ReceiverAutoConfigPlan& plan)
 {
   plan.validation.production_ready = false;
   plan.validation.ready_to_execute = false;
   plan.warnings.push_back(
-      "base profile planning is not yet production-ready; survey-in and full "
-      "base-station orchestration remain deferred");
+      "factory reset clears saved receiver configuration and restarts the receiver");
+  plan.warnings.push_back(
+      "Unicore FRESET resets the active serial baud rate to 115200 bps");
+  plan.warnings.push_back(
+      "live factory-reset execution remains guarded until reconnect/probe handling is implemented");
+  plan.rollback_expectation.changes_are_temporary = false;
+  plan.rollback_expectation.operator_action_required = true;
+  plan.rollback_expectation.summary =
+      "factory reset clears saved receiver configuration and requires manual reprovisioning";
+  plan.rollback_expectation.operator_action =
+      "reconnect at 115200 bps, rediscover the receiver, and reapply a known-good profile";
+}
+
+bool ProfileLeavesReceiverUnchanged(const ReceiverAutoConfigProfile profile)
+{
+  return profile == ReceiverAutoConfigProfile::kRuntimeOnly;
+}
+
+bool ProfileSupportsRateOverride(const ReceiverAutoConfigProfile profile)
+{
+  return profile == ReceiverAutoConfigProfile::kRoverHighPrecision ||
+         profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug;
+}
+
+ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(
+    const ReceiverAutoConfigRequest& request,
+    const ReceiverVendor vendor,
+    std::string family_name,
+    const ReceiverCapabilities& capabilities,
+    const std::string& message)
+{
+  ReceiverAutoConfigPlan plan = MakeBasePlan(request);
+  plan.vendor = vendor;
+  plan.receiver_family_name = std::move(family_name);
+  plan.capabilities_known = true;
+  plan.capabilities = capabilities;
+  plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedProfile;
+  plan.validation.receiver_recognized = true;
+  plan.validation.config_supported = true;
+  plan.validation.profile_supported = false;
+  plan.validation.apply_mode_supported = true;
+  plan.error_message = message;
+  plan.unsupported_reason = message;
+  ApplyNoChangeRollback(plan);
+  return plan;
+}
+
+ReceiverAutoConfigPlan MakeNoChangePlan(
+    const ReceiverAutoConfigRequest& request,
+    const ReceiverVendor vendor,
+    std::string family_name,
+    const ReceiverCapabilities& capabilities)
+{
+  ReceiverAutoConfigPlan plan = MakeBasePlan(request);
+  plan.vendor = vendor;
+  plan.receiver_family_name = std::move(family_name);
+  plan.capabilities_known = true;
+  plan.capabilities = capabilities;
+  plan.validation.receiver_recognized = true;
+  plan.validation.config_supported = true;
+  plan.validation.profile_supported = true;
+
+  if (request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
+  {
+    plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode;
+    plan.validation.apply_mode_supported = false;
+    plan.error_message =
+        "runtime_only profile does not support persistent apply because it does not modify receiver configuration";
+    plan.unsupported_reason = plan.error_message;
+    ApplyNoChangeRollback(plan);
+    return plan;
+  }
+
+  plan.validation.apply_mode_supported = true;
+
+  if (request.config_baud.has_value() || request.rate_hz.has_value())
+  {
+    plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+    plan.error_message =
+        "runtime_only profile does not accept configuration overrides because it does not send receiver commands";
+    ApplyNoChangeRollback(plan);
+    return plan;
+  }
+
+  plan.validation.production_ready = true;
+  plan.validation.ready_to_execute =
+      request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  plan.warnings.push_back(
+      "runtime_only profile leaves the receiver configuration unchanged");
+  ApplyNoChangeRollback(plan);
+  return plan;
 }
 
 bool ValidateRateHz(const ReceiverAutoConfigRequest& request,
@@ -189,8 +288,14 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   plan.capabilities = UbloxDriver{}.capabilities();
   plan.validation.receiver_recognized = true;
   plan.validation.config_supported = true;
-  plan.validation.apply_mode_supported = true;
-  plan.validation.profile_supported = true;
+
+  if (ProfileLeavesReceiverUnchanged(request.requested_profile))
+  {
+    return MakeNoChangePlan(request,
+                            ReceiverVendor::kUblox,
+                            "F9/F10",
+                            UbloxDriver{}.capabilities());
+  }
 
   if (!ValidateConfigBaud(request, plan) || !ValidateRateHz(request, plan))
   {
@@ -209,14 +314,24 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   UbloxConfigProfile profile;
   switch (request.requested_profile)
   {
-    case ReceiverAutoConfigProfile::kRover:
+    case ReceiverAutoConfigProfile::kRoverHighPrecision:
+      plan.validation.apply_mode_supported = true;
+      plan.validation.profile_supported = true;
       profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(safety_level, layers);
       break;
-    case ReceiverAutoConfigProfile::kBase:
-      profile = UbloxConfigProfileBuilder::BuildUbloxBaseProfile(safety_level, layers);
-      break;
-    case ReceiverAutoConfigProfile::kDiagnostics:
+    case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
+      plan.validation.apply_mode_supported = true;
+      plan.validation.profile_supported = true;
       profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(safety_level, layers);
+      break;
+    case ReceiverAutoConfigProfile::kFactoryReset:
+      return MakeUnsupportedProfilePlan(
+          request,
+          ReceiverVendor::kUblox,
+          "F9/F10",
+          UbloxDriver{}.capabilities(),
+          "u-blox factory_reset profile is not yet implemented by the portable config layer");
+    case ReceiverAutoConfigProfile::kRuntimeOnly:
       break;
   }
 
@@ -242,11 +357,6 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   plan.validation.production_ready = true;
   plan.validation.ready_to_execute =
       request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
-
-  if (request.requested_profile == ReceiverAutoConfigProfile::kBase)
-  {
-    ApplyBaseProfileWarning(plan);
-  }
 
   if (request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
@@ -274,10 +384,30 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   plan.capabilities = UnicoreDriver{}.capabilities();
   plan.validation.receiver_recognized = true;
   plan.validation.config_supported = true;
-  plan.validation.apply_mode_supported = true;
+
+  if (ProfileLeavesReceiverUnchanged(request.requested_profile))
+  {
+    return MakeNoChangePlan(request,
+                            ReceiverVendor::kUnicore,
+                            "UM98x",
+                            UnicoreDriver{}.capabilities());
+  }
 
   if (!ValidateRateHz(request, plan))
   {
+    return plan;
+  }
+
+  if (request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset &&
+      request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
+  {
+    plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode;
+    plan.validation.profile_supported = true;
+    plan.validation.apply_mode_supported = false;
+    plan.error_message =
+        "factory_reset profile does not support persistent apply because the reset itself already clears saved configuration";
+    plan.unsupported_reason = plan.error_message;
+    ApplyFactoryResetWarningsAndRollback(plan);
     return plan;
   }
 
@@ -289,19 +419,8 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     return plan;
   }
 
-  if (request.requested_profile == ReceiverAutoConfigProfile::kBase)
-  {
-    plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedProfile;
-    plan.validation.profile_supported = false;
-    plan.error_message =
-        "Unicore base profile planning is not yet supported by the portable config layer";
-    plan.unsupported_reason = plan.error_message;
-    ApplyBaseProfileWarning(plan);
-    ApplyRuntimeRollback(plan);
-    return plan;
-  }
-
   plan.validation.profile_supported = true;
+  plan.validation.apply_mode_supported = true;
 
   const auto persistence = request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
                                ? UnicorePersistenceTarget::kSaveConfig
@@ -310,17 +429,21 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   UnicoreConfigProfile profile;
   switch (request.requested_profile)
   {
-    case ReceiverAutoConfigProfile::kRover:
+    case ReceiverAutoConfigProfile::kRoverHighPrecision:
       profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
       break;
-    case ReceiverAutoConfigProfile::kDiagnostics:
+    case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
       profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(persistence);
       break;
-    case ReceiverAutoConfigProfile::kBase:
+    case ReceiverAutoConfigProfile::kFactoryReset:
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
+      break;
+    case ReceiverAutoConfigProfile::kRuntimeOnly:
       break;
   }
 
-  if (request.rate_hz.has_value())
+  if (request.rate_hz.has_value() &&
+      ProfileSupportsRateOverride(request.requested_profile))
   {
     const double period_s = 1.0 / *request.rate_hz;
     for (auto& output : profile.output_messages)
@@ -342,6 +465,12 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
 
   plan.commands = build_result.commands;
   SummarizeCommands(plan);
+  if (request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset)
+  {
+    ApplyFactoryResetWarningsAndRollback(plan);
+    return plan;
+  }
+
   plan.validation.production_ready = true;
   plan.validation.ready_to_execute =
       request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
@@ -358,22 +487,21 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   return plan;
 }
 
-ReceiverAutoConfigPlan BuildNmeaUnsupportedPlan(const ReceiverAutoConfigRequest& request)
+ReceiverAutoConfigPlan BuildNmeaPlan(const ReceiverAutoConfigRequest& request)
 {
-  ReceiverAutoConfigPlan plan = MakeBasePlan(request);
-  plan.vendor = ReceiverVendor::kGeneric;
-  plan.receiver_family_name = "NMEA";
-  plan.capabilities_known = true;
-  plan.capabilities = NmeaDriver{}.capabilities();
-  plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedReceiver;
-  plan.validation.receiver_recognized = true;
+  if (ProfileLeavesReceiverUnchanged(request.requested_profile))
+  {
+    return MakeNoChangePlan(
+        request, ReceiverVendor::kGeneric, "NMEA", NmeaDriver{}.capabilities());
+  }
+
+  ReceiverAutoConfigPlan plan = MakeUnsupportedProfilePlan(
+      request,
+      ReceiverVendor::kGeneric,
+      "NMEA",
+      NmeaDriver{}.capabilities(),
+      "generic NMEA receivers only support the runtime_only profile because portable write-side configuration is not standardized");
   plan.validation.config_supported = false;
-  plan.validation.profile_supported = false;
-  plan.validation.apply_mode_supported = false;
-  plan.error_message =
-      "generic NMEA receivers do not support portable live configuration planning";
-  plan.unsupported_reason = plan.error_message;
-  plan.rollback_expectation.summary = "no receiver configuration changes are planned";
   return plan;
 }
 
@@ -429,7 +557,7 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
       plan = BuildUnicorePlan(plan.request);
       break;
     case ReceiverDetectedFamily::kNmea:
-      plan = BuildNmeaUnsupportedPlan(plan.request);
+      plan = BuildNmeaPlan(plan.request);
       break;
     case ReceiverDetectedFamily::kUnknown:
       break;
@@ -479,15 +607,43 @@ const char* ToString(const ReceiverAutoConfigProfile profile)
 {
   switch (profile)
   {
-    case ReceiverAutoConfigProfile::kRover:
-      return "rover";
-    case ReceiverAutoConfigProfile::kBase:
-      return "base";
-    case ReceiverAutoConfigProfile::kDiagnostics:
-      return "diagnostics";
+    case ReceiverAutoConfigProfile::kRuntimeOnly:
+      return "runtime_only";
+    case ReceiverAutoConfigProfile::kRoverHighPrecision:
+      return "rover_high_precision";
+    case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
+      return "rover_high_precision_debug";
+    case ReceiverAutoConfigProfile::kFactoryReset:
+      return "factory_reset";
   }
 
-  return "rover";
+  return "runtime_only";
+}
+
+std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
+    const std::string_view profile)
+{
+  const std::string normalized = ToLowerCopy(profile);
+  if (normalized == "runtime_only" || normalized == "runtime-only")
+  {
+    return ReceiverAutoConfigProfile::kRuntimeOnly;
+  }
+  if (normalized == "rover_high_precision" || normalized == "rover-high-precision" ||
+      normalized == "rover")
+  {
+    return ReceiverAutoConfigProfile::kRoverHighPrecision;
+  }
+  if (normalized == "rover_high_precision_debug" ||
+      normalized == "rover-high-precision-debug" ||
+      normalized == "diagnostics")
+  {
+    return ReceiverAutoConfigProfile::kRoverHighPrecisionDebug;
+  }
+  if (normalized == "factory_reset" || normalized == "factory-reset")
+  {
+    return ReceiverAutoConfigProfile::kFactoryReset;
+  }
+  return std::nullopt;
 }
 
 const char* ToString(const ReceiverAutoConfigApplyMode apply_mode)

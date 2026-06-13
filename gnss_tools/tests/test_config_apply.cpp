@@ -124,7 +124,7 @@ void TestDryRunDoesNotWrite(TestContext& ctx)
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
 
   MemoryByteDuplex transport({});
   const auto result = ExecuteConfigApply(transport, options);
@@ -139,12 +139,36 @@ void TestDryRunDoesNotWrite(TestContext& ctx)
              "dry-run auto-config apply must not write to the transport");
 }
 
+void TestRuntimeOnlyNoOpNeedsNoConfirmation(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea);
+  options.profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  const auto prepared = PrepareConfigApply(options);
+  ctx.Expect(prepared.status == ConfigApplyStatus::kOk &&
+                 !prepared.requires_runtime_confirmation &&
+                 prepared.plan.summary.commands_total == 0u,
+             "runtime_only no-op apply should not require confirmation when no commands exist");
+
+  MemoryByteDuplex closed_transport({});
+  closed_transport.Close();
+  const auto executed = ExecuteConfigApply(closed_transport, options);
+  ctx.Expect(executed.status == ConfigApplyStatus::kOk &&
+                 !executed.dry_run &&
+                 executed.executed &&
+                 executed.execution_summary.final_status == "completed",
+             "runtime_only no-op execution should complete without needing an open transport");
+}
+
 void TestRuntimeOnlyRequiresConfirmation(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
 
   const auto result = PrepareConfigApply(options);
@@ -161,7 +185,7 @@ void TestUnknownReceiverRejected(TestContext& ctx)
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyUSB99", 9600u, ReceiverDetectedFamily::kUnknown);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
 
   const auto result = PrepareConfigApply(options);
 
@@ -170,18 +194,18 @@ void TestUnknownReceiverRejected(TestContext& ctx)
              "unknown discovery results should be rejected before any live apply");
 }
 
-void TestNmeaRejected(TestContext& ctx)
+void TestNmeaWriteProfileRejected(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kUnsupportedReceiver &&
-                 result.plan.error_message.find("NMEA") != std::string::npos,
-             "generic NMEA receivers should be rejected for auto-config apply");
+  ctx.Expect(result.status == ConfigApplyStatus::kUnsupportedProfile &&
+                 result.plan.error_message.find("runtime_only") != std::string::npos,
+             "generic NMEA receivers should reject write-side portable profiles for apply");
 }
 
 void TestPersistentGuarded(TestContext& ctx)
@@ -189,7 +213,7 @@ void TestPersistentGuarded(TestContext& ctx)
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
   options.confirm = true;
 
@@ -205,12 +229,29 @@ void TestPersistentGuarded(TestContext& ctx)
              "persistent live apply should remain guarded even after confirmation");
 }
 
+void TestFactoryResetGuarded(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
+                 result.requires_persistent_confirmation &&
+                 result.error_message.find("reconnect/probe") != std::string::npos,
+             "factory-reset live apply should stay explicitly guarded until reconnect/probe handling exists");
+}
+
 void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
   options.confirm = true;
 
@@ -240,7 +281,7 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
-  options.profile = ReceiverAutoConfigProfile::kRover;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
   options.confirm = true;
 
@@ -267,10 +308,12 @@ int main()
   TestContext ctx;
 
   TestDryRunDoesNotWrite(ctx);
+  TestRuntimeOnlyNoOpNeedsNoConfirmation(ctx);
   TestRuntimeOnlyRequiresConfirmation(ctx);
   TestUnknownReceiverRejected(ctx);
-  TestNmeaRejected(ctx);
+  TestNmeaWriteProfileRejected(ctx);
   TestPersistentGuarded(ctx);
+  TestFactoryResetGuarded(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
 

@@ -27,54 +27,71 @@ struct TestContext
   }
 };
 
-void TestUbloxRoverPlan(TestContext& ctx)
+void TestUbloxRoverHighPrecisionPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
   options.vendor = "ublox";
-  options.profile = "rover";
+  options.profile = "rover_high_precision";
 
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "F9/F10",
-             "u-blox rover plan should resolve the expected receiver family");
+             "u-blox rover_high_precision plan should resolve the expected receiver family");
   ctx.Expect(result.summary.commands_total == 13u &&
                  result.summary.runtime_commands == 13u &&
                  !result.summary.requires_explicit_safety_confirmation,
-             "u-blox rover plan should remain runtime-only without extra confirmation");
+             "u-blox rover_high_precision plan should remain runtime-only without extra confirmation");
   ctx.Expect(text.find("Dry run: yes") != std::string::npos &&
                  text.find("Command sequence:") != std::string::npos,
-             "u-blox rover plan text should show dry-run status and command ordering");
+             "u-blox rover_high_precision plan text should show dry-run status and command ordering");
 }
 
-void TestUnicoreDiagnosticsPlan(TestContext& ctx)
+void TestUnicoreDebugPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
   options.vendor = "unicore";
-  options.profile = "diagnostics";
+  options.profile = "rover_high_precision_debug";
 
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "UM98x",
-             "Unicore diagnostics plan should resolve the expected receiver family");
+             "Unicore rover_high_precision_debug plan should resolve the expected receiver family");
   ctx.Expect(result.summary.commands_total == 14u &&
                  result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
-             "Unicore diagnostics plan should report the expected default command counts");
+             "Unicore rover_high_precision_debug plan should report the expected default command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
                  text.find("SATSINFOA 1") != std::string::npos,
-             "Unicore diagnostics plan text should show the ASCII command sequence");
+             "Unicore rover_high_precision_debug plan text should show the ASCII command sequence");
+}
+
+void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
+{
+  ConfigPlanOptions options;
+  options.vendor = "nmea";
+  options.profile = "runtime_only";
+
+  const auto result = BuildConfigPlan(options);
+  const std::string text = FormatConfigPlanText(result);
+
+  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
+                 result.summary.commands_total == 0u &&
+                 result.receiver_family == "NMEA",
+             "runtime_only config plans should support generic NMEA as a zero-command read-only profile");
+  ctx.Expect(text.find("Command count: 0") != std::string::npos,
+             "runtime_only plan text should report that no receiver commands are generated");
 }
 
 void TestPersistentSafetySummary(TestContext& ctx)
 {
   ConfigPlanOptions ublox_options;
   ublox_options.vendor = "ublox";
-  ublox_options.profile = "rover";
+  ublox_options.profile = "rover_high_precision";
   ublox_options.persistent = true;
 
   const auto ublox_result = BuildConfigPlan(ublox_options);
@@ -82,11 +99,11 @@ void TestPersistentSafetySummary(TestContext& ctx)
                  ublox_result.summary.persistent_commands == 13u &&
                  ublox_result.summary.commands_requiring_confirmation == 13u &&
                  ublox_result.summary.requires_explicit_safety_confirmation,
-             "persistent u-blox plan should require confirmation for every command");
+             "persistent u-blox plans should require confirmation for every command");
 
   ConfigPlanOptions unicore_options;
   unicore_options.vendor = "unicore";
-  unicore_options.profile = "diagnostics";
+  unicore_options.profile = "rover_high_precision_debug";
   unicore_options.persistent = true;
 
   const auto unicore_result = BuildConfigPlan(unicore_options);
@@ -94,14 +111,33 @@ void TestPersistentSafetySummary(TestContext& ctx)
                  unicore_result.summary.persistent_commands == 1u &&
                  unicore_result.summary.commands_requiring_confirmation == 1u &&
                  unicore_result.summary.requires_explicit_safety_confirmation,
-             "persistent Unicore plan should flag SAVECONFIG for confirmation");
+             "persistent Unicore plans should flag SAVECONFIG for confirmation");
+}
+
+void TestFactoryResetPlan(TestContext& ctx)
+{
+  ConfigPlanOptions options;
+  options.vendor = "unicore";
+  options.profile = "factory_reset";
+
+  const auto result = BuildConfigPlan(options);
+  const std::string text = FormatConfigPlanText(result);
+
+  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
+                 result.summary.factory_reset_commands == 1u &&
+                 !result.production_ready &&
+                 !result.ready_to_execute,
+             "factory_reset plans should remain guarded while still exposing the command sequence");
+  ctx.Expect(text.find("115200") != std::string::npos &&
+                 text.find("reconnect/probe") != std::string::npos,
+             "factory_reset plan text should document the baud reset and reconnect requirement");
 }
 
 void TestJsonFormatting(TestContext& ctx)
 {
   ConfigPlanOptions options;
   options.vendor = "ublox";
-  options.profile = "base";
+  options.profile = "rover_high_precision";
   options.rate_hz = 1.0;
 
   const auto result = BuildConfigPlan(options);
@@ -122,7 +158,7 @@ void TestUnsupportedProfileRejection(TestContext& ctx)
 {
   ConfigPlanOptions options;
   options.vendor = "ublox";
-  options.profile = "survey";
+  options.profile = "base";
 
   const auto result = BuildConfigPlan(options);
   ctx.Expect(result.status == ConfigPlanStatus::kUnsupportedProfile &&
@@ -130,16 +166,17 @@ void TestUnsupportedProfileRejection(TestContext& ctx)
              "unsupported config plan profiles should be rejected clearly");
 }
 
-void TestNmeaRejectedCleanly(TestContext& ctx)
+void TestPersistentRuntimeOnlyRejected(TestContext& ctx)
 {
   ConfigPlanOptions options;
   options.vendor = "nmea";
-  options.profile = "rover";
+  options.profile = "runtime_only";
+  options.persistent = true;
 
   const auto result = BuildConfigPlan(options);
-  ctx.Expect(result.status == ConfigPlanStatus::kUnsupportedReceiver &&
-                 !result.unsupported_reason.empty(),
-             "generic NMEA config plans should be rejected through the portable planner");
+  ctx.Expect(result.status == ConfigPlanStatus::kUnsupportedApplyMode &&
+                 result.error_message.find("persistent apply") != std::string::npos,
+             "runtime_only plans should reject persistent mode with a clear explanation");
 }
 
 }  // namespace
@@ -148,12 +185,14 @@ int main()
 {
   TestContext ctx;
 
-  TestUbloxRoverPlan(ctx);
-  TestUnicoreDiagnosticsPlan(ctx);
+  TestUbloxRoverHighPrecisionPlan(ctx);
+  TestUnicoreDebugPlan(ctx);
+  TestRuntimeOnlyNoOpPlan(ctx);
   TestPersistentSafetySummary(ctx);
+  TestFactoryResetPlan(ctx);
   TestJsonFormatting(ctx);
   TestUnsupportedProfileRejection(ctx);
-  TestNmeaRejectedCleanly(ctx);
+  TestPersistentRuntimeOnlyRejected(ctx);
 
   if (ctx.failures != 0)
   {

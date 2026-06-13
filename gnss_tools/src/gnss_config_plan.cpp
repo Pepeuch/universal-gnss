@@ -13,11 +13,11 @@ void PrintUsage(const char* program_name)
       << "Usage: " << program_name
       << " [--json] [--persistent] [--baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
-      << "  " << program_name << " ublox rover\n"
-      << "  " << program_name << " unicore diagnostics\n"
-      << "  " << program_name << " ublox rover --persistent\n"
-      << "  " << program_name << " ublox rover --rate-hz 5 --baud 921600\n"
-      << "  " << program_name << " unicore rover --json\n"
+      << "  " << program_name << " ublox rover_high_precision\n"
+      << "  " << program_name << " unicore rover_high_precision_debug\n"
+      << "  " << program_name << " ublox rover_high_precision --persistent\n"
+      << "  " << program_name << " ublox rover_high_precision --rate-hz 5 --baud 921600\n"
+      << "  " << program_name << " unicore factory_reset --json\n"
       << "Notes:\n"
       << "  dry-run only; no receiver writes are performed\n"
       << "  --persistent changes the planned storage target only\n";

@@ -191,25 +191,6 @@ std::optional<ReceiverDetectedFamily> ParseReceiverFamily(const std::string& ven
   return std::nullopt;
 }
 
-std::optional<ReceiverAutoConfigProfile> ParseRequestedProfile(const std::string& profile)
-{
-  const std::string normalized = ToLowerCopy(profile);
-  if (normalized == "rover")
-  {
-    return ReceiverAutoConfigProfile::kRover;
-  }
-  if (normalized == "base")
-  {
-    return ReceiverAutoConfigProfile::kBase;
-  }
-  if (normalized == "diagnostics")
-  {
-    return ReceiverAutoConfigProfile::kDiagnostics;
-  }
-
-  return std::nullopt;
-}
-
 ConfigPlanStatus MapPlanStatus(const ReceiverAutoConfigPlanStatus status)
 {
   switch (status)
@@ -339,7 +320,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
     return result;
   }
 
-  const auto profile = ParseRequestedProfile(options.profile);
+  const auto profile = universal_gnss_driver::ParseReceiverAutoConfigProfile(options.profile);
   if (!profile.has_value())
   {
     result.status = ConfigPlanStatus::kUnsupportedProfile;
@@ -357,7 +338,6 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
 
   result = BuildConfigPlan(request);
   result.vendor = ToLowerCopy(options.vendor);
-  result.profile = ToLowerCopy(options.profile);
   return result;
 }
 

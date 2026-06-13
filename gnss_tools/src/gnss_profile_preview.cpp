@@ -14,11 +14,11 @@ void PrintUsage(const char* program_name)
       << "Usage: " << program_name
       << " [--json] [--verbose] [--persistent] [--baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
-      << "  " << program_name << " ublox rover\n"
-      << "  " << program_name << " ublox diagnostics --json\n"
-      << "  " << program_name << " ublox base --persistent --rate-hz 1\n"
-      << "  " << program_name << " unicore rover\n"
-      << "  " << program_name << " unicore diagnostics --persistent --rate-hz 5\n";
+      << "  " << program_name << " ublox rover_high_precision\n"
+      << "  " << program_name << " ublox rover_high_precision_debug --json\n"
+      << "  " << program_name << " unicore factory_reset\n"
+      << "  " << program_name << " unicore rover_high_precision --persistent\n"
+      << "  " << program_name << " nmea runtime_only\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)

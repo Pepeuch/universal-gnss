@@ -37,9 +37,9 @@ Current implementation lives in:
 
 The current builder was shaped by:
 
-- the local Unicore N4 command manual
-- `mowglinext/sensors/unicore/configure_receiver.sh`
-- `mowglinext/docs/unicore_profiles.md`
+- `docs/vendors/unicore/Unicore Reference Commands Manual For N4 High Precision Products_V2_EN_R1.4.pdf`
+- the current portable runtime-mapping boundary documented in
+  `docs/vendors/unicore/runtime_mapping.md`
 
 What was reused conceptually:
 
@@ -55,7 +55,7 @@ What was intentionally not copied:
 - runtime environment variables
 - NTRIP wiring
 - firmware fallback probing logic
-- mower-specific assumptions like launch/runtime orchestration
+- project-specific launch/runtime orchestration
 
 ## Generated Command Families
 
@@ -66,8 +66,11 @@ Current runtime-safe command families:
 - `CONFIG RTK TIMEOUT <seconds>`
 - `CONFIG RTK RELIABILITY <a> <b>`
 - `CONFIG DGPS TIMEOUT <seconds>`
+- `UNLOG`
 - output enable commands for:
   - `GPGGA`
+  - `GPGSV`
+  - `GPGST`
   - `PVTSLNA`
   - `BESTNAVA`
   - `RTKSTATUSA`
@@ -78,12 +81,15 @@ Current safety-gated commands:
 
 - `SAVECONFIG`
 - `CONFIG SIGNALGROUP ...`
+- `FRESET`
 
 ## Output Syntax Policy
 
 The builder uses a fixed per-message syntax table.
 
 - `GPGGA` -> `LOG GPGGA ONTIME <period>`
+- `GPGSV` -> `GPGSV <period>`
+- `GPGST` -> `GPGST <period>`
 - `PVTSLNA` -> `LOG PVTSLNA ONTIME <period>`
 - `BESTNAVA` -> `BESTNAVA <period>`
 - `RTKSTATUSA` -> `RTKSTATUSA <period>`
@@ -95,26 +101,57 @@ already consumed elsewhere in `universal-gnss`.
 
 ## Helper Profiles
 
-### Rover
+### `runtime_only`
 
-Current rover helper generates:
+`runtime_only` is handled at the portable planner layer as a zero-command,
+read-only/no-op path. The Unicore builder does not emit a dedicated command
+sequence for it.
+
+### `rover_high_precision`
+
+Current `rover_high_precision` helper generates:
 
 - `MODE ROVER`
 - `CONFIG NMEA0183 V411`
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
+- `UNLOG`
 - `LOG GPGGA ONTIME 0.2`
+- `GPGSV 1`
+- `GPGST 1`
 - `LOG PVTSLNA ONTIME 0.2`
 - `BESTNAVA 0.2`
 - `RTKSTATUSA 1`
 - `RTCMSTATUSA ONCHANGED`
 
-### Diagnostics
+If persistent mode is requested, the builder appends only:
 
-Current diagnostics helper extends the rover helper with:
+- `SAVECONFIG`
+
+Legacy CLI alias:
+
+- `rover` -> `rover_high_precision`
+
+### `rover_high_precision_debug`
+
+Current `rover_high_precision_debug` helper extends
+`rover_high_precision` with:
 
 - `SATSINFOA 1`
+
+Legacy CLI alias:
+
+- `diagnostics` -> `rover_high_precision_debug`
+
+### `factory_reset`
+
+Current `factory_reset` helper generates:
+
+- `FRESET`
+
+This profile is intentionally modeled as a dedicated factory-reset workflow, not
+as a normal runtime profile.
 
 ## Safety Policy
 
@@ -123,10 +160,17 @@ Runtime-safe commands are emitted with `ReceiverCommandSafetyLevel::kRuntime`.
 Persistent-impact commands are emitted with
 `ReceiverCommandSafetyLevel::kPersistent`.
 
+Factory-reset commands are emitted with
+`ReceiverCommandSafetyLevel::kFactoryReset`.
+
 Current persistent-impact commands are:
 
 - `SAVECONFIG`
 - `CONFIG SIGNALGROUP ...`
+
+Current factory-reset commands are:
+
+- `FRESET`
 
 This means:
 
@@ -134,6 +178,10 @@ This means:
 - dispatch still does
 - the existing `ReceiverCommandDispatcher` rejects those commands until
   `explicit_safety_confirmation` is set
+- live `factory_reset` execution remains guarded at the portable apply layer
+  until reconnect / re-probe handling is implemented
+- the current Unicore `FRESET` path returns the receiver to `115200 bps`, so
+  downstream tooling must be prepared to reconnect at the factory baud
 
 ## Conservative response routing
 
@@ -155,7 +203,9 @@ These lines map into the generic driver response model as `text_ok` or
 `RTCMSTATUSA`, and `SATSINFOA` is ignored by the router.
 
 This is intentionally conservative and does not attempt to infer undocumented
-success/failure semantics.
+success/failure semantics. The current live-validation fixes also allow the
+router to resynchronize on recognized response tokens inside mixed
+binary/ASCII-buffered lines.
 
 ## Deferred Work
 

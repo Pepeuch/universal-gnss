@@ -19,6 +19,14 @@ Implemented:
 - `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
 - Auto Configuration planner/report layer
 - guarded operator-driven runtime-only apply for u-blox and Unicore
+- portable receiver profile surface:
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - guarded `factory_reset`
+- legacy alias compatibility for `rover` and `diagnostics`
+- module-level receiver profile API plus standalone preview/plan/apply CLIs as
+  the intended downstream integration surface
 - real F9P and UM982 runtime-only apply validation
 - auto-discovery v2:
   - score-based detection
@@ -36,7 +44,7 @@ Implemented:
 
 1. Foxglove Surface
 2. Auto Configuration ROS2/report extension and arbitration
-3. GUI / Dashboard
+3. Downstream UI / Dashboard integration
 4. ESP32 / Gateway
 5. Quectel
 6. Septentrio
@@ -84,13 +92,22 @@ Implemented:
 - [ ] extend the planner/report layer into ROS2
 - [x] live u-blox runtime-only operator configuration transactions
 - [x] live Unicore runtime-only operator configuration transactions
+- [x] expose portable profile names and keep legacy alias compatibility in the
+  standalone CLIs
+- [x] keep the module-level receiver profile API plus standalone
+  preview/plan/apply CLIs as the source of truth for downstream integrations
 - [x] make vendor-specific persistence semantics explicit in plan/apply output
+- [ ] post-reset reconnect / probe loop for guarded `factory_reset`
+- [ ] complete u-blox `factory_reset` and future portable profile coverage
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [x] explicit policy for runtime-only vs persistent apply
 - [ ] capability/profile consistency cleanup between built-in receiver profiles and driver support
-- [ ] keep `base` as a portable role but gate live apply until vendor base workflows are complete
+- [ ] document and preserve generic NMEA `runtime_only` limitations until a
+  portable write-side config contract exists
 - [x] post-discovery auto-configuration when explicitly enabled
 - [ ] production-safe failure handling and rollback expectations
+- [ ] live receiver identity / model / firmware metadata in discovery and
+  planning output
 
 ### ROS2 Replay Node
 
@@ -149,19 +166,25 @@ Implemented:
 - [ ] Unicore raw observation support
 - [ ] conservative AGC threshold interpretation if a safe generic policy emerges
 
-## v0.7 — GUI / Dashboard
+## v0.7 — Downstream UI / Dashboard Integrations
 
-- [ ] choose GUI stack
-- [ ] define local API between core/ROS2 and GUI
-- [ ] live GNSS status page
-- [ ] RTK/correction status page
-- [ ] satellite/CN0 view
-- [ ] receiver configuration page
-- [ ] safe config apply actions
-- [ ] debug/log viewer
-- [ ] NTRIP status view
-- [ ] RTCM message rate view
-- [ ] export JSON/debug snapshot
+- [ ] keep Universal GNSS itself scoped to the module API, CLI tools, and
+  downstream integration hooks rather than a built-in GUI
+- [ ] define the local API between core/ROS2 surfaces and downstream UI
+  consumers
+- [ ] use MowgliNext GUI/onboarding as the first practical downstream
+  integration and testbed for receiver profile selection
+- [ ] capture lessons from MowgliNext before designing a minimal generic
+  Universal GNSS UI for other projects
+- [ ] downstream live GNSS status page
+- [ ] downstream RTK/correction status page
+- [ ] downstream satellite/CN0 view
+- [ ] downstream receiver configuration page
+- [ ] downstream safe config apply actions
+- [ ] downstream debug/log viewer
+- [ ] downstream NTRIP status view
+- [ ] downstream RTCM message rate view
+- [ ] downstream export JSON/debug snapshot
 
 ## v0.8 — ESP32 / Gateway
 

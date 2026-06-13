@@ -30,6 +30,60 @@ Out of scope for this milestone:
 - adding MowgliNext-specific integration logic
 - bypassing the existing Universal GNSS config/profile layer
 
+## Current Portable Profile Surface
+
+The currently shipped receiver-profile API intentionally exposes only four
+generic profiles:
+
+- `runtime_only`
+  - do not change receiver configuration
+  - only open the receiver and parse current output
+- `rover_high_precision`
+  - configure a conservative high-precision rover/runtime message set
+- `rover_high_precision_debug`
+  - extend `rover_high_precision` with extra satellite / RF / hardware /
+    correction diagnostics where supported
+- `factory_reset`
+  - represent a receiver factory-reset workflow when the vendor support is
+    known
+  - remain guarded for live execution until reconnect / re-probe handling is
+    robust
+
+Legacy aliases are still accepted by the current CLIs:
+
+- `rover` -> `rover_high_precision`
+- `diagnostics` -> `rover_high_precision_debug`
+
+Current receiver-family support:
+
+- Unicore
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - `factory_reset` planning/preview support with guarded live execution
+- u-blox
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - `factory_reset` currently reported as unsupported by the portable planner
+- generic NMEA
+  - `runtime_only` only
+
+Safety notes:
+
+- `runtime_only` is a zero-command no-op path used to validate parsing without
+  changing the receiver
+- persistent apply remains opt-in and vendor-specific
+- receiver factory reset may change the active baud rate
+- the current Unicore `FRESET` path returns the receiver to `115200 bps`
+
+This surface is currently exposed through:
+
+- the module-level planner/profile API in `gnss_driver`
+- `gnss_profile_preview`, `gnss_config_plan`, and `gnss_config_apply`
+- downstream integration hooks for ROS2 nodes, launch files, and future
+  project-specific onboarding or UI layers
+
 ## Audit Summary
 
 ### What already exists
@@ -73,20 +127,30 @@ portable, explainable, and safe:
 - no transport/session arbitration exists for configuring a receiver that is
   already being monitored by a live session or ROS2 node
 
-There are also several scope and naming gaps that should be resolved before
-implementation:
+There are also several scope and naming gaps that should stay explicit while the
+profile surface is widened later:
 
 - `ReceiverProfile` currently means hardware family identity, while
   `ReceiverConfigProfile` means configuration intent
-- the portable `base` role exists, but current vendor support is incomplete
+- a future portable `base` role still exists conceptually, but the current
+  public profile surface intentionally does not expose it yet
 - current "persistent" behavior is not semantically identical across vendors
 
 ## Important Current Gaps
 
 ### 1. "Base" is not implementation-ready across vendors
 
-The portable config taxonomy already includes `rover`, `base`, and
-`diagnostics`.
+The earlier design taxonomy included `rover`, `base`, and `diagnostics`.
+
+The currently shipped public/operator surface is narrower:
+
+- `runtime_only`
+- `rover_high_precision`
+- `rover_high_precision_debug`
+- `factory_reset`
+- legacy aliases:
+  - `rover` -> `rover_high_precision`
+  - `diagnostics` -> `rover_high_precision_debug`
 
 Current real support is narrower:
 
@@ -99,11 +163,12 @@ Current real support is narrower:
 
 Design consequence:
 
-- Auto Configuration `v1` should treat `base` as a declared portable role, but
-  not as a universally safe live-apply target
-- rover and diagnostics should be the first-class live Auto Configuration roles
-- base should remain explicitly gated until each vendor driver can prove that it
-  supports a complete and honest base workflow
+- `base` should remain a future portable role, not a generally safe live-apply
+  target
+- `rover_high_precision` and `rover_high_precision_debug` are the first-class
+  public live Auto Configuration roles today
+- any future public `base` profile should stay explicitly gated until each
+  vendor driver can prove that it supports a complete and honest base workflow
 
 ### 2. "Persistent" does not mean the same thing everywhere
 
@@ -251,23 +316,32 @@ Universal GNSS stays the single source of truth.
 The existing `ReceiverConfigProfileKind` should remain the portable role
 vocabulary.
 
-For `v1`, the operational profile meanings should be:
+For the current `v0.6.x` public surface, the operational profile meanings are:
 
-- `rover`
-  - first-class portable role
-  - eligible for dry-run and later live runtime/persistent apply
-- `diagnostics`
-  - additive monitoring/output role
-  - first-class portable role
-  - ideal first target for ROS2-assisted field validation
-- `base`
-  - keep as a portable role in the API
-  - do not treat it as generally live-ready until vendor support is complete
+- `runtime_only`
+  - zero-command read-only/no-op path
+  - useful for validating transport, parsing, and reporting without changing
+    receiver state
+- `rover_high_precision`
+  - first-class portable runtime config profile
+  - eligible for dry-run and later live runtime/persistent apply where
+    supported
+- `rover_high_precision_debug`
+  - additive debug/diagnostics variant of `rover_high_precision`
+  - ideal first target for ROS2-assisted field validation when richer receiver
+    diagnostics are needed
+- `factory_reset`
+  - explicit factory-reset workflow model
+  - should not be treated as generally live-ready until reconnect/probe
+    handling is complete
 
-That gives us a clean rule:
+Legacy aliases are still accepted for compatibility:
 
-- rover and diagnostics are `v1` implementation targets
-- base remains architected now, but gated by validation
+- `rover` -> `rover_high_precision`
+- `diagnostics` -> `rover_high_precision_debug`
+
+The future `base` role remains architected conceptually, but is not part of the
+current public profile surface.
 
 ### Apply modes
 
@@ -300,7 +374,7 @@ Minimum `v1` report content:
 - whether the plan is safe to execute
 - whether the plan is complete or only partial
 - warnings about vendor-specific persistence semantics
-- warnings about deferred base/survey orchestration
+- warnings about deferred base/survey orchestration or guarded reset handling
 - rollback expectation summary
 
 That report should be shareable by:
@@ -308,7 +382,7 @@ That report should be shareable by:
 - `gnss_config_plan`
 - `gnss_config_apply`
 - future ROS2 diagnostics/services
-- future GUI/Foxglove surfaces
+- future downstream UI/Foxglove surfaces
 
 ### Rollback expectations
 
@@ -364,18 +438,20 @@ Implemented:
 
 Current next step:
 
-- keep this as the source of truth while extending it to ROS2 and future GUI
-  surfaces
+- keep this as the source of truth while extending it to ROS2 and future
+  downstream UI surfaces
 
 ### 2. u-blox support
 
 For `v1`, support:
 
-- rover
-- diagnostics
-- runtime-only
+- `runtime_only`
+- `rover_high_precision`
+- `rover_high_precision_debug`
 - persistent, with explicit reporting that the current persistent target is
   `RAM + BBR`
+- keep `factory_reset` reported as unsupported until the portable planner and
+  apply path can support it honestly
 
 Do not oversell the current base helper as a complete RTK base workflow.
 
@@ -383,10 +459,12 @@ Do not oversell the current base helper as a complete RTK base workflow.
 
 For `v1`, support:
 
-- rover
-- diagnostics
-- runtime-only
+- `runtime_only`
+- `rover_high_precision`
+- `rover_high_precision_debug`
 - persistent through `SAVECONFIG`
+- `factory_reset` planning/preview support via `FRESET`, with live execution
+  guarded until reconnect / re-probe handling exists
 
 Keep base explicitly unsupported until the config/profile layer can model it
 honestly.
@@ -408,9 +486,9 @@ Implemented in `v0.6-3`:
 - runtime-only live writes require explicit `--confirm` / `--yes`
 - persistent apply remains guarded in the CLI even when a persistent plan can be
   generated
-- unknown and generic NMEA receivers are rejected for apply
-- `base` plans are reported, but live execution stays gated when the planner does
-  not mark them ready
+- generic NMEA apply is limited to the `runtime_only` no-op profile
+- `factory_reset` plans can be previewed/planned when supported, but live
+  execution stays guarded until reconnect / re-probe handling is implemented
 
 Validated in `v0.6-4` on real hardware:
 
@@ -420,18 +498,19 @@ Validated in `v0.6-4` on real hardware:
   persistent commands
 - no live writes were performed during the operator review pass unless
   `--confirm` or `--yes` was supplied explicitly
-- confirmed runtime-only rover apply completed on the F9P without any
-  persistent save/write step
-- UM982 runtime-only rover apply exposed a mixed-stream response-matching gap:
+- confirmed runtime-only `rover_high_precision` apply completed on the F9P
+  without any persistent save/write step
+- UM982 runtime-only `rover_high_precision` apply exposed a mixed-stream
+  response-matching gap:
   valid `$command,...,response: OK*` acknowledgements can appear with binary or
   printable prefix noise on the same buffered line
 - the Unicore response router was tightened to resynchronize on recognized
   response tokens inside mixed binary/ASCII lines
-- after that router fix, confirmed UM982 runtime-only rover apply completed with
-  `--timeout-ms 5000`
+- after that router fix, confirmed UM982 runtime-only
+  `rover_high_precision` apply completed with `--timeout-ms 5000`
 - short passive post-apply captures still may not show `RTCMSTATUSA` because
-  the portable rover helper enables it with `ONCHANGED` semantics rather than a
-  fixed periodic rate
+  the portable `rover_high_precision` helper enables it with `ONCHANGED`
+  semantics rather than a fixed periodic rate
 - persistent apply remains intentionally out of scope for this validation pass
 
 ### 5. ROS2 integration
@@ -453,8 +532,8 @@ Add focused tests for:
 
 - planner validation and reporting
 - unsupported profile gating
-- incomplete-base warnings
 - persistence-semantics reporting
+- `factory_reset` guard and rollback reporting
 - shared CLI formatting
 - ROS2 diagnostics/report projection
 
@@ -505,8 +584,10 @@ Additional documentation likely needed next:
 Auto Configuration `v1` should be intentionally modest:
 
 - portable planner/report layer
-- u-blox rover + diagnostics
-- Unicore rover + diagnostics
+- u-blox `runtime_only`, `rover_high_precision`, and
+  `rover_high_precision_debug`
+- Unicore `runtime_only`, `rover_high_precision`,
+  `rover_high_precision_debug`, and guarded `factory_reset`
 - shared CLI integration
 - ROS2 plan/report integration
 

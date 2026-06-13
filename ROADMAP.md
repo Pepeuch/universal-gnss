@@ -22,6 +22,12 @@ That current `v0.6.0` posture covers:
 - score-based auto-discovery hardening for vendor detection and serial noise rejection
 - Auto Configuration planner/report coverage
 - guarded operator-driven runtime-only apply
+- portable receiver profile surface:
+  - `runtime_only`
+  - `rover_high_precision`
+  - `rover_high_precision_debug`
+  - guarded `factory_reset`
+- legacy alias compatibility for `rover` and `diagnostics`
 - explicit confirmation gating for live writes
 - persistent apply guarded out of the default workflow
 - real F9P and UM982 runtime-only apply validation
@@ -175,9 +181,12 @@ Implemented and validated scope:
     - required explicit operator confirmation for runtime-only live writes
     - kept persistent live apply guarded while still surfacing plan warnings and
       manual rollback expectations
+    - exposed portable profiles as `runtime_only`, `rover_high_precision`,
+      `rover_high_precision_debug`, and guarded `factory_reset`
+    - kept legacy `rover` and `diagnostics` aliases accepted by the CLIs
   - `v0.6-4` runtime-only hardware validation completed:
-    - confirmed runtime-only rover apply on the F9P
-    - confirmed runtime-only rover apply on the UM982
+    - confirmed runtime-only `rover_high_precision` apply on the F9P
+    - confirmed runtime-only `rover_high_precision` apply on the UM982
     - verified that no persistent write/save path was used
     - validated stable `/dev/serial/by-id/*` device targeting
     - captured and fixed a mixed-stream Unicore response-matching gap
@@ -210,13 +219,35 @@ Release verdict:
 - persistent apply remains intentionally guarded beyond the default release
   workflow
 
-## v0.7 — GUI / Dashboard
+Carry-over follow-up immediately after `v0.6.0`:
+
+- keep the module-level receiver-profile API plus
+  `gnss_profile_preview`, `gnss_config_plan`, and `gnss_config_apply` CLIs as
+  the source of truth for downstream integrations
+- post-reset reconnect / probe loop for guarded `factory_reset`
+- complete u-blox portable receiver-profile implementation for reset and future
+  profile growth
+- live receiver identity / model / firmware metadata in discovery, planner,
+  and ROS2 reporting
+- keep generic NMEA limited to `runtime_only` until a portable write-side
+  configuration contract exists
+
+## v0.7 — Downstream UI / Dashboard Integrations
 
 Planned after `v0.6`:
 
+- Universal GNSS does not ship its own GUI yet; the module currently exposes
+  only the profile API, standalone CLIs, and downstream integration hooks
+- MowgliNext GUI/onboarding will be the first practical downstream integration
+  and testbed for profile selection and guarded apply flows
+- lessons from MowgliNext can later be reused to design a minimal generic
+  Universal GNSS UI for other projects
+- define stable downstream hooks from the module-level profile API and ROS2
+  surfaces
 - live GNSS status view
 - RTK / correction status
 - satellite / CN0 view
+- onboarding / profile selector for the portable receiver profiles
 - receiver configuration page
 - NTRIP status
 - RTCM activity view

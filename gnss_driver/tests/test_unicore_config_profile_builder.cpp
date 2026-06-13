@@ -172,6 +172,27 @@ void TestPersistentAndSignalGroupSafety(TestContext& ctx)
   }
 }
 
+void TestFactoryResetProfileGeneration(TestContext& ctx)
+{
+  const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
+  const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                 result.commands.size() == 1u,
+             "unicore factory-reset helper should generate exactly one reset command");
+  ExpectTextCommand(ctx,
+                    result.commands.front(),
+                    ReceiverCommandKind::kReset,
+                    ReceiverCommandSafetyLevel::kFactoryReset,
+                    "FRESET");
+
+  MemoryByteSink sink;
+  ReceiverCommandDispatcher dispatcher(sink);
+  const auto rejected = dispatcher.Dispatch(result.commands.front());
+  ctx.Expect(rejected.status == DispatchStatus::kRejectedSafety,
+             "unicore factory-reset commands should require explicit safety confirmation");
+}
+
 void TestInvalidDeferredInputs(TestContext& ctx)
 {
   {
@@ -200,6 +221,16 @@ void TestInvalidDeferredInputs(TestContext& ctx)
     ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument,
                "empty unicore signal-group settings should be rejected");
   }
+
+  {
+    UnicoreConfigProfile profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
+    profile.output_messages = {
+        {UnicoreOutputMessageKind::kGpgga, 1.0},
+    };
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument,
+               "factory-reset profiles should reject mixed portable config mutations");
+  }
 }
 
 void TestRuntimeDispatcherBehavior(TestContext& ctx)
@@ -224,6 +255,7 @@ int main()
   TestRoverProfileGeneration(ctx);
   TestDiagnosticsProfileGeneration(ctx);
   TestPersistentAndSignalGroupSafety(ctx);
+  TestFactoryResetProfileGeneration(ctx);
   TestInvalidDeferredInputs(ctx);
   TestRuntimeDispatcherBehavior(ctx);
 
