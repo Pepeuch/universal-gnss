@@ -65,6 +65,13 @@ struct ReceiverNodeConfig
   std::string tcp_host{};
   std::uint16_t tcp_port{0u};
   double publish_rate_hz{10.0};
+  // Bytes pulled from the transport per receiver tick. The node reads ONE chunk
+  // per publish cycle, so effective read throughput is read_chunk_size *
+  // publish_rate_hz. The previous fixed 512 B (= 2.56 KB/s at 5 Hz) sits below a
+  // busy u-blox F9P's UBX output (~13 KB/s measured), so the OS serial buffer
+  // backlogs and published fixes lag by seconds. 64 KB drains the buffer in one
+  // read per tick; a single ::read() returns all bytes available up to capacity.
+  std::size_t read_chunk_size{65536u};
   std::string frame_id{"gnss"};
 };
 
@@ -464,6 +471,8 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.tcp_host = node.declare_parameter<std::string>("tcp_host", "");
   const auto tcp_port = node.declare_parameter<std::int64_t>("tcp_port", 0);
   config.publish_rate_hz = node.declare_parameter<double>("publish_rate_hz", 10.0);
+  config.read_chunk_size = static_cast<std::size_t>(
+      node.declare_parameter<std::int64_t>("read_chunk_size", 65536));
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.discovery_include_platform_uarts =
       node.declare_parameter<bool>("discovery_include_platform_uarts", false);
@@ -741,7 +750,7 @@ struct ReceiverNode::Impl
     if (transport_source_ != nullptr)
     {
       universal_gnss_driver::ReceiverSessionRunnerConfig runner_config;
-      runner_config.read_chunk_size = 512u;
+      runner_config.read_chunk_size = config_.read_chunk_size;
       runner_config.finalize_session_on_end_of_stream = true;
       runner_config.finalize_session_on_closed = true;
       runner_config.finalize_session_on_error = true;
