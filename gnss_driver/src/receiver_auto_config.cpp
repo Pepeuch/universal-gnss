@@ -25,6 +25,7 @@ namespace
 
 using universal_gnss_protocols::UbxCfgLayer;
 using universal_gnss_protocols::UbxCfgConstellation;
+using universal_gnss_driver::UbloxInterfacePort;
 
 constexpr std::uint8_t kUnicoreRecommendedSignalGroupPrimary = 3u;
 constexpr std::uint8_t kUnicoreRecommendedSignalGroupSecondary = 6u;
@@ -51,6 +52,45 @@ ReceiverAutoConfigPlan MakeBasePlan(const ReceiverAutoConfigRequest& request)
   ReceiverAutoConfigPlan plan;
   plan.request = request;
   return plan;
+}
+
+std::optional<std::string_view> ResolveTransportPathView(
+    const ReceiverAutoConfigRequest& request)
+{
+  if (request.discovery_result.has_value() &&
+      !request.discovery_result->path.empty())
+  {
+    return request.discovery_result->path;
+  }
+
+  if (request.transport_device_path.has_value() &&
+      !request.transport_device_path->empty())
+  {
+    return *request.transport_device_path;
+  }
+
+  return std::nullopt;
+}
+
+bool TransportPathLooksUsb(const std::string_view path)
+{
+  const std::string normalized = ToLowerCopy(path);
+  return normalized.find("ttyacm") != std::string::npos ||
+         normalized.find("/dev/usb-u-blox") != std::string::npos ||
+         normalized.find("/dev/serial/by-id/usb-u-blox") != std::string::npos ||
+         normalized.find("usb-u-blox") != std::string::npos ||
+         normalized.find("u-blox_gnss_receiver") != std::string::npos;
+}
+
+bool TransportPathLooksUart(const std::string_view path)
+{
+  const std::string normalized = ToLowerCopy(path);
+  return normalized.find("ttyusb") != std::string::npos ||
+         normalized.find("/dev/ttyama") != std::string::npos ||
+         normalized.find("/dev/ttys") != std::string::npos ||
+         normalized.find("/dev/ttyths") != std::string::npos ||
+         normalized.find("/dev/serial0") != std::string::npos ||
+         normalized.find("/dev/serial1") != std::string::npos;
 }
 
 void CopyDiscoveryContext(ReceiverAutoConfigPlan& plan)
@@ -148,6 +188,19 @@ void ApplyNoChangeRollback(ReceiverAutoConfigPlan& plan)
   plan.rollback_expectation.operator_action_required = false;
   plan.rollback_expectation.summary = "no receiver configuration changes are planned";
   plan.rollback_expectation.operator_action = "none";
+}
+
+void AppendIgnoredOutputPortWarning(ReceiverAutoConfigPlan& plan)
+{
+  if (!plan.request.output_port.has_value())
+  {
+    return;
+  }
+
+  plan.warnings.push_back(
+      "output_port=" + std::string(ToString(*plan.request.output_port)) +
+      " is currently only mapped by the portable u-blox planner; ignoring it for " +
+      plan.receiver_family_name + " planning");
 }
 
 void ApplyFactoryResetWarningsAndRollback(ReceiverAutoConfigPlan& plan)
@@ -316,6 +369,7 @@ ReceiverAutoConfigPlan MakeNoChangePlan(
   plan.validation.ready_to_execute =
       request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
   AppendRuntimeOnlySignalProfileWarning(plan);
+  AppendIgnoredOutputPortWarning(plan);
   plan.warnings.push_back(
       "runtime_only profile leaves the receiver configuration unchanged");
   ApplyNoChangeRollback(plan);
@@ -366,6 +420,95 @@ void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
                                ReceiverAutoConfigPlan& plan,
                                UnicoreConfigProfile& profile);
 
+struct UbloxOutputPortResolution
+{
+  std::vector<UbloxInterfacePort> output_ports{
+      UbloxInterfacePort::kUart1,
+      UbloxInterfacePort::kUsb,
+  };
+  std::optional<ReceiverAutoConfigOutputPort> resolved_output_port{};
+  bool apply_uart1_baud{false};
+  bool apply_uart2_baud{false};
+};
+
+UbloxOutputPortResolution ResolveUbloxOutputPort(const ReceiverAutoConfigRequest& request,
+                                                 ReceiverAutoConfigPlan& plan)
+{
+  UbloxOutputPortResolution resolution;
+
+  if (!request.output_port.has_value())
+  {
+    resolution.apply_uart1_baud = true;
+    if (const auto transport_path = ResolveTransportPathView(request);
+        transport_path.has_value() && TransportPathLooksUsb(*transport_path))
+    {
+      plan.warnings.push_back(
+          "u-blox planning kept the legacy default output-port set (UART1 + USB) because no explicit output_port was provided; this transport looks USB-attached, so prefer output_port=usb or output_port=auto for interface-specific plans");
+    }
+    return resolution;
+  }
+
+  switch (*request.output_port)
+  {
+    case ReceiverAutoConfigOutputPort::kUsb:
+      resolution.output_ports = {UbloxInterfacePort::kUsb};
+      resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUsb;
+      return resolution;
+    case ReceiverAutoConfigOutputPort::kUart1:
+      resolution.output_ports = {UbloxInterfacePort::kUart1};
+      resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUart1;
+      resolution.apply_uart1_baud = true;
+      return resolution;
+    case ReceiverAutoConfigOutputPort::kUart2:
+      resolution.output_ports = {UbloxInterfacePort::kUart2};
+      resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUart2;
+      resolution.apply_uart2_baud = true;
+      return resolution;
+    case ReceiverAutoConfigOutputPort::kAll:
+      resolution.output_ports = {
+          UbloxInterfacePort::kUart1,
+          UbloxInterfacePort::kUart2,
+          UbloxInterfacePort::kUsb,
+      };
+      resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kAll;
+      resolution.apply_uart1_baud = true;
+      resolution.apply_uart2_baud = true;
+      return resolution;
+    case ReceiverAutoConfigOutputPort::kAuto:
+      if (const auto transport_path = ResolveTransportPathView(request);
+          transport_path.has_value())
+      {
+        if (TransportPathLooksUsb(*transport_path))
+        {
+          resolution.output_ports = {UbloxInterfacePort::kUsb};
+          resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUsb;
+          plan.warnings.push_back(
+              "output_port=auto resolved to usb from the current transport path");
+          return resolution;
+        }
+
+        if (TransportPathLooksUart(*transport_path))
+        {
+          resolution.output_ports = {UbloxInterfacePort::kUart1};
+          resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUart1;
+          resolution.apply_uart1_baud = true;
+          plan.warnings.push_back(
+              "output_port=auto resolved to uart1 from the current serial transport path");
+          return resolution;
+        }
+      }
+
+      resolution.output_ports = {UbloxInterfacePort::kUart1};
+      resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUart1;
+      resolution.apply_uart1_baud = true;
+      plan.warnings.push_back(
+          "output_port=auto could not safely infer the receiver interface from the available transport context; defaulting to uart1");
+      return resolution;
+  }
+
+  return resolution;
+}
+
 ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
@@ -389,6 +532,9 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
     return plan;
   }
 
+  const auto output_port = ResolveUbloxOutputPort(request, plan);
+  plan.resolved_output_port = output_port.resolved_output_port;
+
   const auto safety_level = ToSafetyLevel(request.apply_mode);
   std::vector<UbxCfgLayer> layers{
       UbxCfgLayer::kRam,
@@ -404,12 +550,14 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
     case ReceiverAutoConfigProfile::kRoverHighPrecision:
       plan.validation.apply_mode_supported = true;
       plan.validation.profile_supported = true;
-      profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(safety_level, layers);
+      profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
+          safety_level, layers, output_port.output_ports);
       break;
     case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
       plan.validation.apply_mode_supported = true;
       plan.validation.profile_supported = true;
-      profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(safety_level, layers);
+      profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(
+          safety_level, layers, output_port.output_ports);
       break;
     case ReceiverAutoConfigProfile::kFactoryReset:
       return MakeUnsupportedProfilePlan(
@@ -424,7 +572,26 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
 
   if (request.config_baud.has_value())
   {
-    profile.port.uart1_baudrate = *request.config_baud;
+    if (output_port.apply_uart1_baud)
+    {
+      profile.port.uart1_baudrate = *request.config_baud;
+    }
+    if (output_port.apply_uart2_baud)
+    {
+      profile.port.uart2_baudrate = *request.config_baud;
+    }
+    if (!output_port.apply_uart1_baud && !output_port.apply_uart2_baud)
+    {
+      plan.warnings.push_back(
+          "config-baud does not apply to USB output-port plans; no UART baud command was generated");
+    }
+    else if (request.output_port ==
+             std::optional<ReceiverAutoConfigOutputPort>{
+                 ReceiverAutoConfigOutputPort::kAll})
+    {
+      plan.warnings.push_back(
+          "output_port=all applies config-baud to both UART1 and UART2; verify any attached correction or downstream serial links before live apply");
+    }
   }
   if (request.rate_hz.has_value())
   {
@@ -563,6 +730,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   plan.capabilities = UnicoreDriver{}.capabilities();
   plan.validation.receiver_recognized = true;
   plan.validation.config_supported = true;
+  AppendIgnoredOutputPortWarning(plan);
 
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
   {
@@ -724,6 +892,7 @@ ReceiverAutoConfigPlan BuildNmeaPlan(const ReceiverAutoConfigRequest& request)
       NmeaDriver{}.capabilities(),
       "generic NMEA receivers only support the runtime_only profile because portable write-side configuration is not standardized");
   plan.validation.config_supported = false;
+  AppendIgnoredOutputPortWarning(plan);
   return plan;
 }
 
@@ -896,6 +1065,33 @@ std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProf
   return std::nullopt;
 }
 
+std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(
+    const std::string_view output_port)
+{
+  const std::string normalized = ToLowerCopy(output_port);
+  if (normalized == "uart1")
+  {
+    return ReceiverAutoConfigOutputPort::kUart1;
+  }
+  if (normalized == "uart2")
+  {
+    return ReceiverAutoConfigOutputPort::kUart2;
+  }
+  if (normalized == "usb")
+  {
+    return ReceiverAutoConfigOutputPort::kUsb;
+  }
+  if (normalized == "all")
+  {
+    return ReceiverAutoConfigOutputPort::kAll;
+  }
+  if (normalized == "auto")
+  {
+    return ReceiverAutoConfigOutputPort::kAuto;
+  }
+  return std::nullopt;
+}
+
 const char* ToString(const ReceiverAutoConfigApplyMode apply_mode)
 {
   switch (apply_mode)
@@ -928,6 +1124,25 @@ const char* ToString(const ReceiverAutoConfigSignalProfile signal_profile)
   }
 
   return "balanced";
+}
+
+const char* ToString(const ReceiverAutoConfigOutputPort output_port)
+{
+  switch (output_port)
+  {
+    case ReceiverAutoConfigOutputPort::kUart1:
+      return "uart1";
+    case ReceiverAutoConfigOutputPort::kUart2:
+      return "uart2";
+    case ReceiverAutoConfigOutputPort::kUsb:
+      return "usb";
+    case ReceiverAutoConfigOutputPort::kAll:
+      return "all";
+    case ReceiverAutoConfigOutputPort::kAuto:
+      return "auto";
+  }
+
+  return "uart1";
 }
 
 const char* ToString(const ReceiverAutoConfigPlanStatus status)

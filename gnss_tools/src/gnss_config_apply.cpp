@@ -50,13 +50,16 @@ void PrintUsage(const char* program_name)
       << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>] [--config-baud <value>]\n"
       << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
       << "       [--apply-mode <dry-run|runtime-only|persistent>]\n"
-      << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>] [--rate-hz <value>]\n"
+      << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+      << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
       << "                --confirm-persistent, and positional <family> <profile>\n"
       << "Examples:\n"
       << "  " << program_name
       << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only\n"
+      << "  " << program_name
+      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only\n"
       << "  " << program_name
       << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm\n"
       << "  " << program_name
@@ -442,6 +445,22 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
       }
       cli_options.apply.signal_profile = *parsed;
+      continue;
+    }
+
+    if (argument == "--output-port")
+    {
+      const auto parsed =
+          universal_gnss_driver::ParseReceiverAutoConfigOutputPort(
+              require_value("--output-port"));
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --output-port value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      cli_options.apply.output_port = *parsed;
       continue;
     }
     if (argument == "--rate-hz")

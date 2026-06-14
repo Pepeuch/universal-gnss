@@ -38,6 +38,15 @@ enum class ReceiverAutoConfigSignalProfile : std::uint8_t
   kCustom = 4,
 };
 
+enum class ReceiverAutoConfigOutputPort : std::uint8_t
+{
+  kUart1 = 0,
+  kUart2 = 1,
+  kUsb = 2,
+  kAll = 3,
+  kAuto = 4,
+};
+
 enum class ReceiverAutoConfigPlanStatus : std::uint8_t
 {
   kOk = 0,
@@ -56,8 +65,10 @@ struct ReceiverAutoConfigRequest
       ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<ReceiverAutoConfigSignalProfile> signal_profile{};
+  std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
+  std::optional<std::string> transport_device_path{};
 };
 
 struct ReceiverAutoConfigValidationSummary
@@ -95,6 +106,7 @@ struct ReceiverAutoConfigPlan
   std::optional<std::uint32_t> detected_baud{};
   std::optional<ReceiverProbeConfidence> discovery_confidence{};
   std::optional<int> discovery_score{};
+  std::optional<ReceiverAutoConfigOutputPort> resolved_output_port{};
   std::vector<ReceiverCommand> commands{};
   std::vector<std::string> warnings{};
   ReceiverAutoConfigRollbackExpectation rollback_expectation{};
@@ -117,10 +129,13 @@ std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
     std::string_view profile);
 std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
     std::string_view signal_profile);
+std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(
+    std::string_view output_port);
 
 const char* ToString(ReceiverAutoConfigProfile profile);
 const char* ToString(ReceiverAutoConfigApplyMode apply_mode);
 const char* ToString(ReceiverAutoConfigSignalProfile signal_profile);
+const char* ToString(ReceiverAutoConfigOutputPort output_port);
 const char* ToString(ReceiverAutoConfigPlanStatus status);
 
 }  // namespace universal_gnss_driver

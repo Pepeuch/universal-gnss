@@ -1397,8 +1397,13 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.requested_profile = options.profile;
   request.apply_mode = options.apply_mode;
   request.signal_profile = options.signal_profile;
+  request.output_port = options.output_port;
   request.config_baud = options.config_baud;
   request.rate_hz = options.rate_hz;
+  if (!options.device_path.empty())
+  {
+    request.transport_device_path = options.device_path;
+  }
   return request;
 }
 
@@ -1721,6 +1726,31 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
     output << "Signal profile override: "
            << universal_gnss_driver::ToString(*result.plan.signal_profile) << "\n";
   }
+  if (result.plan.vendor == "ublox")
+  {
+    if (!result.plan.output_port.has_value())
+    {
+      output << "Output port: legacy_default (uart1 + usb)\n";
+    }
+    else if (*result.plan.output_port ==
+             universal_gnss_driver::ReceiverAutoConfigOutputPort::kAuto)
+    {
+      output << "Output port request: auto\n";
+      if (result.plan.resolved_output_port.has_value())
+      {
+        output << "Resolved output port: "
+               << universal_gnss_driver::ToString(*result.plan.resolved_output_port)
+               << "\n";
+      }
+    }
+    else
+    {
+      output << "Output port: "
+             << universal_gnss_driver::ToString(
+                    result.plan.resolved_output_port.value_or(*result.plan.output_port))
+             << "\n";
+    }
+  }
   if (result.plan.rate_hz.has_value())
   {
     output << "Rate override: " << FormatCompactDouble(*result.plan.rate_hz) << " Hz\n";
@@ -1789,6 +1819,34 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   {
     output << "\""
            << EscapeJson(universal_gnss_driver::ToString(*result.plan.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"output_port\": ";
+  if (result.plan.output_port.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.plan.output_port))
+           << "\"";
+  }
+  else if (result.plan.vendor == "ublox")
+  {
+    output << "\"legacy_default\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"resolved_output_port\": ";
+  if (result.plan.resolved_output_port.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.plan.resolved_output_port))
            << "\"";
   }
   else

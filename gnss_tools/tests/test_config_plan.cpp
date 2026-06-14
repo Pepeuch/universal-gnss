@@ -135,6 +135,73 @@ void TestSignalProfilePlanning(TestContext& ctx)
              "generic NMEA signal-profile planning should stay a warning-only no-op");
 }
 
+void TestUbloxOutputPortPlanning(TestContext& ctx)
+{
+  ConfigPlanOptions usb_options;
+  usb_options.vendor = "ublox";
+  usb_options.profile = "rover_high_precision";
+  usb_options.output_port =
+      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
+  usb_options.baud = 460800u;
+
+  const auto usb_result = BuildConfigPlan(usb_options);
+  const std::string usb_text = FormatConfigPlanText(usb_result);
+
+  ctx.Expect(usb_result.status == ConfigPlanStatus::kOk &&
+                 usb_result.summary.commands_total == 9u &&
+                 usb_result.output_port ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort>{
+                         universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb} &&
+                 usb_result.resolved_output_port ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort>{
+                         universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb},
+             "USB-only config plans should shrink to the documented USB message set");
+  ctx.Expect(usb_text.find("Output port: usb") != std::string::npos &&
+                 usb_text.find("set UART1 baud rate") == std::string::npos &&
+                 usb_text.find("set UART2 baud rate") == std::string::npos &&
+                 usb_text.find("does not apply to USB") != std::string::npos,
+             "USB-only config plan text should show the resolved USB port and warn that config-baud is ignored");
+
+  ConfigPlanOptions uart1_options;
+  uart1_options.vendor = "ublox";
+  uart1_options.profile = "rover_high_precision";
+  uart1_options.output_port =
+      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart1;
+  uart1_options.baud = 460800u;
+
+  const auto uart1_result = BuildConfigPlan(uart1_options);
+  const std::string uart1_text = FormatConfigPlanText(uart1_result);
+
+  ctx.Expect(uart1_result.status == ConfigPlanStatus::kOk &&
+                 uart1_result.summary.commands_total == 10u,
+             "UART1-only config plans should include a single UART1 baud command");
+  ctx.Expect(uart1_text.find("Output port: uart1") != std::string::npos &&
+                 uart1_text.find("set UART1 baud rate to 460800") != std::string::npos &&
+                 uart1_text.find("UART2 baud rate") == std::string::npos,
+             "UART1-only config plan text should include the UART1 baud command only");
+
+  ConfigPlanOptions all_options;
+  all_options.vendor = "ublox";
+  all_options.profile = "rover_high_precision";
+  all_options.output_port =
+      universal_gnss_driver::ReceiverAutoConfigOutputPort::kAll;
+
+  const auto all_result = BuildConfigPlan(all_options);
+  const std::string all_text = FormatConfigPlanText(all_result);
+
+  ctx.Expect(all_result.status == ConfigPlanStatus::kOk &&
+                 all_result.summary.commands_total == 17u &&
+                 all_result.resolved_output_port ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort>{
+                         universal_gnss_driver::ReceiverAutoConfigOutputPort::kAll},
+             "all-port config plans should emit USB, UART1, and UART2 message outputs");
+  ctx.Expect(all_text.find("Output port: all") != std::string::npos &&
+                 all_text.find("output on UART1") != std::string::npos &&
+                 all_text.find("output on UART2") != std::string::npos &&
+                 all_text.find("output on USB") != std::string::npos,
+             "all-port config plan text should decode UART1, UART2, and USB message outputs");
+}
+
 void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -260,6 +327,7 @@ int main()
   TestUnicoreDebugPlan(ctx);
   TestUnicorePersistentTargetBaudPlan(ctx);
   TestSignalProfilePlanning(ctx);
+  TestUbloxOutputPortPlanning(ctx);
   TestRuntimeOnlyNoOpPlan(ctx);
   TestPersistentSafetySummary(ctx);
   TestFactoryResetPlan(ctx);

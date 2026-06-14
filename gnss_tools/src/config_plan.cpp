@@ -311,6 +311,8 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
   result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
   result.persistent = plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
   result.signal_profile = plan.request.signal_profile;
+  result.output_port = plan.request.output_port;
+  result.resolved_output_port = plan.resolved_output_port;
   result.baud = plan.request.config_baud;
   result.rate_hz = plan.request.rate_hz;
   result.detected_device = plan.detected_device;
@@ -373,6 +375,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   result.apply_mode = options.persistent ? "persistent" : "runtime_only";
   result.persistent = options.persistent;
   result.signal_profile = options.signal_profile;
+  result.output_port = options.output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
 
@@ -406,6 +409,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   request.requested_profile = *profile;
   request.apply_mode = ResolveApplyMode(options);
   request.signal_profile = options.signal_profile;
+  request.output_port = options.output_port;
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
 
@@ -477,6 +481,29 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   {
     output << "Signal profile override: "
            << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
+  }
+  if (result.vendor == "ublox")
+  {
+    if (!result.output_port.has_value())
+    {
+      output << "Output port: legacy_default (uart1 + usb)\n";
+    }
+    else if (*result.output_port == universal_gnss_driver::ReceiverAutoConfigOutputPort::kAuto)
+    {
+      output << "Output port request: auto\n";
+      if (result.resolved_output_port.has_value())
+      {
+        output << "Resolved output port: "
+               << universal_gnss_driver::ToString(*result.resolved_output_port) << "\n";
+      }
+    }
+    else
+    {
+      output << "Output port: "
+             << universal_gnss_driver::ToString(
+                    result.resolved_output_port.value_or(*result.output_port))
+             << "\n";
+    }
   }
   if (result.baud.has_value())
   {
@@ -554,6 +581,33 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   if (result.signal_profile.has_value())
   {
     output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"output_port\": ";
+  if (result.output_port.has_value())
+  {
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.output_port))
+           << "\"";
+  }
+  else if (result.vendor == "ublox")
+  {
+    output << "\"legacy_default\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"resolved_output_port\": ";
+  if (result.resolved_output_port.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
            << "\"";
   }
   else

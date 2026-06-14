@@ -20,6 +20,7 @@ using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kRateMeas;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGalEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kUart1Baudrate;
+using universal_gnss_protocols::ubx_cfg_keys::kUart2Baudrate;
 
 struct TestContext
 {
@@ -166,6 +167,18 @@ void TestHelperBuilders(TestContext& ctx)
                  baud.payload[11u] == 0x00u,
              "baud-rate helper should pack UART1 baud rate as a U4");
 
+  const auto uart2_baud = universal_gnss_protocols::BuildUart2BaudrateFrame(460800u);
+  ctx.Expect(uart2_baud.status == UbxCfgBuilderStatus::kOk &&
+                 uart2_baud.payload[4u] == 0x01u &&
+                 uart2_baud.payload[5u] == 0x00u &&
+                 uart2_baud.payload[6u] == 0x53u &&
+                 uart2_baud.payload[7u] == 0x40u &&
+                 uart2_baud.payload[8u] == 0x00u &&
+                 uart2_baud.payload[9u] == 0x08u &&
+                 uart2_baud.payload[10u] == 0x07u &&
+                 uart2_baud.payload[11u] == 0x00u,
+             "baud-rate helper should pack UART2 baud rate as a U4");
+
   const auto rate_hz = universal_gnss_protocols::BuildRateHzFrame(10.0);
   ctx.Expect(rate_hz.status == UbxCfgBuilderStatus::kOk &&
                  rate_hz.payload[4u] == 0x01u &&
@@ -194,6 +207,12 @@ void TestRejectedInputs(TestContext& ctx)
       UbxCfgKeyValue{kUart1Baudrate, UbxCfgValue::U1(1u)});
   ctx.Expect(bad_size.status == UbxCfgBuilderStatus::kSizeMismatch,
              "builder should reject value types that do not match the key size");
+
+  const auto bad_uart2_size = universal_gnss_protocols::BuildUbxCfgValsetFrame(
+      {UbxCfgLayer::kRam},
+      UbxCfgKeyValue{kUart2Baudrate, UbxCfgValue::U1(1u)});
+  ctx.Expect(bad_uart2_size.status == UbxCfgBuilderStatus::kSizeMismatch,
+             "builder should reject UART2 values that do not match the key size");
 
   const auto no_layers = universal_gnss_protocols::BuildUbxCfgValsetFrame(
       {},

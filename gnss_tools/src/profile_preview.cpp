@@ -30,16 +30,39 @@ using universal_gnss_driver::ReceiverAutoConfigPlan;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHw2Uart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHw2Uart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHw2Usb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHwUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHwUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonHwUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavDopUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavDopUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavDopUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUsb;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxRxmRtcmUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxRxmRtcmUart2;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxRxmRtcmUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kRateMeas;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalBdsEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGalEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGloEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGpsEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kUart1Baudrate;
+using universal_gnss_protocols::ubx_cfg_keys::kUart2Baudrate;
 
 constexpr std::uint8_t kUbxCfgClass = 0x06u;
 constexpr std::uint8_t kUbxCfgValsetId = 0x8Au;
@@ -295,20 +318,85 @@ std::string DescribeMessageRateKey(const std::uint32_t key)
   switch (key)
   {
     case kMsgoutUbxNavPvtUart1:
+    case kMsgoutUbxNavPvtUart2:
+    case kMsgoutUbxNavPvtUsb:
       return "NAV-PVT";
     case kMsgoutUbxNavSatUart1:
+    case kMsgoutUbxNavSatUart2:
+    case kMsgoutUbxNavSatUsb:
       return "NAV-SAT";
     case kMsgoutUbxNavStatusUart1:
+    case kMsgoutUbxNavStatusUart2:
+    case kMsgoutUbxNavStatusUsb:
       return "NAV-STATUS";
+    case kMsgoutUbxNavDopUart1:
+    case kMsgoutUbxNavDopUart2:
+    case kMsgoutUbxNavDopUsb:
+      return "NAV-DOP";
+    case kMsgoutUbxMonHwUart1:
+    case kMsgoutUbxMonHwUart2:
+    case kMsgoutUbxMonHwUsb:
+      return "MON-HW";
+    case kMsgoutUbxMonHw2Uart1:
+    case kMsgoutUbxMonHw2Uart2:
+    case kMsgoutUbxMonHw2Usb:
+      return "MON-HW2";
     case kMsgoutUbxMonRfUart1:
+    case kMsgoutUbxMonRfUart2:
+    case kMsgoutUbxMonRfUsb:
       return "MON-RF";
     case kMsgoutNmeaGgaUart1:
+    case kMsgoutNmeaGgaUart2:
+    case kMsgoutNmeaGgaUsb:
       return "NMEA-GGA";
+    case kMsgoutUbxRxmRtcmUart1:
+    case kMsgoutUbxRxmRtcmUart2:
+    case kMsgoutUbxRxmRtcmUsb:
+      return "RXM-RTCM";
   }
 
   std::ostringstream stream;
   stream << "CFG key 0x" << std::hex << std::uppercase << key;
   return stream.str();
+}
+
+std::string DescribeMessageRatePort(const std::uint32_t key)
+{
+  switch (key)
+  {
+    case kMsgoutUbxNavPvtUart1:
+    case kMsgoutUbxNavSatUart1:
+    case kMsgoutUbxNavStatusUart1:
+    case kMsgoutUbxNavDopUart1:
+    case kMsgoutUbxMonHwUart1:
+    case kMsgoutUbxMonHw2Uart1:
+    case kMsgoutUbxMonRfUart1:
+    case kMsgoutUbxRxmRtcmUart1:
+    case kMsgoutNmeaGgaUart1:
+      return "UART1";
+    case kMsgoutUbxNavPvtUart2:
+    case kMsgoutUbxNavSatUart2:
+    case kMsgoutUbxNavStatusUart2:
+    case kMsgoutUbxNavDopUart2:
+    case kMsgoutUbxMonHwUart2:
+    case kMsgoutUbxMonHw2Uart2:
+    case kMsgoutUbxMonRfUart2:
+    case kMsgoutUbxRxmRtcmUart2:
+    case kMsgoutNmeaGgaUart2:
+      return "UART2";
+    case kMsgoutUbxNavPvtUsb:
+    case kMsgoutUbxNavSatUsb:
+    case kMsgoutUbxNavStatusUsb:
+    case kMsgoutUbxNavDopUsb:
+    case kMsgoutUbxMonHwUsb:
+    case kMsgoutUbxMonHw2Usb:
+    case kMsgoutUbxMonRfUsb:
+    case kMsgoutUbxRxmRtcmUsb:
+    case kMsgoutNmeaGgaUsb:
+      return "USB";
+  }
+
+  return "receiver port";
 }
 
 std::string DescribeConstellationKey(const std::uint32_t key)
@@ -371,9 +459,11 @@ std::string DescribeUbxValset(const std::vector<std::uint8_t>& frame)
     return "preview UBX binary configuration command";
   }
 
-  if (key == kUart1Baudrate && value_size == 4u)
+  if ((key == kUart1Baudrate || key == kUart2Baudrate) && value_size == 4u)
   {
-    return "set UART1 baud rate to " +
+    return std::string("set ") +
+           (key == kUart1Baudrate ? "UART1" : "UART2") +
+           " baud rate to " +
            std::to_string(ReadLeU4(frame, payload_offset + 8u));
   }
 
@@ -389,17 +479,40 @@ std::string DescribeUbxValset(const std::vector<std::uint8_t>& frame)
   }
 
   if ((key == kMsgoutUbxNavPvtUart1 ||
+       key == kMsgoutUbxNavPvtUart2 ||
+       key == kMsgoutUbxNavPvtUsb ||
        key == kMsgoutUbxNavSatUart1 ||
+       key == kMsgoutUbxNavSatUart2 ||
+       key == kMsgoutUbxNavSatUsb ||
        key == kMsgoutUbxNavStatusUart1 ||
+       key == kMsgoutUbxNavStatusUart2 ||
+       key == kMsgoutUbxNavStatusUsb ||
+       key == kMsgoutUbxNavDopUart1 ||
+       key == kMsgoutUbxNavDopUart2 ||
+       key == kMsgoutUbxNavDopUsb ||
+       key == kMsgoutUbxMonHwUart1 ||
+       key == kMsgoutUbxMonHwUart2 ||
+       key == kMsgoutUbxMonHwUsb ||
+       key == kMsgoutUbxMonHw2Uart1 ||
+       key == kMsgoutUbxMonHw2Uart2 ||
+       key == kMsgoutUbxMonHw2Usb ||
        key == kMsgoutUbxMonRfUart1 ||
-       key == kMsgoutNmeaGgaUart1) &&
+       key == kMsgoutUbxMonRfUart2 ||
+       key == kMsgoutUbxMonRfUsb ||
+       key == kMsgoutUbxRxmRtcmUart1 ||
+       key == kMsgoutUbxRxmRtcmUart2 ||
+       key == kMsgoutUbxRxmRtcmUsb ||
+       key == kMsgoutNmeaGgaUart1 ||
+       key == kMsgoutNmeaGgaUart2 ||
+       key == kMsgoutNmeaGgaUsb) &&
       value_size == 1u)
   {
     const std::uint8_t rate = frame[payload_offset + 8u];
     return std::string(rate == 0u ? "disable " : "enable ") +
            DescribeMessageRateKey(key) +
-           (rate == 0u ? " output on UART1" :
-                         " output on UART1 at rate " + std::to_string(rate));
+           (rate == 0u ? " output on " + DescribeMessageRatePort(key)
+                       : " output on " + DescribeMessageRatePort(key) +
+                             " at rate " + std::to_string(rate));
   }
 
   if ((key == kSignalGpsEnable ||
@@ -527,6 +640,7 @@ ProfilePreviewResult MakeErrorResult(const ProfilePreviewOptions& options,
   result.profile = ToLowerCopy(options.profile);
   result.persistent = options.persistent;
   result.signal_profile = options.signal_profile;
+  result.output_port = options.output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
   result.error_message = error_message;
@@ -644,6 +758,7 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   request.apply_mode = options.persistent ? ReceiverAutoConfigApplyMode::kPersistent
                                           : ReceiverAutoConfigApplyMode::kRuntimeOnly;
   request.signal_profile = options.signal_profile;
+  request.output_port = options.output_port;
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
 
@@ -658,6 +773,8 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
           : ToLowerCopy(options.profile);
   result.persistent = options.persistent;
   result.signal_profile = plan.request.signal_profile;
+  result.output_port = plan.request.output_port;
+  result.resolved_output_port = plan.resolved_output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
   result.error_message =
@@ -700,6 +817,29 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
   {
     output << "Signal profile override: "
            << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
+  }
+  if (result.vendor == "ublox")
+  {
+    if (!result.output_port.has_value())
+    {
+      output << "Output port: legacy_default (uart1 + usb)\n";
+    }
+    else if (*result.output_port == universal_gnss_driver::ReceiverAutoConfigOutputPort::kAuto)
+    {
+      output << "Output port request: auto\n";
+      if (result.resolved_output_port.has_value())
+      {
+        output << "Resolved output port: "
+               << universal_gnss_driver::ToString(*result.resolved_output_port) << "\n";
+      }
+    }
+    else
+    {
+      output << "Output port: "
+             << universal_gnss_driver::ToString(
+                    result.resolved_output_port.value_or(*result.output_port))
+             << "\n";
+    }
   }
   if (result.baud.has_value())
   {
@@ -765,6 +905,34 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   {
     output << "\""
            << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "  \"output_port\": ";
+  if (result.output_port.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.output_port))
+           << "\"";
+  }
+  else if (result.vendor == "ublox")
+  {
+    output << "\"legacy_default\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "  \"resolved_output_port\": ";
+  if (result.resolved_output_port.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
            << "\"";
   }
   else

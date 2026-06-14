@@ -173,6 +173,52 @@ void TestSignalProfilePreview(TestContext& ctx)
              "minimal signal-profile preview text should show the reduced output plan");
 }
 
+void TestUbloxOutputPortPreview(TestContext& ctx)
+{
+  ProfilePreviewOptions usb_options;
+  usb_options.vendor = "ublox";
+  usb_options.profile = "rover_high_precision";
+  usb_options.output_port =
+      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
+  usb_options.baud = 460800u;
+
+  const auto usb_result = BuildProfilePreview(usb_options);
+  const std::string usb_text = FormatProfilePreviewText(usb_result);
+
+  ctx.Expect(usb_result.status == ProfilePreviewStatus::kOk &&
+                 usb_result.summary.commands_total == 9u &&
+                 usb_result.output_port ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort>{
+                         universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb} &&
+                 usb_result.resolved_output_port ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort>{
+                         universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb},
+             "USB-only preview should shrink to the documented USB message set");
+  ctx.Expect(usb_text.find("Output port: usb") != std::string::npos &&
+                 usb_text.find("output on USB") != std::string::npos &&
+                 usb_text.find("UART1 baud rate") == std::string::npos,
+             "USB-only preview text should decode USB message outputs and omit UART baud commands");
+
+  ProfilePreviewOptions uart2_options;
+  uart2_options.vendor = "ublox";
+  uart2_options.profile = "rover_high_precision_debug";
+  uart2_options.output_port =
+      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart2;
+  uart2_options.baud = 460800u;
+
+  const auto uart2_result = BuildProfilePreview(uart2_options);
+  const std::string uart2_text = FormatProfilePreviewText(uart2_result);
+
+  ctx.Expect(uart2_result.status == ProfilePreviewStatus::kOk &&
+                 uart2_result.summary.commands_total == 15u,
+             "UART2-only diagnostics preview should include a UART2 baud command, rate command, nine UART2 message outputs, and four constellation toggles");
+  ctx.Expect(uart2_text.find("Output port: uart2") != std::string::npos &&
+                 uart2_text.find("set UART2 baud rate to 460800") != std::string::npos &&
+                 uart2_text.find("output on UART2") != std::string::npos &&
+                 uart2_text.find("output on USB") == std::string::npos,
+             "UART2-only preview text should decode UART2 baud and message-output commands");
+}
+
 void TestFactoryResetPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
@@ -242,6 +288,7 @@ int main()
   TestPersistentSummaryGeneration(ctx);
   TestUnicorePersistentTargetBaudPreview(ctx);
   TestSignalProfilePreview(ctx);
+  TestUbloxOutputPortPreview(ctx);
   TestFactoryResetPreview(ctx);
   TestJsonFormatting(ctx);
   TestInvalidUnicoreBaudOverride(ctx);

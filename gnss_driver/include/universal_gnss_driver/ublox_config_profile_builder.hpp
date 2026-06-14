@@ -32,9 +32,21 @@ struct UbloxConstellationConfig
   bool enabled{true};
 };
 
+enum class UbloxInterfacePort : std::uint8_t
+{
+  kUart1 = 0,
+  kUart2 = 1,
+  kUsb = 2,
+};
+
 struct UbloxPortConfig
 {
+  std::vector<UbloxInterfacePort> output_ports{
+      UbloxInterfacePort::kUart1,
+      UbloxInterfacePort::kUsb,
+  };
   std::optional<std::uint32_t> uart1_baudrate{};
+  std::optional<std::uint32_t> uart2_baudrate{};
 };
 
 struct UbloxConfigProfile
@@ -65,17 +77,26 @@ public:
   static UbloxConfigProfile BuildUbloxRoverProfile(
       ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime,
       std::vector<universal_gnss_protocols::UbxCfgLayer> layers = {
-          universal_gnss_protocols::UbxCfgLayer::kRam});
+          universal_gnss_protocols::UbxCfgLayer::kRam},
+      std::vector<UbloxInterfacePort> output_ports = {
+          UbloxInterfacePort::kUart1,
+          UbloxInterfacePort::kUsb});
 
   static UbloxConfigProfile BuildUbloxBaseProfile(
       ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime,
       std::vector<universal_gnss_protocols::UbxCfgLayer> layers = {
-          universal_gnss_protocols::UbxCfgLayer::kRam});
+          universal_gnss_protocols::UbxCfgLayer::kRam},
+      std::vector<UbloxInterfacePort> output_ports = {
+          UbloxInterfacePort::kUart1,
+          UbloxInterfacePort::kUsb});
 
   static UbloxConfigProfile BuildUbloxDiagnosticsProfile(
       ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime,
       std::vector<universal_gnss_protocols::UbxCfgLayer> layers = {
-          universal_gnss_protocols::UbxCfgLayer::kRam});
+          universal_gnss_protocols::UbxCfgLayer::kRam},
+      std::vector<UbloxInterfacePort> output_ports = {
+          UbloxInterfacePort::kUart1,
+          UbloxInterfacePort::kUsb});
 };
 
 }  // namespace universal_gnss_driver

@@ -12,11 +12,13 @@ void PrintUsage(const char* program_name)
   std::cout
       << "Usage: " << program_name
       << " [--json] [--persistent] [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+      << " [--output-port <usb|uart1|uart2|all|auto>]"
       << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
       << "  " << program_name << " ublox rover_high_precision\n"
       << "  " << program_name << " unicore rover_high_precision_debug\n"
       << "  " << program_name << " ublox rover_high_precision --persistent\n"
+      << "  " << program_name << " ublox rover_high_precision --output-port usb\n"
       << "  " << program_name << " unicore rover_high_precision --signal-profile high_precision\n"
       << "  " << program_name << " ublox rover_high_precision --rate-hz 5 --config-baud 921600\n"
       << "  " << program_name << " unicore factory_reset --json\n"
@@ -123,6 +125,28 @@ int main(int argc, char** argv)
       }
 
       options.signal_profile = *parsed;
+      continue;
+    }
+
+    if (argument == "--output-port")
+    {
+      if (index + 1 >= argc)
+      {
+        std::cerr << "error: --output-port requires a value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      const auto parsed =
+          universal_gnss_driver::ParseReceiverAutoConfigOutputPort(argv[++index]);
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --output-port value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      options.output_port = *parsed;
       continue;
     }
 

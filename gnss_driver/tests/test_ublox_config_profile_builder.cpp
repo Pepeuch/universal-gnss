@@ -24,19 +24,24 @@ using universal_gnss_driver::UbloxConfigProfile;
 using universal_gnss_driver::UbloxConfigProfileBuildStatus;
 using universal_gnss_driver::UbloxConfigProfileBuilder;
 using universal_gnss_driver::UbloxConstellationConfig;
+using universal_gnss_driver::UbloxInterfacePort;
 using universal_gnss_driver::UbloxMessageRate;
 using universal_gnss_protocols::UbxCfgConstellation;
 using universal_gnss_protocols::UbxCfgLayer;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart2;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUart2;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxMonRfUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart1;
+using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUart2;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavPvtUsb;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavSatUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutUbxNavStatusUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kSignalGalEnable;
 using universal_gnss_protocols::ubx_cfg_keys::kUart1Baudrate;
+using universal_gnss_protocols::ubx_cfg_keys::kUart2Baudrate;
 using universal_gnss_transport::MemoryByteSink;
 
 struct TestContext
@@ -119,18 +124,23 @@ void TestBaudrateAndMeasurementRateGeneration(TestContext& ctx)
 {
   UbloxConfigProfile profile;
   profile.port.uart1_baudrate = 460800u;
+  profile.port.uart2_baudrate = 460800u;
   profile.measurement_rate_hz = 5.0;
 
   const auto result = UbloxConfigProfileBuilder::Build(profile);
   ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 2u,
-             "explicit baudrate and measurement rate should each generate a command");
+                 result.commands.size() == 3u,
+             "explicit UART1/UART2 baudrate overrides and the measurement rate should each generate a command");
 
   const auto baud_key = PackU32Le(kUart1Baudrate);
+  const auto uart2_baud_key = PackU32Le(kUart2Baudrate);
   const std::vector<std::uint8_t> baud_value = {0x00u, 0x08u, 0x07u, 0x00u};
   ctx.Expect(ContainsBytes(result.commands[0].payload.binary, baud_key) &&
                  ContainsBytes(result.commands[0].payload.binary, baud_value),
              "u-blox baudrate command should pack the UART1 baud CFG key and U4 little-endian value");
+  ctx.Expect(ContainsBytes(result.commands[1].payload.binary, uart2_baud_key) &&
+                 ContainsBytes(result.commands[1].payload.binary, baud_value),
+             "u-blox baudrate command should pack the UART2 baud CFG key and U4 little-endian value");
 }
 
 void TestMessageEnableDisableGeneration(TestContext& ctx)
@@ -173,6 +183,57 @@ void TestMessageEnableDisableGeneration(TestContext& ctx)
   ctx.Expect(ContainsBytes(result.commands[5].payload.binary, nmea_gga_usb) &&
                  ContainsBytes(result.commands[5].payload.binary, {0x00u}),
              "disabled USB message command should carry the CFG key and a zero rate");
+}
+
+void TestOutputPortSelection(TestContext& ctx)
+{
+  const auto usb_profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
+      ReceiverCommandSafetyLevel::kRuntime,
+      {UbxCfgLayer::kRam},
+      {UbloxInterfacePort::kUsb});
+  const auto usb_result = UbloxConfigProfileBuilder::Build(usb_profile);
+
+  ctx.Expect(usb_result.status == UbloxConfigProfileBuildStatus::kOk &&
+                 usb_result.commands.size() == 9u,
+             "USB-only rover profiles should emit one measurement command, four USB message commands, and four constellation commands");
+  ctx.Expect(!usb_result.commands.empty() &&
+                 ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
+                 !ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart1)),
+             "USB-only rover profiles should emit USB NAV-PVT output keys without UART1 output keys");
+
+  auto uart2_profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(
+      ReceiverCommandSafetyLevel::kRuntime,
+      {UbxCfgLayer::kRam},
+      {UbloxInterfacePort::kUart2});
+  uart2_profile.port.uart2_baudrate = 460800u;
+  const auto uart2_result = UbloxConfigProfileBuilder::Build(uart2_profile);
+
+  ctx.Expect(uart2_result.status == UbloxConfigProfileBuildStatus::kOk &&
+                 uart2_result.commands.size() == 15u,
+             "UART2-only diagnostics profiles with a baud override should emit one UART2 baud command, one rate command, nine UART2 message commands, and four constellation commands");
+  ctx.Expect(ContainsBytes(uart2_result.commands[0].payload.binary, PackU32Le(kUart2Baudrate)) &&
+                 ContainsBytes(uart2_result.commands[2].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart2)) &&
+                 ContainsBytes(uart2_result.commands[10].payload.binary, PackU32Le(kMsgoutNmeaGgaUart2)),
+             "UART2-only diagnostics profiles should target the documented UART2 baud and message-output CFG keys");
+
+  const auto all_ports_profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
+      ReceiverCommandSafetyLevel::kRuntime,
+      {UbxCfgLayer::kRam},
+      {
+          UbloxInterfacePort::kUsb,
+          UbloxInterfacePort::kUart1,
+          UbloxInterfacePort::kUart2,
+      });
+  const auto all_ports_result = UbloxConfigProfileBuilder::Build(all_ports_profile);
+
+  ctx.Expect(all_ports_result.status == UbloxConfigProfileBuildStatus::kOk &&
+                 all_ports_result.commands.size() == 17u,
+             "all-port rover profiles should emit one rate command, twelve message commands, and four constellation commands");
+  ctx.Expect(ContainsBytes(all_ports_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
+                 ContainsBytes(all_ports_result.commands[2].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart1)) &&
+                 ContainsBytes(all_ports_result.commands[3].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart2)) &&
+                 ContainsBytes(all_ports_result.commands[12].payload.binary, PackU32Le(kMsgoutUbxMonRfUart2)),
+             "all-port rover profiles should emit USB, UART1, and UART2 message-output keys");
 }
 
 void TestConstellationAndSafetyPolicy(TestContext& ctx)
@@ -251,6 +312,7 @@ int main()
   TestRoverProfileGeneratesExpectedCommands(ctx);
   TestBaudrateAndMeasurementRateGeneration(ctx);
   TestMessageEnableDisableGeneration(ctx);
+  TestOutputPortSelection(ctx);
   TestConstellationAndSafetyPolicy(ctx);
   TestDispatchSafetyIntegration(ctx);
   TestInvalidProfileInputs(ctx);

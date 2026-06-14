@@ -464,7 +464,17 @@ Current behavior:
 - prints compact human-readable command previews by default
 - can emit JSON for scripting and review
 - can apply offline overrides like `--persistent`, `--signal-profile`,
-  `--baud`, and `--rate-hz`
+  `--baud`, `--rate-hz`, and `--output-port`
+- for `ublox`, separates the current host transport from the receiver output
+  interface being configured:
+  - `--output-port usb` enables the required `CFG-MSGOUT-*USB` keys only
+  - `--output-port uart1` or `uart2` targets only that UART interface
+  - `--output-port all` enables USB, UART1, and UART2 outputs together
+  - `--output-port auto` uses the available transport-path context when present
+  - when `--output-port` is omitted, the legacy planner default remains
+    `UART1 + USB` for backwards compatibility
+- for `ublox`, `--config-baud` only applies to UART output-port plans; USB has
+  no baud-rate configuration key
 - shows `factory_reset` command counts and baud-reset implications when the
   vendor support is known
 
@@ -481,6 +491,7 @@ Examples:
 ```text
 gnss_profile_preview nmea runtime_only
 gnss_profile_preview ublox rover_high_precision
+gnss_profile_preview ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_profile_preview ublox rover_high_precision_debug --json
 gnss_profile_preview unicore rover_high_precision --signal-profile minimal --rate-hz 1
 gnss_profile_preview unicore rover_high_precision --persistent --rate-hz 5
@@ -491,6 +502,7 @@ Text output includes:
 
 - profile metadata and requested overrides
 - signal-profile intent when present
+- requested and resolved output-port context when present
 - one command at a time with kind, safety level, payload kind, payload size, and description
 - raw text commands for ASCII-based profiles
 - raw binary hex only when `--verbose` is enabled
@@ -522,6 +534,8 @@ Current behavior:
 - highlights whether explicit safety confirmation would be required before dispatch
 - marks persistent and factory-reset commands clearly in the sequence
 - accepts vendor-neutral `--signal-profile balanced|high_precision|all_signals|minimal|custom`
+- accepts `--output-port usb|uart1|uart2|all|auto` for `ublox` interface
+  selection
 - supports the same portable profile names and legacy aliases as
   `gnss_profile_preview`
 - current receiver-family support:
@@ -537,6 +551,21 @@ Current behavior:
   receiver state
 - emits either compact text output or JSON
 
+u-blox interface-planning notes:
+
+- the transport device is how the CLI would talk to the receiver right now
+- the output port is which receiver interface should emit configured runtime
+  messages later
+- `--config-baud` only changes UART interfaces; it is ignored for
+  `--output-port usb`
+- omitting `--output-port` preserves the legacy `UART1 + USB` command plan for
+  backwards compatibility
+- `--output-port auto` resolves to USB for `ttyACM*` and
+  `/dev/serial/by-id/usb-u-blox*` paths when transport context is available
+- the same USB inference also accepts container-local aliases such as
+  `/dev/usb-u-blox_*`
+- otherwise it warns and falls back to `uart1`
+
 Current non-goals:
 
 - command execution
@@ -550,10 +579,12 @@ Examples:
 ```text
 gnss_config_plan nmea runtime_only
 gnss_config_plan ublox rover_high_precision
+gnss_config_plan ublox rover_high_precision --output-port usb --rate-hz 7
+gnss_config_plan ublox rover_high_precision --output-port uart1 --config-baud 460800 --rate-hz 7
 gnss_config_plan unicore rover_high_precision_debug
 gnss_config_plan unicore rover_high_precision --signal-profile minimal --rate-hz 1
 gnss_config_plan ublox rover_high_precision --persistent
-gnss_config_plan ublox rover_high_precision --rate-hz 5 --baud 921600
+gnss_config_plan ublox rover_high_precision --rate-hz 5 --config-baud 921600
 gnss_config_plan unicore factory_reset --json
 ```
 
@@ -561,6 +592,7 @@ Text output includes:
 
 - receiver family and profile metadata
 - signal-profile intent and other requested overrides
+- requested and resolved output-port context when present
 - requested apply mode
 - dry-run status
 - runtime / persistent / factory-reset command counts
@@ -599,6 +631,8 @@ Current behavior:
 - accepts the same portable profile names and legacy aliases as
   `gnss_profile_preview`
 - accepts the same vendor-neutral `--signal-profile` values as
+  `gnss_config_plan`
+- accepts the same `--output-port usb|uart1|uart2|all|auto` values as
   `gnss_config_plan`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
 - supports Unicore persistent live apply through the reset/recovery workflow
@@ -640,9 +674,9 @@ Examples:
 
 ```text
 gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm
+gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only --confirm
 gnss_config_apply --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
-gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --apply-mode runtime-only --confirm
+gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --output-port usb --apply-mode runtime-only --confirm
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode persistent --confirm
 ```
@@ -671,6 +705,7 @@ Text output includes:
 - discovered device/family/baud context when available
 - plan validation, warnings, and rollback expectations
 - signal-profile intent and its translated command-plan impact when present
+- requested and resolved output-port context when present
 - dry-run vs live-apply-requested status
 - runtime/persistent confirmation requirements
 - the command sequence to be applied

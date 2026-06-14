@@ -383,6 +383,41 @@ Current capability-oriented translation policy:
   - signal-profile requests remain warning-only no-ops under `runtime_only`
     because generic NMEA has no portable receiver-side configuration standard
 
+### u-blox interface abstraction
+
+Portable planning must also distinguish:
+
+- the current transport device used to reach the receiver now
+- the receiver interface that should emit configured runtime messages later
+
+For u-blox, that second concept is modeled as `output_port` with the portable
+values:
+
+- `usb`
+- `uart1`
+- `uart2`
+- `all`
+- `auto`
+
+Current policy:
+
+- omitting `output_port` keeps the legacy planner behavior of enabling the
+  required outputs on `UART1 + USB`
+- `config_baud` only applies to UART interfaces; USB has no receiver-side baud
+  setting
+- `output_port=usb` generates only `CFG-MSGOUT-*USB` keys and no UART baud
+  command
+- `output_port=uart1` and `output_port=uart2` generate interface-specific
+  `CFG-MSGOUT` keys and apply `config_baud` only to the selected UART
+- `output_port=all` enables USB, UART1, and UART2 outputs together; when a
+  baud override is requested, both UART1 and UART2 must be treated as live
+  configuration targets
+- `output_port=auto` may infer USB from transport paths such as `ttyACM*` or
+  `/dev/serial/by-id/usb-u-blox*`
+- container-local aliases such as `/dev/usb-u-blox_*` should be treated as the
+  same USB transport class
+- otherwise it warns and falls back conservatively
+
 ### Apply modes
 
 Auto Configuration should standardize three modes:
@@ -490,6 +525,8 @@ For `v1`, support:
 - `rover_high_precision_debug`
 - persistent, with explicit reporting that the current persistent target is
   `RAM + BBR`
+- interface-aware planning for `usb`, `uart1`, `uart2`, `all`, and cautious
+  `auto` output-port selection
 - keep `factory_reset` reported as unsupported until the portable planner and
   apply path can support it honestly
 

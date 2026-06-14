@@ -10,8 +10,10 @@ namespace
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::ParseReceiverAutoConfigProfile;
+using universal_gnss_driver::ParseReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ParseReceiverAutoConfigSignalProfile;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverAutoConfigRequest;
@@ -114,6 +116,14 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
                  std::optional<ReceiverAutoConfigSignalProfile>{
                      ReceiverAutoConfigSignalProfile::kMinimal},
              "low_bandwidth should remain accepted as a compatibility alias for minimal");
+  ctx.Expect(ParseReceiverAutoConfigOutputPort("usb") ==
+                 std::optional<ReceiverAutoConfigOutputPort>{
+                     ReceiverAutoConfigOutputPort::kUsb},
+             "usb should parse as the canonical u-blox output-port selector");
+  ctx.Expect(ParseReceiverAutoConfigOutputPort("auto") ==
+                 std::optional<ReceiverAutoConfigOutputPort>{
+                     ReceiverAutoConfigOutputPort::kAuto},
+             "auto should parse as the transport-aware u-blox output-port selector");
   ctx.Expect(std::string(
                  universal_gnss_driver::ToString(
                      ReceiverAutoConfigProfile::kRoverHighPrecisionDebug)) ==
@@ -124,6 +134,11 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
                      ReceiverAutoConfigSignalProfile::kAllSignals)) ==
                  "all_signals",
              "portable signal-profile formatting should prefer canonical vendor-neutral names");
+  ctx.Expect(std::string(
+                 universal_gnss_driver::ToString(
+                     ReceiverAutoConfigOutputPort::kUart2)) ==
+                 "uart2",
+             "portable output-port formatting should prefer canonical u-blox interface names");
 }
 
 void TestUbloxRuntimeOnlyPlan(TestContext& ctx)
@@ -165,6 +180,85 @@ void TestUbloxRoverHighPrecisionPlans(TestContext& ctx)
                  debug_plan.validation.generated_command_count == 23u &&
                  debug_plan.validation.runtime_command_count == 23u,
              "u-blox rover_high_precision_debug planning should preserve the existing diagnostics builder");
+}
+
+void TestUbloxOutputPortPlanning(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUblox;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
+                          921600u,
+                          ReceiverDetectedFamily::kUblox);
+  request.transport_device_path = request.discovery_result->path;
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  const auto legacy_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(legacy_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 legacy_plan.validation.generated_command_count == 13u &&
+                 ContainsWarning(legacy_plan, "legacy default output-port set"),
+             "u-blox plans without an explicit output port should keep the legacy UART1+USB command set and warn on USB-looking transports");
+
+  request.output_port = ReceiverAutoConfigOutputPort::kUsb;
+  request.config_baud = 460800u;
+  const auto usb_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(usb_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 usb_plan.validation.generated_command_count == 9u &&
+                 usb_plan.resolved_output_port ==
+                     std::optional<ReceiverAutoConfigOutputPort>{
+                         ReceiverAutoConfigOutputPort::kUsb} &&
+                 ContainsWarning(usb_plan, "does not apply to USB"),
+             "u-blox USB-only plans should drop UART baud commands and warn that config-baud is ignored on USB");
+
+  request.output_port = ReceiverAutoConfigOutputPort::kAll;
+  request.config_baud = 460800u;
+  const auto all_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(all_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 all_plan.validation.generated_command_count == 19u &&
+                 all_plan.resolved_output_port ==
+                     std::optional<ReceiverAutoConfigOutputPort>{
+                         ReceiverAutoConfigOutputPort::kAll} &&
+                 ContainsWarning(all_plan, "both UART1 and UART2"),
+             "u-blox all-port plans should expand to USB, UART1, and UART2 outputs plus both UART baud commands when config-baud is requested");
+
+  request.output_port = ReceiverAutoConfigOutputPort::kAuto;
+  request.config_baud = std::nullopt;
+  const auto auto_usb_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(auto_usb_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 auto_usb_plan.validation.generated_command_count == 9u &&
+                 auto_usb_plan.resolved_output_port ==
+                     std::optional<ReceiverAutoConfigOutputPort>{
+                         ReceiverAutoConfigOutputPort::kUsb} &&
+                 ContainsWarning(auto_usb_plan, "resolved to usb"),
+             "u-blox auto output-port plans should resolve USB-attached receivers to USB output keys");
+
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
+                          921600u,
+                          ReceiverDetectedFamily::kUblox);
+  request.transport_device_path = request.discovery_result->path;
+  const auto auto_usb_alias_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(auto_usb_alias_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 auto_usb_alias_plan.validation.generated_command_count == 9u &&
+                 auto_usb_alias_plan.resolved_output_port ==
+                     std::optional<ReceiverAutoConfigOutputPort>{
+                         ReceiverAutoConfigOutputPort::kUsb} &&
+                 ContainsWarning(auto_usb_alias_plan, "resolved to usb"),
+             "u-blox auto output-port plans should also treat /dev/usb-u-blox aliases as USB transports");
+
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUblox);
+  request.transport_device_path = request.discovery_result->path;
+  request.output_port = ReceiverAutoConfigOutputPort::kAuto;
+  const auto auto_uart_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(auto_uart_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 auto_uart_plan.validation.generated_command_count == 9u &&
+                 auto_uart_plan.resolved_output_port ==
+                     std::optional<ReceiverAutoConfigOutputPort>{
+                         ReceiverAutoConfigOutputPort::kUart1} &&
+                 ContainsWarning(auto_uart_plan, "resolved to uart1"),
+             "u-blox auto output-port plans should resolve ttyUSB transports to UART1 output keys");
 }
 
 void TestUbloxFactoryResetStub(TestContext& ctx)
@@ -403,6 +497,7 @@ int main()
   TestProfileParsingAndFormatting(ctx);
   TestUbloxRuntimeOnlyPlan(ctx);
   TestUbloxRoverHighPrecisionPlans(ctx);
+  TestUbloxOutputPortPlanning(ctx);
   TestUbloxFactoryResetStub(ctx);
   TestUnicoreRoverHighPrecisionPlans(ctx);
   TestSignalProfileCapabilityMapping(ctx);

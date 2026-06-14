@@ -27,6 +27,7 @@ struct ProfilePreviewOptions
   std::string profile{};
   bool persistent{false};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
 };
@@ -53,6 +54,8 @@ struct ProfilePreviewResult
   std::string profile{};
   bool persistent{false};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> output_port{};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> resolved_output_port{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
   std::vector<ProfilePreviewCommand> commands{};

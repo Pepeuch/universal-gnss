@@ -431,6 +431,38 @@ UbxCfgBuilderResult BuildUart1BaudrateFrame(
       transaction);
 }
 
+UbxCfgBuilderResult BuildUart2BaudrateFrame(
+    const std::uint32_t baud_rate,
+    const std::initializer_list<UbxCfgLayer> layers,
+    const UbxCfgTransaction transaction)
+{
+  if (baud_rate == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "baud rate must be non-zero");
+  }
+
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{ubx_cfg_keys::kUart2Baudrate, UbxCfgValue::U4(baud_rate)},
+      transaction);
+}
+
+UbxCfgBuilderResult BuildUart2BaudrateFrame(
+    const std::uint32_t baud_rate,
+    const std::vector<UbxCfgLayer>& layers,
+    const UbxCfgTransaction transaction)
+{
+  if (baud_rate == 0u)
+  {
+    return MakeError(UbxCfgBuilderStatus::kInvalidArgument, "baud rate must be non-zero");
+  }
+
+  return BuildUbxCfgValsetFrame(
+      layers,
+      UbxCfgKeyValue{ubx_cfg_keys::kUart2Baudrate, UbxCfgValue::U4(baud_rate)},
+      transaction);
+}
+
 UbxCfgBuilderResult BuildRateHzFrame(const double rate_hz,
                                      const std::initializer_list<UbxCfgLayer> layers,
                                      const UbxCfgTransaction transaction)
