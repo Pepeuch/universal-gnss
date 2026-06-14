@@ -144,7 +144,7 @@ void ApplyPersistentWarningsAndRollback(ReceiverAutoConfigPlan& plan)
   if (plan.request.receiver_family == ReceiverDetectedFamily::kUblox)
   {
     plan.warnings.push_back(
-        "u-blox persistent planning currently targets CFG-RAM plus CFG-BBR");
+        "u-blox persistent planning currently targets CFG-RAM plus CFG-BBR plus CFG-FLASH");
   }
   else if (plan.request.receiver_family == ReceiverDetectedFamily::kUnicore)
   {
@@ -542,6 +542,7 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   if (safety_level == ReceiverCommandSafetyLevel::kPersistent)
   {
     layers.push_back(UbxCfgLayer::kBbr);
+    layers.push_back(UbxCfgLayer::kFlash);
   }
 
   UbloxConfigProfile profile;

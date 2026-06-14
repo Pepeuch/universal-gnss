@@ -434,11 +434,13 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result,
 
   if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
-    if (!uses_unicore_recovery_workflow)
+    const bool is_ublox_persistent_plan = result.plan.vendor == "ublox";
+
+    if (!uses_unicore_recovery_workflow && !is_ublox_persistent_plan)
     {
       result.status = ConfigApplyStatus::kSafetyRejected;
       result.error_message =
-          "persistent live apply remains guarded in gnss_config_apply; review the plan and use manual rollback-capable vendor workflows if needed";
+          "persistent live apply remains guarded for this receiver family";
       result.execution_summary.final_status = "safety_rejected";
       return false;
     }
