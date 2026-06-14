@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_driver/receiver_command.hpp"
 
 namespace universal_gnss_tools
@@ -25,6 +26,7 @@ struct ProfilePreviewOptions
   std::string vendor{};
   std::string profile{};
   bool persistent{false};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
 };
@@ -50,6 +52,7 @@ struct ProfilePreviewResult
   std::string vendor{};
   std::string profile{};
   bool persistent{false};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
   std::vector<ProfilePreviewCommand> commands{};

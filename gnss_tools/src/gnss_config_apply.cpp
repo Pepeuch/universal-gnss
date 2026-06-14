@@ -49,7 +49,8 @@ void PrintUsage(const char* program_name)
       << "Usage: " << program_name
       << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>] [--config-baud <value>]\n"
       << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
-      << "       [--apply-mode <dry-run|runtime-only|persistent>] [--rate-hz <value>]\n"
+      << "       [--apply-mode <dry-run|runtime-only|persistent>]\n"
+      << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
       << "                --confirm-persistent, and positional <family> <profile>\n"
@@ -62,6 +63,8 @@ void PrintUsage(const char* program_name)
       << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision_debug --apply-mode runtime-only --confirm --timeout-ms 5000\n"
       << "  " << program_name
       << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --apply-mode persistent --config-baud 460800 --confirm\n"
+      << "  " << program_name
+      << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm\n"
       << "  " << program_name
       << " --family nmea --profile runtime_only\n"
       << "Notes:\n"
@@ -426,6 +429,19 @@ int main(int argc, char** argv)
         PrintUsage(argv[0]);
         return EXIT_FAILURE;
       }
+      continue;
+    }
+    if (argument == "--signal-profile")
+    {
+      const auto parsed = universal_gnss_driver::ParseReceiverAutoConfigSignalProfile(
+          require_value("--signal-profile"));
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --signal-profile value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      cli_options.apply.signal_profile = *parsed;
       continue;
     }
     if (argument == "--rate-hz")

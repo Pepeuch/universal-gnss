@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "universal_gnss_tools/profile_preview.hpp"
@@ -148,6 +149,30 @@ void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
              "persistent Unicore preview text should distinguish override, factory baud, and target COM1 baud");
 }
 
+void TestSignalProfilePreview(TestContext& ctx)
+{
+  ProfilePreviewOptions options;
+  options.vendor = "unicore";
+  options.profile = "rover_high_precision";
+  options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
+  options.rate_hz = 1.0;
+
+  const auto result = BuildProfilePreview(options);
+  const std::string text = FormatProfilePreviewText(result);
+
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
+                 result.signal_profile ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
+                         universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
+                 result.summary.commands_total == 12u,
+             "minimal signal-profile preview should expose the reduced Unicore command set");
+  ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
+                 text.find("BESTNAVA 1") != std::string::npos &&
+                 text.find("GPGSV") == std::string::npos,
+             "minimal signal-profile preview text should show the reduced output plan");
+}
+
 void TestFactoryResetPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
@@ -174,6 +199,8 @@ void TestJsonFormatting(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "ublox";
   options.profile = "rover_high_precision";
+  options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
   options.rate_hz = 1.0;
 
   const auto result = BuildProfilePreview(options);
@@ -183,6 +210,7 @@ void TestJsonFormatting(TestContext& ctx)
              "JSON formatting test setup should build successfully");
   ctx.Expect(json.find("\"vendor\": \"ublox\"") != std::string::npos &&
                  json.find("\"profile\": \"rover_high_precision\"") != std::string::npos &&
+                 json.find("\"signal_profile\": \"all_signals\"") != std::string::npos &&
                  json.find("\"summary\"") != std::string::npos,
              "JSON preview output should include metadata and summary objects");
   ctx.Expect(json.find("\"hex\": \"") != std::string::npos,
@@ -213,6 +241,7 @@ int main()
   TestRuntimeOnlyPreview(ctx);
   TestPersistentSummaryGeneration(ctx);
   TestUnicorePersistentTargetBaudPreview(ctx);
+  TestSignalProfilePreview(ctx);
   TestFactoryResetPreview(ctx);
   TestJsonFormatting(ctx);
   TestInvalidUnicoreBaudOverride(ctx);

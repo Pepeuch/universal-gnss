@@ -12,12 +12,15 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " [--json] [--verbose] [--persistent] [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
+      << " [--json] [--verbose] [--persistent]"
+      << " [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+      << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
       << "  " << program_name << " ublox rover_high_precision\n"
       << "  " << program_name << " ublox rover_high_precision_debug --json\n"
       << "  " << program_name << " unicore factory_reset\n"
       << "  " << program_name << " unicore rover_high_precision --persistent\n"
+      << "  " << program_name << " unicore rover_high_precision --signal-profile minimal\n"
       << "  " << program_name << " nmea runtime_only\n"
       << "Notes:\n"
       << "  --baud remains accepted as a legacy alias for --config-baud\n";
@@ -105,6 +108,28 @@ int main(int argc, char** argv)
       }
 
       options.baud = baud;
+      continue;
+    }
+
+    if (argument == "--signal-profile")
+    {
+      if (index + 1 >= argc)
+      {
+        std::cerr << "error: --signal-profile requires a value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      const auto parsed =
+          universal_gnss_driver::ParseReceiverAutoConfigSignalProfile(argv[++index]);
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --signal-profile value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      options.signal_profile = *parsed;
       continue;
     }
 

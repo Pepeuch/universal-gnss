@@ -65,6 +65,7 @@ struct ConfigApplyOptions
       universal_gnss_driver::ReceiverAutoConfigProfile::kRoverHighPrecision};
   universal_gnss_driver::ReceiverAutoConfigApplyMode apply_mode{
       universal_gnss_driver::ReceiverAutoConfigApplyMode::kDryRun};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
   bool confirm{false};

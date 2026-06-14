@@ -1396,6 +1396,7 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.discovery_result = options.discovery_result;
   request.requested_profile = options.profile;
   request.apply_mode = options.apply_mode;
+  request.signal_profile = options.signal_profile;
   request.config_baud = options.config_baud;
   request.rate_hz = options.rate_hz;
   return request;
@@ -1715,6 +1716,11 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   {
     output << "Config baud override: " << *result.plan.baud << "\n";
   }
+  if (result.plan.signal_profile.has_value())
+  {
+    output << "Signal profile override: "
+           << universal_gnss_driver::ToString(*result.plan.signal_profile) << "\n";
+  }
   if (result.plan.rate_hz.has_value())
   {
     output << "Rate override: " << FormatCompactDouble(*result.plan.rate_hz) << " Hz\n";
@@ -1778,6 +1784,18 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"name\": \"" << EscapeJson(result.plan.profile) << "\",\n";
   output << "    \"apply_mode\": \"" << EscapeJson(result.plan.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.plan.persistent ? "true" : "false") << ",\n";
+  output << "    \"signal_profile\": ";
+  if (result.plan.signal_profile.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.plan.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "    \"baud\": ";
   if (result.plan.baud.has_value())
   {

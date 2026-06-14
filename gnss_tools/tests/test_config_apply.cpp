@@ -481,6 +481,32 @@ void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContex
              "prepared Unicore apply text should distinguish detected, current, factory, and target baud values");
 }
 
+void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
+  options.rate_hz = 1.0;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+  const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.plan.signal_profile ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
+                         universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
+                 result.plan.summary.commands_total == 12u,
+             "prepared apply plans should preserve the minimal signal-profile override");
+  ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
+                 text.find("BESTNAVA 1") != std::string::npos &&
+                 text.find("GPGSV") == std::string::npos,
+             "prepared apply text should surface the reduced minimal signal-profile command set");
+}
+
 void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -760,6 +786,7 @@ int main()
   TestNmeaWriteProfileRejected(ctx);
   TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
   TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(ctx);
+  TestSignalProfilePreparationFlowsIntoApplyPlan(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);

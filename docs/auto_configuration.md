@@ -278,6 +278,7 @@ struct ReceiverAutoConfigRequest
   std::string family;
   ReceiverConfigProfileKind profile_kind;
   ReceiverAutoConfigApplyMode apply_mode;
+  std::optional<ReceiverAutoConfigSignalProfile> signal_profile;
   std::optional<std::uint32_t> baud;
   std::optional<double> rate_hz;
 };
@@ -341,6 +342,46 @@ Legacy aliases are still accepted for compatibility:
 
 The future `base` role remains architected conceptually, but is not part of the
 current public profile surface.
+
+### Signal-profile abstraction
+
+Portable signal-profile intent is modeled separately from receiver family names.
+
+Current portable values are:
+
+- `balanced`
+- `high_precision`
+- `all_signals`
+- `minimal`
+- `custom`
+
+Design rules:
+
+- downstream UIs should persist only this generic intent
+- `gnss_driver` remains the single source of truth for translating that intent
+  into receiver-family-specific command plans
+- receiver families implement only the capabilities they can document honestly
+- unsupported or partial translations must warn clearly instead of inventing
+  fake vendor commands
+
+Current capability-oriented translation policy:
+
+- Unicore
+  - `balanced`, `high_precision`, and `all_signals` map to the validated UM982
+    `CONFIG SIGNALGROUP 3 6` portable runtime setting
+  - `rate_hz` currently retimes `BESTNAVA` while keeping `GPGGA`, `GPGSV`,
+    `GPGST`, `RTKSTATUSA`, and `SATSINFOA` at conservative default rates
+  - `minimal` keeps that validated signal-group mapping but reduces auxiliary
+    rover output messages to lower serial-link load
+  - `custom` currently warns and preserves the default portable profile mapping
+- u-blox
+  - `balanced` and `high_precision` resolve to the existing documented
+    multi-constellation portable plan
+  - `all_signals`, `minimal`, and `custom` currently warn because the portable
+    layer does not yet expose a documented per-signal or reduced-signal mapping
+- generic NMEA
+  - signal-profile requests remain warning-only no-ops under `runtime_only`
+    because generic NMEA has no portable receiver-side configuration standard
 
 ### Apply modes
 

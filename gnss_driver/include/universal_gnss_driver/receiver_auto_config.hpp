@@ -29,6 +29,15 @@ enum class ReceiverAutoConfigApplyMode : std::uint8_t
   kPersistent = 2,
 };
 
+enum class ReceiverAutoConfigSignalProfile : std::uint8_t
+{
+  kBalanced = 0,
+  kHighPrecision = 1,
+  kAllSignals = 2,
+  kMinimal = 3,
+  kCustom = 4,
+};
+
 enum class ReceiverAutoConfigPlanStatus : std::uint8_t
 {
   kOk = 0,
@@ -46,6 +55,7 @@ struct ReceiverAutoConfigRequest
   ReceiverAutoConfigProfile requested_profile{
       ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
+  std::optional<ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
 };
@@ -105,9 +115,12 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
 
 std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
     std::string_view profile);
+std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
+    std::string_view signal_profile);
 
 const char* ToString(ReceiverAutoConfigProfile profile);
 const char* ToString(ReceiverAutoConfigApplyMode apply_mode);
+const char* ToString(ReceiverAutoConfigSignalProfile signal_profile);
 const char* ToString(ReceiverAutoConfigPlanStatus status);
 
 }  // namespace universal_gnss_driver

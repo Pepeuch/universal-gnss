@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <string>
 
 #include "universal_gnss_tools/config_plan.hpp"
@@ -96,6 +97,44 @@ void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
              "persistent Unicore plan text should distinguish override, factory baud, and target COM1 baud");
 }
 
+void TestSignalProfilePlanning(TestContext& ctx)
+{
+  ConfigPlanOptions unicore_options;
+  unicore_options.vendor = "unicore";
+  unicore_options.profile = "rover_high_precision";
+  unicore_options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
+  unicore_options.rate_hz = 1.0;
+
+  const auto unicore_result = BuildConfigPlan(unicore_options);
+  const std::string unicore_text = FormatConfigPlanText(unicore_result);
+
+  ctx.Expect(unicore_result.status == ConfigPlanStatus::kOk &&
+                 unicore_result.signal_profile ==
+                     std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
+                         universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
+                 unicore_result.summary.commands_total == 12u,
+             "Unicore minimal signal-profile plans should expose the reduced output plan");
+  ctx.Expect(unicore_text.find("Signal profile override: minimal") != std::string::npos &&
+                 unicore_text.find("BESTNAVA 1") != std::string::npos &&
+                 unicore_text.find("GPGSV") == std::string::npos &&
+                 unicore_text.find("PVTSLNA") == std::string::npos,
+             "Unicore minimal signal-profile plan text should show the reduced runtime command set");
+
+  ConfigPlanOptions nmea_options;
+  nmea_options.vendor = "nmea";
+  nmea_options.profile = "runtime_only";
+  nmea_options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kBalanced;
+
+  const auto nmea_result = BuildConfigPlan(nmea_options);
+  ctx.Expect(nmea_result.status == ConfigPlanStatus::kOk &&
+                 !nmea_result.warnings.empty() &&
+                 nmea_result.warnings.front().find("signal_profile=balanced") !=
+                     std::string::npos,
+             "generic NMEA signal-profile planning should stay a warning-only no-op");
+}
+
 void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -167,6 +206,8 @@ void TestJsonFormatting(TestContext& ctx)
   ConfigPlanOptions options;
   options.vendor = "ublox";
   options.profile = "rover_high_precision";
+  options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
   options.rate_hz = 1.0;
 
   const auto result = BuildConfigPlan(options);
@@ -176,6 +217,7 @@ void TestJsonFormatting(TestContext& ctx)
              "JSON formatting test setup should build successfully");
   ctx.Expect(json.find("\"profile\": {") != std::string::npos &&
                  json.find("\"receiver_family\": \"F9/F10\"") != std::string::npos &&
+                 json.find("\"signal_profile\": \"all_signals\"") != std::string::npos &&
                  json.find("\"summary\": {") != std::string::npos &&
                  json.find("\"commands\": [") != std::string::npos,
              "config plan JSON should include profile, summary, and command list objects");
@@ -217,6 +259,7 @@ int main()
   TestUbloxRoverHighPrecisionPlan(ctx);
   TestUnicoreDebugPlan(ctx);
   TestUnicorePersistentTargetBaudPlan(ctx);
+  TestSignalProfilePlanning(ctx);
   TestRuntimeOnlyNoOpPlan(ctx);
   TestPersistentSafetySummary(ctx);
   TestFactoryResetPlan(ctx);

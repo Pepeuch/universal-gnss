@@ -10,9 +10,12 @@ namespace
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::ParseReceiverAutoConfigProfile;
+using universal_gnss_driver::ParseReceiverAutoConfigSignalProfile;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
+using universal_gnss_driver::ReceiverAutoConfigRequest;
+using universal_gnss_driver::ReceiverAutoConfigSignalProfile;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverPortSource;
 using universal_gnss_driver::ReceiverProbeConfidence;
@@ -71,6 +74,20 @@ bool ContainsWarning(const universal_gnss_driver::ReceiverAutoConfigPlan& plan,
   return false;
 }
 
+bool ContainsCommandText(const universal_gnss_driver::ReceiverAutoConfigPlan& plan,
+                         const std::string& needle)
+{
+  for (const auto& command : plan.commands)
+  {
+    if (command.payload.text.find(needle) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void TestProfileParsingAndFormatting(TestContext& ctx)
 {
   ctx.Expect(ParseReceiverAutoConfigProfile("runtime_only") ==
@@ -89,11 +106,24 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
                  std::optional<ReceiverAutoConfigProfile>{
                      ReceiverAutoConfigProfile::kFactoryReset},
              "factory-reset should parse as a supported portable alias");
+  ctx.Expect(ParseReceiverAutoConfigSignalProfile("high-precision") ==
+                 std::optional<ReceiverAutoConfigSignalProfile>{
+                     ReceiverAutoConfigSignalProfile::kHighPrecision},
+             "high-precision should parse as the canonical generic signal-profile alias");
+  ctx.Expect(ParseReceiverAutoConfigSignalProfile("low_bandwidth") ==
+                 std::optional<ReceiverAutoConfigSignalProfile>{
+                     ReceiverAutoConfigSignalProfile::kMinimal},
+             "low_bandwidth should remain accepted as a compatibility alias for minimal");
   ctx.Expect(std::string(
                  universal_gnss_driver::ToString(
                      ReceiverAutoConfigProfile::kRoverHighPrecisionDebug)) ==
                  "rover_high_precision_debug",
              "portable profile formatting should prefer the canonical generic profile names");
+  ctx.Expect(std::string(
+                 universal_gnss_driver::ToString(
+                     ReceiverAutoConfigSignalProfile::kAllSignals)) ==
+                 "all_signals",
+             "portable signal-profile formatting should prefer canonical vendor-neutral names");
 }
 
 void TestUbloxRuntimeOnlyPlan(TestContext& ctx)
@@ -173,6 +203,60 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
                  debug_plan.commands[10].payload.text.find("LOG PVTSLNA ONTIME 0.2") !=
                      std::string::npos,
              "Unicore debug planning should keep PVTSLNA at 5 Hz while the normal rover profile stays at 1 Hz");
+}
+
+void TestSignalProfileCapabilityMapping(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest unicore_request;
+  unicore_request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  unicore_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  unicore_request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  unicore_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  unicore_request.signal_profile = ReceiverAutoConfigSignalProfile::kHighPrecision;
+  unicore_request.rate_hz = 5.0;
+
+  const auto unicore_high_precision_plan = BuildReceiverAutoConfigPlan(unicore_request);
+  ctx.Expect(unicore_high_precision_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(unicore_high_precision_plan, "CONFIG SIGNALGROUP 3 6") &&
+                 ContainsCommandText(unicore_high_precision_plan, "BESTNAVA 0.2") &&
+                 ContainsCommandText(unicore_high_precision_plan, "LOG GPGGA ONTIME 1") &&
+                 ContainsCommandText(unicore_high_precision_plan, "LOG PVTSLNA ONTIME 1") &&
+                 ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA 1"),
+             "Unicore high_precision signal-profile planning should map to CONFIG SIGNALGROUP 3 6 while keeping auxiliary logs at their safe default rates");
+
+  unicore_request.signal_profile = ReceiverAutoConfigSignalProfile::kMinimal;
+  unicore_request.rate_hz = 1.0;
+  const auto unicore_minimal_plan = BuildReceiverAutoConfigPlan(unicore_request);
+  ctx.Expect(unicore_minimal_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 unicore_minimal_plan.validation.generated_command_count == 12u &&
+                 ContainsCommandText(unicore_minimal_plan, "BESTNAVA 1") &&
+                 !ContainsCommandText(unicore_minimal_plan, "GPGSV") &&
+                 !ContainsCommandText(unicore_minimal_plan, "GPGST") &&
+                 !ContainsCommandText(unicore_minimal_plan, "PVTSLNA") &&
+                 ContainsWarning(unicore_minimal_plan, "signal_profile=minimal"),
+             "Unicore minimal signal-profile planning should reduce the auxiliary output set while preserving a 1 Hz BESTNAVA runtime plan");
+
+  unicore_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
+  unicore_request.rate_hz = 10.0;
+  const auto unicore_fast_plan = BuildReceiverAutoConfigPlan(unicore_request);
+  ctx.Expect(unicore_fast_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(unicore_fast_plan, "BESTNAVA 0.1"),
+             "Unicore rate-hz planning should map 10 Hz requests to a 0.1 s BESTNAVA period");
+
+  ReceiverAutoConfigRequest ublox_request;
+  ublox_request.receiver_family = ReceiverDetectedFamily::kUblox;
+  ublox_request.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  ublox_request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  ublox_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  ublox_request.signal_profile = ReceiverAutoConfigSignalProfile::kAllSignals;
+
+  const auto ublox_plan = BuildReceiverAutoConfigPlan(ublox_request);
+  ctx.Expect(ublox_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ublox_plan.validation.generated_command_count == 13u &&
+                 ContainsWarning(ublox_plan, "signal_profile=all_signals"),
+             "u-blox signal-profile requests without a documented portable translation should stay honest and warn while keeping the standard plan");
 }
 
 void TestUnicoreFactoryResetPlan(TestContext& ctx)
@@ -274,6 +358,20 @@ void TestNmeaProfiles(TestContext& ctx)
                  !config_plan.validation.profile_supported &&
                  config_plan.error_message.find("runtime_only") != std::string::npos,
              "generic NMEA receivers should reject write-side portable profiles with a clear reason");
+
+  ReceiverAutoConfigRequest signal_request;
+  signal_request.receiver_family = ReceiverDetectedFamily::kNmea;
+  signal_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea);
+  signal_request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  signal_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  signal_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
+
+  const auto signal_plan = BuildReceiverAutoConfigPlan(signal_request);
+  ctx.Expect(signal_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 signal_plan.validation.generated_command_count == 0u &&
+                 ContainsWarning(signal_plan, "signal_profile=balanced"),
+             "generic NMEA signal-profile requests should remain a warning-only no-op under runtime_only");
 }
 
 void TestUnknownReceiverRejected(TestContext& ctx)
@@ -307,6 +405,7 @@ int main()
   TestUbloxRoverHighPrecisionPlans(ctx);
   TestUbloxFactoryResetStub(ctx);
   TestUnicoreRoverHighPrecisionPlans(ctx);
+  TestSignalProfileCapabilityMapping(ctx);
   TestUnicoreFactoryResetPlan(ctx);
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);

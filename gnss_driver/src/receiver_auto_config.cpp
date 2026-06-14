@@ -1,5 +1,6 @@
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <optional>
@@ -23,6 +24,10 @@ namespace
 {
 
 using universal_gnss_protocols::UbxCfgLayer;
+using universal_gnss_protocols::UbxCfgConstellation;
+
+constexpr std::uint8_t kUnicoreRecommendedSignalGroupPrimary = 3u;
+constexpr std::uint8_t kUnicoreRecommendedSignalGroupSecondary = 6u;
 
 std::string ToLowerCopy(std::string_view text)
 {
@@ -211,10 +216,18 @@ bool ProfileLeavesReceiverUnchanged(const ReceiverAutoConfigProfile profile)
   return profile == ReceiverAutoConfigProfile::kRuntimeOnly;
 }
 
+bool ProfileSupportsSignalProfileOverride(const ReceiverAutoConfigProfile profile)
+{
+  return profile == ReceiverAutoConfigProfile::kRoverHighPrecision ||
+         profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug ||
+         profile == ReceiverAutoConfigProfile::kFactoryReset;
+}
+
 bool ProfileSupportsRateOverride(const ReceiverAutoConfigProfile profile)
 {
   return profile == ReceiverAutoConfigProfile::kRoverHighPrecision ||
-         profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug;
+         profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug ||
+         profile == ReceiverAutoConfigProfile::kFactoryReset;
 }
 
 std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& request)
@@ -248,6 +261,18 @@ ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(
   plan.unsupported_reason = message;
   ApplyNoChangeRollback(plan);
   return plan;
+}
+
+void AppendRuntimeOnlySignalProfileWarning(ReceiverAutoConfigPlan& plan)
+{
+  if (!plan.request.signal_profile.has_value())
+  {
+    return;
+  }
+
+  plan.warnings.push_back(
+      "signal_profile=" + std::string(ToString(*plan.request.signal_profile)) +
+      " is unsupported with the runtime_only profile because runtime_only does not send receiver commands");
 }
 
 ReceiverAutoConfigPlan MakeNoChangePlan(
@@ -290,6 +315,7 @@ ReceiverAutoConfigPlan MakeNoChangePlan(
   plan.validation.production_ready = true;
   plan.validation.ready_to_execute =
       request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  AppendRuntimeOnlySignalProfileWarning(plan);
   plan.warnings.push_back(
       "runtime_only profile leaves the receiver configuration unchanged");
   ApplyNoChangeRollback(plan);
@@ -331,6 +357,14 @@ bool ValidateConfigBaud(const ReceiverAutoConfigRequest& request,
 
   return true;
 }
+
+void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
+                             ReceiverAutoConfigPlan& plan,
+                             UbloxConfigProfile& profile);
+
+void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
+                               ReceiverAutoConfigPlan& plan,
+                               UnicoreConfigProfile& profile);
 
 ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
 {
@@ -396,6 +430,7 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   {
     profile.measurement_rate_hz = *request.rate_hz;
   }
+  ApplyUbloxSignalProfile(request, plan, profile);
 
   const auto build_result = UbloxConfigProfileBuilder::Build(profile);
   if (build_result.status != UbloxConfigProfileBuildStatus::kOk)
@@ -423,9 +458,100 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   return plan;
 }
 
-bool IsPeriodicUnicoreMessage(const UnicoreOutputMessageKind message)
+bool IsRateControlledUnicoreMessage(const UnicoreOutputMessageKind message)
 {
-  return message != UnicoreOutputMessageKind::kRtcmstatusa;
+  return message == UnicoreOutputMessageKind::kBestnava;
+}
+
+void ApplyUnicoreRecommendedSignalGroup(UnicoreConfigProfile& profile)
+{
+  profile.signal_config = UnicoreSignalConfig{
+      {kUnicoreRecommendedSignalGroupPrimary, kUnicoreRecommendedSignalGroupSecondary}};
+}
+
+void ApplyUnicoreMinimalOutputLoad(UnicoreConfigProfile& profile)
+{
+  profile.output_messages.erase(
+      std::remove_if(
+          profile.output_messages.begin(),
+          profile.output_messages.end(),
+          [](const UnicoreOutputMessageRate& output) {
+            return output.message == UnicoreOutputMessageKind::kGpgsv ||
+                   output.message == UnicoreOutputMessageKind::kGpgst ||
+                   output.message == UnicoreOutputMessageKind::kPvtslna;
+          }),
+      profile.output_messages.end());
+}
+
+void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
+                               ReceiverAutoConfigPlan& plan,
+                               UnicoreConfigProfile& profile)
+{
+  if (!request.signal_profile.has_value() ||
+      !ProfileSupportsSignalProfileOverride(request.requested_profile))
+  {
+    return;
+  }
+
+  switch (*request.signal_profile)
+  {
+    case ReceiverAutoConfigSignalProfile::kBalanced:
+    case ReceiverAutoConfigSignalProfile::kHighPrecision:
+    case ReceiverAutoConfigSignalProfile::kAllSignals:
+      ApplyUnicoreRecommendedSignalGroup(profile);
+      return;
+    case ReceiverAutoConfigSignalProfile::kMinimal:
+      ApplyUnicoreRecommendedSignalGroup(profile);
+      ApplyUnicoreMinimalOutputLoad(profile);
+      plan.warnings.push_back(
+          "signal_profile=minimal keeps the validated CONFIG SIGNALGROUP 3 6 mapping and reduces auxiliary Unicore output messages to lower serial link load");
+      return;
+    case ReceiverAutoConfigSignalProfile::kCustom:
+      plan.warnings.push_back(
+          "custom signal_profile is reserved for vendor-specific advanced settings; the portable Unicore planner kept the default validated runtime mapping");
+      return;
+  }
+}
+
+void ApplyUbloxStandardConstellations(UbloxConfigProfile& profile)
+{
+  profile.constellations = {
+      {UbxCfgConstellation::kGps, true},
+      {UbxCfgConstellation::kGalileo, true},
+      {UbxCfgConstellation::kBeiDou, true},
+      {UbxCfgConstellation::kGlonass, true},
+  };
+}
+
+void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
+                             ReceiverAutoConfigPlan& plan,
+                             UbloxConfigProfile& profile)
+{
+  if (!request.signal_profile.has_value() ||
+      !ProfileSupportsSignalProfileOverride(request.requested_profile))
+  {
+    return;
+  }
+
+  switch (*request.signal_profile)
+  {
+    case ReceiverAutoConfigSignalProfile::kBalanced:
+    case ReceiverAutoConfigSignalProfile::kHighPrecision:
+      ApplyUbloxStandardConstellations(profile);
+      return;
+    case ReceiverAutoConfigSignalProfile::kAllSignals:
+      plan.warnings.push_back(
+          "signal_profile=all_signals is not yet mapped to documented portable u-blox per-signal configuration; keeping the standard GPS/Galileo/BeiDou/GLONASS plan");
+      return;
+    case ReceiverAutoConfigSignalProfile::kMinimal:
+      plan.warnings.push_back(
+          "signal_profile=minimal is not yet mapped to a documented portable u-blox reduced-signal plan; keeping the standard GPS/Galileo/BeiDou/GLONASS configuration");
+      return;
+    case ReceiverAutoConfigSignalProfile::kCustom:
+      plan.warnings.push_back(
+          "custom signal_profile is not yet supported by the portable u-blox planner");
+      return;
+  }
 }
 
 ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request)
@@ -491,6 +617,8 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       break;
   }
 
+  ApplyUnicoreSignalProfile(request, plan, profile);
+
   if (requires_clean_reset_workflow)
   {
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
@@ -502,7 +630,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       const double period_s = 1.0 / *request.rate_hz;
       for (auto& output : profile.output_messages)
       {
-        if (IsPeriodicUnicoreMessage(output.message))
+        if (IsRateControlledUnicoreMessage(output.message))
         {
           output.period_s = period_s;
         }
@@ -542,7 +670,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     const double period_s = 1.0 / *request.rate_hz;
     for (auto& output : profile.output_messages)
     {
-      if (IsPeriodicUnicoreMessage(output.message))
+      if (IsRateControlledUnicoreMessage(output.message))
       {
         output.period_s = period_s;
       }
@@ -740,6 +868,34 @@ std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
   return std::nullopt;
 }
 
+std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
+    const std::string_view signal_profile)
+{
+  const std::string normalized = ToLowerCopy(signal_profile);
+  if (normalized == "balanced")
+  {
+    return ReceiverAutoConfigSignalProfile::kBalanced;
+  }
+  if (normalized == "high_precision" || normalized == "high-precision")
+  {
+    return ReceiverAutoConfigSignalProfile::kHighPrecision;
+  }
+  if (normalized == "all_signals" || normalized == "all-signals")
+  {
+    return ReceiverAutoConfigSignalProfile::kAllSignals;
+  }
+  if (normalized == "minimal" || normalized == "low_bandwidth" ||
+      normalized == "low-bandwidth")
+  {
+    return ReceiverAutoConfigSignalProfile::kMinimal;
+  }
+  if (normalized == "custom")
+  {
+    return ReceiverAutoConfigSignalProfile::kCustom;
+  }
+  return std::nullopt;
+}
+
 const char* ToString(const ReceiverAutoConfigApplyMode apply_mode)
 {
   switch (apply_mode)
@@ -753,6 +909,25 @@ const char* ToString(const ReceiverAutoConfigApplyMode apply_mode)
   }
 
   return "dry_run";
+}
+
+const char* ToString(const ReceiverAutoConfigSignalProfile signal_profile)
+{
+  switch (signal_profile)
+  {
+    case ReceiverAutoConfigSignalProfile::kBalanced:
+      return "balanced";
+    case ReceiverAutoConfigSignalProfile::kHighPrecision:
+      return "high_precision";
+    case ReceiverAutoConfigSignalProfile::kAllSignals:
+      return "all_signals";
+    case ReceiverAutoConfigSignalProfile::kMinimal:
+      return "minimal";
+    case ReceiverAutoConfigSignalProfile::kCustom:
+      return "custom";
+  }
+
+  return "balanced";
 }
 
 const char* ToString(const ReceiverAutoConfigPlanStatus status)

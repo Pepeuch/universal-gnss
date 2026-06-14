@@ -310,6 +310,7 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
   result.profile = universal_gnss_driver::ToString(plan.request.requested_profile);
   result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
   result.persistent = plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
+  result.signal_profile = plan.request.signal_profile;
   result.baud = plan.request.config_baud;
   result.rate_hz = plan.request.rate_hz;
   result.detected_device = plan.detected_device;
@@ -371,6 +372,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   result.profile = ToLowerCopy(options.profile);
   result.apply_mode = options.persistent ? "persistent" : "runtime_only";
   result.persistent = options.persistent;
+  result.signal_profile = options.signal_profile;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
 
@@ -403,6 +405,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   request.receiver_family = *family;
   request.requested_profile = *profile;
   request.apply_mode = ResolveApplyMode(options);
+  request.signal_profile = options.signal_profile;
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
 
@@ -469,6 +472,11 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   if (result.persistent)
   {
     output << "Persistence request: enabled\n";
+  }
+  if (result.signal_profile.has_value())
+  {
+    output << "Signal profile override: "
+           << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
   }
   if (result.baud.has_value())
   {
@@ -542,6 +550,17 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "    \"name\": \"" << EscapeJson(result.profile) << "\",\n";
   output << "    \"apply_mode\": \"" << EscapeJson(result.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.persistent ? "true" : "false") << ",\n";
+  output << "    \"signal_profile\": ";
+  if (result.signal_profile.has_value())
+  {
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "    \"baud\": ";
   if (result.baud.has_value())
   {

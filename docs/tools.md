@@ -463,7 +463,8 @@ Current behavior:
   - `nmea`: `runtime_only` only
 - prints compact human-readable command previews by default
 - can emit JSON for scripting and review
-- can apply offline overrides like `--persistent`, `--baud`, and `--rate-hz`
+- can apply offline overrides like `--persistent`, `--signal-profile`,
+  `--baud`, and `--rate-hz`
 - shows `factory_reset` command counts and baud-reset implications when the
   vendor support is known
 
@@ -481,6 +482,7 @@ Examples:
 gnss_profile_preview nmea runtime_only
 gnss_profile_preview ublox rover_high_precision
 gnss_profile_preview ublox rover_high_precision_debug --json
+gnss_profile_preview unicore rover_high_precision --signal-profile minimal --rate-hz 1
 gnss_profile_preview unicore rover_high_precision --persistent --rate-hz 5
 gnss_profile_preview unicore factory_reset
 ```
@@ -488,6 +490,7 @@ gnss_profile_preview unicore factory_reset
 Text output includes:
 
 - profile metadata and requested overrides
+- signal-profile intent when present
 - one command at a time with kind, safety level, payload kind, payload size, and description
 - raw text commands for ASCII-based profiles
 - raw binary hex only when `--verbose` is enabled
@@ -518,6 +521,7 @@ Current behavior:
 - reports whether the same plan would be ready for later manual execution
 - highlights whether explicit safety confirmation would be required before dispatch
 - marks persistent and factory-reset commands clearly in the sequence
+- accepts vendor-neutral `--signal-profile balanced|high_precision|all_signals|minimal|custom`
 - supports the same portable profile names and legacy aliases as
   `gnss_profile_preview`
 - current receiver-family support:
@@ -547,6 +551,7 @@ Examples:
 gnss_config_plan nmea runtime_only
 gnss_config_plan ublox rover_high_precision
 gnss_config_plan unicore rover_high_precision_debug
+gnss_config_plan unicore rover_high_precision --signal-profile minimal --rate-hz 1
 gnss_config_plan ublox rover_high_precision --persistent
 gnss_config_plan ublox rover_high_precision --rate-hz 5 --baud 921600
 gnss_config_plan unicore factory_reset --json
@@ -555,6 +560,7 @@ gnss_config_plan unicore factory_reset --json
 Text output includes:
 
 - receiver family and profile metadata
+- signal-profile intent and other requested overrides
 - requested apply mode
 - dry-run status
 - runtime / persistent / factory-reset command counts
@@ -592,6 +598,8 @@ Current behavior:
 - prints the full plan/report before any live-write decision
 - accepts the same portable profile names and legacy aliases as
   `gnss_profile_preview`
+- accepts the same vendor-neutral `--signal-profile` values as
+  `gnss_config_plan`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
 - supports Unicore persistent live apply through the reset/recovery workflow
 - allows `runtime_only` live apply as a no-op when the selected family/profile
@@ -633,6 +641,7 @@ Examples:
 ```text
 gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm
+gnss_config_apply --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
 gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --apply-mode runtime-only --confirm
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode persistent --confirm
@@ -661,6 +670,7 @@ Text output includes:
 
 - discovered device/family/baud context when available
 - plan validation, warnings, and rollback expectations
+- signal-profile intent and its translated command-plan impact when present
 - dry-run vs live-apply-requested status
 - runtime/persistent confirmation requirements
 - the command sequence to be applied
