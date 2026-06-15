@@ -51,6 +51,7 @@ void PrintUsage(const char* program_name)
       << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
       << "       [--apply-mode <dry-run|runtime-only|persistent>]\n"
       << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+      << " [--signal-group <\"2\"|\"3 6\"|...>]"
       << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
@@ -68,6 +69,8 @@ void PrintUsage(const char* program_name)
       << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --apply-mode persistent --config-baud 460800 --confirm\n"
       << "  " << program_name
       << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm\n"
+      << "  " << program_name
+      << " --family unicore --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --signal-group 2 --apply-mode persistent --confirm   # single-antenna UM980/UM981\n"
       << "  " << program_name
       << " --family nmea --profile runtime_only\n"
       << "Notes:\n"
@@ -445,6 +448,20 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
       }
       cli_options.apply.signal_profile = *parsed;
+      continue;
+    }
+    if (argument == "--signal-group")
+    {
+      const auto parsed = universal_gnss_driver::ParseUnicoreSignalGroupOverride(
+          require_value("--signal-group"));
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --signal-group value (expected one or two "
+                     "integers 0-255, e.g. \"2\" or \"3 6\")\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      cli_options.apply.signal_group_override = *parsed;
       continue;
     }
 

@@ -65,6 +65,10 @@ struct ReceiverAutoConfigRequest
       ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<ReceiverAutoConfigSignalProfile> signal_profile{};
+  // Explicit Unicore CONFIG SIGNALGROUP override (e.g. {2} for UM980/UM981,
+  // {3, 6} for UM982). When set it replaces the profile/signal_profile default,
+  // letting the operator match the receiver model. Ignored by non-Unicore plans.
+  std::optional<std::vector<std::uint8_t>> signal_group_override{};
   std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
@@ -129,6 +133,11 @@ std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
     std::string_view profile);
 std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
     std::string_view signal_profile);
+// Parses a whitespace-separated Unicore signal-group override (e.g. "2" or
+// "3 6") into group bytes. Returns nullopt on empty input, non-numeric tokens,
+// out-of-range values, or more than two groups.
+std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
+    std::string_view signal_group);
 std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(
     std::string_view output_port);
 

@@ -1399,6 +1399,7 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.requested_profile = options.profile;
   request.apply_mode = options.apply_mode;
   request.signal_profile = options.signal_profile;
+  request.signal_group_override = options.signal_group_override;
   request.output_port = options.output_port;
   request.config_baud = options.config_baud;
   request.rate_hz = options.rate_hz;
