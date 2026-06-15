@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -788,6 +789,15 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
 
   ApplyUnicoreSignalProfile(request, plan, profile);
 
+  // An explicit operator override wins over the profile/signal_profile default
+  // (e.g. CONFIG SIGNALGROUP 2 for a single-antenna UM980 vs the UM982 "3 6"
+  // default). Only applied when the profile actually manages signal groups so
+  // runtime-only plans stay free of an unsolicited SIGNALGROUP command.
+  if (request.signal_group_override.has_value() && profile.signal_config.has_value())
+  {
+    profile.signal_config = UnicoreSignalConfig{*request.signal_group_override};
+  }
+
   if (requires_clean_reset_workflow)
   {
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
@@ -1064,6 +1074,40 @@ std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProf
     return ReceiverAutoConfigSignalProfile::kCustom;
   }
   return std::nullopt;
+}
+
+std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
+    const std::string_view signal_group)
+{
+  std::istringstream stream{std::string(signal_group)};
+  std::vector<std::uint8_t> groups;
+  std::string token;
+  while (stream >> token)
+  {
+    std::size_t consumed = 0u;
+    unsigned long value = 0ul;
+    try
+    {
+      value = std::stoul(token, &consumed, 10);
+    }
+    catch (const std::exception&)
+    {
+      return std::nullopt;
+    }
+    if (consumed != token.size() || value > 255ul)
+    {
+      return std::nullopt;
+    }
+    groups.push_back(static_cast<std::uint8_t>(value));
+  }
+
+  // Unicore CONFIG SIGNALGROUP accepts one field (UM980/UM981) or two
+  // (UM982 master + slave). Anything else is a malformed override.
+  if (groups.empty() || groups.size() > 2u)
+  {
+    return std::nullopt;
+  }
+  return groups;
 }
 
 std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(

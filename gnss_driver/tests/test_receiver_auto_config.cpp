@@ -1,7 +1,9 @@
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 
@@ -12,6 +14,7 @@ using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::ParseReceiverAutoConfigProfile;
 using universal_gnss_driver::ParseReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ParseReceiverAutoConfigSignalProfile;
+using universal_gnss_driver::ParseUnicoreSignalGroupOverride;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
@@ -490,6 +493,60 @@ void TestUnknownReceiverRejected(TestContext& ctx)
 
 }  // namespace
 
+void TestUnicoreSignalGroupOverride(TestContext& ctx)
+{
+  // Parsing: single-field (UM980/UM981) and two-field (UM982) forms are valid,
+  // everything else is rejected.
+  ctx.Expect(ParseUnicoreSignalGroupOverride("2") ==
+                 std::optional<std::vector<std::uint8_t>>{{2u}},
+             "ParseUnicoreSignalGroupOverride should accept a single UM980 group");
+  ctx.Expect(ParseUnicoreSignalGroupOverride("3 6") ==
+                 std::optional<std::vector<std::uint8_t>>{{3u, 6u}},
+             "ParseUnicoreSignalGroupOverride should accept the UM982 master/slave pair");
+  ctx.Expect(!ParseUnicoreSignalGroupOverride("").has_value() &&
+                 !ParseUnicoreSignalGroupOverride("3 6 9").has_value() &&
+                 !ParseUnicoreSignalGroupOverride("abc").has_value() &&
+                 !ParseUnicoreSignalGroupOverride("300").has_value(),
+             "ParseUnicoreSignalGroupOverride should reject empty, >2 fields, non-numeric, and out-of-range input");
+
+  // An explicit single-field override replaces the UM982 default so a
+  // single-antenna UM980 stops getting the invalid "CONFIG SIGNALGROUP 3 6".
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyAMA4", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  request.signal_group_override = std::vector<std::uint8_t>{2u};
+
+  const auto override_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 2") &&
+                 !ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 3 6"),
+             "A single-field signal-group override should emit CONFIG SIGNALGROUP 2 instead of the UM982 default");
+
+  // The operator override wins even when a signal_profile is also requested.
+  request.signal_profile = ReceiverAutoConfigSignalProfile::kHighPrecision;
+  const auto override_wins_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(override_wins_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(override_wins_plan, "CONFIG SIGNALGROUP 2") &&
+                 !ContainsCommandText(override_wins_plan, "CONFIG SIGNALGROUP 3 6"),
+             "An explicit signal-group override should take precedence over signal_profile");
+
+  // A runtime-only profile manages no signal groups, so an override must not
+  // inject an unsolicited SIGNALGROUP command.
+  ReceiverAutoConfigRequest runtime_request;
+  runtime_request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  runtime_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyAMA4", 921600u, ReceiverDetectedFamily::kUnicore);
+  runtime_request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  runtime_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  runtime_request.signal_group_override = std::vector<std::uint8_t>{2u};
+  const auto runtime_plan = BuildReceiverAutoConfigPlan(runtime_request);
+  ctx.Expect(!ContainsCommandText(runtime_plan, "CONFIG SIGNALGROUP"),
+             "A runtime-only plan should not gain a SIGNALGROUP command from an override");
+}
+
 int main()
 {
   TestContext ctx;
@@ -501,6 +558,7 @@ int main()
   TestUbloxFactoryResetStub(ctx);
   TestUnicoreRoverHighPrecisionPlans(ctx);
   TestSignalProfileCapabilityMapping(ctx);
+  TestUnicoreSignalGroupOverride(ctx);
   TestUnicoreFactoryResetPlan(ctx);
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);
