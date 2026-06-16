@@ -57,7 +57,7 @@ using universal_gnss_transport::TransportStatus;
 
 using Clock = std::chrono::steady_clock;
 
-constexpr std::uint32_t kUnicoreFactoryResetRecoveryWindowMs = 45000u;
+constexpr std::uint32_t kUnicoreFactoryResetRecoveryWindowMs = 60000u;
 constexpr std::uint32_t kUnicoreBaudSwitchRecoveryWindowMs = 10000u;
 constexpr std::uint32_t kProbeAttemptReadTimeoutMs = 250u;
 constexpr auto kRecoveryProbeRetrySleep = std::chrono::milliseconds(500);
