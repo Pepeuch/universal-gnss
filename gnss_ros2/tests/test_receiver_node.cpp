@@ -14,8 +14,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include <gtest/gtest.h>
@@ -58,19 +58,14 @@ std::vector<std::uint8_t> BuildBytes(const std::string& text)
 
 std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
 {
-  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
-      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
-      frame_without_crc.size() - 1u);
+  const auto crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(reinterpret_cast<const std::uint8_t*>(
+                                                              frame_without_crc.data() + 1u),
+                                                          frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
-  stream << frame_without_crc
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
-         << "\r\n";
+  stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
+         << std::setfill('0') << crc << "\r\n";
   return stream.str();
 }
 
@@ -810,6 +805,38 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_EQ(diagnostics.header.frame_id, "gnss");
 }
 
+TEST_F(ReceiverNodeTest, PublishesHighPrecisionFixCoordinatesWithoutTruncation)
+{
+  constexpr double expected_latitude = 48.0 + 7.0381234 / 60.0;
+  constexpr double expected_longitude = 11.0 + 31.0005678 / 60.0;
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "nmea")});
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildNmeaSentence("GPGGA,123519,4807.0381234,N,01131.0005678,E,1,08,0.9,545.4,M,46.9,M,,"),
+       true},
+  });
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_fix_message().has_value());
+  ASSERT_TRUE(node.current_state().latitude_deg.has_value());
+  ASSERT_TRUE(node.current_state().longitude_deg.has_value());
+
+  const auto& fix = *node.last_fix_message();
+  EXPECT_NEAR(fix.latitude, expected_latitude, 1e-12);
+  EXPECT_NEAR(fix.longitude, expected_longitude, 1e-12);
+  EXPECT_NEAR(fix.latitude, *node.current_state().latitude_deg, 1e-12);
+  EXPECT_NEAR(fix.longitude, *node.current_state().longitude_deg, 1e-12);
+}
+
 TEST_F(ReceiverNodeTest, SemanticOnlyVtgAndZdaDoNotInventRuntimeFields)
 {
   std::vector<std::uint8_t> stream;
@@ -892,8 +919,8 @@ TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
 
 TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCount)
 {
-  const std::string malformed_line =
-      BuildInvalidUnicoreAsciiFrame("#BESTNAVA,97,GPS,FINE,1,2,0,0,18,16;SOL_COMPUTED,SINGLE,1,2,3");
+  const std::string malformed_line = BuildInvalidUnicoreAsciiFrame(
+      "#BESTNAVA,97,GPS,FINE,1,2,0,0,18,16;SOL_COMPUTED,SINGLE,1,2,3");
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
@@ -995,8 +1022,7 @@ TEST_F(ReceiverNodeTest, IgnoresUnknownButValidUnicoreRecordsForParserHealth)
 
   ASSERT_NE(summary, nullptr);
   ASSERT_NE(parser_counters, nullptr);
-  EXPECT_EQ(FindDiagnosticValue(*summary, "parser_healthy"),
-            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*summary, "parser_healthy"), std::optional<std::string>{"true"});
   EXPECT_EQ(parser_counters->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(FindDiagnosticValue(*parser_counters, "unknown_records_total"),
             std::optional<std::string>{"1"});

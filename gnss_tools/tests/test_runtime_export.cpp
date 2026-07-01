@@ -7,10 +7,10 @@
 #include <string>
 #include <vector>
 
+#include "testdata_utils.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_tools/gnss_replay.hpp"
 #include "universal_gnss_tools/runtime_export.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
-#include "testdata_utils.hpp"
 
 namespace
 {
@@ -163,13 +163,15 @@ void TestNmeaJsonlExport(TestContext& ctx)
   const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay);
   const auto lines = SplitLines(jsonl);
 
-  ctx.Expect(lines.size() == 5u,
-             "basic NMEA export should emit one JSON line per runtime update");
+  ctx.Expect(lines.size() == 5u, "basic NMEA export should emit one JSON line per runtime update");
   ctx.Expect(lines.front().front() == '{' && lines.front().back() == '}',
              "each JSONL export line should be a single JSON object");
   ctx.Expect(lines.front().find("\"protocol\":\"NMEA\"") != std::string::npos &&
                  lines.front().find("\"message\":\"GGA\"") != std::string::npos,
              "the first NMEA export line should identify the GGA update");
+  ctx.Expect(lines.front().find("\"latitude_deg\":48.117300000") != std::string::npos &&
+                 lines.front().find("\"longitude_deg\":11.516666667") != std::string::npos,
+             "NMEA JSONL export should keep coordinate text precision above seven decimals");
   ctx.Expect(lines.back().find("\"message\":\"GST\"") != std::string::npos &&
                  lines.back().find("\"horizontal_accuracy_m\":0.6") != std::string::npos &&
                  lines.back().find("\"vertical_accuracy_m\":1.1") != std::string::npos,
@@ -182,8 +184,7 @@ void TestNmeaJsonlExport(TestContext& ctx)
 
 void TestMixedJsonlExport(TestContext& ctx)
 {
-  const auto bytes =
-      universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
   const auto replay = universal_gnss_tools::ReplayGnssBytes(bytes, true);
   const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay);
   const auto lines = SplitLines(jsonl);
@@ -216,6 +217,9 @@ void TestUnicoreBinaryJsonlExport(TestContext& ctx)
   ctx.Expect(lines.front().find("\"protocol\":\"UNICORE\"") != std::string::npos &&
                  lines.front().find("\"message\":\"BESTNAVB\"") != std::string::npos,
              "binary Unicore export should expose BESTNAVB update names");
+  ctx.Expect(lines.front().find("\"latitude_deg\":40.078958827") != std::string::npos &&
+                 lines.front().find("\"longitude_deg\":116.236510298") != std::string::npos,
+             "binary Unicore export should preserve high-precision coordinates in JSONL");
   ctx.Expect(lines.back().find("\"message\":\"PVTSLNB\"") != std::string::npos &&
                  lines.back().find("\"heading_deg\":182.25") != std::string::npos &&
                  lines.back().find("\"hdop\":0.684") != std::string::npos,
@@ -232,8 +236,7 @@ void TestPrettyJsonlExport(TestContext& ctx)
   const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay, options);
   const auto lines = SplitLines(jsonl);
 
-  ctx.Expect(!lines.empty() &&
-                 lines.front().find("\"event_index\": ") != std::string::npos &&
+  ctx.Expect(!lines.empty() && lines.front().find("\"event_index\": ") != std::string::npos &&
                  lines.front().find(", \"protocol\": ") != std::string::npos,
              "pretty JSONL should remain one object per line with stable spaced formatting");
 }
@@ -266,8 +269,7 @@ void TestFileOutputHandling(TestContext& ctx)
   const std::string content((std::istreambuf_iterator<char>(input)),
                             std::istreambuf_iterator<char>());
   const auto lines = SplitLines(content);
-  ctx.Expect(lines.size() == 5u,
-             "file export should persist one line per runtime sample");
+  ctx.Expect(lines.size() == 5u, "file export should persist one line per runtime sample");
   ctx.Expect(lines.front().find("\"message\":\"GGA\"") != std::string::npos,
              "file export should preserve stable schema keys and values");
 

@@ -15,11 +15,11 @@
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
+#include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/ubx_parser.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
-#include "universal_gnss_protocols/ubx_framer.hpp"
-#include "universal_gnss_protocols/ubx_parser.hpp"
 #include "universal_gnss_tools/gnss_stream_inspector.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
 
@@ -29,23 +29,25 @@ namespace universal_gnss_tools
 namespace
 {
 
+constexpr int kCoordinateOutputPrecision = 9;
+
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
+using universal_gnss::GnssRtkMode;
 using universal_gnss::GnssRuntimeAggregator;
 using universal_gnss::GnssRuntimeState;
-using universal_gnss::GnssRtkMode;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::ProtocolType;
-using universal_gnss_protocols::UnicoreFrame;
-using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
 
 template <typename RecordT>
 struct ProbeResult
@@ -132,9 +134,7 @@ std::string EscapeJsonString(const std::string& text)
       default:
         if (ch < 0x20u)
         {
-          output << "\\u"
-                 << std::hex << std::setw(4) << std::setfill('0')
-                 << static_cast<int>(ch)
+          output << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(ch)
                  << std::dec << std::setfill(' ');
         }
         else
@@ -211,16 +211,22 @@ std::string FormatDouble(const double value, const int precision = 6)
   return output.str();
 }
 
+std::string FormatCoordinate(const double value)
+{
+  std::ostringstream output;
+  output << std::fixed << std::setprecision(kCoordinateOutputPrecision) << value;
+  return output.str();
+}
+
 std::string BuildStateTextSummary(const GnssRuntimeState& state)
 {
   std::ostringstream output;
-  output << "fix=" << DescribeFixType(state.fix_type)
-         << " rtk=" << DescribeRtkMode(state.rtk_mode);
+  output << "fix=" << DescribeFixType(state.fix_type) << " rtk=" << DescribeRtkMode(state.rtk_mode);
 
   if (state.latitude_deg.has_value() && state.longitude_deg.has_value())
   {
-    output << " lat=" << FormatDouble(*state.latitude_deg)
-           << " lon=" << FormatDouble(*state.longitude_deg);
+    output << " lat=" << FormatCoordinate(*state.latitude_deg)
+           << " lon=" << FormatCoordinate(*state.longitude_deg);
   }
   if (state.altitude_m.has_value())
   {
@@ -275,15 +281,24 @@ void WriteRuntimeStateJson(std::ostringstream& output, const GnssRuntimeState& s
   output << '{';
   bool first_field = true;
 
-  auto write_bool = [&](const char* name, const bool value) {
+  auto write_bool = [&](const char* name, const bool value)
+  {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":" << (value ? "true" : "false");
   };
-  auto write_number = [&](const char* name, const auto value) {
+  auto write_number = [&](const char* name, const auto value)
+  {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":" << value;
   };
-  auto write_string = [&](const char* name, const std::string& value) {
+  auto write_coordinate = [&](const char* name, const double value)
+  {
+    AppendJsonFieldSeparator(output, first_field);
+    output << '"' << name << "\":";
+    output << FormatCoordinate(value);
+  };
+  auto write_string = [&](const char* name, const std::string& value)
+  {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":\"" << EscapeJsonString(value) << '"';
   };
@@ -300,11 +315,11 @@ void WriteRuntimeStateJson(std::ostringstream& output, const GnssRuntimeState& s
   }
   if (state.latitude_deg.has_value())
   {
-    write_number("latitude_deg", *state.latitude_deg);
+    write_coordinate("latitude_deg", *state.latitude_deg);
   }
   if (state.longitude_deg.has_value())
   {
-    write_number("longitude_deg", *state.longitude_deg);
+    write_coordinate("longitude_deg", *state.longitude_deg);
   }
   if (state.altitude_m.has_value())
   {
@@ -477,8 +492,7 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUbx(const std::vector<std:
 }
 
 std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
-    const std::vector<std::uint8_t>& bytes,
-    const std::size_t byte_offset)
+    const std::vector<std::uint8_t>& bytes, const std::size_t byte_offset)
 {
   if (byte_offset >= bytes.size())
   {
@@ -489,8 +503,7 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
   if (byte == '#' || byte == '%')
   {
     UnicoreFrameFramer framer;
-    const auto probe =
-        ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, byte_offset);
+    const auto probe = ProbeAtOffset<UnicoreFrameFramer, UnicoreFrame>(framer, bytes, byte_offset);
     if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
     {
       return std::nullopt;
@@ -533,11 +546,9 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
       return universal_gnss_protocols::UnicoreJamStatusToRuntimeState(*jamstatus.record);
     }
     if (const auto freqjamstatus = universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame);
-        freqjamstatus.status == ParserStatus::kRecordReady &&
-        freqjamstatus.record.has_value())
+        freqjamstatus.status == ParserStatus::kRecordReady && freqjamstatus.record.has_value())
     {
-      return universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(
-          *freqjamstatus.record);
+      return universal_gnss_protocols::UnicoreFreqJamStatusToRuntimeState(*freqjamstatus.record);
     }
 
     return std::nullopt;
@@ -546,8 +557,8 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
   if (byte == universal_gnss_protocols::kUnicoreBinarySync1)
   {
     UnicoreBinaryFrameFramer framer;
-    const auto probe = ProbeAtOffset<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
-        framer, bytes, byte_offset);
+    const auto probe =
+        ProbeAtOffset<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(framer, bytes, byte_offset);
     if (probe.status != ParserStatus::kRecordReady || !probe.record.has_value())
     {
       return std::nullopt;
@@ -641,10 +652,8 @@ std::string FormatGnssReplayText(const GnssReplayResult& result, const bool summ
   {
     for (const auto& event : result.events)
     {
-      output << event.event_index
-             << " offset=" << event.byte_offset
-             << " proto=" << DescribeProtocolType(event.protocol)
-             << " len=" << event.length_bytes;
+      output << event.event_index << " offset=" << event.byte_offset
+             << " proto=" << DescribeProtocolType(event.protocol) << " len=" << event.length_bytes;
 
       if (!event.identity.empty())
       {
@@ -667,14 +676,12 @@ std::string FormatGnssReplayText(const GnssReplayResult& result, const bool summ
       }
 
       output << " update=" << (event.produced_runtime_update ? "yes" : "no")
-             << " crc=" << DescribeChecksumStatus(event.checksum_status)
-             << ' ' << BuildStateTextSummary(event.state_after_event)
-             << '\n';
+             << " crc=" << DescribeChecksumStatus(event.checksum_status) << ' '
+             << BuildStateTextSummary(event.state_after_event) << '\n';
     }
   }
 
-  output << "summary"
-         << " total_bytes=" << result.summary.total_bytes_read
+  output << "summary" << " total_bytes=" << result.summary.total_bytes_read
          << " records=" << result.summary.recognized_records
          << " valid=" << result.summary.valid_records
          << " invalid=" << result.summary.invalid_records
@@ -682,8 +689,7 @@ std::string FormatGnssReplayText(const GnssReplayResult& result, const bool summ
          << " truncated=" << result.summary.truncated_records
          << " noise_bytes=" << result.summary.noise_bytes
          << " noise_spans=" << result.summary.noise_spans
-         << " runtime_updates=" << result.summary.runtime_updates
-         << '\n';
+         << " runtime_updates=" << result.summary.runtime_updates << '\n';
 
   if (!result.summary.counts_by_protocol.empty())
   {
@@ -759,11 +765,13 @@ std::string FormatGnssReplayJson(const GnssReplayResult& result, const bool summ
       const auto& event = result.events[index];
       output << '{';
       bool first_event_field = true;
-      auto write_event_number = [&](const char* name, const auto value) {
+      auto write_event_number = [&](const char* name, const auto value)
+      {
         AppendJsonFieldSeparator(output, first_event_field);
         output << '"' << name << "\":" << value;
       };
-      auto write_event_string = [&](const char* name, const std::string& value) {
+      auto write_event_string = [&](const char* name, const std::string& value)
+      {
         AppendJsonFieldSeparator(output, first_event_field);
         output << '"' << name << "\":\"" << EscapeJsonString(value) << '"';
       };
@@ -788,7 +796,8 @@ std::string FormatGnssReplayJson(const GnssReplayResult& result, const bool summ
   AppendJsonFieldSeparator(output, first_root_field);
   output << "\"summary\":{";
   bool first_summary_field = true;
-  auto write_summary_number = [&](const char* name, const std::size_t value) {
+  auto write_summary_number = [&](const char* name, const std::size_t value)
+  {
     AppendJsonFieldSeparator(output, first_summary_field);
     output << '"' << name << "\":" << value;
   };

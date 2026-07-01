@@ -62,6 +62,8 @@ void TestJsonFormatting(TestContext& ctx)
   GnssRuntimeState state;
   state.fix_valid = false;
   state.fix_type = GnssFixType::kUnknown;
+  state.latitude_deg = 40.0789588272;
+  state.longitude_deg = 116.2365102982;
   state.satellites_visible = 24u;
   state.jamming_detected = true;
 
@@ -70,6 +72,9 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should emit null when no receiver session is selected");
   ctx.Expect(formatted.find("\"fix_valid\":false") != std::string::npos,
              "json formatting should include fix validity");
+  ctx.Expect(formatted.find("\"latitude_deg\":40.078958827") != std::string::npos &&
+                 formatted.find("\"longitude_deg\":116.236510298") != std::string::npos,
+             "json formatting should keep coordinate output above seven decimal places");
   ctx.Expect(formatted.find("\"satellites_visible\":24") != std::string::npos,
              "json formatting should include available satellite counters");
   ctx.Expect(formatted.find("\"jamming_detected\":true") != std::string::npos,

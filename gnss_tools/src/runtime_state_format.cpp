@@ -11,6 +11,8 @@ namespace universal_gnss_tools
 namespace
 {
 
+constexpr int kCoordinateOutputPrecision = 9;
+
 const char* ToString(const universal_gnss::GnssFixType fix_type)
 {
   switch (fix_type)
@@ -128,6 +130,23 @@ void AppendJsonOptionalNumber(std::ostringstream& stream,
   }
 }
 
+void AppendJsonOptionalCoordinate(std::ostringstream& stream,
+                                  const char* label,
+                                  const std::optional<double>& value)
+{
+  stream << '"' << label << "\":";
+  if (value.has_value())
+  {
+    std::ostringstream coordinate;
+    coordinate << std::fixed << std::setprecision(kCoordinateOutputPrecision) << *value;
+    stream << coordinate.str();
+  }
+  else
+  {
+    stream << "null";
+  }
+}
+
 void AppendJsonOptionalBool(std::ostringstream& stream,
                             const char* label,
                             const std::optional<bool>& value)
@@ -167,8 +186,7 @@ std::string FormatRuntimeStateCompact(
   }
   stream << " fix_valid=" << state.fix_valid;
   stream << " fix_type=" << ToString(state.fix_type);
-  stream << " rtk_mode="
-         << (state.rtk_mode.has_value() ? ToString(*state.rtk_mode) : "unknown");
+  stream << " rtk_mode=" << (state.rtk_mode.has_value() ? ToString(*state.rtk_mode) : "unknown");
 
   AppendOptionalFloat(stream, "lat_deg", state.latitude_deg, 7);
   AppendOptionalFloat(stream, "lon_deg", state.longitude_deg, 7);
@@ -224,9 +242,9 @@ std::string FormatRuntimeStateJson(
   }
   stream << ',';
 
-  AppendJsonOptionalNumber(stream, "latitude_deg", state.latitude_deg);
+  AppendJsonOptionalCoordinate(stream, "latitude_deg", state.latitude_deg);
   stream << ',';
-  AppendJsonOptionalNumber(stream, "longitude_deg", state.longitude_deg);
+  AppendJsonOptionalCoordinate(stream, "longitude_deg", state.longitude_deg);
   stream << ',';
   AppendJsonOptionalNumber(stream, "altitude_m", state.altitude_m);
   stream << ',';

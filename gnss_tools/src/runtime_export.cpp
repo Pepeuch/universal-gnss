@@ -1,5 +1,6 @@
 #include "universal_gnss_tools/runtime_export.hpp"
 
+#include <iomanip>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -14,6 +15,8 @@ namespace universal_gnss_tools
 
 namespace
 {
+
+constexpr int kCoordinateOutputPrecision = 9;
 
 const char* DescribeFixType(const universal_gnss::GnssFixType fix_type)
 {
@@ -176,6 +179,26 @@ void WriteJsonOptionalNumber(std::ostream& output,
   }
 }
 
+void WriteJsonOptionalCoordinate(std::ostream& output,
+                                 const char* key,
+                                 const std::optional<double>& value,
+                                 const bool pretty,
+                                 bool& first_field)
+{
+  WriteFieldPrefix(output, pretty, first_field);
+  output << '"' << key << '"' << (pretty ? ": " : ":");
+  if (value.has_value())
+  {
+    std::ostringstream coordinate;
+    coordinate << std::fixed << std::setprecision(kCoordinateOutputPrecision) << *value;
+    output << coordinate.str();
+  }
+  else
+  {
+    output << "null";
+  }
+}
+
 void WriteJsonString(std::ostream& output,
                      const char* key,
                      const std::string& value,
@@ -183,19 +206,14 @@ void WriteJsonString(std::ostream& output,
                      bool& first_field)
 {
   WriteFieldPrefix(output, pretty, first_field);
-  output << '"' << key << '"' << (pretty ? ": " : ":")
-         << '"' << EscapeJsonString(value) << '"';
+  output << '"' << key << '"' << (pretty ? ": " : ":") << '"' << EscapeJsonString(value) << '"';
 }
 
-void WriteJsonBool(std::ostream& output,
-                   const char* key,
-                   const bool value,
-                   const bool pretty,
-                   bool& first_field)
+void WriteJsonBool(
+    std::ostream& output, const char* key, const bool value, const bool pretty, bool& first_field)
 {
   WriteFieldPrefix(output, pretty, first_field);
-  output << '"' << key << '"' << (pretty ? ": " : ":")
-         << (value ? "true" : "false");
+  output << '"' << key << '"' << (pretty ? ": " : ":") << (value ? "true" : "false");
 }
 
 void WriteJsonOptionalBool(std::ostream& output,
@@ -224,10 +242,9 @@ void WriteRuntimeUpdateJson(std::ostream& output,
   const bool pretty = options.pretty;
   bool first_field = true;
 
-  WriteJsonOptionalNumber(output, "event_index", std::optional<std::size_t>(event.event_index), pretty,
-                          first_field);
   WriteJsonOptionalNumber(
-      output, "timestamp_ns", state.timestamp_ns, pretty, first_field);
+      output, "event_index", std::optional<std::size_t>(event.event_index), pretty, first_field);
+  WriteJsonOptionalNumber(output, "timestamp_ns", state.timestamp_ns, pretty, first_field);
   WriteJsonString(output, "protocol", DescribeExportProtocol(event.protocol), pretty, first_field);
   WriteJsonString(output, "message", DescribeExportMessage(event), pretty, first_field);
   WriteJsonBool(output, "fix_valid", state.fix_valid, pretty, first_field);
@@ -245,8 +262,8 @@ void WriteRuntimeUpdateJson(std::ostream& output,
     output << '"' << rtk_mode << '"';
   }
 
-  WriteJsonOptionalNumber(output, "latitude_deg", state.latitude_deg, pretty, first_field);
-  WriteJsonOptionalNumber(output, "longitude_deg", state.longitude_deg, pretty, first_field);
+  WriteJsonOptionalCoordinate(output, "latitude_deg", state.latitude_deg, pretty, first_field);
+  WriteJsonOptionalCoordinate(output, "longitude_deg", state.longitude_deg, pretty, first_field);
   WriteJsonOptionalNumber(output, "altitude_m", state.altitude_m, pretty, first_field);
   WriteJsonOptionalNumber(
       output, "horizontal_accuracy_m", state.horizontal_accuracy_m, pretty, first_field);
@@ -259,19 +276,15 @@ void WriteRuntimeUpdateJson(std::ostream& output,
       output, "satellites_tracked", state.satellites_tracked, pretty, first_field);
   WriteJsonOptionalNumber(
       output, "satellites_visible", state.satellites_visible, pretty, first_field);
-  WriteJsonOptionalNumber(
-      output, "mean_cn0_dbhz", state.mean_cn0_db_hz, pretty, first_field);
-  WriteJsonOptionalNumber(
-      output, "max_cn0_dbhz", state.max_cn0_db_hz, pretty, first_field);
-  WriteJsonOptionalNumber(
-      output, "correction_age_s", state.correction_age_s, pretty, first_field);
+  WriteJsonOptionalNumber(output, "mean_cn0_dbhz", state.mean_cn0_db_hz, pretty, first_field);
+  WriteJsonOptionalNumber(output, "max_cn0_dbhz", state.max_cn0_db_hz, pretty, first_field);
+  WriteJsonOptionalNumber(output, "correction_age_s", state.correction_age_s, pretty, first_field);
   WriteJsonOptionalNumber(output, "heading_deg", state.heading_deg, pretty, first_field);
   WriteJsonOptionalBool(
       output, "dual_antenna_heading", state.dual_antenna_heading, pretty, first_field);
   WriteJsonOptionalBool(
       output, "interference_detected", state.interference_detected, pretty, first_field);
-  WriteJsonOptionalBool(
-      output, "jamming_detected", state.jamming_detected, pretty, first_field);
+  WriteJsonOptionalBool(output, "jamming_detected", state.jamming_detected, pretty, first_field);
 
   output << '}';
 }
