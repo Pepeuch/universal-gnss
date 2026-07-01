@@ -9,9 +9,9 @@
   <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
   <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
   <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
-  <img src="https://img.shields.io/badge/Lyrical-Ready-blue">
+  <img src="https://img.shields.io/badge/Lyrical-Validation%20Pending-blue">
     <a href="https://mowgli.garden/">
-    <img src="https://img.shields.io/badge/MowgliNext-GNSS%20Migration-orange">
+    <img src="https://img.shields.io/badge/MowgliNext-Downstream%20Field%20Validation-orange">
   </a>
 </p>
 <p align="center">
@@ -32,13 +32,24 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
-## v0.6.0 Release Status
+## Current Project Status
 
-`v0.6.0` is the first release posture with:
+`v0.6.0` is released.
 
-- Auto Discovery v2
-- Auto Configuration dry-run planning
-- operator-driven runtime-only receiver apply for supported families
+Current phase: post-`v0.6.x` stabilization.
+
+Current project state includes:
+
+- Auto Discovery v2 plus `ReceiverNode` auto-discovery wiring
+- Auto Configuration dry-run planning and operator-driven apply for supported
+  families
+- `ReceiverNode`, `NtripNode`, and `ReplayNode`
+- parser counters plus malformed/rejected diagnostic visibility in ROS2
+- live RTCM forwarding from `NtripNode` into `ReceiverNode`
+- u-blox persistent FLASH configuration and output-port selection
+- UM982 / Unicore runtime field validation through downstream MowgliNext use
+- decimal-degree latitude/longitude outputs preserving at least 9 decimal
+  places
 
 Current release guidance:
 
@@ -52,6 +63,9 @@ Current release guidance:
   `/dev/ttyACM*` and `/dev/ttyUSB*` names whenever they exist
 - UM982 runtime-only live apply should use an operator timeout around
   `--timeout-ms 5000`
+- MowgliNext is treated as downstream field validation; GUI/install issues do
+  not belong in the Universal GNSS core backlog unless they expose a missing
+  portable feature or a bug in this repository
 
 ## Portable Receiver Profiles
 
@@ -131,14 +145,19 @@ Current implemented layers:
   - no ROS 2 dependency
 - `gnss_protocols`
   - portable framing and checksum helpers
-  - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`
-  - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-SAT`, `MON-RF`
-  - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`, `RTCMSTATUSA`, `SATSINFOA`
+  - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA`
+  - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-DOP`, `NAV-SAT`,
+    `MON-HW`, `MON-HW2`, `MON-RF`, `RXM-RTCM`, `ACK/NAK`
+  - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`,
+    `RTCMSTATUSA`, `SATSINFOA`, `BESTSATA`, `JAMSTATUSA`, `FREQJAMSTATUSA`,
+    `HWSTATUSA`, `AGCA`
+  - Unicore binary `N4` semantic parsing: `BESTNAVB`, `PVTSLNB`
   - RTCM3 framing, CRC24Q, and message-type extraction/classification
 - `gnss_driver`
   - receiver profile declarations
   - protocol support and feature flags
-  - lightweight stream-family detection
+  - lightweight stream-family detection and auto-discovery
+  - discovery-aware planner/report layer for portable receiver configuration
 - `gnss_transport`
   - portable byte source / sink interfaces
   - memory-backed test / replay transport
@@ -165,26 +184,18 @@ Current implemented layers:
   - `GnssRuntimeState -> GnssStatus` adapter
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
-  - minimal `ReceiverNode` skeleton publishing `fix`, `status`, and `diagnostics`
+  - `ReceiverNode` publishing `fix`, `status`, and `diagnostics`
+  - `ReceiverNode` serial auto-discovery support for
+    `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
+  - discovery, correction, and parser-counter diagnostic reporting
+  - live RTCM forwarding from ROS2 into the receiver transport when writable
   - `ReplayNode` for hardware-free `status` / `fix` / `diagnostics` replay with
     optional `rtcm` publication from sanitized logs
-  - serial receiver auto-discovery support for `ReceiverNode`
-  - minimal `NtripNode` wrapper publishing `diagnostics` for ROS-side NTRIP state
-  - minimal serial / TCP launch examples for `receiver_node`
-  - minimal `replay.launch.py` example for offline ROS2 playback
-  - minimal `ntrip.launch.py` example for the ROS2 NTRIP wrapper
-  - minimal `receiver_and_ntrip.launch.py` combined bringup example
+  - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state
+  - serial / TCP / replay / combined launch examples
 
-Planned layers:
+Later modules:
 
-- `gnss_protocols`
-  - NMEA, RTCM3, UBX, Unicore, Quectel, and other protocol parsers
-- `gnss_driver`
-  - detection, configuration, and runtime-state mapping
-- `gnss_transport`
-  - serial, TCP / UDP, replay, and embedded byte-stream adapters
-- `gnss_ntrip`
-  - NTRIP client, RTCM relay, correction transport metrics
 - `gnss_rtk_base`
   - survey-in, fixed-base workflows, RTCM routing
 - `gnss_esp32`
@@ -215,6 +226,10 @@ serial hardware access examples.
 See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
 current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and
 the latest real receiver and real caster hardware smoke-test notes.
+
+See [docs/validation/README.md](docs/validation/README.md) for the current
+boundary between Universal GNSS core validation, ROS2 package validation,
+receiver-backend validation, and downstream integration validation.
 
 See [docs/robot_localization.md](docs/robot_localization.md) for the first
 example of connecting Universal GNSS `fix` output to
