@@ -126,6 +126,11 @@ Implemented behaviors:
 Current NMEA notes:
 
 - `GGA` provides the strongest position mapping today
+- `GGA` also maps standard fix-quality values into normalized `rtk_mode`
+  conservatively:
+  - `0/1/2/3/6/7/8` -> `kNone`
+  - `4` -> `kFixed`
+  - `5` -> `kFloat`
 - `RMC` currently contributes fix validity and coordinates
 - `GSA` contributes DOP and active-satellite information
 - `GSV` contributes satellites-in-view and per-sentence CN0 summaries
@@ -392,7 +397,7 @@ Runtime field            Current protocol sources
 ---------------------------------------------------------------
 fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
 fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
-rtk_mode                 UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
+rtk_mode                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
 latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 altitude                 NMEA GGA, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
 horizontal accuracy      NMEA GST, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
@@ -423,8 +428,9 @@ Rules:
 
 Examples:
 
-- NMEA `GGA` can set a generic fix and coordinates, but it does not claim RTK
-  fixed
+- NMEA `GGA` can set a generic fix, coordinates, and standard RTK mode from
+  documented `fix_quality` values only; it still keeps `fix_type` conservative
+  as generic `fix` / `no_fix`
 - NMEA `GST` can set horizontal and vertical accuracy, but it does not imply
   fix validity, RTK mode, satellite counts, or covariance orientation in the
   portable runtime model

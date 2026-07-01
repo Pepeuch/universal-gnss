@@ -439,8 +439,10 @@ void TestNmeaGstAccuracyUpdates(TestContext& ctx)
                  state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
                  state.vertical_accuracy_m == std::optional<float>(1.1f),
              "GST should enrich the session state with conservative accuracy fields");
-  ctx.Expect(!HasCapability(state, GnssCapability::kRtkMode),
-             "GST should not invent RTK capability in the session state");
+  ctx.Expect(HasCapability(state, GnssCapability::kRtkMode) &&
+                 HasValueAvailable(state, GnssCapability::kRtkMode) &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "GST should preserve the known non-RTK mode previously established by standard GGA");
 }
 
 void TestMixedStreamRouting(TestContext& ctx)

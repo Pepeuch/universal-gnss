@@ -24,6 +24,7 @@ Recently completed:
 - u-blox persistent FLASH configuration and output-port selection
 - UM982 / Unicore runtime hardening and downstream field validation through
   MowgliNext
+- generic NMEA `GGA fix_quality` runtime mapping into normalized `rtk_mode`
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
 
 ## Immediate correctness
@@ -31,7 +32,6 @@ Recently completed:
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [ ] production-safe failure handling and rollback expectations
 - [ ] live receiver identity / model / firmware metadata in discovery and planning output
-- [ ] Generic NMEA: propagate GGA fix_quality 4/5 into normalized rtk_mode / fix_type
 - [ ] document and preserve generic NMEA runtime_only limitations until a portable write-side config contract exists
 
 ## Universal GNSS core tasks

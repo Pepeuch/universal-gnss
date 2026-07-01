@@ -300,6 +300,28 @@ bool ParseGgaFixQuality(std::string_view text, NmeaGgaFixQuality& fix_quality)
   return true;
 }
 
+std::optional<universal_gnss::GnssRtkMode> MapGgaFixQualityToRtkMode(
+    const NmeaGgaFixQuality fix_quality)
+{
+  switch (fix_quality)
+  {
+    case NmeaGgaFixQuality::kRtkFixed:
+      return universal_gnss::GnssRtkMode::kFixed;
+    case NmeaGgaFixQuality::kRtkFloat:
+      return universal_gnss::GnssRtkMode::kFloat;
+    case NmeaGgaFixQuality::kInvalid:
+    case NmeaGgaFixQuality::kGpsFix:
+    case NmeaGgaFixQuality::kDifferentialFix:
+    case NmeaGgaFixQuality::kPpsFix:
+    case NmeaGgaFixQuality::kEstimated:
+    case NmeaGgaFixQuality::kManual:
+    case NmeaGgaFixQuality::kSimulation:
+      return universal_gnss::GnssRtkMode::kNone;
+  }
+
+  return std::nullopt;
+}
+
 ParserResult<NmeaGgaRecord> InvalidGga()
 {
   return ParserResult<NmeaGgaRecord>::InvalidData();
@@ -1121,9 +1143,15 @@ universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& reco
   state.longitude_deg = record.longitude_deg;
   state.altitude_m = record.altitude_m;
 
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
 
+  if (const auto rtk_mode = MapGgaFixQualityToRtkMode(record.fix_quality); rtk_mode.has_value())
+  {
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kRtkMode, state.rtk_mode, *rtk_mode);
+  }
   if (record.hdop.has_value())
   {
     universal_gnss::SetOptionalValue(

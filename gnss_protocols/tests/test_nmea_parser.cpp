@@ -21,6 +21,7 @@ namespace
 
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
+using universal_gnss::GnssRtkMode;
 using universal_gnss::GnssRuntimeAggregator;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaDate;
@@ -295,12 +296,57 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
              "GGA runtime mapping should expose HDOP when present");
   ctx.Expect(universal_gnss::HasValueAvailable(gga_state, GnssCapability::kSatellitesUsed),
              "GGA runtime mapping should expose satellites used when present");
-  ctx.Expect(!universal_gnss::HasCapability(gga_state, GnssCapability::kRtkMode),
-             "GGA runtime mapping should not invent RTK capability");
-  ctx.Expect(gga_state.rtk_mode == std::nullopt,
-             "GGA runtime mapping should not invent RTK mode");
+  ctx.Expect(universal_gnss::HasCapability(gga_state, GnssCapability::kRtkMode),
+             "GGA runtime mapping should advertise RTK capability when standard fix quality is present");
+  ctx.Expect(universal_gnss::HasValueAvailable(gga_state, GnssCapability::kRtkMode),
+             "GGA runtime mapping should expose RTK mode when fix quality is known");
+  ctx.Expect(gga_state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "GGA fix quality 1 should map to a known non-RTK runtime mode");
   ctx.Expect(!gga_state.heading_deg.has_value(),
              "GGA runtime mapping should not invent heading");
+
+  const auto expect_gga_rtk_mode = [&](const std::string& payload,
+                                       const GnssRtkMode expected_rtk_mode,
+                                       const bool expected_fix_valid,
+                                       const GnssFixType expected_fix_type,
+                                       const std::string& label)
+  {
+    const auto sentence = FrameSentence(MakeSentence(payload), 150);
+    const auto result = universal_gnss_protocols::ParseNmeaGga(sentence);
+    ctx.Expect(result.record.has_value(), label + " should parse");
+    if (!result.record.has_value())
+    {
+      return;
+    }
+
+    const auto state = universal_gnss_protocols::NmeaGgaToRuntimeState(*result.record);
+    ctx.Expect(state.fix_valid == expected_fix_valid, label + " should preserve fix validity");
+    ctx.Expect(state.fix_type == expected_fix_type, label + " should preserve generic fix type");
+    ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kRtkMode),
+               label + " should advertise RTK capability");
+    ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kRtkMode),
+               label + " should expose a known RTK mode");
+    ctx.Expect(state.rtk_mode == std::optional<GnssRtkMode>(expected_rtk_mode),
+               label + " should map to the expected RTK mode");
+  };
+
+  expect_gga_rtk_mode("GPGGA,123520,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,",
+                      GnssRtkMode::kNone,
+                      true,
+                      GnssFixType::kFix,
+                      "GGA fix quality 2");
+  expect_gga_rtk_mode("GPGGA,123521,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,",
+                      GnssRtkMode::kFixed,
+                      true,
+                      GnssFixType::kFix,
+                      "GGA fix quality 4");
+  expect_gga_rtk_mode("GPGGA,123522,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,",
+                      GnssRtkMode::kFloat,
+                      true,
+                      GnssFixType::kFix,
+                      "GGA fix quality 5");
+  expect_gga_rtk_mode(
+      "GPGGA,123523,,,,,0,00,,,,,,", GnssRtkMode::kNone, false, GnssFixType::kNoFix, "GGA fix quality 0");
 
   const NmeaSentence rmc_sentence = FrameSentence(
       MakeSentence("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W"),
@@ -798,7 +844,7 @@ void TestGstRuntimeMapping(TestContext& ctx)
 void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
 {
   const NmeaSentence gga_sentence = FrameSentence(
-      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
       1000);
   const NmeaSentence gsa_sentence = FrameSentence(
       MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
@@ -829,6 +875,10 @@ void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
   const universal_gnss::GnssRuntimeState& state = aggregator.state();
   ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
              "aggregated NMEA state should retain a generic valid fix");
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kRtkMode) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kRtkMode) &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
+             "aggregated NMEA state should preserve the GGA-derived RTK mode");
   ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 48.1173) &&
                  state.longitude_deg.has_value() && NearlyEqual(*state.longitude_deg, 11.5166667) &&
                  state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 545.4),

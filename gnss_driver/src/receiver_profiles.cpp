@@ -23,7 +23,8 @@ constexpr ReceiverProfile kBuiltInProfiles[] = {
         false,
         MakeCapabilities(0u,
                          ToFlag(ReceiverProtocol::kNmea),
-                         ToFlag(ReceiverFeature::kRoverMode)),
+                         ToFlag(ReceiverFeature::kRtk) |
+                             ToFlag(ReceiverFeature::kRoverMode)),
     },
     ReceiverProfile{
         "ublox_f9_f10",

@@ -88,6 +88,7 @@ const ReceiverCapabilities& NmeaDriver::DriverCapabilities()
   static const ReceiverCapabilities capabilities = [] {
     ReceiverCapabilities value;
     AddSupportedOutputProtocol(value, ReceiverProtocol::kNmea);
+    AddReceiverFeature(value, ReceiverFeature::kRtk);
     AddReceiverFeature(value, ReceiverFeature::kRoverMode);
     return value;
   }();

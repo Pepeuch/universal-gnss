@@ -519,7 +519,8 @@ Current vendor coverage:
   - family: `NMEA`
   - profiles: none
   - runtime state: delegated to `NmeaSession`
-  - capabilities: read-only NMEA output support, rover mode
+  - capabilities: read-only NMEA output support, RTK read visibility through
+    standard `GGA fix_quality`, rover mode
 - `UbloxDriver`
   - family: `F9/F10`
   - profiles: rover, diagnostics, base
@@ -681,6 +682,8 @@ Its job is:
   - `GSA`
   - `GSV`
   - `GST`
+- map standard `GGA fix_quality` into normalized `rtk_mode` without adding any
+  receiver-specific write/config behavior
 - parse `VTG` and `ZDA` semantically without projecting them into runtime state
 - merge runtime updates through `GnssRuntimeAggregator`
 - expose current runtime state and lightweight session metrics

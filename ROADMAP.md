@@ -36,6 +36,8 @@ Already delivered in `v0.6.0` and its follow-up fixes:
 - operator-driven Unicore reset/recovery persistent apply
 - u-blox persistent FLASH configuration and output-port selection
 - UM982 / Unicore runtime validation through downstream MowgliNext field use
+- generic NMEA `GGA fix_quality` mapping into normalized `rtk_mode` for
+  runtime-only receivers
 
 Validation boundary:
 
@@ -53,7 +55,9 @@ Validation boundary:
 - receiver metadata
 - RTCM observation-level decode beyond MSM summary
 - RTCM semantic expansion beyond `1005` / `1006` / `1230` / MSM summary
-- Generic NMEA completion
+- remaining Generic NMEA completion:
+  - VTG/ZDA portable runtime contracts
+  - runtime_only/write-side boundary documentation
 
 ### Runtime observability
 

@@ -105,6 +105,7 @@ Current receiver-family support:
   - `factory_reset` currently reported as unsupported by the portable planner
 - generic NMEA
   - `runtime_only` only
+  - read-side RTK status can be inferred from standard `GGA fix_quality`
 
 Safety note:
 
@@ -149,6 +150,8 @@ Current implemented layers:
 - `gnss_protocols`
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA`
+  - standard `GGA fix_quality` -> normalized `rtk_mode` mapping for generic
+    runtime-only receivers
   - UBX semantic parsing: `NAV-STATUS`, `NAV-PVT`, `NAV-DOP`, `NAV-SAT`,
     `MON-HW`, `MON-HW2`, `MON-RF`, `RXM-RTCM`, `ACK/NAK`
   - Unicore ASCII semantic parsing: `PVTSLNA`, `BESTNAVA`, `RTKSTATUSA`,

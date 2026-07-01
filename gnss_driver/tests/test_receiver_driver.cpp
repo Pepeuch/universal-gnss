@@ -205,10 +205,12 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
                  universal_gnss_driver::SupportsOutputProtocol(
                      nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
                  universal_gnss_driver::HasReceiverFeature(
+                     nmea_driver.capabilities(), ReceiverFeature::kRtk) &&
+                 universal_gnss_driver::HasReceiverFeature(
                      nmea_driver.capabilities(), ReceiverFeature::kRoverMode) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      nmea_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
-             "generic NMEA driver should advertise a read-only NMEA output path without config features");
+             "generic NMEA driver should advertise a read-only NMEA output path with RTK read visibility but without config features");
 }
 
 void TestSupportedProfilesAndGeneration(TestContext& ctx)
@@ -299,7 +301,7 @@ void TestRuntimeStateAccess(TestContext& ctx)
   ublox_driver.FeedBytes(BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()), 1000);
   unicore_driver.FeedString(kBestNavLine, 2000);
   nmea_driver.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
       3000);
   nmea_driver.FeedBytes(
       BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
@@ -316,6 +318,8 @@ void TestRuntimeStateAccess(TestContext& ctx)
              "Unicore driver should surface runtime state from the underlying session");
   ctx.Expect(nmea_driver.current_state().fix_valid &&
                  nmea_driver.current_state().fix_type == GnssFixType::kFix &&
+                 nmea_driver.current_state().rtk_mode ==
+                     std::optional<universal_gnss::GnssRtkMode>(GnssRtkMode::kFloat) &&
                  nmea_driver.current_state().timestamp_ns == std::optional<std::int64_t>(3001) &&
                  nmea_driver.current_state().horizontal_accuracy_m == std::optional<float>(0.5f),
              "generic NMEA driver should surface runtime state from the underlying session");

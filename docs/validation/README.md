@@ -19,8 +19,8 @@ Track validation here when the issue is about:
 
 Current pending example:
 
-- generic NMEA improvement: propagate `GGA` fix_quality `4/5` into normalized
-  `rtk_mode` / `fix_type`
+- generic NMEA validation: preserve the documented `runtime_only` boundary while
+  keeping standard `GGA fix_quality` -> normalized `rtk_mode` coverage green
 
 ## ROS2 package validation
 

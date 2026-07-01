@@ -14,6 +14,7 @@ namespace
 {
 
 using universal_gnss::GnssFixType;
+using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_driver::NmeaSession;
@@ -72,13 +73,55 @@ void TestPositionAndFixUpdates(TestContext& ctx)
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1000) &&
                  state.fix_valid &&
                  state.fix_type == GnssFixType::kFix &&
+                 HasCapability(state, universal_gnss::GnssCapability::kRtkMode) &&
+                 HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone) &&
                  state.latitude_deg.has_value() &&
                  state.longitude_deg.has_value() &&
                  state.altitude_m == std::optional<double>(545.4),
-             "GGA should update the generic NMEA session with fix and position");
+             "GGA should update the generic NMEA session with fix, position, and a known non-RTK mode");
   ctx.Expect(metrics.sentences_seen == 1u && metrics.records_parsed == 1u &&
                  metrics.runtime_updates == 1u,
              "GGA should count as one parsed runtime-producing sentence");
+}
+
+void TestStandardGgaFixQualityDrivesPortableRtkMode(TestContext& ctx)
+{
+  NmeaSession session;
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"),
+      1100);
+
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kFix &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
+             "GGA fix quality 4 should map to RTK fixed");
+
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
+      1101);
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kFix &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
+             "GGA fix quality 5 should map to RTK float");
+
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123521,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"),
+      1102);
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kFix &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "GGA fix quality 2 should clear RTK float/fixed back to a known non-RTK mode");
+
+  session.FeedBytes(BuildNmeaSentence("GPGGA,123522,,,,,0,00,,,,,,"), 1103);
+  ctx.Expect(!session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kNoFix &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "invalid GGA should not leave stale RTK float/fixed state behind");
 }
 
 void TestDopSatelliteCn0AndAccuracyUpdates(TestContext& ctx)
@@ -154,6 +197,7 @@ int main()
   TestContext ctx;
 
   TestPositionAndFixUpdates(ctx);
+  TestStandardGgaFixQualityDrivesPortableRtkMode(ctx);
   TestDopSatelliteCn0AndAccuracyUpdates(ctx);
   TestVtgAndZdaRemainSemanticOnly(ctx);
   TestMalformedAndResetBehavior(ctx);

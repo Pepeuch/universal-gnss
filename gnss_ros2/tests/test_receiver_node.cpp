@@ -1029,6 +1029,33 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_EQ(diagnostics.header.frame_id, "gnss");
 }
 
+TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "nmea")});
+
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"),
+       true},
+  });
+
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_status_message().has_value());
+  const auto& status = *node.last_status_message();
+  EXPECT_TRUE(status.fix_valid);
+  EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_FIX);
+  EXPECT_EQ(status.rtk_mode, universal_gnss_ros2::msg::GnssStatus::RTK_MODE_FIXED);
+  EXPECT_NE(status.capability_flags & universal_gnss_ros2::msg::GnssStatus::CAP_RTK_MODE, 0u);
+  EXPECT_NE(status.value_flags & universal_gnss_ros2::msg::GnssStatus::CAP_RTK_MODE, 0u);
+}
+
 TEST_F(ReceiverNodeTest, PublishesHighPrecisionFixCoordinatesWithoutTruncation)
 {
   constexpr double expected_latitude = 48.0 + 7.0381234 / 60.0;

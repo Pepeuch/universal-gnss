@@ -208,6 +208,9 @@ Unknown vs unsupported matters:
 - `rtk_mode = UNKNOWN` with no capability bit means the path does not expose RTK mode
 - `rtk_mode = UNKNOWN` with the capability bit set means RTK mode exists in the
   model but is not known for this sample
+- generic NMEA `GGA` now sets a known `rtk_mode` from standard `fix_quality`
+  values, so `/gps/status` can report `NONE`, `FLOAT`, or `FIXED` even without
+  a vendor-specific backend
 
 Timestamp semantics:
 
@@ -256,6 +259,8 @@ Current policy:
 - missing coordinates, invalid fix, `UNKNOWN`, or `NO_FIX` -> `STATUS_NO_FIX`
 - valid non-fixed solutions -> `STATUS_FIX`
 - explicit RTK fixed only -> `STATUS_GBAS_FIX`
+- generic NMEA reaches the same mapping when `GGA fix_quality = 4` provides an
+  explicit normalized RTK-fixed state
 
 This is intentionally conservative.
 

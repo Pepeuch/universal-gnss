@@ -81,6 +81,55 @@ Suggested field-validation checks:
 * verify GUI/API tolerate optional per-message MSM entries appearing only when
   seen
 
+### 0b. Pending MowgliNext work — consume generic NMEA RTK mode from `/gps/status`
+
+What new Universal GNSS capability exists:
+
+* Universal GNSS now maps standard NMEA `GGA fix_quality` into normalized
+  `rtk_mode` on the generic `receiver_family=nmea` path.
+* This means `/gps/status` can now report:
+  * `RTK_MODE_NONE`
+  * `RTK_MODE_FLOAT`
+  * `RTK_MODE_FIXED`
+  without requiring a dedicated vendor backend when the receiver already
+  exposes standard GGA quality values.
+
+Why it matters for the robot:
+
+* robots using a generic NMEA path can now distinguish plain GNSS, RTK Float,
+  and RTK Fixed instead of appearing permanently non-RTK
+* operator UX and localization logic no longer need to assume "generic NMEA
+  means no RTK visibility"
+
+Where MowgliNext should consume it:
+
+* GPS sidecar ROS2 status consumers
+* diagnostics/API layers that already read `/gps/status`
+* operator GNSS panels or badges
+
+Expected GUI/operator behavior:
+
+* show RTK Float / RTK Fixed from `/gps/status.rtk_mode` even for generic NMEA
+  receivers
+* do not label the path as vendor-specific Quectel support unless a dedicated
+  backend is actually in use
+
+Expected safety/localization behavior if relevant:
+
+* if localization/autonomy gating depends on RTK state, generic NMEA receivers
+  should now follow the same normalized RTK mode contract as other backends
+* a fallback generic-NMEA deployment should not be treated as permanently
+  non-RTK when standard GGA already proves otherwise
+
+Suggested field-validation checks:
+
+* verify `/gps/status.rtk_mode` transitions correctly for generic NMEA
+  receivers that output GGA quality `1/4/5`
+* verify dashboards update RTK badges without requiring vendor strings or a
+  dedicated backend
+* verify localization/safety logic reacts to Float -> Fixed -> None transitions
+  on the generic NMEA path
+
 ### 1. Update Universal GNSS dependency
 
 * [ ] Update the Universal GNSS version/submodule/branch used by MowgliNext.

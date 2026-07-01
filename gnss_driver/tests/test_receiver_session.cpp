@@ -306,7 +306,7 @@ void TestExplicitNmeaMode(TestContext& ctx)
 {
   ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"),
       2100);
   session.FeedBytes(
       BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 2101);
@@ -326,12 +326,13 @@ void TestExplicitNmeaMode(TestContext& ctx)
              "explicit NMEA mode should start selected and locked");
   ctx.Expect(state.fix_valid &&
                  state.fix_type == GnssFixType::kFix &&
+                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
                  state.hdop == std::optional<float>(1.0f) &&
                  state.vdop == std::optional<float>(1.5f) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u) &&
                  state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
                  !state.heading_deg.has_value(),
-             "explicit NMEA mode should route runtime-mapped NMEA sentences without inventing VTG heading");
+             "explicit NMEA mode should route runtime-mapped NMEA sentences, including GGA-derived RTK fixed, without inventing VTG heading");
   ctx.Expect(session.nmea_metrics().semantic_only_records == 1u &&
                  session.nmea_metrics().records_parsed == 5u,
              "explicit NMEA mode should still parse VTG semantically");

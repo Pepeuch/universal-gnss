@@ -178,11 +178,11 @@ void TestProfiles(TestContext& ctx)
                  !universal_gnss_driver::SupportsInputProtocol(
                      generic.capabilities, ReceiverProtocol::kRtcm3),
              "generic NMEA profile should stay output-only and correction-agnostic");
-  ctx.Expect(!universal_gnss_driver::HasReceiverFeature(
+  ctx.Expect(universal_gnss_driver::HasReceiverFeature(
                  generic.capabilities, ReceiverFeature::kRtk) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      generic.capabilities, ReceiverFeature::kBaseMode),
-             "generic NMEA profile should not imply RTK or base-mode support");
+             "generic NMEA profile should advertise RTK read visibility without implying base-mode support");
 
   const ReceiverProfile& ublox = RequireProfile(ctx, "ublox_f9_f10");
   ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
