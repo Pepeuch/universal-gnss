@@ -129,6 +129,55 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
+                                             const bool code_phase_bias_indicator,
+                                             const bool has_l1_ca_bias,
+                                             const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias,
+                                             const bool has_l2_p_bias,
+                                             const std::optional<std::int16_t> l1_ca_bias_raw,
+                                             const std::optional<std::int16_t> l1_p_bias_raw,
+                                             const std::optional<std::int16_t> l2_ca_bias_raw,
+                                             const std::optional<std::int16_t> l2_p_bias_raw)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1230u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, code_phase_bias_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_p_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_p_bias ? 1u : 0u, 1u);
+  if (has_l1_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_ca_bias_raw, 16u);
+  }
+  if (has_l1_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_p_bias_raw, 16u);
+  }
+  if (has_l2_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_ca_bias_raw, 16u);
+  }
+  if (has_l2_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_p_bias_raw, 16u);
+  }
+
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
 RtcmInspectionResult BuildSyntheticInspectionResult()
 {
   std::vector<std::uint8_t> stream = {0x55u, 0xAAu, 0x01u};
@@ -202,11 +251,13 @@ void TestFormattedOutput(TestContext& ctx)
              "summary output should include counts by message type");
   ctx.Expect(summary.find("msm_constellations gps=1 glonass=1") != std::string::npos,
              "summary output should include MSM constellation counts");
-  ctx.Expect(summary.find("base_station_arp unavailable") != std::string::npos,
-             "summary output should report unavailable base station ARP when no full 1005/1006 payload is present");
+  ctx.Expect(summary.find("base_station_arp seen=true decoded=false valid=false") !=
+                 std::string::npos,
+             "summary output should expose semantic RTCM observations even without a decodable ARP payload");
   ctx.Expect(json.find("\"total_frames_found\":3") != std::string::npos &&
                  json.find("\"1005\":1") != std::string::npos &&
                  json.find("\"gps\":1") != std::string::npos &&
+                 json.find("\"semantic_observations\":[") != std::string::npos &&
                  json.find("\"base_station_arp\":null") != std::string::npos,
              "JSON summary should include the expected aggregate counters");
 }
@@ -221,12 +272,42 @@ void TestDecodedBaseStationPositionSummary(TestContext& ctx)
   ctx.Expect(result.summary.last_base_station_arp.has_value() &&
                  result.summary.last_base_station_arp->station_id == 88u,
              "inspection should decode and retain the latest base station ARP record");
-  ctx.Expect(summary.find("base_station_arp available station_id=88") != std::string::npos &&
+  ctx.Expect(summary.find("base_station_arp seen=true decoded=true valid=true") !=
+                     std::string::npos &&
+                 summary.find("station_id=88") != std::string::npos &&
                  summary.find("antenna_height_m=0.4321") != std::string::npos,
              "summary output should expose decoded base station ARP details");
   ctx.Expect(json.find("\"base_station_arp\":{\"message_type\":1006") != std::string::npos &&
                  json.find("\"station_id\":88") != std::string::npos,
              "JSON summary should expose the decoded base station ARP object");
+}
+
+void TestDecodedGlonassBiasSummary(TestContext& ctx)
+{
+  const auto bytes = BuildRtcm1230Frame(42u,
+                                        true,
+                                        true,
+                                        false,
+                                        true,
+                                        true,
+                                        10,
+                                        std::nullopt,
+                                        -5,
+                                        7);
+  const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
+  const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
+  const std::string json = universal_gnss_tools::FormatRtcmInspectionJson(result, true);
+
+  ctx.Expect(summary.find("glonass_code_phase_bias seen=true decoded=true valid=true") !=
+                 std::string::npos &&
+                 summary.find("station_id=42") != std::string::npos &&
+                 summary.find("signal_mask=0xD") != std::string::npos &&
+                 summary.find("l1_ca_bias_m=0.2000") != std::string::npos,
+             "summary output should expose decoded RTCM 1230 semantic content");
+  ctx.Expect(json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
+                 json.find("\"signal_mask\":\"0xD\"") != std::string::npos &&
+                 json.find("\"station_id\":\"42\"") != std::string::npos,
+             "JSON summary should expose decoded RTCM 1230 semantic observations");
 }
 
 void TestFileBackedInspection(TestContext& ctx)
@@ -259,6 +340,7 @@ int main()
   TestInvalidCrcFrameHandling(ctx);
   TestFormattedOutput(ctx);
   TestDecodedBaseStationPositionSummary(ctx);
+  TestDecodedGlonassBiasSummary(ctx);
   TestFileBackedInspection(ctx);
 
   if (ctx.failures != 0)

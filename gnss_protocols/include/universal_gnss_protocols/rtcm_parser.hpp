@@ -26,4 +26,7 @@ ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame);
 
 ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& frame);
 
+ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
+    const RtcmFrame& frame);
+
 }  // namespace universal_gnss_protocols

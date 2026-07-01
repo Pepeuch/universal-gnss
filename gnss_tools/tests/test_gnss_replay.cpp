@@ -713,6 +713,27 @@ void TestReplaySummaryOnlyAndFormatting(TestContext& ctx)
              "JSON output should include replay events, summary counts, and final state");
 }
 
+void TestReplayCountsRtcm1230WithoutChangingRuntimeState(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildRtcmFrame(1230u));
+
+  const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
+
+  ctx.Expect(result.summary.recognized_records == 1u &&
+                 result.summary.runtime_updates == 0u &&
+                 result.summary.counts_by_protocol.at("rtcm3") == 1u &&
+                 result.summary.counts_by_rtcm_message_type.at(1230u) == 1u,
+             "replay should preserve RTCM 1230 as a first-class RTCM message");
+  ctx.Expect(result.events.size() == 1u &&
+                 result.events[0].identity == "1230" &&
+                 !result.events[0].produced_runtime_update,
+             "RTCM 1230 replay events should remain metadata-only");
+  ctx.Expect(!result.final_state.fix_valid &&
+                 result.final_state.fix_type == universal_gnss::GnssFixType::kUnknown,
+             "RTCM 1230 replay should not inject direct-navigation runtime state");
+}
+
 void TestReplayStreamInput(TestContext& ctx)
 {
   const auto bytes = BuildMixedReplayStream();
@@ -788,6 +809,7 @@ int main()
   TestReplayUnicoreBinaryAndAsciiRouting(ctx);
   TestReplayMergesMixedRuntimeState(ctx);
   TestReplaySummaryOnlyAndFormatting(ctx);
+  TestReplayCountsRtcm1230WithoutChangingRuntimeState(ctx);
   TestReplayStreamInput(ctx);
   TestFileBackedReplay(ctx);
   TestFileBackedBasicNmeaReplayIncludesGstAccuracy(ctx);

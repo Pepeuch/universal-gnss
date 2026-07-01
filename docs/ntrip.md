@@ -302,7 +302,8 @@ and `Connect()` calls to the outer application.
 
 The current model is compatible with the existing RTCM parser/tooling:
 
-- `gnss_protocols` already validates and classifies RTCM frames
+- `gnss_protocols` already validates, classifies, and semantically decodes the
+  current RTCM subset
 - `rtcm_inspect` and `gnss_inspect` already expose RTCM stream summaries
 - future NTRIP clients can update these same counters while feeding the RTCM
   stream into runtime or tool adapters

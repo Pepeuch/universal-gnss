@@ -55,6 +55,81 @@ std::vector<std::uint8_t> MakeRtcmPayload(const std::uint16_t message_type)
   };
 }
 
+void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, const bool bit)
+{
+  if ((bit_offset % 8u) == 0u)
+  {
+    payload.push_back(0u);
+  }
+
+  if (bit)
+  {
+    payload.back() |= static_cast<std::uint8_t>(1u << (7u - (bit_offset % 8u)));
+  }
+  ++bit_offset;
+}
+
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
+{
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t shift = bit_count - 1u - i;
+    AppendBit(payload, bit_offset, ((value >> shift) & 0x01u) != 0u);
+  }
+}
+
+void AppendSignedBits(std::vector<std::uint8_t>& payload,
+                      std::size_t& bit_offset,
+                      const std::int64_t value,
+                      const std::size_t bit_count)
+{
+  const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
+  AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
+}
+
+std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
+                                               const bool code_phase_bias_indicator,
+                                               const bool has_l1_ca_bias,
+                                               const bool has_l1_p_bias,
+                                               const bool has_l2_ca_bias,
+                                               const bool has_l2_p_bias,
+                                               const std::optional<std::int16_t> l1_ca_bias_raw,
+                                               const std::optional<std::int16_t> l1_p_bias_raw,
+                                               const std::optional<std::int16_t> l2_ca_bias_raw,
+                                               const std::optional<std::int16_t> l2_p_bias_raw)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1230u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, code_phase_bias_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_p_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_p_bias ? 1u : 0u, 1u);
+  if (has_l1_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_ca_bias_raw, 16u);
+  }
+  if (has_l1_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_p_bias_raw, 16u);
+  }
+  if (has_l2_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_ca_bias_raw, 16u);
+  }
+  if (has_l2_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_p_bias_raw, 16u);
+  }
+  return payload;
+}
+
 RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
                              const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
@@ -210,6 +285,59 @@ void TestInvalidFrameHandling(TestContext& ctx)
              "latest timestamp should include invalid frames");
 }
 
+void TestGlonassBiasDecodeTracking(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+
+  RtcmFrame valid_1230 = MakeValidRtcmFrame(1230u, 1000);
+  valid_1230.payload = BuildRtcm1230Payload(42u,
+                                            true,
+                                            true,
+                                            false,
+                                            true,
+                                            false,
+                                            10,
+                                            std::nullopt,
+                                            -5,
+                                            std::nullopt);
+  monitor.ObserveFrame(valid_1230);
+
+  RtcmFrame malformed_1230 = MakeValidRtcmFrame(1230u, 1500);
+  malformed_1230.payload = BuildRtcm1230Payload(42u,
+                                                true,
+                                                true,
+                                                true,
+                                                false,
+                                                false,
+                                                10,
+                                                12,
+                                                std::nullopt,
+                                                std::nullopt);
+  malformed_1230.payload.pop_back();
+  monitor.ObserveFrame(malformed_1230);
+
+  ctx.Expect(monitor.HasSeenGlonassBias1230(),
+             "RTCM 1230 frames should mark GLONASS bias presence");
+  ctx.Expect(monitor.HasDecodedGlonassBias1230() && monitor.LastGlonassBias1230Valid(),
+             "successfully decoded RTCM 1230 content should be retained as valid");
+  ctx.Expect(monitor.LastGlonassBias1230TimestampNs() == std::optional<std::int64_t>(1500),
+             "last-seen RTCM 1230 timestamp should include malformed payloads");
+  ctx.Expect(monitor.LastDecodedGlonassBias1230TimestampNs() == std::optional<std::int64_t>(1000),
+             "last-decoded RTCM 1230 timestamp should reflect the latest semantic decode success");
+  ctx.Expect(monitor.GlonassBias1230DecodeSuccessCount() == 1u &&
+                 monitor.GlonassBias1230DecodeFailureCount() == 1u &&
+                 monitor.GlonassBias1230MalformedCount() == 1u,
+             "RTCM 1230 decode success/failure counters should distinguish malformed payloads");
+  ctx.Expect(monitor.AgeSinceGlonassBias1230Ns(2000) == std::optional<std::int64_t>(500),
+             "RTCM 1230 age should be based on the last observed 1230 frame");
+  if (monitor.last_glonass_code_phase_bias().has_value())
+  {
+    ctx.Expect(monitor.last_glonass_code_phase_bias()->station_id == 42u &&
+                   monitor.last_glonass_code_phase_bias()->signal_mask == 0x05u,
+               "decoded RTCM 1230 content should expose station id and signal mask");
+  }
+}
+
 void TestHealthStates(TestContext& ctx)
 {
   RtcmCorrectionMonitor healthy_monitor;
@@ -351,6 +479,7 @@ int main()
   TestMsmConstellationTracking(ctx);
   TestBasePositionAndGlonassBiasTracking(ctx);
   TestInvalidFrameHandling(ctx);
+  TestGlonassBiasDecodeTracking(ctx);
   TestHealthStates(ctx);
   TestPortableRtkRequirementsAccept1006(ctx);
   TestPortableRtkRequirementsUseRecentObservationWindow(ctx);

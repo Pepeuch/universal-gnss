@@ -7,8 +7,10 @@ namespace
 {
 
 constexpr double kRtcmArpCoordinateScaleM = 0.0001;
+constexpr double kRtcmGlonassCodePhaseBiasScaleM = 0.02;
 constexpr std::size_t kRtcm1005Bits = 153u;
 constexpr std::size_t kRtcm1006Bits = 169u;
+constexpr std::size_t kRtcm1230HeaderBits = 32u;
 
 bool IsRtcmMsmVariant(const std::uint16_t message_type)
 {
@@ -241,6 +243,100 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
   }
 
   return ParserResult<RtcmBaseStationArpRecord>::RecordReady(record);
+}
+
+ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
+    const RtcmFrame& frame)
+{
+  const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
+  if (!message_type.has_value() || !IsRtcmGlonassBiasMessage(*message_type))
+  {
+    return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
+  }
+
+  if (frame.payload.size() * 8u < kRtcm1230HeaderBits)
+  {
+    return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
+  }
+
+  std::size_t bit_offset = 0u;
+  const auto read_u = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmUnsignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+  const auto read_s = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmSignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+
+  const auto parsed_message_type = read_u(12u);
+  const auto station_id = read_u(12u);
+  const auto code_phase_bias_indicator = read_u(1u);
+  const auto reserved = read_u(3u);
+  const auto has_l1_ca_bias = read_u(1u);
+  const auto has_l1_p_bias = read_u(1u);
+  const auto has_l2_ca_bias = read_u(1u);
+  const auto has_l2_p_bias = read_u(1u);
+
+  (void)reserved;
+
+  if (!parsed_message_type.has_value() || !station_id.has_value() ||
+      !code_phase_bias_indicator.has_value() || !has_l1_ca_bias.has_value() ||
+      !has_l1_p_bias.has_value() || !has_l2_ca_bias.has_value() ||
+      !has_l2_p_bias.has_value())
+  {
+    return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
+  }
+
+  RtcmGlonassCodePhaseBiasRecord record;
+  record.message_type = static_cast<std::uint16_t>(*parsed_message_type);
+  record.station_id = static_cast<std::uint16_t>(*station_id);
+  record.code_phase_bias_indicator = *code_phase_bias_indicator != 0u;
+  record.signal_mask = static_cast<std::uint8_t>(
+      ((*has_l1_ca_bias != 0u) ? 0x01u : 0x00u) |
+      ((*has_l1_p_bias != 0u) ? 0x02u : 0x00u) |
+      ((*has_l2_ca_bias != 0u) ? 0x04u : 0x00u) |
+      ((*has_l2_p_bias != 0u) ? 0x08u : 0x00u));
+
+  const auto read_optional_bias = [&](const bool present, std::optional<double>& destination) {
+    if (!present)
+    {
+      return true;
+    }
+
+    const auto raw_bias = read_s(16u);
+    if (!raw_bias.has_value())
+    {
+      return false;
+    }
+
+    destination = static_cast<double>(*raw_bias) * kRtcmGlonassCodePhaseBiasScaleM;
+    return true;
+  };
+
+  if (!read_optional_bias(*has_l1_ca_bias != 0u, record.l1_ca_bias_m) ||
+      !read_optional_bias(*has_l1_p_bias != 0u, record.l1_p_bias_m) ||
+      !read_optional_bias(*has_l2_ca_bias != 0u, record.l2_ca_bias_m) ||
+      !read_optional_bias(*has_l2_p_bias != 0u, record.l2_p_bias_m))
+  {
+    return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
+  }
+
+  record.has_any_bias_values = record.l1_ca_bias_m.has_value() ||
+                               record.l1_p_bias_m.has_value() ||
+                               record.l2_ca_bias_m.has_value() ||
+                               record.l2_p_bias_m.has_value();
+  record.valid = record.code_phase_bias_indicator && record.has_any_bias_values;
+
+  return ParserResult<RtcmGlonassCodePhaseBiasRecord>::RecordReady(record);
 }
 
 }  // namespace universal_gnss_protocols

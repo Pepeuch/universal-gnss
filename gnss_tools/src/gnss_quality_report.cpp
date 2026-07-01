@@ -405,6 +405,29 @@ void AddRtcmDiagnostics(const RtcmCorrectionMonitor& correction_monitor,
                    std::nullopt,
                    std::string("rtcm_correction_monitor")});
   }
+
+  if (correction_monitor.GlonassBias1230MalformedCount() > 0u)
+  {
+    AddDiagnostic(diagnostics,
+                  {GnssDiagnosticSeverity::kWarning,
+                   GnssDiagnosticCategory::kParser,
+                   "rtcm.1230_malformed",
+                   "Malformed RTCM 1230 GLONASS code-phase bias payloads were observed",
+                   correction_monitor.LastGlonassBias1230TimestampNs(),
+                   std::string("rtcm_correction_monitor")});
+  }
+
+  if (correction_monitor.HasDecodedGlonassBias1230() &&
+      !correction_monitor.LastGlonassBias1230Valid())
+  {
+    AddDiagnostic(diagnostics,
+                  {GnssDiagnosticSeverity::kWarning,
+                   GnssDiagnosticCategory::kCorrection,
+                   "rtcm.1230_not_valid",
+                   "The latest RTCM 1230 GLONASS code-phase bias message is not marked valid",
+                   correction_monitor.LastDecodedGlonassBias1230TimestampNs(),
+                   std::string("rtcm_correction_monitor")});
+  }
 }
 
 GnssQualityLevel ClassifyQualityLevel(const GnssRuntimeState& state,
@@ -718,6 +741,8 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
   report.rtcm.valid_frames = static_cast<std::size_t>(correction_monitor.valid_frames());
   report.rtcm.invalid_frames = static_cast<std::size_t>(correction_monitor.invalid_frames());
   report.rtcm.last_base_station_arp = correction_monitor.last_base_station_arp();
+  report.rtcm.semantic_observations =
+      universal_gnss_protocols::BuildRtcmSemanticObservations(correction_monitor);
   for (const auto& entry : correction_monitor.msm_constellation_activity())
   {
     report.rtcm.msm_constellation_counts[entry.first] =
@@ -803,6 +828,11 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
       output << " antenna_height_m=" << *report.rtcm.last_base_station_arp->antenna_height_m;
     }
     output << '\n';
+  }
+
+  for (const auto& observation : report.rtcm.semantic_observations)
+  {
+    output << "rtcm_semantic " << FormatRtcmSemanticObservationText(observation) << '\n';
   }
 
   if (!report.rtcm.message_type_counts.empty())
@@ -934,6 +964,10 @@ std::string FormatGnssQualityReportJson(const GnssQualityReport& report, const b
   AppendJsonFieldSeparator(output, first_rtcm_field);
   output << "\"base_station_arp\":";
   WriteBaseStationArpJson(output, report.rtcm.last_base_station_arp);
+
+  AppendJsonFieldSeparator(output, first_rtcm_field);
+  output << "\"semantic_observations\":";
+  WriteRtcmSemanticObservationsJson(output, report.rtcm.semantic_observations);
 
   AppendJsonFieldSeparator(output, first_rtcm_field);
   output << "\"message_type_counts\":{";

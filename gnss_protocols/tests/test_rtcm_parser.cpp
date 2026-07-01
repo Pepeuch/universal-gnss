@@ -40,6 +40,81 @@ std::vector<std::uint8_t> MakeRtcmPayload(const std::uint16_t message_type)
   };
 }
 
+void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, const bool bit)
+{
+  if ((bit_offset % 8u) == 0u)
+  {
+    payload.push_back(0u);
+  }
+
+  if (bit)
+  {
+    payload.back() |= static_cast<std::uint8_t>(1u << (7u - (bit_offset % 8u)));
+  }
+  ++bit_offset;
+}
+
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
+{
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t shift = bit_count - 1u - i;
+    AppendBit(payload, bit_offset, ((value >> shift) & 0x01u) != 0u);
+  }
+}
+
+void AppendSignedBits(std::vector<std::uint8_t>& payload,
+                      std::size_t& bit_offset,
+                      const std::int64_t value,
+                      const std::size_t bit_count)
+{
+  const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
+  AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
+}
+
+std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
+                                               const bool code_phase_bias_indicator,
+                                               const bool has_l1_ca_bias,
+                                               const bool has_l1_p_bias,
+                                               const bool has_l2_ca_bias,
+                                               const bool has_l2_p_bias,
+                                               const std::optional<std::int16_t> l1_ca_bias_raw,
+                                               const std::optional<std::int16_t> l1_p_bias_raw,
+                                               const std::optional<std::int16_t> l2_ca_bias_raw,
+                                               const std::optional<std::int16_t> l2_p_bias_raw)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1230u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, code_phase_bias_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_p_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_p_bias ? 1u : 0u, 1u);
+  if (has_l1_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_ca_bias_raw, 16u);
+  }
+  if (has_l1_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_p_bias_raw, 16u);
+  }
+  if (has_l2_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_ca_bias_raw, 16u);
+  }
+  if (has_l2_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_p_bias_raw, 16u);
+  }
+  return payload;
+}
+
 RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
                              const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
@@ -154,6 +229,61 @@ void TestFrameParsingBehavior(TestContext& ctx)
              "invalid checksum frames should be rejected");
 }
 
+void TestGlonassCodePhaseBiasParsing(TestContext& ctx)
+{
+  RtcmFrame frame = MakeValidRtcmFrame(1230u, 123456789LL);
+  frame.payload = BuildRtcm1230Payload(42u,
+                                       true,
+                                       true,
+                                       false,
+                                       true,
+                                       true,
+                                       10,
+                                       std::nullopt,
+                                       -5,
+                                       7);
+
+  const auto parsed = universal_gnss_protocols::ParseRtcmGlonassCodePhaseBias(frame);
+  ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
+             "valid RTCM 1230 payload should parse successfully");
+  if (!parsed.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(parsed.record->message_type == 1230u && parsed.record->station_id == 42u,
+             "parsed RTCM 1230 record should expose message type and station id");
+  ctx.Expect(parsed.record->code_phase_bias_indicator && parsed.record->valid,
+             "parsed RTCM 1230 record should preserve the bias indicator and validity");
+  ctx.Expect(parsed.record->signal_mask == 0x0Du,
+             "parsed RTCM 1230 record should preserve the L1/L2 signal mask");
+  ctx.Expect(parsed.record->l1_ca_bias_m == std::optional<double>(0.2) &&
+                 !parsed.record->l1_p_bias_m.has_value() &&
+                 parsed.record->l2_ca_bias_m == std::optional<double>(-0.1) &&
+                 parsed.record->l2_p_bias_m == std::optional<double>(0.14),
+             "parsed RTCM 1230 record should scale signed bias values with optional fields");
+}
+
+void TestGlonassCodePhaseBiasRejectsTruncatedPayload(TestContext& ctx)
+{
+  RtcmFrame frame = MakeValidRtcmFrame(1230u);
+  frame.payload = BuildRtcm1230Payload(42u,
+                                       true,
+                                       true,
+                                       true,
+                                       false,
+                                       false,
+                                       10,
+                                       12,
+                                       std::nullopt,
+                                       std::nullopt);
+  frame.payload.pop_back();
+
+  const auto parsed = universal_gnss_protocols::ParseRtcmGlonassCodePhaseBias(frame);
+  ctx.Expect(parsed.status == ParserStatus::kInvalidData,
+             "truncated RTCM 1230 payloads should be rejected");
+}
+
 }  // namespace
 
 int main()
@@ -164,6 +294,8 @@ int main()
   TestTruncatedPayloadHandling(ctx);
   TestClassificationHelpers(ctx);
   TestFrameParsingBehavior(ctx);
+  TestGlonassCodePhaseBiasParsing(ctx);
+  TestGlonassCodePhaseBiasRejectsTruncatedPayload(ctx);
 
   if (ctx.failures != 0)
   {

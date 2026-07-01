@@ -1,6 +1,8 @@
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 
 #include <cstddef>
+#include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "universal_gnss/gnss_diagnostic.hpp"
@@ -128,6 +130,20 @@ bool IsWithinStartupGrace(const RtcmCorrectionMonitor& monitor,
   return *options.now_timestamp_ns - *first_valid_timestamp_ns < options.startup_grace_ns;
 }
 
+std::string FormatDoubleValue(const double value, const int precision = 4)
+{
+  std::ostringstream stream;
+  stream << std::fixed << std::setprecision(precision) << value;
+  return stream.str();
+}
+
+std::string FormatMaskValue(const std::uint8_t value)
+{
+  std::ostringstream stream;
+  stream << "0x" << std::hex << std::uppercase << static_cast<unsigned int>(value);
+  return stream.str();
+}
+
 }  // namespace
 
 void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& options)
@@ -161,6 +177,15 @@ void RtcmCorrectionMonitor::Reset()
   seen_glonass_bias_1230_ = false;
   last_base_station_arp_.reset();
   last_base_station_arp_timestamp_ns_.reset();
+  base_station_arp_decode_success_count_ = 0;
+  base_station_arp_decode_failure_count_ = 0;
+  base_station_arp_malformed_count_ = 0;
+  last_glonass_code_phase_bias_.reset();
+  last_glonass_bias_1230_timestamp_ns_.reset();
+  last_decoded_glonass_bias_1230_timestamp_ns_.reset();
+  glonass_bias_1230_decode_success_count_ = 0;
+  glonass_bias_1230_decode_failure_count_ = 0;
+  glonass_bias_1230_malformed_count_ = 0;
 }
 
 void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
@@ -188,7 +213,29 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
     {
       last_base_station_arp_ = *parsed_arp.record;
+      ++base_station_arp_decode_success_count_;
       UpdateLatestTimestamp(frame.timestamp_ns, last_base_station_arp_timestamp_ns_);
+    }
+    else
+    {
+      ++base_station_arp_decode_failure_count_;
+      ++base_station_arp_malformed_count_;
+    }
+  }
+
+  if (parsed_info.record->is_glonass_bias)
+  {
+    const auto parsed_bias = ParseRtcmGlonassCodePhaseBias(frame);
+    if (parsed_bias.status == ParserStatus::kRecordReady && parsed_bias.record.has_value())
+    {
+      last_glonass_code_phase_bias_ = *parsed_bias.record;
+      ++glonass_bias_1230_decode_success_count_;
+      UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_glonass_bias_1230_timestamp_ns_);
+    }
+    else
+    {
+      ++glonass_bias_1230_decode_failure_count_;
+      ++glonass_bias_1230_malformed_count_;
     }
   }
 
@@ -299,6 +346,16 @@ bool RtcmCorrectionMonitor::HasSeenGlonassBias1230() const
   return seen_glonass_bias_1230_;
 }
 
+bool RtcmCorrectionMonitor::HasDecodedGlonassBias1230() const
+{
+  return last_glonass_code_phase_bias_.has_value();
+}
+
+bool RtcmCorrectionMonitor::LastGlonassBias1230Valid() const
+{
+  return last_glonass_code_phase_bias_.has_value() && last_glonass_code_phase_bias_->valid;
+}
+
 bool RtcmCorrectionMonitor::HasSeenAnyMsmMessage() const
 {
   return !msm_constellation_activity_.empty();
@@ -312,6 +369,53 @@ const std::optional<RtcmBaseStationArpRecord>& RtcmCorrectionMonitor::last_base_
 std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastBaseStationArpTimestampNs() const
 {
   return last_base_station_arp_timestamp_ns_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::BaseStationArpDecodeSuccessCount() const
+{
+  return base_station_arp_decode_success_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::BaseStationArpDecodeFailureCount() const
+{
+  return base_station_arp_decode_failure_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::BaseStationArpMalformedCount() const
+{
+  return base_station_arp_malformed_count_;
+}
+
+const std::optional<RtcmGlonassCodePhaseBiasRecord>&
+RtcmCorrectionMonitor::last_glonass_code_phase_bias() const
+{
+  return last_glonass_code_phase_bias_;
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastGlonassBias1230TimestampNs() const
+{
+  return last_glonass_bias_1230_timestamp_ns_;
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastDecodedGlonassBias1230TimestampNs()
+    const
+{
+  return last_decoded_glonass_bias_1230_timestamp_ns_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::GlonassBias1230DecodeSuccessCount() const
+{
+  return glonass_bias_1230_decode_success_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::GlonassBias1230DecodeFailureCount() const
+{
+  return glonass_bias_1230_decode_failure_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::GlonassBias1230MalformedCount() const
+{
+  return glonass_bias_1230_malformed_count_;
 }
 
 bool RtcmCorrectionMonitor::HasRequiredMessageTypes(
@@ -457,6 +561,12 @@ std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceBaseStationArp
   return ComputeAgeSince(last_base_station_arp_timestamp_ns_, now_timestamp_ns);
 }
 
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceGlonassBias1230Ns(
+    const ProtocolTimestampNs now_timestamp_ns) const
+{
+  return ComputeAgeSince(last_glonass_bias_1230_timestamp_ns_, now_timestamp_ns);
+}
+
 std::optional<double> RtcmCorrectionMonitor::TotalFrameRateHz(
     const ProtocolTimestampNs window_end_timestamp_ns,
     const ProtocolTimestampNs window_duration_ns) const
@@ -524,6 +634,7 @@ void RtcmCorrectionMonitor::RecordValidMessage(const RtcmMessageInfo& info,
   if (info.is_glonass_bias)
   {
     seen_glonass_bias_1230_ = true;
+    UpdateLatestTimestamp(timestamp_ns, last_glonass_bias_1230_timestamp_ns_);
   }
 
   if (info.is_msm)
@@ -542,6 +653,26 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
 {
   universal_gnss::GnssHealthSummary summary;
   summary.parser_healthy = monitor.invalid_frames() == 0u;
+
+  if (monitor.GlonassBias1230MalformedCount() > 0u)
+  {
+    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kWarning,
+                      universal_gnss::GnssDiagnosticCategory::kParser,
+                      "rtcm.1230_malformed",
+                      "Malformed RTCM 1230 GLONASS code-phase bias payloads were observed",
+                      monitor.LastGlonassBias1230TimestampNs(),
+                      std::string("rtcm_correction_monitor")});
+  }
+
+  if (monitor.HasDecodedGlonassBias1230() && !monitor.LastGlonassBias1230Valid())
+  {
+    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kWarning,
+                      universal_gnss::GnssDiagnosticCategory::kCorrection,
+                      "rtcm.1230_not_valid",
+                      "The latest RTCM 1230 GLONASS code-phase bias message is not marked valid",
+                      monitor.LastDecodedGlonassBias1230TimestampNs(),
+                      std::string("rtcm_correction_monitor")});
+  }
 
   const bool has_required_messages = monitor.HasRequiredCorrectionMessages(options);
   const bool within_startup_grace =
@@ -614,6 +745,93 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
                     monitor.last_frame_timestamp_ns(),
                     std::string("rtcm_correction_monitor")});
   return summary;
+}
+
+RtcmSemanticObservations BuildRtcmSemanticObservations(
+    const RtcmCorrectionMonitor& monitor,
+    const std::optional<ProtocolTimestampNs> now_timestamp_ns)
+{
+  RtcmSemanticObservations observations;
+
+  RtcmSemanticObservation base_station_arp;
+  base_station_arp.name = "base_station_arp";
+  base_station_arp.message_type =
+      monitor.last_base_station_arp().has_value()
+          ? monitor.last_base_station_arp()->message_type
+          : (monitor.HasSeenBasePosition1006() ? 1006u
+             : monitor.HasSeenBasePosition1005() ? 1005u
+                                                 : 0u);
+  base_station_arp.seen = monitor.HasSeenBasePositionMessage();
+  base_station_arp.decoded = monitor.last_base_station_arp().has_value();
+  base_station_arp.valid = base_station_arp.decoded;
+  base_station_arp.decode_success_count = monitor.BaseStationArpDecodeSuccessCount();
+  base_station_arp.decode_failure_count = monitor.BaseStationArpDecodeFailureCount();
+  base_station_arp.malformed_count = monitor.BaseStationArpMalformedCount();
+  base_station_arp.last_seen_timestamp_ns = monitor.LastSeenMessageTimestampNs(1005u);
+  UpdateLatestTimestamp(
+      monitor.LastSeenMessageTimestampNs(1006u), base_station_arp.last_seen_timestamp_ns);
+  base_station_arp.last_decoded_timestamp_ns = monitor.LastBaseStationArpTimestampNs();
+  if (now_timestamp_ns.has_value())
+  {
+    base_station_arp.age_ns = monitor.AgeSinceBaseStationArpNs(*now_timestamp_ns);
+  }
+  if (monitor.last_base_station_arp().has_value())
+  {
+    const auto& arp = *monitor.last_base_station_arp();
+    base_station_arp.fields.push_back({"station_id", std::to_string(arp.station_id)});
+    base_station_arp.fields.push_back({"ecef_x_m", FormatDoubleValue(arp.ecef_x_m)});
+    base_station_arp.fields.push_back({"ecef_y_m", FormatDoubleValue(arp.ecef_y_m)});
+    base_station_arp.fields.push_back({"ecef_z_m", FormatDoubleValue(arp.ecef_z_m)});
+    if (arp.antenna_height_m.has_value())
+    {
+      base_station_arp.fields.push_back(
+          {"antenna_height_m", FormatDoubleValue(*arp.antenna_height_m)});
+    }
+  }
+  observations.push_back(std::move(base_station_arp));
+
+  RtcmSemanticObservation glonass_bias;
+  glonass_bias.name = "glonass_code_phase_bias";
+  glonass_bias.message_type = 1230u;
+  glonass_bias.seen = monitor.HasSeenGlonassBias1230();
+  glonass_bias.decoded = monitor.HasDecodedGlonassBias1230();
+  glonass_bias.valid = monitor.LastGlonassBias1230Valid();
+  glonass_bias.decode_success_count = monitor.GlonassBias1230DecodeSuccessCount();
+  glonass_bias.decode_failure_count = monitor.GlonassBias1230DecodeFailureCount();
+  glonass_bias.malformed_count = monitor.GlonassBias1230MalformedCount();
+  glonass_bias.last_seen_timestamp_ns = monitor.LastGlonassBias1230TimestampNs();
+  glonass_bias.last_decoded_timestamp_ns = monitor.LastDecodedGlonassBias1230TimestampNs();
+  if (now_timestamp_ns.has_value())
+  {
+    glonass_bias.age_ns = monitor.AgeSinceGlonassBias1230Ns(*now_timestamp_ns);
+  }
+  if (monitor.last_glonass_code_phase_bias().has_value())
+  {
+    const auto& record = *monitor.last_glonass_code_phase_bias();
+    glonass_bias.fields.push_back({"station_id", std::to_string(record.station_id)});
+    glonass_bias.fields.push_back(
+        {"code_phase_bias_indicator", record.code_phase_bias_indicator ? "true" : "false"});
+    glonass_bias.fields.push_back({"signal_mask", FormatMaskValue(record.signal_mask)});
+    if (record.l1_ca_bias_m.has_value())
+    {
+      glonass_bias.fields.push_back({"l1_ca_bias_m", FormatDoubleValue(*record.l1_ca_bias_m)});
+    }
+    if (record.l1_p_bias_m.has_value())
+    {
+      glonass_bias.fields.push_back({"l1_p_bias_m", FormatDoubleValue(*record.l1_p_bias_m)});
+    }
+    if (record.l2_ca_bias_m.has_value())
+    {
+      glonass_bias.fields.push_back({"l2_ca_bias_m", FormatDoubleValue(*record.l2_ca_bias_m)});
+    }
+    if (record.l2_p_bias_m.has_value())
+    {
+      glonass_bias.fields.push_back({"l2_p_bias_m", FormatDoubleValue(*record.l2_p_bias_m)});
+    }
+  }
+  observations.push_back(std::move(glonass_bias));
+
+  return observations;
 }
 
 }  // namespace universal_gnss_protocols

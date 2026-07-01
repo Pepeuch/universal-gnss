@@ -196,7 +196,8 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
     universal_gnss::GnssHealthSummary correction_health,
     const NtripMonitorStopReason stop_reason,
     const std::optional<std::int64_t> elapsed_time_ns,
-    std::string response_header)
+    std::string response_header,
+    const std::optional<universal_gnss::GnssTimestampNs> now_timestamp_ns)
 {
   NtripMonitorSnapshot snapshot;
   snapshot.options = options;
@@ -216,6 +217,9 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
   snapshot.base_position_1005_seen = correction_monitor.HasSeenBasePosition1005();
   snapshot.base_position_1006_seen = correction_monitor.HasSeenBasePosition1006();
   snapshot.glonass_bias_1230_seen = correction_monitor.HasSeenGlonassBias1230();
+  snapshot.semantic_observations =
+      universal_gnss_protocols::BuildRtcmSemanticObservations(
+          correction_monitor, now_timestamp_ns);
   snapshot.last_rtcm_message_type = metrics.last_rtcm_message_type;
   snapshot.last_gga_sent_timestamp_ns = metrics.last_gga_sent_timestamp_ns;
   snapshot.elapsed_time_ns = elapsed_time_ns;
@@ -378,6 +382,11 @@ std::string FormatNtripMonitorSummaryText(const NtripMonitorSnapshot& snapshot)
          << " base_1006_seen=" << snapshot.base_position_1006_seen
          << " glonass_bias_1230_seen=" << snapshot.glonass_bias_1230_seen << '\n';
 
+  for (const auto& observation : snapshot.semantic_observations)
+  {
+    stream << "  " << FormatRtcmSemanticObservationText(observation) << '\n';
+  }
+
   stream << "  correction_health="
          << DescribeGnssDiagnosticSeverity(snapshot.correction_health.overall_severity)
          << " correction_available=" << snapshot.correction_health.correction_available
@@ -518,6 +527,10 @@ std::string FormatNtripMonitorSummaryJson(const NtripMonitorSnapshot& snapshot)
            << "\":" << entry.second;
   }
   stream << "},";
+
+  stream << "\"semantic_observations\":";
+  WriteRtcmSemanticObservationsJson(stream, snapshot.semantic_observations);
+  stream << ',';
 
   stream << "\"response_status_line\":";
   const std::string status_line = ExtractResponseStatusLine(snapshot.response_header);

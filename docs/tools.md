@@ -158,7 +158,7 @@ It reuses:
 - the RTCM3 framer
 - CRC24Q validation
 - 12-bit RTCM message type extraction
-- lightweight message classification helpers
+- the shared RTCM semantic observation layer used by the correction monitor
 
 Typical uses:
 
@@ -167,6 +167,8 @@ Typical uses:
 - confirm whether a stream contains MSM traffic
 - confirm whether a stream contains a decodable `1005` / `1006` base-station
   ARP position
+- inspect decoded `1230` GLONASS code-phase bias state without writing a
+  message-specific parser in the tool
 
 Examples:
 
@@ -327,7 +329,8 @@ Current behavior:
 - reconstructs the final normalized runtime state
 - reports final fix / RTK state, accuracy, DOP, satellite counts, and CN0
 - reports RTCM frame counts and message-type activity
-- reports decoded RTCM `1005` / `1006` base-station ECEF position when present
+- reports shared RTCM semantic observations, currently `1005`, `1006`, and
+  `1230`
 - reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
   present
 - reports portable receiver RF / hardware diagnostics when supported messages
@@ -812,7 +815,8 @@ Summary output includes:
 - RTCM frames seen, valid, and invalid
 - per-message-type counts
 - MSM constellation counts
-- base-position and `1230`-bias presence flags
+- RTCM semantic observation state, including `1230` validity / mask / decoded
+  bias values when available
 - correction-health severity and availability flags
 - optional GGA send counters
 

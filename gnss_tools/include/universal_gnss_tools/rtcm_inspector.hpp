@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "universal_gnss_protocols/protocol_records.hpp"
+#include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 
 namespace universal_gnss_tools
@@ -36,6 +37,7 @@ struct RtcmInspectionSummary
   std::map<std::uint16_t, std::size_t> counts_by_message_type{};
   std::map<universal_gnss_protocols::RtcmConstellation, std::size_t>
       msm_counts_by_constellation{};
+  universal_gnss_protocols::RtcmSemanticObservations semantic_observations{};
   std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord> last_base_station_arp{};
 };
 
@@ -58,6 +60,13 @@ std::string DescribeRtcmMessageInfo(
     const universal_gnss_protocols::RtcmMessageInfo& message_info);
 
 std::string DescribeChecksumStatus(universal_gnss_protocols::ChecksumStatus status);
+
+std::string FormatRtcmSemanticObservationText(
+    const universal_gnss_protocols::RtcmSemanticObservation& observation);
+
+void WriteRtcmSemanticObservationsJson(
+    std::ostream& output,
+    const universal_gnss_protocols::RtcmSemanticObservations& observations);
 
 std::string FormatRtcmInspectionText(
     const RtcmInspectionResult& result,

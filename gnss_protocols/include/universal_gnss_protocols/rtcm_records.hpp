@@ -44,4 +44,18 @@ struct RtcmBaseStationArpRecord
   std::uint8_t quarter_cycle_indicator{0};
 };
 
+struct RtcmGlonassCodePhaseBiasRecord
+{
+  std::uint16_t message_type{0};
+  std::uint16_t station_id{0};
+  bool code_phase_bias_indicator{false};
+  std::uint8_t signal_mask{0};
+  bool has_any_bias_values{false};
+  bool valid{false};
+  std::optional<double> l1_ca_bias_m{};
+  std::optional<double> l1_p_bias_m{};
+  std::optional<double> l2_ca_bias_m{};
+  std::optional<double> l2_p_bias_m{};
+};
+
 }  // namespace universal_gnss_protocols

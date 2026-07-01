@@ -224,6 +224,7 @@ Implemented behaviors:
 - 12-bit message type extraction from validated frames
 - lightweight classification helpers
 - base-station ARP decode for `1005` / `1006`
+- GLONASS code-phase bias decode for `1230`
 
 Current RTCM classifications:
 
@@ -246,33 +247,41 @@ Current RTCM monitor support:
 - MSM constellation counts, last-seen timestamps, and simple windowed rates
 - presence tracking for base-position messages `1005` / `1006`
 - latest decoded base-station ARP ECEF position from `1005` / `1006`
-- presence tracking for GLONASS bias message `1230`
+- semantic observations for decoded RTCM content, currently base-station ARP
+  and GLONASS code-phase bias
+- `1230` seen / decoded / valid state, station id, age, mask, and decode
+  success/failure counters through the correction monitor
 - portable correction-health summaries for later NTRIP / ROS 2 / GUI reuse
 
 Current RTCM semantic decode coverage:
 
 - `1005`: reference-station ARP ECEF position
 - `1006`: reference-station ARP ECEF position plus antenna height
+- `1230`: GLONASS code-phase bias indicator, signal mask, and optional L1/L2
+  bias values
 
 Current RTCM decode policy:
 
+- decoded RTCM semantics stay in correction-stream metadata, not in
+  `GnssRuntimeState`
 - ECEF coordinates are exposed only as base-station metadata
-- no rover runtime-state mapping is inferred from `1005` / `1006`
+- `1230` is exposed through correction/RTCM state, not as direct-navigation
+  rover runtime state
 - no MSM signal / satellite extraction yet
 
 What RTCM does not do yet:
 
-- full payload semantic decoding
+- broader semantic decoding beyond `1005` / `1006` / `1230`
 - MSM satellite / signal extraction
 - broader station metadata decode beyond base-station ARP
 - correction-age estimation
 - runtime-state mapping
 - LoRa filtering
 
-The RTCM correction monitor still does not perform full payload decode. It
-tracks correction-stream activity and health around already-classified RTCM
-frames, and is intended to feed later NTRIP clients, ROS 2 diagnostics, and
-GUI/dashboard work without introducing transport or middleware coupling here.
+The RTCM correction monitor now combines stream activity with a small semantic
+observation layer. It still does not attempt full RTCM coverage, but it does
+provide one common portable interface for decoded RTCM metadata so tools,
+diagnostics, and later integrations do not need message-specific `1230` logic.
 
 ### Unicore
 

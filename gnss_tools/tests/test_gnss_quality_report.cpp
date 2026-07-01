@@ -176,6 +176,59 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
+                                             const bool code_phase_bias_indicator,
+                                             const bool has_l1_ca_bias,
+                                             const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias,
+                                             const bool has_l2_p_bias,
+                                             const std::optional<std::int16_t> l1_ca_bias_raw,
+                                             const std::optional<std::int16_t> l1_p_bias_raw,
+                                             const std::optional<std::int16_t> l2_ca_bias_raw,
+                                             const std::optional<std::int16_t> l2_p_bias_raw)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1230u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, code_phase_bias_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_p_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_p_bias ? 1u : 0u, 1u);
+  if (has_l1_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_ca_bias_raw, 16u);
+  }
+  if (has_l1_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_p_bias_raw, 16u);
+  }
+  if (has_l2_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_ca_bias_raw, 16u);
+  }
+  if (has_l2_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_p_bias_raw, 16u);
+  }
+
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      0x00u,
+      static_cast<std::uint8_t>(payload.size()),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
 std::vector<std::uint8_t> MakeNavStatusFixedPayload()
 {
   std::vector<std::uint8_t> payload(16u, 0u);
@@ -225,6 +278,16 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x01u, 0u, 42u, 1005u)));
   Append(bytes, BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(3u, 0u, 3u)));
   Append(bytes, BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u));
+  Append(bytes, BuildRtcm1230Frame(42u,
+                                   true,
+                                   true,
+                                   false,
+                                   true,
+                                   true,
+                                   10,
+                                   std::nullopt,
+                                   -5,
+                                   7));
   Append(bytes, BuildRtcmFrame(1077u));
   return bytes;
 }
@@ -349,7 +412,7 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
 
   ctx.Expect(report.summary.quality_level == GnssQualityLevel::kRtkFixed,
              "receiver-side fixed RTK state should classify as rtk_fixed");
-  ctx.Expect(report.rtcm.total_frames == 2u &&
+  ctx.Expect(report.rtcm.total_frames == 3u &&
                  report.rtcm.receiver_side.events_observed == 2u &&
                  report.rtcm.receiver_side.accepted_messages == 1u &&
                  report.rtcm.receiver_side.not_used_messages == 0u &&
@@ -377,11 +440,17 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
   const std::string text = universal_gnss_tools::FormatGnssQualityReportText(report, true);
   const std::string json = universal_gnss_tools::FormatGnssQualityReportJson(report, true);
   ctx.Expect(text.find("rtcm_base station_id=42") != std::string::npos &&
-                 text.find("antenna_height_m=0.4321") != std::string::npos,
-             "text quality report should include decoded base station ARP details");
+                 text.find("antenna_height_m=0.4321") != std::string::npos &&
+                 text.find("rtcm_semantic glonass_code_phase_bias seen=true decoded=true valid=true") !=
+                     std::string::npos &&
+                 text.find("signal_mask=0xD") != std::string::npos,
+             "text quality report should include decoded RTCM semantic details");
   ctx.Expect(json.find("\"base_station_arp\":{\"message_type\":1006") != std::string::npos &&
-                 json.find("\"station_id\":42") != std::string::npos,
-             "JSON quality report should include the decoded base station ARP object");
+                 json.find("\"station_id\":42") != std::string::npos &&
+                 json.find("\"semantic_observations\":[") != std::string::npos &&
+                 json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
+                 json.find("\"signal_mask\":\"0xD\"") != std::string::npos,
+             "JSON quality report should include the decoded RTCM semantic observations");
 }
 
 void TestUnicoreRfDiagnostics(TestContext& ctx)

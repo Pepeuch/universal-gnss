@@ -11,6 +11,7 @@
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss/gnss_types.hpp"
+#include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 
 namespace universal_gnss_tools
@@ -42,6 +43,7 @@ struct GnssQualityReportRtcmSummary
   std::map<std::uint16_t, std::size_t> message_type_counts{};
   std::map<universal_gnss_protocols::RtcmConstellation, std::size_t> msm_constellation_counts{};
   GnssReceiverRtcmDiagnosticsSummary receiver_side{};
+  universal_gnss_protocols::RtcmSemanticObservations semantic_observations{};
   std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord> last_base_station_arp{};
 };
 

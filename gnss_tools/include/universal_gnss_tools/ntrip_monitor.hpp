@@ -92,6 +92,7 @@ struct NtripMonitorSnapshot
   bool base_position_1005_seen{false};
   bool base_position_1006_seen{false};
   bool glonass_bias_1230_seen{false};
+  universal_gnss_protocols::RtcmSemanticObservations semantic_observations{};
 
   std::optional<std::uint16_t> last_rtcm_message_type{};
   std::optional<universal_gnss::GnssTimestampNs> last_gga_sent_timestamp_ns{};
@@ -123,7 +124,8 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
     universal_gnss::GnssHealthSummary correction_health,
     NtripMonitorStopReason stop_reason = NtripMonitorStopReason::kCompleted,
     std::optional<std::int64_t> elapsed_time_ns = std::nullopt,
-    std::string response_header = {});
+    std::string response_header = {},
+    std::optional<universal_gnss::GnssTimestampNs> now_timestamp_ns = std::nullopt);
 
 std::string DescribeGnssDiagnosticSeverity(
     universal_gnss::GnssDiagnosticSeverity severity);

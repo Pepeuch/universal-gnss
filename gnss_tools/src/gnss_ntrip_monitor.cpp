@@ -177,8 +177,8 @@ void PrintSummary(const NtripMonitorOptions& options, const NtripClient& client,
                   const NtripMonitorStopReason stop_reason,
                   const std::int64_t elapsed_time_ns)
 {
-  const auto health = client.BuildCorrectionHealth(
-      BuildHealthOptions(options, MonotonicNowNs()));
+  const auto now_ns = MonotonicNowNs();
+  const auto health = client.BuildCorrectionHealth(BuildHealthOptions(options, now_ns));
   const auto snapshot = BuildNtripMonitorSnapshot(options,
                                                   DescribeClientState(client.state()),
                                                   client.metrics(),
@@ -186,7 +186,8 @@ void PrintSummary(const NtripMonitorOptions& options, const NtripClient& client,
                                                   health,
                                                   stop_reason,
                                                   elapsed_time_ns,
-                                                  client.response_header());
+                                                  client.response_header(),
+                                                  now_ns);
 
   if (options.json_output)
   {
@@ -396,7 +397,8 @@ int main(int argc, char** argv)
                                                     health,
                                                     NtripMonitorStopReason::kRunning,
                                                     now_ns - start_time_ns,
-                                                    client.response_header());
+                                                    client.response_header(),
+                                                    now_ns);
     const std::string line = FormatNtripMonitorStatusLine(snapshot);
     if (force || line != last_status_line)
     {

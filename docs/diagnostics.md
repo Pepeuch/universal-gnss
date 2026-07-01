@@ -75,9 +75,10 @@ health as:
 - `kUnknown` when correction freshness cannot be judged because timestamps are
   unavailable
 
-That RTCM monitor only tracks activity, message presence, and timing. It does
-not add full RTCM payload decode, LoRa policy, ROS 2 adapters, or GUI-specific
-presentation concerns.
+That RTCM monitor now mixes stream activity with a small semantic observation
+surface for decoded RTCM metadata such as `1005` / `1006` base position and
+`1230` GLONASS code-phase bias state. It still does not add broad RTCM payload
+coverage, LoRa policy, ROS 2 adapters, or GUI-specific presentation concerns.
 
 The next receiver-side correction consumer is the `UBX-RXM-RTCM` helper in the
 UBX semantic layer. It emits portable correction events describing whether a

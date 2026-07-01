@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "universal_gnss/gnss_health.hpp"
@@ -34,6 +35,30 @@ struct RtcmCorrectionHealthOptions
   bool require_base_position{false};
   bool require_glonass_bias{false};
 };
+
+struct RtcmSemanticField
+{
+  std::string key{};
+  std::string value{};
+};
+
+struct RtcmSemanticObservation
+{
+  std::string name{};
+  std::uint16_t message_type{0};
+  bool seen{false};
+  bool decoded{false};
+  bool valid{false};
+  std::uint64_t decode_success_count{0};
+  std::uint64_t decode_failure_count{0};
+  std::uint64_t malformed_count{0};
+  std::optional<ProtocolTimestampNs> last_seen_timestamp_ns{};
+  std::optional<ProtocolTimestampNs> last_decoded_timestamp_ns{};
+  std::optional<ProtocolTimestampNs> age_ns{};
+  std::vector<RtcmSemanticField> fields{};
+};
+
+using RtcmSemanticObservations = std::vector<RtcmSemanticObservation>;
 
 void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& options);
 
@@ -67,10 +92,21 @@ public:
   bool HasSeenBasePosition1005() const;
   bool HasSeenBasePosition1006() const;
   bool HasSeenGlonassBias1230() const;
+  bool HasDecodedGlonassBias1230() const;
+  bool LastGlonassBias1230Valid() const;
   bool HasSeenAnyMsmMessage() const;
 
   const std::optional<RtcmBaseStationArpRecord>& last_base_station_arp() const;
   std::optional<ProtocolTimestampNs> LastBaseStationArpTimestampNs() const;
+  std::uint64_t BaseStationArpDecodeSuccessCount() const;
+  std::uint64_t BaseStationArpDecodeFailureCount() const;
+  std::uint64_t BaseStationArpMalformedCount() const;
+  const std::optional<RtcmGlonassCodePhaseBiasRecord>& last_glonass_code_phase_bias() const;
+  std::optional<ProtocolTimestampNs> LastGlonassBias1230TimestampNs() const;
+  std::optional<ProtocolTimestampNs> LastDecodedGlonassBias1230TimestampNs() const;
+  std::uint64_t GlonassBias1230DecodeSuccessCount() const;
+  std::uint64_t GlonassBias1230DecodeFailureCount() const;
+  std::uint64_t GlonassBias1230MalformedCount() const;
 
   bool HasRequiredMessageTypes(const std::vector<std::uint16_t>& message_types) const;
   bool HasRequiredCorrectionMessages(const RtcmCorrectionHealthOptions& options) const;
@@ -82,6 +118,8 @@ public:
       RtcmConstellation constellation,
       ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceBaseStationArpNs(
+      ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs> AgeSinceGlonassBias1230Ns(
       ProtocolTimestampNs now_timestamp_ns) const;
 
   std::optional<double> TotalFrameRateHz(ProtocolTimestampNs window_end_timestamp_ns,
@@ -115,6 +153,15 @@ private:
   bool seen_glonass_bias_1230_{false};
   std::optional<RtcmBaseStationArpRecord> last_base_station_arp_{};
   std::optional<ProtocolTimestampNs> last_base_station_arp_timestamp_ns_{};
+  std::uint64_t base_station_arp_decode_success_count_{0};
+  std::uint64_t base_station_arp_decode_failure_count_{0};
+  std::uint64_t base_station_arp_malformed_count_{0};
+  std::optional<RtcmGlonassCodePhaseBiasRecord> last_glonass_code_phase_bias_{};
+  std::optional<ProtocolTimestampNs> last_glonass_bias_1230_timestamp_ns_{};
+  std::optional<ProtocolTimestampNs> last_decoded_glonass_bias_1230_timestamp_ns_{};
+  std::uint64_t glonass_bias_1230_decode_success_count_{0};
+  std::uint64_t glonass_bias_1230_decode_failure_count_{0};
+  std::uint64_t glonass_bias_1230_malformed_count_{0};
 
   void RecordValidMessage(const RtcmMessageInfo& info,
                           std::optional<ProtocolTimestampNs> timestamp_ns);
@@ -123,5 +170,9 @@ private:
 universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
     const RtcmCorrectionMonitor& monitor,
     const RtcmCorrectionHealthOptions& options);
+
+RtcmSemanticObservations BuildRtcmSemanticObservations(
+    const RtcmCorrectionMonitor& monitor,
+    std::optional<ProtocolTimestampNs> now_timestamp_ns = std::nullopt);
 
 }  // namespace universal_gnss_protocols

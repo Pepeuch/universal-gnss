@@ -19,6 +19,7 @@ namespace
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::RtcmConstellation;
+using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
 using universal_gnss_protocols::RtcmMessageInfo;
@@ -39,6 +40,7 @@ void AccumulateFrame(const RtcmFrame& frame,
                      const RtcmMessageInfo& message_info,
                      const std::size_t byte_offset,
                      const bool include_frames,
+                     RtcmCorrectionMonitor& correction_monitor,
                      RtcmInspectionResult& result)
 {
   ++result.summary.total_frames_found;
@@ -56,14 +58,7 @@ void AccumulateFrame(const RtcmFrame& frame,
   {
     ++result.summary.msm_counts_by_constellation[message_info.msm_constellation];
   }
-  if (frame.checksum_status == ChecksumStatus::kValid && message_info.is_station_arp)
-  {
-    const auto parsed_arp = universal_gnss_protocols::ParseRtcmBaseStationArp(frame);
-    if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
-    {
-      result.summary.last_base_station_arp = *parsed_arp.record;
-    }
-  }
+  correction_monitor.ObserveFrame(frame);
 
   if (!include_frames)
   {
@@ -83,6 +78,7 @@ void AccumulateFrame(const RtcmFrame& frame,
 void ConsumeParserResult(const universal_gnss_protocols::ParserResult<RtcmFrame>& parser_result,
                          const std::size_t total_bytes_read,
                          const bool include_frames,
+                         RtcmCorrectionMonitor& correction_monitor,
                          RtcmInspectionResult& result)
 {
   switch (parser_result.status)
@@ -93,7 +89,8 @@ void ConsumeParserResult(const universal_gnss_protocols::ParserResult<RtcmFrame>
         const RtcmFrame& frame = *parser_result.record;
         const RtcmMessageInfo message_info = BuildMessageInfo(frame);
         const std::size_t byte_offset = total_bytes_read - frame.raw_bytes.size();
-        AccumulateFrame(frame, message_info, byte_offset, include_frames, result);
+        AccumulateFrame(
+            frame, message_info, byte_offset, include_frames, correction_monitor, result);
       }
       break;
     case ParserStatus::kInvalidData:
@@ -116,15 +113,21 @@ RtcmInspectionResult InspectWithProvider(ByteProvider&& provider, const bool inc
 {
   RtcmInspectionResult result;
   RtcmFrameFramer framer;
+  RtcmCorrectionMonitor correction_monitor;
 
   provider([&](const std::uint8_t byte) {
     ++result.summary.total_bytes_read;
     const auto parser_result = framer.PushByte(byte);
-    ConsumeParserResult(parser_result, result.summary.total_bytes_read, include_frames, result);
+    ConsumeParserResult(
+        parser_result, result.summary.total_bytes_read, include_frames, correction_monitor, result);
   });
 
   const auto finalize_result = framer.Finalize();
-  ConsumeParserResult(finalize_result, result.summary.total_bytes_read, include_frames, result);
+  ConsumeParserResult(
+      finalize_result, result.summary.total_bytes_read, include_frames, correction_monitor, result);
+  result.summary.last_base_station_arp = correction_monitor.last_base_station_arp();
+  result.summary.semantic_observations =
+      universal_gnss_protocols::BuildRtcmSemanticObservations(correction_monitor);
   return result;
 }
 
@@ -174,6 +177,18 @@ void WriteBaseStationArpJson(
     output << "null";
   }
   output << '}';
+}
+
+void WriteRtcmSemanticFieldJson(std::ostream& output,
+                                const universal_gnss_protocols::RtcmSemanticField& field,
+                                bool& first_field)
+{
+  if (!first_field)
+  {
+    output << ',';
+  }
+  first_field = false;
+  output << '"' << field.key << "\":\"" << field.value << '"';
 }
 
 }  // namespace
@@ -270,6 +285,102 @@ std::string DescribeChecksumStatus(const ChecksumStatus status)
   }
 }
 
+std::string FormatRtcmSemanticObservationText(
+    const universal_gnss_protocols::RtcmSemanticObservation& observation)
+{
+  std::ostringstream output;
+  output << observation.name
+         << " seen=" << (observation.seen ? "true" : "false")
+         << " decoded=" << (observation.decoded ? "true" : "false")
+         << " valid=" << (observation.valid ? "true" : "false")
+         << " decode_success=" << observation.decode_success_count
+         << " decode_failure=" << observation.decode_failure_count
+         << " malformed=" << observation.malformed_count;
+  if (observation.message_type != 0u)
+  {
+    output << " message_type=" << observation.message_type;
+  }
+  if (observation.last_seen_timestamp_ns.has_value())
+  {
+    output << " last_seen_ns=" << *observation.last_seen_timestamp_ns;
+  }
+  if (observation.last_decoded_timestamp_ns.has_value())
+  {
+    output << " last_decoded_ns=" << *observation.last_decoded_timestamp_ns;
+  }
+  if (observation.age_ns.has_value())
+  {
+    output << " age_ns=" << *observation.age_ns;
+  }
+  for (const auto& field : observation.fields)
+  {
+    output << ' ' << field.key << '=' << field.value;
+  }
+  return output.str();
+}
+
+void WriteRtcmSemanticObservationsJson(
+    std::ostream& output,
+    const universal_gnss_protocols::RtcmSemanticObservations& observations)
+{
+  output << '[';
+  for (std::size_t index = 0u; index < observations.size(); ++index)
+  {
+    if (index != 0u)
+    {
+      output << ',';
+    }
+
+    const auto& observation = observations[index];
+    output << '{'
+           << "\"name\":\"" << observation.name << "\","
+           << "\"message_type\":" << observation.message_type << ','
+           << "\"seen\":" << (observation.seen ? "true" : "false") << ','
+           << "\"decoded\":" << (observation.decoded ? "true" : "false") << ','
+           << "\"valid\":" << (observation.valid ? "true" : "false") << ','
+           << "\"decode_success_count\":" << observation.decode_success_count << ','
+           << "\"decode_failure_count\":" << observation.decode_failure_count << ','
+           << "\"malformed_count\":" << observation.malformed_count << ','
+           << "\"last_seen_timestamp_ns\":";
+    if (observation.last_seen_timestamp_ns.has_value())
+    {
+      output << *observation.last_seen_timestamp_ns;
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ','
+           << "\"last_decoded_timestamp_ns\":";
+    if (observation.last_decoded_timestamp_ns.has_value())
+    {
+      output << *observation.last_decoded_timestamp_ns;
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ','
+           << "\"age_ns\":";
+    if (observation.age_ns.has_value())
+    {
+      output << *observation.age_ns;
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ",\"fields\":{";
+    bool first_field = true;
+    for (const auto& field : observation.fields)
+    {
+      WriteRtcmSemanticFieldJson(output, field, first_field);
+    }
+    output << "}}";
+  }
+  output << ']';
+}
+
 std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, const bool summary_only)
 {
   std::ostringstream output;
@@ -316,24 +427,17 @@ std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, const b
     output << '\n';
   }
 
-  output << "base_station_arp";
-  if (result.summary.last_base_station_arp.has_value())
+  if (result.summary.semantic_observations.empty())
   {
-    output << " available"
-           << " station_id=" << result.summary.last_base_station_arp->station_id
-           << " ecef_x_m=" << result.summary.last_base_station_arp->ecef_x_m
-           << " ecef_y_m=" << result.summary.last_base_station_arp->ecef_y_m
-           << " ecef_z_m=" << result.summary.last_base_station_arp->ecef_z_m;
-    if (result.summary.last_base_station_arp->antenna_height_m.has_value())
-    {
-      output << " antenna_height_m=" << *result.summary.last_base_station_arp->antenna_height_m;
-    }
+    output << "semantic_observations unavailable\n";
   }
   else
   {
-    output << " unavailable";
+    for (const auto& observation : result.summary.semantic_observations)
+    {
+      output << FormatRtcmSemanticObservationText(observation) << '\n';
+    }
   }
-  output << '\n';
 
   return output.str();
 }
@@ -414,6 +518,10 @@ std::string FormatRtcmInspectionJson(const RtcmInspectionResult& result, const b
   AppendJsonFieldSeparator(output, first_summary_field);
   output << "\"base_station_arp\":";
   WriteBaseStationArpJson(output, result.summary.last_base_station_arp);
+
+  AppendJsonFieldSeparator(output, first_summary_field);
+  output << "\"semantic_observations\":";
+  WriteRtcmSemanticObservationsJson(output, result.summary.semantic_observations);
 
   output << "}}";
   return output.str();
