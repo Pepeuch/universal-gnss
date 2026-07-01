@@ -188,8 +188,8 @@ std::string FormatRuntimeStateCompact(
   stream << " fix_type=" << ToString(state.fix_type);
   stream << " rtk_mode=" << (state.rtk_mode.has_value() ? ToString(*state.rtk_mode) : "unknown");
 
-  AppendOptionalFloat(stream, "lat_deg", state.latitude_deg, 7);
-  AppendOptionalFloat(stream, "lon_deg", state.longitude_deg, 7);
+  AppendOptionalFloat(stream, "lat_deg", state.latitude_deg, kCoordinateOutputPrecision);
+  AppendOptionalFloat(stream, "lon_deg", state.longitude_deg, kCoordinateOutputPrecision);
   AppendOptionalFloat(stream, "alt_m", state.altitude_m, 3);
   AppendOptionalFloat(stream, "h_acc_m", state.horizontal_accuracy_m, 3);
   AppendOptionalFloat(stream, "v_acc_m", state.vertical_accuracy_m, 3);

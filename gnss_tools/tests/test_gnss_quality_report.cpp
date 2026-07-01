@@ -332,9 +332,14 @@ void TestReportFromMixedLog(TestContext& ctx)
   ctx.Expect(text.find("quality level=rtk_float") != std::string::npos &&
                  text.find("rtcm_types 1005=1 1077=1") != std::string::npos,
              "text report should include quality level and RTCM type counts");
+  ctx.Expect(text.find("lat_deg=40.078958827") != std::string::npos &&
+                 text.find("lon_deg=116.236510298") != std::string::npos,
+             "text report should preserve at least nine decimal places for coordinates");
   ctx.Expect(json.find("\"quality_level\":\"rtk_float\"") != std::string::npos &&
-                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1}") != std::string::npos,
-             "JSON report should include the expected RTK level and RTCM counters");
+                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1}") != std::string::npos &&
+                 json.find("\"latitude_deg\":40.078958827") != std::string::npos &&
+                 json.find("\"longitude_deg\":116.236510298") != std::string::npos,
+             "JSON report should include the expected RTK level, RTCM counters, and high-precision coordinates");
 }
 
 void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)

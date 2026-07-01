@@ -289,7 +289,7 @@ Summary:
   port=/dev/ttyACM0 baud=921600 vendor=ublox
   selected_session=ublox bytes_read=8284 chunks_read=73 runtime_updates=42
   eof_seen=false read_errors=0 malformed_records=0 unknown_records=2 last_status=ok last_error=none
-  final_state: session=ublox fix_valid=true fix_type=fix rtk_mode=none lat_deg=43.9542911 lon_deg=2.2023466 alt_m=168.629 h_acc_m=0.608 v_acc_m=0.850 hdop=0.56 vdop=0.83 sats_used=29 sats_visible=49 cn0_mean_db_hz=35.3 cn0_max_db_hz=48.0
+  final_state: session=ublox fix_valid=true fix_type=fix rtk_mode=none lat_deg=43.954291100 lon_deg=2.202346600 alt_m=168.629 h_acc_m=0.608 v_acc_m=0.850 hdop=0.56 vdop=0.83 sats_used=29 sats_visible=49 cn0_mean_db_hz=35.3 cn0_max_db_hz=48.0
 ```
 
 ### Receiver output observed
@@ -396,7 +396,9 @@ Observed topics:
 - `/fix`
 - `/diagnostics`
 
-Observed `ros2 topic echo /status --once` after the timestamp fix:
+Observed `/status` values after the timestamp fix (`ros2 topic echo /status --once`
+capture, with geodetic fields reformatted here to 9 decimal places for
+consistency with Universal GNSS text/JSON surfaces):
 
 ```text
 stamp:
@@ -407,8 +409,8 @@ fix_type: 2
 rtk_mode: 1
 capability_flags: 25471
 value_flags: 895
-latitude_deg: 43.9542759
-longitude_deg: 2.2023804
+latitude_deg: 43.954275900
+longitude_deg: 2.202380400
 altitude_m: 171.577
 horizontal_accuracy_m: 0.32199999690055847
 vertical_accuracy_m: 0.492000013589859

@@ -207,6 +207,15 @@ The current GGA support is policy plus portable sentence generation.
 - altitude, satellites-used, and HDOP fields when available
 - deterministic NMEA checksum generation
 
+That GGA coordinate formatting is protocol-specific:
+
+- it emits NMEA `ddmm.mmmmm` / `dddmm.mmmmm` fields with five decimal places of
+  minutes
+- it is not a decimal-degree text/JSON surface
+- it is therefore tracked separately from the Universal GNSS policy that
+  human-readable and machine-readable decimal-degree outputs preserve at least
+  9 decimal places
+
 `gga_generator.hpp` remains as a compatibility include for callers that already
 use the older generator naming.
 

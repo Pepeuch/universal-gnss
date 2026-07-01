@@ -37,8 +37,8 @@ void TestCompactFormatting(TestContext& ctx)
   state.fix_valid = true;
   state.fix_type = GnssFixType::kRtkFixed;
   state.rtk_mode = GnssRtkMode::kFixed;
-  state.latitude_deg = 48.1234567;
-  state.longitude_deg = 2.2345678;
+  state.latitude_deg = 48.1234567891;
+  state.longitude_deg = 2.2345678912;
   state.horizontal_accuracy_m = 0.25f;
   state.satellites_used = 18u;
   state.mean_cn0_db_hz = 35.5f;
@@ -50,9 +50,9 @@ void TestCompactFormatting(TestContext& ctx)
              "compact formatting should include the selected receiver session");
   ctx.Expect(formatted.find("fix_type=rtk_fixed") != std::string::npos,
              "compact formatting should include the fix type");
-  ctx.Expect(formatted.find("lat_deg=48.1234567") != std::string::npos &&
-                 formatted.find("lon_deg=2.2345678") != std::string::npos,
-             "compact formatting should include coordinates with stable precision");
+  ctx.Expect(formatted.find("lat_deg=48.123456789") != std::string::npos &&
+                 formatted.find("lon_deg=2.234567891") != std::string::npos,
+             "compact formatting should preserve nine decimal places for coordinates");
   ctx.Expect(formatted.find("interference=false") != std::string::npos,
              "compact formatting should include optional booleans when available");
 }
@@ -74,7 +74,7 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should include fix validity");
   ctx.Expect(formatted.find("\"latitude_deg\":40.078958827") != std::string::npos &&
                  formatted.find("\"longitude_deg\":116.236510298") != std::string::npos,
-             "json formatting should keep coordinate output above seven decimal places");
+             "json formatting should preserve at least nine decimal places for coordinates");
   ctx.Expect(formatted.find("\"satellites_visible\":24") != std::string::npos,
              "json formatting should include available satellite counters");
   ctx.Expect(formatted.find("\"jamming_detected\":true") != std::string::npos,
