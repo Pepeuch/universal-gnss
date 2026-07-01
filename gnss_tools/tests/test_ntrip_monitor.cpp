@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "universal_gnss_protocols/protocol_records.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss_tools/ntrip_monitor.hpp"
 
@@ -103,6 +104,35 @@ void AppendSignedBits(std::vector<std::uint8_t>& payload,
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
 RtcmFrame BuildRtcm1230Frame(const std::int64_t timestamp_ns)
 {
   RtcmFrame frame;
@@ -124,6 +154,78 @@ RtcmFrame BuildRtcm1230Frame(const std::int64_t timestamp_ns)
   AppendSignedBits(frame.payload, bit_offset, 10, 16u);
   AppendSignedBits(frame.payload, bit_offset, -5, 16u);
   AppendSignedBits(frame.payload, bit_offset, 7, 16u);
+  return frame;
+}
+
+RtcmFrame BuildRtcmMsmFrame(const std::uint16_t message_type,
+                            const std::int64_t timestamp_ns,
+                            const std::uint16_t station_id,
+                            const std::vector<std::uint8_t>& satellite_ids,
+                            const std::vector<std::uint8_t>& signal_ids,
+                            const std::vector<bool>& cell_mask)
+{
+  RtcmFrame frame;
+  frame.protocol = universal_gnss_protocols::ProtocolType::kRtcm3;
+  frame.timestamp_ns = timestamp_ns;
+  frame.checksum_status = universal_gnss_protocols::ChecksumStatus::kValid;
+  frame.raw_bytes = {0xD3u};
+  frame.message_type = message_type;
+
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(frame.payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(frame.payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(frame.payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(frame.payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(frame.payload, bit_offset, 2u, 3u);
+  AppendUnsignedBits(frame.payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(frame.payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(frame.payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(frame.payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(frame.payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(frame.payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(frame.payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(frame.payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(frame.payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
   return frame;
 }
 
@@ -198,15 +300,18 @@ void TestSummaryFormatting(TestContext& ctx)
 
   RtcmCorrectionMonitor correction_monitor;
   ObserveMessage(correction_monitor, 1005u, 1000000000LL, true);
-  ObserveMessage(correction_monitor, 1077u, 1500000000LL, false, false, RtcmConstellation::kGps);
+  correction_monitor.ObserveFrame(
+      BuildRtcmMsmFrame(1077u, 1500000000LL, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}));
+  correction_monitor.ObserveFrame(
+      BuildRtcmMsmFrame(1087u, 1700000000LL, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
   correction_monitor.ObserveFrame(BuildRtcm1230Frame(2000000000LL));
   correction_monitor.ObserveInvalidFrame(2200000000LL);
 
   universal_gnss_ntrip::NtripConnectionMetrics metrics;
   metrics.bytes_received = 4096u;
   metrics.bytes_sent = 128u;
-  metrics.rtcm_frames_seen = 4u;
-  metrics.rtcm_frames_received = 3u;
+  metrics.rtcm_frames_seen = 5u;
+  metrics.rtcm_frames_received = 4u;
   metrics.invalid_rtcm_frames = 1u;
   metrics.gga_sent_count = 2u;
   metrics.gga_send_errors = 1u;
@@ -246,21 +351,26 @@ void TestSummaryFormatting(TestContext& ctx)
              "status formatting should surface state, severity, and the last RTCM type");
   ctx.Expect(text.find("endpoint=caster.example.org:2101/NEAR state=streaming stop_reason=max_seconds") !=
                  std::string::npos &&
-                 text.find("message_types 1005=1 1077=1 1230=1") != std::string::npos &&
-                 text.find("msm_constellations gps=1") != std::string::npos &&
+                 text.find("message_types 1005=1 1077=1 1087=1 1230=1") != std::string::npos &&
+                 text.find("msm_constellations gps=1 glonass=1") != std::string::npos &&
                  text.find("response_status ICY 200 OK") != std::string::npos &&
                  text.find("glonass_bias_1230_seen=true") != std::string::npos &&
+                 text.find("msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=0 malformed=0 message_type=1087") !=
+                     std::string::npos &&
+                 text.find("constellations_seen=gps,glonass") != std::string::npos &&
                  text.find("glonass_code_phase_bias seen=true decoded=true valid=true") !=
                      std::string::npos &&
                  text.find("signal_mask=0xD") != std::string::npos &&
-                 text.find("age_ns=500000000") != std::string::npos,
+                 text.find("age_ns=800000000") != std::string::npos,
              "text formatting should summarize message counts, constellation counts, and status");
   ctx.Expect(json.find("\"stop_reason\":\"max_seconds\"") != std::string::npos &&
-                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1,\"1230\":1}") !=
+                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1,\"1087\":1,\"1230\":1}") !=
                      std::string::npos &&
-                 json.find("\"msm_constellation_counts\":{\"gps\":1}") !=
+                 json.find("\"msm_constellation_counts\":{\"gps\":1,\"glonass\":1}") !=
                      std::string::npos &&
                  json.find("\"semantic_observations\":[") != std::string::npos &&
+                 json.find("\"name\":\"msm_summary\"") != std::string::npos &&
+                 json.find("\"constellations_seen\":\"gps,glonass\"") != std::string::npos &&
                  json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
                  json.find("\"signal_mask\":\"0xD\"") != std::string::npos &&
                  json.find("\"response_status_line\":\"ICY 200 OK\"") !=

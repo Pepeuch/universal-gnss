@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
 #include "testdata_utils.hpp"
@@ -54,6 +55,19 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
 {
   destination.insert(destination.end(), source.begin(), source.end());
@@ -92,6 +106,35 @@ void AppendSignedBits(std::vector<std::uint8_t>& payload,
 {
   const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
+}
+
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
 }
 
 std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
@@ -176,6 +219,91 @@ std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
   return bytes;
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
+                                              const std::uint16_t station_id,
+                                              const std::vector<std::uint8_t>& satellite_ids,
+                                              const std::vector<std::uint8_t>& signal_ids,
+                                              const std::vector<bool>& cell_mask,
+                                              const bool multiple_message = false,
+                                              const std::uint8_t issue_of_data_station = 0u)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(payload, bit_offset, multiple_message ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, issue_of_data_station, 3u);
+  AppendUnsignedBits(payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
+  return payload;
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
+                                            const std::uint16_t station_id,
+                                            const std::vector<std::uint8_t>& satellite_ids,
+                                            const std::vector<std::uint8_t>& signal_ids,
+                                            const std::vector<bool>& cell_mask,
+                                            const bool multiple_message = false,
+                                            const std::uint8_t issue_of_data_station = 0u)
+{
+  return BuildRtcmFrameFromPayload(BuildRtcmMsmPayload(message_type,
+                                                       station_id,
+                                                       satellite_ids,
+                                                       signal_ids,
+                                                       cell_mask,
+                                                       multiple_message,
+                                                       issue_of_data_station));
 }
 
 RtcmInspectionResult BuildSyntheticInspectionResult()
@@ -310,6 +438,49 @@ void TestDecodedGlonassBiasSummary(TestContext& ctx)
              "JSON summary should expose decoded RTCM 1230 semantic observations");
 }
 
+void TestDecodedMsmSummary(TestContext& ctx)
+{
+  std::vector<std::uint8_t> bytes;
+  Append(bytes, BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u));
+  Append(bytes, BuildRtcmMsmFrame(1087u, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
+
+  const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
+  const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
+  const std::string json = universal_gnss_tools::FormatRtcmInspectionJson(result, true);
+
+  ctx.Expect(summary.find("msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=0 malformed=0 message_type=1087") !=
+                     std::string::npos &&
+                 summary.find("constellations_seen=gps,glonass") != std::string::npos &&
+                 summary.find("station_id=7") != std::string::npos &&
+                 summary.find("satellite_count=1") != std::string::npos &&
+                 summary.find("signal_count=3") != std::string::npos &&
+                 summary.find("cell_count=2") != std::string::npos,
+             "summary output should expose the aggregate portable MSM summary");
+  ctx.Expect(summary.find("msm_gps_msm7 seen=true decoded=true valid=true") != std::string::npos &&
+                 summary.find("msm_glonass_msm7 seen=true decoded=true valid=true") !=
+                     std::string::npos,
+             "summary output should expose per-message MSM semantic observations");
+  ctx.Expect(json.find("\"name\":\"msm_summary\"") != std::string::npos &&
+                 json.find("\"constellations_seen\":\"gps,glonass\"") != std::string::npos &&
+                 json.find("\"name\":\"msm_glonass_msm7\"") != std::string::npos &&
+                 json.find("\"cell_count\":\"2\"") != std::string::npos,
+             "JSON summary should expose aggregate and per-message MSM semantic observations");
+}
+
+void TestMalformedMsmSummary(TestContext& ctx)
+{
+  auto malformed_payload =
+      BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true}, false, 1u);
+  malformed_payload.resize(21u);
+  const auto bytes = BuildRtcmFrameFromPayload(malformed_payload);
+  const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
+  const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
+
+  ctx.Expect(summary.find("msm_summary seen=true decoded=false valid=false decode_success=0 decode_failure=1 malformed=1 message_type=1077") !=
+                 std::string::npos,
+             "summary output should retain malformed MSM decode visibility");
+}
+
 void TestFileBackedInspection(TestContext& ctx)
 {
   const auto bytes = universal_gnss_tools::test::ReadBinaryFile("rtcm/basic_msm.rtcm");
@@ -341,6 +512,8 @@ int main()
   TestFormattedOutput(ctx);
   TestDecodedBaseStationPositionSummary(ctx);
   TestDecodedGlonassBiasSummary(ctx);
+  TestDecodedMsmSummary(ctx);
+  TestMalformedMsmSummary(ctx);
   TestFileBackedInspection(ctx);
 
   if (ctx.failures != 0)

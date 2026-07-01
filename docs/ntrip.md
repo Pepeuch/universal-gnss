@@ -355,7 +355,8 @@ Current scope:
 - synchronous foreground execution
 - one caster / one mountpoint
 - optional manual latitude / longitude input for GGA injection
-- RTCM correction-health summary through the portable monitor
+- RTCM correction-health summary plus portable MSM/header semantic summary
+  through the portable monitor
 
 Current non-goals:
 
@@ -370,6 +371,8 @@ Typical uses:
 - confirm a caster responds with a valid NTRIP header
 - confirm RTCM payload bytes are actually flowing
 - confirm base-position and MSM messages appear in the stream
+- inspect portable MSM summary state such as station id, constellation, MSM
+  variant, and satellite / signal / cell counts
 - test NEAR-style mounts with explicit latitude / longitude input
 
 The CLI is intentionally a thin synchronous harness over `NtripClient`, so it

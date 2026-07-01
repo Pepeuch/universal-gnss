@@ -9,6 +9,7 @@
 
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_tools/gnss_quality_report.hpp"
@@ -229,6 +230,137 @@ std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
   return bytes;
 }
 
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      0x00u,
+      static_cast<std::uint8_t>(payload.size()),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
+                                              const std::uint16_t station_id,
+                                              const std::vector<std::uint8_t>& satellite_ids,
+                                              const std::vector<std::uint8_t>& signal_ids,
+                                              const std::vector<bool>& cell_mask,
+                                              const bool multiple_message = false,
+                                              const std::uint8_t issue_of_data_station = 0u)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(payload, bit_offset, multiple_message ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, issue_of_data_station, 3u);
+  AppendUnsignedBits(payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
+  return payload;
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
+                                            const std::uint16_t station_id,
+                                            const std::vector<std::uint8_t>& satellite_ids,
+                                            const std::vector<std::uint8_t>& signal_ids,
+                                            const std::vector<bool>& cell_mask,
+                                            const bool multiple_message = false,
+                                            const std::uint8_t issue_of_data_station = 0u)
+{
+  return BuildRtcmFrameFromPayload(BuildRtcmMsmPayload(message_type,
+                                                       station_id,
+                                                       satellite_ids,
+                                                       signal_ids,
+                                                       cell_mask,
+                                                       multiple_message,
+                                                       issue_of_data_station));
+}
+
 std::vector<std::uint8_t> MakeNavStatusFixedPayload()
 {
   std::vector<std::uint8_t> payload(16u, 0u);
@@ -288,7 +420,18 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
                                    std::nullopt,
                                    -5,
                                    7));
-  Append(bytes, BuildRtcmFrame(1077u));
+  Append(bytes, BuildRtcmMsmFrame(1077u,
+                                  42u,
+                                  {1u, 3u},
+                                  {1u, 5u},
+                                  {true, false, true, true},
+                                  true,
+                                  5u));
+  Append(bytes, BuildRtcmMsmFrame(1087u, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
+
+  auto malformed_msm_payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true});
+  malformed_msm_payload.resize(21u);
+  Append(bytes, BuildRtcmFrameFromPayload(malformed_msm_payload));
   return bytes;
 }
 
@@ -412,7 +555,7 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
 
   ctx.Expect(report.summary.quality_level == GnssQualityLevel::kRtkFixed,
              "receiver-side fixed RTK state should classify as rtk_fixed");
-  ctx.Expect(report.rtcm.total_frames == 3u &&
+  ctx.Expect(report.rtcm.total_frames == 5u &&
                  report.rtcm.receiver_side.events_observed == 2u &&
                  report.rtcm.receiver_side.accepted_messages == 1u &&
                  report.rtcm.receiver_side.not_used_messages == 0u &&
@@ -423,24 +566,37 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
                  report.rtcm.last_base_station_arp->station_id == 42u &&
                  report.rtcm.last_base_station_arp->antenna_height_m.has_value(),
              "quality report should retain the last decoded base station ARP record");
-  ctx.Expect(report.summary.warning_count >= 1u && report.summary.error_count >= 2u,
-             "receiver-side CRC failure plus MON-HW faults should surface warning and error diagnostics");
+  ctx.Expect(report.rtcm.message_type_counts.at(1077u) == 2u &&
+                 report.rtcm.message_type_counts.at(1087u) == 1u &&
+                 report.rtcm.msm_constellation_counts.at(universal_gnss_protocols::RtcmConstellation::kGps) == 2u &&
+                 report.rtcm.msm_constellation_counts.at(universal_gnss_protocols::RtcmConstellation::kGlonass) == 1u,
+             "quality report should preserve per-message and per-constellation MSM counters");
+  ctx.Expect(report.summary.warning_count >= 2u && report.summary.error_count >= 2u,
+             "receiver-side CRC failure, malformed MSM, and MON-HW faults should surface warning and error diagnostics");
 
   bool saw_crc_failed = false;
+  bool saw_msm_malformed = false;
   for (const auto& event : report.diagnostics)
   {
     if (event.code == "ubx_rxm_rtcm.crc_failed")
     {
       saw_crc_failed = true;
     }
+    if (event.code == "rtcm.msm_malformed")
+    {
+      saw_msm_malformed = true;
+    }
   }
-  ctx.Expect(saw_crc_failed,
-             "quality report should preserve the RXM-RTCM CRC-failed diagnostic event");
+  ctx.Expect(saw_crc_failed && saw_msm_malformed,
+             "quality report should preserve both receiver-side and RTCM MSM parser diagnostics");
 
   const std::string text = universal_gnss_tools::FormatGnssQualityReportText(report, true);
   const std::string json = universal_gnss_tools::FormatGnssQualityReportJson(report, true);
   ctx.Expect(text.find("rtcm_base station_id=42") != std::string::npos &&
                  text.find("antenna_height_m=0.4321") != std::string::npos &&
+                 text.find("rtcm_semantic msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=1 malformed=1 message_type=1087") !=
+                     std::string::npos &&
+                 text.find("constellations_seen=gps,glonass") != std::string::npos &&
                  text.find("rtcm_semantic glonass_code_phase_bias seen=true decoded=true valid=true") !=
                      std::string::npos &&
                  text.find("signal_mask=0xD") != std::string::npos,
@@ -448,6 +604,8 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
   ctx.Expect(json.find("\"base_station_arp\":{\"message_type\":1006") != std::string::npos &&
                  json.find("\"station_id\":42") != std::string::npos &&
                  json.find("\"semantic_observations\":[") != std::string::npos &&
+                 json.find("\"name\":\"msm_summary\"") != std::string::npos &&
+                 json.find("\"constellations_seen\":\"gps,glonass\"") != std::string::npos &&
                  json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
                  json.find("\"signal_mask\":\"0xD\"") != std::string::npos,
              "JSON quality report should include the decoded RTCM semantic observations");

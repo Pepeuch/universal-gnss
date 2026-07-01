@@ -10,6 +10,7 @@
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 
 namespace
@@ -130,6 +131,103 @@ std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
   return payload;
 }
 
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
+                                              const std::uint16_t station_id,
+                                              const std::vector<std::uint8_t>& satellite_ids,
+                                              const std::vector<std::uint8_t>& signal_ids,
+                                              const std::vector<bool>& cell_mask,
+                                              const bool multiple_message = false,
+                                              const std::uint8_t issue_of_data_station = 0u)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(payload, bit_offset, multiple_message ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, issue_of_data_station, 3u);
+  AppendUnsignedBits(payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
+  return payload;
+}
+
 RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
                              const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
@@ -146,6 +244,7 @@ RtcmMessageInfo MakeMessageInfo(const std::uint16_t message_type)
   info.message_type = message_type;
   info.is_station_arp = message_type == 1005u || message_type == 1006u;
   info.is_glonass_bias = message_type == 1230u;
+  info.msm_variant = universal_gnss_protocols::GetRtcmMsmVariant(message_type);
   switch (message_type)
   {
     case 1074u:
@@ -169,6 +268,20 @@ RtcmMessageInfo MakeMessageInfo(const std::uint16_t message_type)
       break;
   }
   return info;
+}
+
+const universal_gnss_protocols::RtcmSemanticObservation* FindObservation(
+    const universal_gnss_protocols::RtcmSemanticObservations& observations,
+    const std::string& name)
+{
+  for (const auto& observation : observations)
+  {
+    if (observation.name == name)
+    {
+      return &observation;
+    }
+  }
+  return nullptr;
 }
 
 void TestMessageCountsAndLastSeen(TestContext& ctx)
@@ -338,6 +451,170 @@ void TestGlonassBiasDecodeTracking(TestContext& ctx)
   }
 }
 
+void TestMsmDecodeTracking(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+
+  RtcmFrame gps_msm7 = MakeValidRtcmFrame(1077u, 1000);
+  gps_msm7.payload = BuildRtcmMsmPayload(1077u,
+                                         42u,
+                                         {1u, 3u},
+                                         {1u, 5u},
+                                         {true, false, true, true},
+                                         true,
+                                         5u);
+  monitor.ObserveFrame(gps_msm7);
+
+  RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
+  glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
+                                             7u,
+                                             {2u},
+                                             {1u, 3u, 4u},
+                                             {true, false, true});
+  monitor.ObserveFrame(glonass_msm7);
+
+  RtcmFrame malformed_msm7 = MakeValidRtcmFrame(1077u, 1800);
+  malformed_msm7.payload = BuildRtcmMsmPayload(1077u,
+                                               42u,
+                                               {1u},
+                                               {1u},
+                                               {true});
+  malformed_msm7.payload.resize(21u);
+  monitor.ObserveFrame(malformed_msm7);
+
+  ctx.Expect(monitor.HasSeenAnyMsmMessage(),
+             "decoded MSM frames should mark generic MSM presence");
+  ctx.Expect(monitor.HasDecodedAnyMsmSummary(),
+             "decoded MSM frames should retain the latest semantic summary");
+  ctx.Expect(monitor.LastMsmTimestampNs() == std::optional<std::int64_t>(1800),
+             "latest MSM timestamp should include malformed trailing frames");
+  ctx.Expect(monitor.LastDecodedMsmTimestampNs() == std::optional<std::int64_t>(1500),
+             "latest decoded MSM timestamp should retain the latest semantic decode success");
+  ctx.Expect(monitor.MsmDecodeSuccessCount() == 2u &&
+                 monitor.MsmDecodeFailureCount() == 1u &&
+                 monitor.MsmMalformedCount() == 1u,
+             "MSM decode counters should distinguish successful and malformed payloads");
+  if (monitor.last_msm_summary().has_value())
+  {
+    ctx.Expect(monitor.last_msm_summary()->message_type == 1087u &&
+                   monitor.last_msm_summary()->station_id == 7u &&
+                   monitor.last_msm_summary()->constellation == RtcmConstellation::kGlonass &&
+                   monitor.last_msm_summary()->satellite_count == 1u &&
+                   monitor.last_msm_summary()->signal_count == 3u &&
+                   monitor.last_msm_summary()->cell_count == 2u,
+               "the latest decoded MSM summary should expose station, constellation, and counts");
+  }
+
+  const auto gps_stats = monitor.msm_summary_activity().find(1077u);
+  const auto glonass_stats = monitor.msm_summary_activity().find(1087u);
+  ctx.Expect(gps_stats != monitor.msm_summary_activity().end() &&
+                 gps_stats->second.decode_success_count == 1u &&
+                 gps_stats->second.decode_failure_count == 1u &&
+                 gps_stats->second.malformed_count == 1u,
+             "per-message MSM stats should retain GPS decode and malformed counters");
+  ctx.Expect(glonass_stats != monitor.msm_summary_activity().end() &&
+                 glonass_stats->second.decode_success_count == 1u &&
+                 glonass_stats->second.decode_failure_count == 0u &&
+                 glonass_stats->second.last_summary.has_value() &&
+                 glonass_stats->second.last_summary->cell_count == 2u,
+             "per-message MSM stats should retain GLONASS decode results");
+}
+
+void TestMsmSemanticObservations(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+
+  RtcmFrame gps_msm7 = MakeValidRtcmFrame(1077u, 1000);
+  gps_msm7.payload = BuildRtcmMsmPayload(1077u,
+                                         42u,
+                                         {1u, 3u},
+                                         {1u, 5u},
+                                         {true, false, true, true},
+                                         true,
+                                         5u);
+  monitor.ObserveFrame(gps_msm7);
+
+  RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
+  glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
+                                             7u,
+                                             {2u},
+                                             {1u, 3u, 4u},
+                                             {true, false, true});
+  monitor.ObserveFrame(glonass_msm7);
+
+  const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 2000);
+  const auto* summary = FindObservation(observations, "msm_summary");
+  const auto* gps = FindObservation(observations, "msm_gps_msm7");
+  const auto* glonass = FindObservation(observations, "msm_glonass_msm7");
+
+  ctx.Expect(summary != nullptr && summary->seen && summary->decoded && summary->valid &&
+                 summary->message_type == 1087u &&
+                 summary->age_ns == std::optional<std::int64_t>(500) &&
+                 summary->decode_success_count == 2u &&
+                 summary->decode_failure_count == 0u,
+             "the aggregate MSM semantic observation should expose the latest summary state");
+  if (summary != nullptr)
+  {
+    bool saw_station = false;
+    bool saw_constellations = false;
+    for (const auto& field : summary->fields)
+    {
+      if (field.key == "station_id" && field.value == "7")
+      {
+        saw_station = true;
+      }
+      if (field.key == "constellations_seen" && field.value == "gps,glonass")
+      {
+        saw_constellations = true;
+      }
+    }
+    ctx.Expect(saw_station && saw_constellations,
+               "the aggregate MSM semantic observation should expose the latest station and seen constellations");
+  }
+
+  ctx.Expect(gps != nullptr && gps->message_type == 1077u && gps->decoded && gps->valid,
+             "GPS MSM semantic observations should be emitted per message type");
+  ctx.Expect(glonass != nullptr &&
+                 glonass->message_type == 1087u &&
+                 glonass->decoded &&
+                 glonass->valid &&
+                 glonass->last_decoded_timestamp_ns == std::optional<std::int64_t>(1500),
+             "GLONASS MSM semantic observations should retain the latest decoded timestamp");
+}
+
+void TestMsmMalformedHealthEvent(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  RtcmFrame malformed_msm7 = MakeValidRtcmFrame(1077u, 1800);
+  malformed_msm7.payload = BuildRtcmMsmPayload(1077u,
+                                               42u,
+                                               {1u},
+                                               {1u},
+                                               {true});
+  malformed_msm7.payload.resize(21u);
+  monitor.ObserveFrame(malformed_msm7);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2000;
+  options.stale_after_ns = 5000;
+  options.require_any_msm = false;
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+
+  bool found_msm_malformed = false;
+  for (const auto& event : health.events)
+  {
+    if (event.code == "rtcm.msm_malformed")
+    {
+      found_msm_malformed = true;
+      break;
+    }
+  }
+  ctx.Expect(found_msm_malformed,
+             "RTCM health should surface malformed MSM payloads as parser diagnostics");
+}
+
 void TestHealthStates(TestContext& ctx)
 {
   RtcmCorrectionMonitor healthy_monitor;
@@ -399,10 +676,7 @@ void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
   RtcmCorrectionMonitor monitor;
   monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
   monitor.ObserveMessage(MakeMessageInfo(1077u), 1100);
-  monitor.ObserveMessage(MakeMessageInfo(1087u), 1200);
-  monitor.ObserveMessage(MakeMessageInfo(1097u), 1300);
-  monitor.ObserveMessage(MakeMessageInfo(1127u), 1400);
-  monitor.ObserveMessage(MakeMessageInfo(1230u), 1500);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 1200);
 
   RtcmCorrectionHealthOptions options;
   options.now_timestamp_ns = 2000;
@@ -413,12 +687,14 @@ void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
   const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
       monitor,
       options);
+  ctx.Expect(options.required_msm_constellations.empty() && options.require_any_msm,
+             "portable RTK requirements should require recent MSM presence without pinning specific constellations");
   ctx.Expect(monitor.HasRequiredCorrectionMessages(options),
              "portable RTK requirements should accept 1006 as the base-position message");
   ctx.Expect(health.correction_available,
              "complete portable RTCM content should report correction availability");
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
-             "complete portable RTCM content should clear the missing-message diagnostic");
+             "portable RTCM content with one recent MSM constellation should clear the missing-message diagnostic");
 }
 
 void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
@@ -480,6 +756,9 @@ int main()
   TestBasePositionAndGlonassBiasTracking(ctx);
   TestInvalidFrameHandling(ctx);
   TestGlonassBiasDecodeTracking(ctx);
+  TestMsmDecodeTracking(ctx);
+  TestMsmSemanticObservations(ctx);
+  TestMsmMalformedHealthEvent(ctx);
   TestHealthStates(ctx);
   TestPortableRtkRequirementsAccept1006(ctx);
   TestPortableRtkRequirementsUseRecentObservationWindow(ctx);

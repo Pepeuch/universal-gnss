@@ -167,6 +167,8 @@ Typical uses:
 - confirm whether a stream contains MSM traffic
 - confirm whether a stream contains a decodable `1005` / `1006` base-station
   ARP position
+- inspect portable MSM summary state such as station id, constellation, MSM
+  variant, and satellite / signal / cell counts
 - inspect decoded `1230` GLONASS code-phase bias state without writing a
   message-specific parser in the tool
 
@@ -816,7 +818,7 @@ Summary output includes:
 - per-message-type counts
 - MSM constellation counts
 - RTCM semantic observation state, including `1230` validity / mask / decoded
-  bias values when available
+  bias values plus portable MSM summary fields when available
 - correction-health severity and availability flags
 - optional GGA send counters
 
@@ -848,6 +850,6 @@ Still intentionally deferred:
 - a real `gnss_config_plan --execute` path
 - background config daemons
 - ROS 2 bag or topic output
-- RTCM payload semantic decode
-- MSM satellite/signal views
+- RTCM observation-level decode beyond the current semantic summary
+- MSM observation payload views
 - persistent satellite tracking in replay

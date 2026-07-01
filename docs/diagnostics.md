@@ -76,9 +76,10 @@ health as:
   unavailable
 
 That RTCM monitor now mixes stream activity with a small semantic observation
-surface for decoded RTCM metadata such as `1005` / `1006` base position and
-`1230` GLONASS code-phase bias state. It still does not add broad RTCM payload
-coverage, LoRa policy, ROS 2 adapters, or GUI-specific presentation concerns.
+surface for decoded RTCM metadata such as `1005` / `1006` base position,
+`1230` GLONASS code-phase bias state, and MSM header/correction-stream summary
+state. It still does not add full MSM observation decode, LoRa policy, ROS 2
+adapters, or GUI-specific presentation concerns.
 
 The next receiver-side correction consumer is the `UBX-RXM-RTCM` helper in the
 UBX semantic layer. It emits portable correction events describing whether a

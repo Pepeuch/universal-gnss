@@ -23,6 +23,17 @@ using RtcmMessageTypeActivityMap = std::map<std::uint16_t, RtcmCorrectionActivit
 using RtcmMsmConstellationActivityMap =
     std::map<RtcmConstellation, RtcmCorrectionActivityStats>;
 
+struct RtcmMsmSummaryActivityStats
+{
+  std::uint64_t decode_success_count{0};
+  std::uint64_t decode_failure_count{0};
+  std::uint64_t malformed_count{0};
+  std::optional<ProtocolTimestampNs> last_decoded_timestamp_ns{};
+  std::optional<RtcmMsmSummaryRecord> last_summary{};
+};
+
+using RtcmMsmSummaryActivityMap = std::map<std::uint16_t, RtcmMsmSummaryActivityStats>;
+
 struct RtcmCorrectionHealthOptions
 {
   std::optional<ProtocolTimestampNs> now_timestamp_ns{};
@@ -80,6 +91,7 @@ public:
 
   const RtcmMessageTypeActivityMap& message_type_activity() const;
   const RtcmMsmConstellationActivityMap& msm_constellation_activity() const;
+  const RtcmMsmSummaryActivityMap& msm_summary_activity() const;
 
   std::uint64_t MessageCount(std::uint16_t message_type) const;
   std::optional<ProtocolTimestampNs> LastSeenMessageTimestampNs(std::uint16_t message_type) const;
@@ -95,6 +107,7 @@ public:
   bool HasDecodedGlonassBias1230() const;
   bool LastGlonassBias1230Valid() const;
   bool HasSeenAnyMsmMessage() const;
+  bool HasDecodedAnyMsmSummary() const;
 
   const std::optional<RtcmBaseStationArpRecord>& last_base_station_arp() const;
   std::optional<ProtocolTimestampNs> LastBaseStationArpTimestampNs() const;
@@ -107,6 +120,12 @@ public:
   std::uint64_t GlonassBias1230DecodeSuccessCount() const;
   std::uint64_t GlonassBias1230DecodeFailureCount() const;
   std::uint64_t GlonassBias1230MalformedCount() const;
+  const std::optional<RtcmMsmSummaryRecord>& last_msm_summary() const;
+  std::optional<ProtocolTimestampNs> LastMsmTimestampNs() const;
+  std::optional<ProtocolTimestampNs> LastDecodedMsmTimestampNs() const;
+  std::uint64_t MsmDecodeSuccessCount() const;
+  std::uint64_t MsmDecodeFailureCount() const;
+  std::uint64_t MsmMalformedCount() const;
 
   bool HasRequiredMessageTypes(const std::vector<std::uint16_t>& message_types) const;
   bool HasRequiredCorrectionMessages(const RtcmCorrectionHealthOptions& options) const;
@@ -121,6 +140,7 @@ public:
       ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceGlonassBias1230Ns(
       ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs> AgeSinceLastMsmNs(ProtocolTimestampNs now_timestamp_ns) const;
 
   std::optional<double> TotalFrameRateHz(ProtocolTimestampNs window_end_timestamp_ns,
                                          ProtocolTimestampNs window_duration_ns) const;
@@ -142,6 +162,7 @@ private:
 
   RtcmMessageTypeActivityMap message_type_activity_{};
   RtcmMsmConstellationActivityMap msm_constellation_activity_{};
+  RtcmMsmSummaryActivityMap msm_summary_activity_{};
 
   std::map<std::uint16_t, std::vector<ProtocolTimestampNs>> message_type_timestamps_{};
   std::map<RtcmConstellation, std::vector<ProtocolTimestampNs>> msm_constellation_timestamps_{};
@@ -162,6 +183,12 @@ private:
   std::uint64_t glonass_bias_1230_decode_success_count_{0};
   std::uint64_t glonass_bias_1230_decode_failure_count_{0};
   std::uint64_t glonass_bias_1230_malformed_count_{0};
+  std::optional<RtcmMsmSummaryRecord> last_msm_summary_{};
+  std::optional<ProtocolTimestampNs> last_msm_timestamp_ns_{};
+  std::optional<ProtocolTimestampNs> last_decoded_msm_timestamp_ns_{};
+  std::uint64_t msm_decode_success_count_{0};
+  std::uint64_t msm_decode_failure_count_{0};
+  std::uint64_t msm_malformed_count_{0};
 
   void RecordValidMessage(const RtcmMessageInfo& info,
                           std::optional<ProtocolTimestampNs> timestamp_ns);

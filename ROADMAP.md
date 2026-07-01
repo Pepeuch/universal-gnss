@@ -24,6 +24,7 @@ Already delivered in `v0.6.0` and its follow-up fixes:
   `ReceiverNode` integration
 - `ReceiverNode`, `NtripNode`, and `ReplayNode`
 - live RTCM forwarding and receiver-side correction diagnostics
+- portable RTCM MSM header/correction-stream summary observability
 - parser counters plus malformed/rejected diagnostic visibility
 - portable receiver profile surface:
   - `runtime_only`
@@ -48,8 +49,8 @@ Validation boundary:
 - runtime arbitration
 - safe rollback
 - receiver metadata
-- RTCM MSM summary
-- RTCM semantic expansion beyond `1005` / `1006` / `1230`
+- RTCM observation-level decode beyond MSM summary
+- RTCM semantic expansion beyond `1005` / `1006` / `1230` / MSM summary
 - Generic NMEA completion
 
 ### Runtime observability

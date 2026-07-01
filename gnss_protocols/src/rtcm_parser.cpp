@@ -11,6 +11,7 @@ constexpr double kRtcmGlonassCodePhaseBiasScaleM = 0.02;
 constexpr std::size_t kRtcm1005Bits = 153u;
 constexpr std::size_t kRtcm1006Bits = 169u;
 constexpr std::size_t kRtcm1230HeaderBits = 32u;
+constexpr std::size_t kRtcmMsmHeaderBits = 169u;
 
 bool IsRtcmMsmVariant(const std::uint16_t message_type)
 {
@@ -70,6 +71,42 @@ std::optional<std::int64_t> ReadRtcmSignedBits(const ByteVector& payload,
   }
 
   return static_cast<std::int64_t>(extended_value);
+}
+
+std::uint8_t CountSetBits(std::uint64_t value)
+{
+  std::uint8_t count = 0u;
+  while (value != 0u)
+  {
+    count = static_cast<std::uint8_t>(count + static_cast<std::uint8_t>(value & 0x01u));
+    value >>= 1u;
+  }
+  return count;
+}
+
+std::optional<std::uint16_t> CountSetBitsInRange(const ByteVector& payload,
+                                                 const std::size_t bit_offset,
+                                                 const std::size_t bit_count)
+{
+  const std::size_t total_bits = payload.size() * 8u;
+  if (bit_offset + bit_count > total_bits)
+  {
+    return std::nullopt;
+  }
+
+  std::uint16_t count = 0u;
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    const auto bit = ReadRtcmUnsignedBits(payload, bit_offset + index, 1u);
+    if (!bit.has_value())
+    {
+      return std::nullopt;
+    }
+
+    count = static_cast<std::uint16_t>(count + (*bit != 0u ? 1u : 0u));
+  }
+
+  return count;
 }
 
 }  // namespace
@@ -139,6 +176,16 @@ bool IsRtcmMsmMessage(const std::uint16_t message_type)
   return GetRtcmMsmConstellation(message_type) != RtcmConstellation::kUnknown;
 }
 
+std::uint8_t GetRtcmMsmVariant(const std::uint16_t message_type)
+{
+  if (!IsRtcmMsmVariant(message_type))
+  {
+    return 0u;
+  }
+
+  return static_cast<std::uint8_t>(message_type % 10u);
+}
+
 ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame)
 {
   const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
@@ -153,6 +200,7 @@ ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame)
   info.is_glonass_bias = IsRtcmGlonassBiasMessage(info.message_type);
   info.msm_constellation = GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
+  info.msm_variant = GetRtcmMsmVariant(info.message_type);
   return ParserResult<RtcmMessageInfo>::RecordReady(info);
 }
 
@@ -337,6 +385,87 @@ ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
   record.valid = record.code_phase_bias_indicator && record.has_any_bias_values;
 
   return ParserResult<RtcmGlonassCodePhaseBiasRecord>::RecordReady(record);
+}
+
+ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
+{
+  const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
+  if (!message_type.has_value() || !IsRtcmMsmMessage(*message_type))
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
+  if (frame.payload.size() * 8u < kRtcmMsmHeaderBits)
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
+  std::size_t bit_offset = 0u;
+  const auto read_u = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmUnsignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+
+  const auto parsed_message_type = read_u(12u);
+  const auto station_id = read_u(12u);
+  const auto epoch_time = read_u(30u);
+  const auto multiple_message = read_u(1u);
+  const auto issue_of_data_station = read_u(3u);
+  const auto session_transmission_time = read_u(7u);
+  const auto clock_steering_indicator = read_u(2u);
+  const auto external_clock_indicator = read_u(2u);
+  const auto divergence_free_smoothing = read_u(1u);
+  const auto smoothing_interval = read_u(3u);
+  const auto satellite_mask = read_u(64u);
+  const auto signal_mask = read_u(32u);
+
+  (void)epoch_time;
+
+  if (!parsed_message_type.has_value() || !station_id.has_value() ||
+      !multiple_message.has_value() || !issue_of_data_station.has_value() ||
+      !session_transmission_time.has_value() || !clock_steering_indicator.has_value() ||
+      !external_clock_indicator.has_value() || !divergence_free_smoothing.has_value() ||
+      !smoothing_interval.has_value() || !satellite_mask.has_value() ||
+      !signal_mask.has_value())
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
+  const std::uint8_t satellite_count = CountSetBits(*satellite_mask);
+  const std::uint8_t signal_count =
+      CountSetBits(static_cast<std::uint64_t>(*signal_mask));
+  const std::size_t cell_mask_bits =
+      static_cast<std::size_t>(satellite_count) * static_cast<std::size_t>(signal_count);
+  const auto cell_count = CountSetBitsInRange(frame.payload, bit_offset, cell_mask_bits);
+  if (!cell_count.has_value())
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
+  RtcmMsmSummaryRecord record;
+  record.message_type = static_cast<std::uint16_t>(*parsed_message_type);
+  record.station_id = static_cast<std::uint16_t>(*station_id);
+  record.constellation = GetRtcmMsmConstellation(record.message_type);
+  record.msm_variant = GetRtcmMsmVariant(record.message_type);
+  record.multiple_message = *multiple_message != 0u;
+  record.issue_of_data_station = static_cast<std::uint8_t>(*issue_of_data_station);
+  record.session_transmission_time =
+      static_cast<std::uint8_t>(*session_transmission_time);
+  record.clock_steering_indicator =
+      static_cast<std::uint8_t>(*clock_steering_indicator);
+  record.external_clock_indicator =
+      static_cast<std::uint8_t>(*external_clock_indicator);
+  record.divergence_free_smoothing = *divergence_free_smoothing != 0u;
+  record.smoothing_interval = static_cast<std::uint8_t>(*smoothing_interval);
+  record.satellite_count = satellite_count;
+  record.signal_count = signal_count;
+  record.cell_count = *cell_count;
+
+  return ParserResult<RtcmMsmSummaryRecord>::RecordReady(record);
 }
 
 }  // namespace universal_gnss_protocols

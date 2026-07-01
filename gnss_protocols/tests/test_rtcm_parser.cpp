@@ -115,6 +115,113 @@ std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
   return payload;
 }
 
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
+                                              const std::uint16_t station_id,
+                                              const std::uint32_t epoch_time,
+                                              const bool multiple_message,
+                                              const std::uint8_t issue_of_data_station,
+                                              const std::uint8_t session_transmission_time,
+                                              const std::uint8_t clock_steering_indicator,
+                                              const std::uint8_t external_clock_indicator,
+                                              const bool divergence_free_smoothing,
+                                              const std::uint8_t smoothing_interval,
+                                              const std::vector<std::uint8_t>& satellite_ids,
+                                              const std::vector<std::uint8_t>& signal_ids,
+                                              const std::vector<bool>& cell_mask)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, epoch_time, 30u);
+  AppendUnsignedBits(payload, bit_offset, multiple_message ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, issue_of_data_station, 3u);
+  AppendUnsignedBits(payload, bit_offset, session_transmission_time, 7u);
+  AppendUnsignedBits(payload, bit_offset, clock_steering_indicator, 2u);
+  AppendUnsignedBits(payload, bit_offset, external_clock_indicator, 2u);
+  AppendUnsignedBits(payload, bit_offset, divergence_free_smoothing ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, smoothing_interval, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cells = 0u;
+  for (const bool present : cell_mask)
+  {
+    if (present)
+    {
+      ++populated_cells;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cells));
+  return payload;
+}
+
 RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
                              const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
@@ -284,6 +391,109 @@ void TestGlonassCodePhaseBiasRejectsTruncatedPayload(TestContext& ctx)
              "truncated RTCM 1230 payloads should be rejected");
 }
 
+void TestGpsMsmSummaryParsing(TestContext& ctx)
+{
+  RtcmFrame frame = MakeValidRtcmFrame(1077u, 1000);
+  frame.payload = BuildRtcmMsmPayload(1077u,
+                                      42u,
+                                      123456u,
+                                      true,
+                                      5u,
+                                      17u,
+                                      2u,
+                                      1u,
+                                      true,
+                                      4u,
+                                      {1u, 3u},
+                                      {1u, 5u},
+                                      {true, false, true, true});
+
+  const auto parsed = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
+  ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
+             "valid GPS MSM7 payloads should expose an MSM summary");
+  if (!parsed.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(parsed.record->message_type == 1077u &&
+                 parsed.record->station_id == 42u &&
+                 parsed.record->constellation == RtcmConstellation::kGps &&
+                 parsed.record->msm_variant == 7u,
+             "GPS MSM7 summary should preserve type, station id, constellation, and variant");
+  ctx.Expect(parsed.record->multiple_message &&
+                 parsed.record->issue_of_data_station == 5u &&
+                 parsed.record->session_transmission_time == 17u &&
+                 parsed.record->clock_steering_indicator == 2u &&
+                 parsed.record->external_clock_indicator == 1u &&
+                 parsed.record->divergence_free_smoothing &&
+                 parsed.record->smoothing_interval == 4u,
+             "GPS MSM7 summary should preserve common header metadata");
+  ctx.Expect(parsed.record->satellite_count == 2u &&
+                 parsed.record->signal_count == 2u &&
+                 parsed.record->cell_count == 3u,
+             "GPS MSM7 summary should count satellites, signals, and populated cells");
+}
+
+void TestGlonassMsmSummaryParsing(TestContext& ctx)
+{
+  RtcmFrame frame = MakeValidRtcmFrame(1087u, 2000);
+  frame.payload = BuildRtcmMsmPayload(1087u,
+                                      7u,
+                                      654321u,
+                                      false,
+                                      2u,
+                                      8u,
+                                      0u,
+                                      0u,
+                                      false,
+                                      3u,
+                                      {2u},
+                                      {1u, 3u, 4u},
+                                      {true, false, true});
+
+  const auto parsed = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
+  ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
+             "valid GLONASS MSM7 payloads should expose an MSM summary");
+  if (!parsed.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(parsed.record->message_type == 1087u &&
+                 parsed.record->station_id == 7u &&
+                 parsed.record->constellation == RtcmConstellation::kGlonass &&
+                 parsed.record->msm_variant == 7u,
+             "GLONASS MSM7 summary should preserve type, station id, constellation, and variant");
+  ctx.Expect(parsed.record->satellite_count == 1u &&
+                 parsed.record->signal_count == 3u &&
+                 parsed.record->cell_count == 2u,
+             "GLONASS MSM7 summary should count satellites, signals, and populated cells");
+}
+
+void TestMsmSummaryRejectsTruncatedPayload(TestContext& ctx)
+{
+  RtcmFrame frame = MakeValidRtcmFrame(1077u);
+  frame.payload = BuildRtcmMsmPayload(1077u,
+                                      42u,
+                                      123456u,
+                                      false,
+                                      1u,
+                                      1u,
+                                      0u,
+                                      0u,
+                                      false,
+                                      0u,
+                                      {1u},
+                                      {1u},
+                                      {true});
+  frame.payload.resize(21u);
+
+  const auto parsed = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
+  ctx.Expect(parsed.status == ParserStatus::kInvalidData,
+             "truncated RTCM MSM payloads should be rejected");
+}
+
 }  // namespace
 
 int main()
@@ -296,6 +506,9 @@ int main()
   TestFrameParsingBehavior(ctx);
   TestGlonassCodePhaseBiasParsing(ctx);
   TestGlonassCodePhaseBiasRejectsTruncatedPayload(ctx);
+  TestGpsMsmSummaryParsing(ctx);
+  TestGlonassMsmSummaryParsing(ctx);
+  TestMsmSummaryRejectsTruncatedPayload(ctx);
 
   if (ctx.failures != 0)
   {

@@ -25,6 +25,7 @@ struct RtcmMessageInfo
   bool is_glonass_bias{false};
   bool is_msm{false};
   RtcmConstellation msm_constellation{RtcmConstellation::kUnknown};
+  std::uint8_t msm_variant{0};
 };
 
 struct RtcmBaseStationArpRecord
@@ -56,6 +57,24 @@ struct RtcmGlonassCodePhaseBiasRecord
   std::optional<double> l1_p_bias_m{};
   std::optional<double> l2_ca_bias_m{};
   std::optional<double> l2_p_bias_m{};
+};
+
+struct RtcmMsmSummaryRecord
+{
+  std::uint16_t message_type{0};
+  std::uint16_t station_id{0};
+  RtcmConstellation constellation{RtcmConstellation::kUnknown};
+  std::uint8_t msm_variant{0};
+  bool multiple_message{false};
+  std::uint8_t issue_of_data_station{0};
+  std::uint8_t session_transmission_time{0};
+  std::uint8_t clock_steering_indicator{0};
+  std::uint8_t external_clock_indicator{0};
+  bool divergence_free_smoothing{false};
+  std::uint8_t smoothing_interval{0};
+  std::uint8_t satellite_count{0};
+  std::uint8_t signal_count{0};
+  std::uint16_t cell_count{0};
 };
 
 }  // namespace universal_gnss_protocols

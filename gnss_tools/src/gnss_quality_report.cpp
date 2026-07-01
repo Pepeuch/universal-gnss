@@ -428,6 +428,17 @@ void AddRtcmDiagnostics(const RtcmCorrectionMonitor& correction_monitor,
                    correction_monitor.LastDecodedGlonassBias1230TimestampNs(),
                    std::string("rtcm_correction_monitor")});
   }
+
+  if (correction_monitor.MsmMalformedCount() > 0u)
+  {
+    AddDiagnostic(diagnostics,
+                  {GnssDiagnosticSeverity::kWarning,
+                   GnssDiagnosticCategory::kParser,
+                   "rtcm.msm_malformed",
+                   "Malformed RTCM MSM payloads were observed",
+                   correction_monitor.LastMsmTimestampNs(),
+                   std::string("rtcm_correction_monitor")});
+  }
 }
 
 GnssQualityLevel ClassifyQualityLevel(const GnssRuntimeState& state,

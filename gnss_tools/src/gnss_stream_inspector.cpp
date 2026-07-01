@@ -162,6 +162,7 @@ RtcmMessageInfo BuildRtcmMessageInfo(const RtcmFrame& frame)
   info.msm_constellation =
       universal_gnss_protocols::GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
+  info.msm_variant = universal_gnss_protocols::GetRtcmMsmVariant(info.message_type);
   return info;
 }
 

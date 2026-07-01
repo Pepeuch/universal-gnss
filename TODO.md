@@ -14,6 +14,7 @@ Recently completed:
 - `ReceiverNode`, `NtripNode`, and `ReplayNode`
 - `GnssStatus`, `NavSatFix`, and `diagnostic_msgs` projection
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
+- portable RTCM MSM correction-stream summary observability
 - parser counters plus recent malformed/rejected diagnostic visibility in ROS2
 - portable Auto Configuration planner/report/apply flow
 - operator-driven runtime-only apply for u-blox and Unicore
@@ -28,7 +29,6 @@ Recently completed:
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [ ] production-safe failure handling and rollback expectations
 - [ ] live receiver identity / model / firmware metadata in discovery and planning output
-- [ ] RTCM MSM satellite/signal summary
 - [ ] Generic NMEA: propagate GGA fix_quality 4/5 into normalized rtk_mode / fix_type
 - [ ] document and preserve generic NMEA runtime_only limitations until a portable write-side config contract exists
 
@@ -43,15 +43,7 @@ Recently completed:
 - [ ] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
-- [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230`
-- [ ] Generic NMEA improvement: propagate `GGA` fix_quality `4/5` into
-  normalized `rtk_mode` / `fix_type`
-- [ ] document and preserve generic NMEA `runtime_only` limitations until a
-  portable write-side config contract exists
-- [ ] runtime arbitration between streaming traffic and config traffic
-- [ ] production-safe failure handling and rollback expectations
-- [ ] live receiver identity / model / firmware metadata in discovery and
-  planning output
+- [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230` / MSM summary
 - [ ] `gnss_replay` timing mode outside the ROS2 replay node
 - [ ] TLS support
 - [ ] client certificate authentication
@@ -59,7 +51,7 @@ Recently completed:
 - [ ] UDP transport
 - [ ] multi-caster support
 - [ ] local caster / base mode support
-- [ ] RTCM MSM signal/satellite summary
+- [ ] RTCM observation-level decode beyond MSM summary
 
 ## Network / NTRIP
 

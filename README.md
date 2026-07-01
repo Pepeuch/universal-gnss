@@ -46,6 +46,8 @@ Current project state includes:
 - `ReceiverNode`, `NtripNode`, and `ReplayNode`
 - parser counters plus malformed/rejected diagnostic visibility in ROS2
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
+- portable RTCM MSM correction-stream summary observability through the shared
+  semantic monitor/tools surface
 - u-blox persistent FLASH configuration and output-port selection
 - UM982 / Unicore runtime field validation through downstream MowgliNext use
 - decimal-degree latitude/longitude outputs preserving at least 9 decimal
@@ -153,7 +155,8 @@ Current implemented layers:
     `HWSTATUSA`, `AGCA`
   - Unicore binary `N4` semantic parsing: `BESTNAVB`, `PVTSLNB`
   - RTCM3 framing, CRC24Q, message-type extraction/classification, and
-    semantic decode for `1005`, `1006`, and `1230`
+    semantic decode for `1005`, `1006`, `1230`, and portable MSM
+    header/summary observability
 - `gnss_driver`
   - receiver profile declarations
   - protocol support and feature flags

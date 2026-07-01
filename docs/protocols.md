@@ -225,6 +225,7 @@ Implemented behaviors:
 - lightweight classification helpers
 - base-station ARP decode for `1005` / `1006`
 - GLONASS code-phase bias decode for `1230`
+- portable MSM header/summary decode for supported RTCM MSM families
 
 Current RTCM classifications:
 
@@ -248,8 +249,11 @@ Current RTCM monitor support:
 - presence tracking for base-position messages `1005` / `1006`
 - latest decoded base-station ARP ECEF position from `1005` / `1006`
 - semantic observations for decoded RTCM content, currently base-station ARP
-  and GLONASS code-phase bias
+  position, GLONASS code-phase bias, and MSM correction-stream summary
 - `1230` seen / decoded / valid state, station id, age, mask, and decode
+  success/failure counters through the correction monitor
+- MSM seen / decoded state, last age, constellations seen, latest station id,
+  variant, satellite count, signal count, cell count, and per-message decode
   success/failure counters through the correction monitor
 - portable correction-health summaries for later NTRIP / ROS 2 / GUI reuse
 
@@ -259,6 +263,8 @@ Current RTCM semantic decode coverage:
 - `1006`: reference-station ARP ECEF position plus antenna height
 - `1230`: GLONASS code-phase bias indicator, signal mask, and optional L1/L2
   bias values
+- MSM `1071..1137`: portable header/correction-stream summary with station id,
+  constellation, MSM variant, and satellite / signal / cell counts
 
 Current RTCM decode policy:
 
@@ -267,12 +273,13 @@ Current RTCM decode policy:
 - ECEF coordinates are exposed only as base-station metadata
 - `1230` is exposed through correction/RTCM state, not as direct-navigation
   rover runtime state
-- no MSM signal / satellite extraction yet
+- MSM summary stays at the correction-stream/header level for now; observation
+  payload values are not mapped yet
 
 What RTCM does not do yet:
 
-- broader semantic decoding beyond `1005` / `1006` / `1230`
-- MSM satellite / signal extraction
+- broader semantic decoding beyond `1005` / `1006` / `1230` / MSM summary
+- MSM pseudorange / carrier-phase / Doppler extraction
 - broader station metadata decode beyond base-station ARP
 - correction-age estimation
 - runtime-state mapping
@@ -281,7 +288,8 @@ What RTCM does not do yet:
 The RTCM correction monitor now combines stream activity with a small semantic
 observation layer. It still does not attempt full RTCM coverage, but it does
 provide one common portable interface for decoded RTCM metadata so tools,
-diagnostics, and later integrations do not need message-specific `1230` logic.
+diagnostics, and later integrations do not need message-specific `1230` or MSM
+tool logic.
 
 ### Unicore
 
