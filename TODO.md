@@ -23,71 +23,100 @@ Recently completed:
   MowgliNext
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
 
+## Immediate correctness
+
+- [ ] runtime arbitration between streaming traffic and config traffic
+- [ ] production-safe failure handling and rollback expectations
+- [ ] live receiver identity / model / firmware metadata in discovery and planning output
+- [ ] RTCM MSM satellite/signal summary
+- [ ] RTCM 1230 GLONASS bias decode
+- [ ] Generic NMEA: propagate GGA fix_quality 4/5 into normalized rtk_mode / fix_type
+- [ ] document and preserve generic NMEA runtime_only limitations until a portable write-side config contract exists
+
 ## Universal GNSS core tasks
 
+- [ ] capability/profile consistency cleanup between built-in receiver profiles and driver support
+- [ ] correction age estimation
+- [ ] automatic periodic GGA sending
+- [ ] runtime state CSV export
+- [ ] JSON schema stabilization/versioning
+- [ ] compare two receivers/logs
+- [ ] generate additional sanitized test logs
+- [ ] generic speed/course runtime contract for VTG
+- [ ] generic GNSS wall-clock/date runtime contract for ZDA
 - [ ] Generic NMEA improvement: propagate `GGA` fix_quality `4/5` into
   normalized `rtk_mode` / `fix_type`
 - [ ] document and preserve generic NMEA `runtime_only` limitations until a
   portable write-side config contract exists
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [ ] production-safe failure handling and rollback expectations
-- [ ] capability/profile consistency cleanup between built-in receiver profiles
-  and driver support
 - [ ] live receiver identity / model / firmware metadata in discovery and
   planning output
 - [ ] `gnss_replay` timing mode outside the ROS2 replay node
-- [ ] runtime state CSV export
-- [ ] JSON schema stabilization/versioning
-- [ ] compare two receivers/logs
-- [ ] generate additional sanitized test logs
 - [ ] TLS support
 - [ ] client certificate authentication
 - [ ] custom CA certificate support
 - [ ] UDP transport
-- [ ] correction age estimation
-- [ ] automatic periodic GGA sending
 - [ ] multi-caster support
 - [ ] local caster / base mode support
 - [ ] RTCM `1230` GLONASS bias decode
 - [ ] RTCM MSM signal/satellite summary
-- [ ] generic speed/course runtime contract for `VTG`
-- [ ] generic GNSS wall-clock/date runtime contract for `ZDA`
+
+## Network / NTRIP
+
+- [ ] multi-caster support
+- [ ] local caster / base mode support
+- [ ] UDP transport
+- [ ] TLS support
+- [ ] client certificate authentication
+- [ ] custom CA certificate support
 
 ## ROS2 package tasks
 
-- [ ] extend the planner/report layer into ROS2
-- [ ] expose receiver identity / model / firmware metadata in ROS2 reporting
-- [ ] operator observability surface review for status, diagnostics, correction,
-  discovery, and parser counters
-- [ ] snapshot/export surface for debugging sessions
-- [ ] ROS2 CI coverage for the integrated stack
-- [ ] keep Kilted green as the reference distro
-- [ ] validate Lyrical when the image/toolchain is available
-- [ ] validate Humble/Jazzy compatibility where practical
-- [ ] arm64 build check for the ROS2-integrated stack
-- [ ] long-run runtime validation
-- [ ] GNSS disconnect / reconnect validation
-- [ ] NTRIP disconnect / reconnect validation
+- [ ] expose receiver identity / firmware / model metadata
+- [ ] extend planner/report layer into ROS2
+- [ ] operator observability review
+- [ ] snapshot/export surface
+- [ ] ROS2 CI coverage
+- [ ] keep Kilted green
+- [ ] validate Lyrical
+- [ ] validate Humble/Jazzy
+- [ ] arm64 validation
+- [ ] long-run validation
 - [ ] receiver restart validation
-- [ ] USB serial port renumbering validation
-- [ ] F9P <-> UM982 swap validation without software changes
+- [ ] GNSS reconnect validation
+- [ ] NTRIP reconnect validation
+- [ ] USB serial renumbering validation
+- [ ] F9P ↔ UM982 swap validation
 
-## Receiver-specific backend tasks
+## Receiver-specific backends
 
-- [ ] complete portable u-blox `factory_reset` support
-- [ ] u-blox survey-in support
-- [ ] u-blox `MON-SPAN`
-- [ ] broader Unicore binary `N4` semantic decode beyond `BESTNAVB` /
-  `PVTSLNB`
+### u-blox
+
+- [ ] complete portable factory_reset support
+- [ ] survey-in support
+- [ ] MON-SPAN
+
+### Unicore
+
+- [ ] broader Unicore binary `N4` semantic decode beyond `BESTNAVB` /  `PVTSLNB`
+- [ ] raw observations
+- [ ] conservative `AGCA` threshold interpretation if a safe generic policy emerges
 - [ ] Unicore raw observation support
-- [ ] conservative `AGCA` threshold interpretation if a safe generic policy
-  emerges
-- [ ] Quectel dedicated backend audit (`PQTM` / `PAIR`, parser, RTK mapping,
-  config engine)
-- [ ] Septentrio dedicated backend audit (`SBF`, PVT/status, satellite/RF,
-  config/session)
-- [ ] keep Quectel work separate from generic NMEA unless the message is
-  standard NMEA
+
+### Quectel
+
+- [ ] Quectel dedicated backend audit (`PQTM` / `PAIR`, parser, RTK mapping, config engine)
+- [ ] runtime mapping
+- [ ] keep Quectel work separate from generic NMEA unless the message is standard NMEA
+
+
+### Septentrio
+
+- [ ] Septentrio dedicated backend audit (`SBF`, PVT/status, satellite/RF, config/session)
+- [ ] runtime/status
+- [ ] configuration/session
+
 
 ## Downstream integration tasks
 
@@ -106,12 +135,19 @@ bug in this repository.
 - [ ] full Nav2 mission validation
 - [ ] verify localization stability during RTK Float/Fixed transitions
 
+## Runtime quality
+
+- [ ] GNSS confidence score
+- [ ] RTK confidence score
+- [ ] RF quality score
+- [ ] correction quality score
+
 ## Documentation / Quality
 
 - [ ] contributor architecture guide
 - [ ] parser writing guide
 - [ ] test vector guide
-- [ ] ROS2 integration guide refresh for post-`v0.6.0` bringup
+- [ ] ROS2 integration guide refresh
 - [ ] sanitizer builds
 - [ ] clang-format
 - [ ] clang-tidy

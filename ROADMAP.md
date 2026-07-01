@@ -45,12 +45,19 @@ Validation boundary:
 
 ### Universal GNSS core
 
-- finish correctness and observability gaps that affect the portable runtime
-- keep generic NMEA limited to conservative portable semantics until core
-  contracts are defined
-- complete operator-safe config arbitration and rollback expectations
-- stabilize export/report surfaces and comparison tooling
-- continue transport/NTRIP hardening without mixing in downstream UI concerns
+- runtime arbitration
+- safe rollback
+- receiver metadata
+- RTCM MSM summary
+- RTCM 1230
+- Generic NMEA completion
+
+### Runtime observability
+
+- planner/report
+- diagnostics
+- operator metadata
+- ROS2 reporting
 
 ### ROS2 package
 
@@ -66,7 +73,7 @@ Validation boundary:
 - continue Unicore semantic/config growth only where it remains portable
 - keep future Quectel work as a dedicated backend, not as generic-NMEA scope
 
-## v0.7 — Operator Surfaces And Downstream Hooks
+## v0.7 — Operator Experience
 
 - keep Universal GNSS itself scoped to the module API, CLIs, portable runtime,
   and ROS2 package
@@ -80,6 +87,14 @@ Validation boundary:
 - define the embedded/gateway cut for ESP32 or similar targets
 - preserve a lightweight protocol/session subset for constrained builds
 - add UART / WiFi / Ethernet adapters, MQTT export, and base-gateway policy
+
+## v0.9 — Receiver Ecosystem
+
+- Quectel
+- Septentrio
+- Hemisphere
+- Trimble
+- NovAtel
 
 ## Later vendor expansion
 
