@@ -163,6 +163,8 @@ adapter-only:
 
 - it converts portable `GnssDiagnosticEvent` / `GnssHealthSummary` values into
   ROS message types
+- it also projects shared `RtcmSemanticObservations` into stable
+  `diagnostic_msgs/DiagnosticStatus` entries for ROS consumers
 - it does not add node lifecycle, publisher ownership, or transport policy
 - it keeps ROS concerns out of `gnss_core`
 
@@ -179,6 +181,9 @@ operational:
 - jamming / interference booleans already present in `GnssRuntimeState` are
   forwarded into the portable health summary and then into
   `diagnostic_msgs/DiagnosticArray`
+- forwarded `/rtcm` traffic is also summarized through portable RTCM semantic
+  diagnostics such as `base_station_arp`, `glonass_code_phase_bias`, and
+  `msm_summary`
 
 `universal_gnss_ros2::NtripNode` is the second runtime consumer of the same
 mapping. Its node-level diagnostics stay similarly thin:
@@ -189,6 +194,9 @@ mapping. Its node-level diagnostics stay similarly thin:
 - missing or stale ROS-side GNSS status input is surfaced only as GGA-source
   diagnostics
 - stale GNSS input also suppresses GGA injection so old positions are not reused
+- shared RTCM semantic observations are exposed as machine-readable ROS
+  diagnostics under `.../rtcm_semantic/*`, including base-station ARP state,
+  GLONASS `1230`, and aggregate/per-message MSM summary data
 
 This still stops short of:
 

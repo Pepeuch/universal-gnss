@@ -16,6 +16,7 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
 #include "rclcpp/time.hpp"
+#include "rtcm_diagnostic_projection.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
@@ -350,6 +351,16 @@ struct NtripNode::Impl
     last_diagnostics_message_->header.stamp = ToRosTime(
         std::optional<universal_gnss::GnssTimestampNs>(owner_.get_clock()->now().nanoseconds()));
     AppendRtcmForwardingStatus(*last_diagnostics_message_);
+    if (client_.has_value())
+    {
+      AppendRtcmSemanticObservationStatuses(
+          *last_diagnostics_message_,
+          universal_gnss_protocols::BuildRtcmSemanticObservations(
+              client_->correction_monitor(),
+              static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs())),
+          "universal_gnss_ntrip",
+          hardware_id_);
+    }
     diagnostics_publisher_->publish(*last_diagnostics_message_);
   }
 

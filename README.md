@@ -48,6 +48,7 @@ Current project state includes:
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - portable RTCM MSM correction-stream summary observability through the shared
   semantic monitor/tools surface
+- ROS2 RTCM semantic diagnostics for base-station ARP, `1230`, and MSM summary
 - u-blox persistent FLASH configuration and output-port selection
 - UM982 / Unicore runtime field validation through downstream MowgliNext use
 - decimal-degree latitude/longitude outputs preserving at least 9 decimal
@@ -193,6 +194,8 @@ Current implemented layers:
     `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
   - discovery, correction, and parser-counter diagnostic reporting
   - live RTCM forwarding from ROS2 into the receiver transport when writable
+  - ROS2 diagnostic projection of portable RTCM semantic observations for
+    base-station ARP, GLONASS `1230`, and MSM summary/per-message activity
   - `ReplayNode` for hardware-free `status` / `fix` / `diagnostics` replay with
     optional `rtcm` publication from sanitized logs
   - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state

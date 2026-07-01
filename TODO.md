@@ -15,6 +15,8 @@ Recently completed:
 - `GnssStatus`, `NavSatFix`, and `diagnostic_msgs` projection
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - portable RTCM MSM correction-stream summary observability
+- ROS2 RTCM semantic diagnostics projection for base-station ARP, `1230`, and
+  MSM summary/per-message activity
 - parser counters plus recent malformed/rejected diagnostic visibility in ROS2
 - portable Auto Configuration planner/report/apply flow
 - operator-driven runtime-only apply for u-blox and Unicore

@@ -1,11 +1,14 @@
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 
 #include "diagnostic_msgs/msg/key_value.hpp"
+#include "rtcm_diagnostic_projection.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 
 namespace universal_gnss_ros2
@@ -70,12 +73,52 @@ std::string BoolString(const bool value)
   return value ? "true" : "false";
 }
 
+std::string FormatFractionalSeconds(const std::int64_t nanoseconds)
+{
+  std::ostringstream stream;
+  stream << (static_cast<double>(nanoseconds) / 1000000000.0);
+  return stream.str();
+}
+
 KeyValue MakeKeyValue(std::string key, std::string value)
 {
   KeyValue entry;
   entry.key = std::move(key);
   entry.value = std::move(value);
   return entry;
+}
+
+std::uint8_t RtcmSemanticDiagnosticLevel(
+    const universal_gnss_protocols::RtcmSemanticObservation& observation)
+{
+  if (observation.malformed_count > 0u || observation.decode_failure_count > 0u ||
+      (observation.decoded && !observation.valid))
+  {
+    return DiagnosticStatus::WARN;
+  }
+
+  return DiagnosticStatus::OK;
+}
+
+std::string BuildRtcmSemanticMessage(
+    const universal_gnss_protocols::RtcmSemanticObservation& observation)
+{
+  if (observation.decoded && observation.valid)
+  {
+    return "RTCM semantic observation decoded";
+  }
+
+  if (observation.decoded)
+  {
+    return "RTCM semantic observation decoded but not valid";
+  }
+
+  if (observation.seen)
+  {
+    return "RTCM semantic observation seen";
+  }
+
+  return "RTCM semantic observation not seen";
 }
 
 std::optional<universal_gnss::GnssTimestampNs> LatestDiagnosticTimestamp(
@@ -185,6 +228,65 @@ DiagnosticArray ToDiagnosticArrayMessage(const universal_gnss::GnssHealthSummary
     array.status.push_back(ToDiagnosticStatusMessage(event, name_prefix, hardware_id));
   }
   return array;
+}
+
+DiagnosticStatus ToRtcmSemanticDiagnosticStatusMessage(
+    const universal_gnss_protocols::RtcmSemanticObservation& observation,
+    const std::string& name_prefix,
+    const std::string& hardware_id)
+{
+  DiagnosticStatus status;
+  status.level = RtcmSemanticDiagnosticLevel(observation);
+  status.name = name_prefix + "/rtcm_semantic/" + observation.name;
+  status.message = BuildRtcmSemanticMessage(observation);
+  status.hardware_id = hardware_id;
+
+  status.values.push_back(MakeKeyValue("observation_name", observation.name));
+  status.values.push_back(
+      MakeKeyValue("message_type", std::to_string(observation.message_type)));
+  status.values.push_back(MakeKeyValue("seen", BoolString(observation.seen)));
+  status.values.push_back(MakeKeyValue("decoded", BoolString(observation.decoded)));
+  status.values.push_back(MakeKeyValue("valid", BoolString(observation.valid)));
+  status.values.push_back(MakeKeyValue(
+      "decode_success_count", std::to_string(observation.decode_success_count)));
+  status.values.push_back(MakeKeyValue(
+      "decode_failure_count", std::to_string(observation.decode_failure_count)));
+  status.values.push_back(
+      MakeKeyValue("malformed_count", std::to_string(observation.malformed_count)));
+  if (observation.last_seen_timestamp_ns.has_value())
+  {
+    status.values.push_back(
+        MakeKeyValue("last_seen_timestamp_ns", std::to_string(*observation.last_seen_timestamp_ns)));
+  }
+  if (observation.last_decoded_timestamp_ns.has_value())
+  {
+    status.values.push_back(MakeKeyValue(
+        "last_decoded_timestamp_ns", std::to_string(*observation.last_decoded_timestamp_ns)));
+  }
+  if (observation.age_ns.has_value())
+  {
+    status.values.push_back(MakeKeyValue("age_ns", std::to_string(*observation.age_ns)));
+    status.values.push_back(MakeKeyValue("age_s", FormatFractionalSeconds(*observation.age_ns)));
+  }
+  for (const auto& field : observation.fields)
+  {
+    status.values.push_back(MakeKeyValue(field.key, field.value));
+  }
+
+  return status;
+}
+
+void AppendRtcmSemanticObservationStatuses(
+    diagnostic_msgs::msg::DiagnosticArray& array,
+    const universal_gnss_protocols::RtcmSemanticObservations& observations,
+    const std::string& name_prefix,
+    const std::string& hardware_id)
+{
+  for (const auto& observation : observations)
+  {
+    array.status.push_back(
+        ToRtcmSemanticDiagnosticStatusMessage(observation, name_prefix, hardware_id));
+  }
 }
 
 }  // namespace universal_gnss_ros2

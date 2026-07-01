@@ -20,6 +20,7 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "diagnostic_msgs/msg/key_value.hpp"
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
+#include "rtcm_diagnostic_projection.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
@@ -27,6 +28,8 @@
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_driver/receiver_session.hpp"
 #include "universal_gnss_driver/receiver_session_runner.hpp"
+#include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
+#include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
@@ -255,6 +258,26 @@ void LogDiagnosticEvent(rclcpp::Node& node, const universal_gnss::GnssDiagnostic
       RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
       break;
   }
+}
+
+std::int64_t MonotonicNowNs()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             SteadyClock::now().time_since_epoch())
+      .count();
+}
+
+std::optional<universal_gnss_protocols::ProtocolTimestampNs> RtcmTimestampFromRosMessage(
+    const universal_gnss_ros2::msg::RtcmFrame& message)
+{
+  if (message.stamp.sec == 0 && message.stamp.nanosec == 0u)
+  {
+    return std::nullopt;
+  }
+
+  return static_cast<universal_gnss_protocols::ProtocolTimestampNs>(message.stamp.sec) *
+             1000000000LL +
+         static_cast<universal_gnss_protocols::ProtocolTimestampNs>(message.stamp.nanosec);
 }
 
 [[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node,
@@ -777,6 +800,11 @@ struct ReceiverNode::Impl
       return;
     }
 
+    // Forwarded RTCM updates correction-stream observability only. It must not
+    // refresh receiver runtime freshness because corrections can continue while
+    // GNSS navigation observations are stale or absent.
+    ObserveRtcmSemanticMessage(message);
+
     if (transport_sink_ == nullptr)
     {
       ++rtcm_forward_write_errors_;
@@ -822,6 +850,55 @@ struct ReceiverNode::Impl
     last_rtcm_forward_time_ = SteadyClock::now();
     last_rtcm_forward_message_type_ = message.message_type;
     last_rtcm_forward_failure_message_.reset();
+  }
+
+  void ObserveRtcmSemanticMessage(const universal_gnss_ros2::msg::RtcmFrame& message)
+  {
+    auto timestamp_ns = RtcmTimestampFromRosMessage(message);
+    if (!timestamp_ns.has_value())
+    {
+      timestamp_ns = static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs());
+    }
+
+    rtcm_forward_framer_.Reset();
+    bool observed_frame = false;
+    bool parser_failure = false;
+
+    for (const auto byte : message.data)
+    {
+      const auto parsed = rtcm_forward_framer_.PushByte(byte, timestamp_ns);
+      if (parsed.record.has_value())
+      {
+        rtcm_forward_correction_monitor_.ObserveFrame(*parsed.record);
+        observed_frame = true;
+        continue;
+      }
+
+      if (parsed.status == universal_gnss_protocols::ParserStatus::kInvalidData ||
+          parsed.status == universal_gnss_protocols::ParserStatus::kOverflow)
+      {
+        parser_failure = true;
+      }
+    }
+
+    const auto finalized = rtcm_forward_framer_.Finalize();
+    if (finalized.record.has_value())
+    {
+      rtcm_forward_correction_monitor_.ObserveFrame(*finalized.record);
+      observed_frame = true;
+    }
+    else if (finalized.status == universal_gnss_protocols::ParserStatus::kTruncated ||
+             finalized.status == universal_gnss_protocols::ParserStatus::kInvalidData ||
+             finalized.status == universal_gnss_protocols::ParserStatus::kOverflow)
+    {
+      parser_failure = true;
+    }
+
+    rtcm_forward_framer_.Reset();
+    if (!observed_frame || parser_failure)
+    {
+      rtcm_forward_correction_monitor_.ObserveInvalidFrame(timestamp_ns);
+    }
   }
 
   bool StepOnce()
@@ -1360,6 +1437,13 @@ struct ReceiverNode::Impl
     last_diagnostics_message_->header.frame_id = config_.frame_id;
     AppendDiscoveryStatus(*last_diagnostics_message_);
     AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
+    AppendRtcmSemanticObservationStatuses(
+        *last_diagnostics_message_,
+        universal_gnss_protocols::BuildRtcmSemanticObservations(
+            rtcm_forward_correction_monitor_,
+            static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs())),
+        "universal_gnss",
+        hardware_id_);
     AppendParserStatus(*last_diagnostics_message_);
 
     if (CanPublishFixMessage(state))
@@ -1586,6 +1670,8 @@ struct ReceiverNode::Impl
   std::optional<std::string> last_rtcm_forward_failure_message_{};
   universal_gnss_transport::TransportError last_logged_transport_error_{
       universal_gnss_transport::TransportError::kNone};
+  universal_gnss_protocols::RtcmFrameFramer rtcm_forward_framer_{};
+  universal_gnss_protocols::RtcmCorrectionMonitor rtcm_forward_correction_monitor_{};
   universal_gnss::GnssDiagnosticEvents last_active_events_{};
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};

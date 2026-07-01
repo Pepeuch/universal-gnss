@@ -78,6 +78,9 @@ runtime orchestration.
   reconnect policy, RTCM extraction, and correction monitoring
 - `gnss_ros2` owns subscriptions, timers, diagnostics publishing, launch
   wiring, and the `rtcm` topic bridge into the live receiver path
+- `ReceiverNode` can consume the forwarded `rtcm` topic and project the same
+  portable RTCM semantic observation surface through ROS diagnostics without
+  adding receiver-specific correction logic to downstream apps
 
 The current ROS 2 wrapper also applies one additional runtime policy at the
 node boundary: if the subscribed GNSS status becomes stale, it suppresses GGA
@@ -330,6 +333,8 @@ Current behavior:
 - strip the HTTP/NTRIP response header from streamed output
 - feed streamed payload bytes into `RtcmFrameFramer` and `RtcmCorrectionMonitor`
 - expose portable correction health through the existing diagnostics model
+- expose shared RTCM semantic observations so higher layers can consume
+  base-station ARP, GLONASS `1230`, and MSM summary/per-message metadata
 - support explicit synchronous GGA writes from runtime state
 - expose reconnect state for external retry orchestration
 - update reconnect metrics/state on retry-worthy failures without starting a reconnect loop

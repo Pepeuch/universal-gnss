@@ -452,6 +452,16 @@ Diagnostic states surfaced by the node include:
 - portable jamming / interference state propagated from `GnssRuntimeState`
 - RTCM forwarding activity / write failures
 - receiver-side RTCM acceptance when a backend such as u-blox exposes it
+- portable RTCM semantic observations on `/diagnostics` under
+  `universal_gnss/rtcm_semantic/*`, including:
+  - `base_station_arp`
+  - `glonass_code_phase_bias`
+  - `msm_summary`
+  - per-message MSM entries such as `msm_gps_msm7`
+
+Those RTCM semantic details intentionally stay out of `GnssRuntimeState` and
+`GnssStatus`; ROS2 consumes them through diagnostics instead of polluting the
+portable navigation runtime.
 
 The first real ZED-F9P smoke test on `/dev/ttyACM0` is recorded in
 [ros2_end_to_end_audit.md](ros2_end_to_end_audit.md).
@@ -639,6 +649,28 @@ Current diagnostic states include:
 - `gga_injection_active`
 - `gga_send_error`
 - `rtcm_forwarding_active`
+- `rtcm_semantic/base_station_arp`
+- `rtcm_semantic/glonass_code_phase_bias`
+- `rtcm_semantic/msm_summary`
+- `rtcm_semantic/msm_<constellation>_msm<variant>` when a specific MSM message
+  type has been observed
+
+Each `rtcm_semantic/*` status carries stable key/value fields such as:
+
+- `seen`
+- `decoded`
+- `valid`
+- `decode_success_count`
+- `decode_failure_count`
+- `malformed_count`
+- `message_type`
+- `last_seen_timestamp_ns`
+- `last_decoded_timestamp_ns`
+- `age_ns`
+
+Decoded observations also append semantic payload fields when available, for
+example `station_id`, `constellations_seen`, `satellite_count`,
+`signal_count`, `cell_count`, or the decoded `1230` mask/bias fields.
 
 ### Launch
 

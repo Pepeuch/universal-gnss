@@ -19,9 +19,13 @@ if(BUILD_TESTING)
 endif()
 
 set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_core/include")
+set(UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_protocols/include")
 
 if(NOT EXISTS "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/universal_gnss/gnss_runtime_state.hpp")
   message(FATAL_ERROR "gnss_core headers were not found next to gnss_ros2")
+endif()
+if(NOT EXISTS "${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}/universal_gnss_protocols/rtcm_parser.hpp")
+  message(FATAL_ERROR "gnss_protocols headers were not found next to gnss_ros2")
 endif()
 
 set(_saved_build_testing "${BUILD_TESTING}")
@@ -109,6 +113,8 @@ target_include_directories(
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
+  PRIVATE
+    ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
 )
 ament_target_dependencies(${PROJECT_NAME}_diagnostic_adapter diagnostic_msgs)
 target_link_libraries(
@@ -124,6 +130,8 @@ target_include_directories(
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
+  PRIVATE
+    ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
 )
 ament_target_dependencies(
   ${PROJECT_NAME}_receiver_node
@@ -189,6 +197,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
       $<INSTALL_INTERFACE:include>
+    PRIVATE
+      ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
   )
   ament_target_dependencies(
     ${PROJECT_NAME}_ntrip_node
@@ -296,6 +306,7 @@ if(BUILD_TESTING)
       PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+        ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
     )
   endif()
 
@@ -316,6 +327,7 @@ if(BUILD_TESTING)
       PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+        ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
     )
     ament_target_dependencies(
       test_receiver_node
@@ -361,6 +373,7 @@ if(BUILD_TESTING)
         PRIVATE
           ${CMAKE_CURRENT_SOURCE_DIR}/include
           ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
+          ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
       )
       ament_target_dependencies(
         test_ntrip_node

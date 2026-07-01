@@ -25,6 +25,8 @@ Already delivered in `v0.6.0` and its follow-up fixes:
 - `ReceiverNode`, `NtripNode`, and `ReplayNode`
 - live RTCM forwarding and receiver-side correction diagnostics
 - portable RTCM MSM header/correction-stream summary observability
+- ROS2 RTCM semantic diagnostics projection for base-station ARP, `1230`, and
+  MSM summary/per-message activity
 - parser counters plus malformed/rejected diagnostic visibility
 - portable receiver profile surface:
   - `runtime_only`

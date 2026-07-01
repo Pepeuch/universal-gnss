@@ -21,6 +21,7 @@
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 
 namespace
 {
@@ -193,6 +194,144 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   return bytes;
 }
 
+void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, const bool bit)
+{
+  if ((bit_offset % 8u) == 0u)
+  {
+    payload.push_back(0u);
+  }
+
+  if (bit)
+  {
+    payload.back() |= static_cast<std::uint8_t>(1u << (7u - (bit_offset % 8u)));
+  }
+  ++bit_offset;
+}
+
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
+{
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t shift = bit_count - 1u - i;
+    AppendBit(payload, bit_offset, ((value >> shift) & 0x01u) != 0u);
+  }
+}
+
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0x03u),
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
+                                            const std::uint16_t station_id,
+                                            const std::vector<std::uint8_t>& satellite_ids,
+                                            const std::vector<std::uint8_t>& signal_ids,
+                                            const std::vector<bool>& cell_mask)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
+  return BuildRtcmFrameFromPayload(payload);
+}
+
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
 {
   destination.insert(destination.end(), source.begin(), source.end());
@@ -268,7 +407,7 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
 
   std::vector<std::uint8_t> payload;
   Append(payload, BuildRtcmFrame(1005u));
-  Append(payload, BuildRtcmFrame(1077u));
+  Append(payload, BuildRtcmMsmFrame(1077u, 42u, {1u}, {2u}, {true}));
 
   std::vector<std::uint8_t> response;
   const std::string header = "ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n";

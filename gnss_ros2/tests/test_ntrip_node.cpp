@@ -18,6 +18,7 @@
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
@@ -96,6 +97,219 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
   return bytes;
+}
+
+void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, const bool bit)
+{
+  if ((bit_offset % 8u) == 0u)
+  {
+    payload.push_back(0u);
+  }
+
+  if (bit)
+  {
+    payload.back() |= static_cast<std::uint8_t>(1u << (7u - (bit_offset % 8u)));
+  }
+  ++bit_offset;
+}
+
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
+{
+  for (std::size_t i = 0u; i < bit_count; ++i)
+  {
+    const std::size_t shift = bit_count - 1u - i;
+    AppendBit(payload, bit_offset, ((value >> shift) & 0x01u) != 0u);
+  }
+}
+
+void AppendSignedBits(std::vector<std::uint8_t>& payload,
+                      std::size_t& bit_offset,
+                      const std::int64_t value,
+                      const std::size_t bit_count)
+{
+  const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
+  AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
+}
+
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
+                    const std::size_t bit_count)
+{
+  for (std::size_t index = 0u; index < bit_count; ++index)
+  {
+    AppendBit(payload, bit_offset, false);
+  }
+}
+
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
+                               const std::size_t populated_cell_count)
+{
+  switch (msm_variant)
+  {
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> bytes = {
+      0xD3u,
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0x03u),
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+  };
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
+std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
+                                             const std::int64_t ecef_x_0_1mm,
+                                             const std::int64_t ecef_y_0_1mm,
+                                             const std::int64_t ecef_z_0_1mm,
+                                             const std::uint16_t antenna_height_0_1mm)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1006u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 21u, 6u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendSignedBits(payload, bit_offset, ecef_x_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendSignedBits(payload, bit_offset, ecef_y_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendSignedBits(payload, bit_offset, ecef_z_0_1mm, 38u);
+  AppendUnsignedBits(payload, bit_offset, antenna_height_0_1mm, 16u);
+  return BuildRtcmFrameFromPayload(payload);
+}
+
+std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
+                                             const bool code_phase_bias_indicator,
+                                             const bool has_l1_ca_bias,
+                                             const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias,
+                                             const bool has_l2_p_bias,
+                                             const std::optional<std::int16_t> l1_ca_bias_raw,
+                                             const std::optional<std::int16_t> l1_p_bias_raw,
+                                             const std::optional<std::int16_t> l2_ca_bias_raw,
+                                             const std::optional<std::int16_t> l2_p_bias_raw)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1230u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, code_phase_bias_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l1_p_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_ca_bias ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, has_l2_p_bias ? 1u : 0u, 1u);
+  if (has_l1_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_ca_bias_raw, 16u);
+  }
+  if (has_l1_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l1_p_bias_raw, 16u);
+  }
+  if (has_l2_ca_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_ca_bias_raw, 16u);
+  }
+  if (has_l2_p_bias)
+  {
+    AppendSignedBits(payload, bit_offset, *l2_p_bias_raw, 16u);
+  }
+  return BuildRtcmFrameFromPayload(payload);
+}
+
+std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
+                                            const std::uint16_t station_id,
+                                            const std::vector<std::uint8_t>& satellite_ids,
+                                            const std::vector<std::uint8_t>& signal_ids,
+                                            const std::vector<bool>& cell_mask)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 123456u, 30u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 3u);
+  AppendUnsignedBits(payload, bit_offset, 15u, 7u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 3u, 3u);
+
+  for (std::uint8_t satellite = 1u; satellite <= 64u; ++satellite)
+  {
+    bool present = false;
+    for (const auto candidate : satellite_ids)
+    {
+      if (candidate == satellite)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  for (std::uint8_t signal = 1u; signal <= 32u; ++signal)
+  {
+    bool present = false;
+    for (const auto candidate : signal_ids)
+    {
+      if (candidate == signal)
+      {
+        present = true;
+        break;
+      }
+    }
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+  }
+
+  std::size_t populated_cell_count = 0u;
+  for (const bool present : cell_mask)
+  {
+    AppendUnsignedBits(payload, bit_offset, present ? 1u : 0u, 1u);
+    if (present)
+    {
+      ++populated_cell_count;
+    }
+  }
+
+  AppendZeroBits(payload,
+                 bit_offset,
+                 GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
+                                    satellite_ids.size(),
+                                    populated_cell_count));
+  return BuildRtcmFrameFromPayload(payload);
 }
 
 class NtripNodeTest : public ::testing::Test
@@ -378,6 +592,86 @@ TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "last_message_type"),
             std::optional<std::string>{"1077"});
   EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_forwarding_active"),
+            nullptr);
+}
+
+TEST_F(NtripNodeTest, ProjectsRtcmSemanticObservationsIntoDiagnostics)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", false),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  EXPECT_TRUE(node.StepOnce());
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"));
+
+  const auto rtcm_1006 = BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u);
+  const auto rtcm_1230 = BuildRtcm1230Frame(
+      42u, true, true, false, true, false, 25, std::nullopt, -10, std::nullopt);
+  const auto rtcm_1077 = BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {2u}, {true, false});
+  const auto rtcm_1087 = BuildRtcmMsmFrame(1087u, 42u, {4u}, {1u, 2u}, {true, true});
+
+  ASSERT_TRUE(sockets.WritePeer(rtcm_1006));
+  ASSERT_TRUE(sockets.WritePeer(rtcm_1230));
+  ASSERT_TRUE(sockets.WritePeer(rtcm_1077));
+  ASSERT_TRUE(sockets.WritePeer(rtcm_1087));
+
+  for (std::size_t attempt = 0u; attempt < 8u; ++attempt)
+  {
+    node.StepOnce();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& diagnostics = *node.last_diagnostics_message();
+
+  const auto* base_station =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/base_station_arp");
+  ASSERT_NE(base_station, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*base_station, "seen"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*base_station, "decoded"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*base_station, "message_type"),
+            std::optional<std::string>{"1006"});
+  EXPECT_EQ(FindDiagnosticValue(*base_station, "station_id"), std::optional<std::string>{"42"});
+
+  const auto* glonass_bias = FindDiagnosticStatusByName(
+      diagnostics, "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias");
+  ASSERT_NE(glonass_bias, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "decoded"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "valid"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "signal_mask"), std::optional<std::string>{"0x5"});
+
+  const auto* msm_summary =
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_summary");
+  ASSERT_NE(msm_summary, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "seen"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "decoded"), std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "message_type"),
+            std::optional<std::string>{"1087"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "station_id"), std::optional<std::string>{"42"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "constellations_seen"),
+            std::optional<std::string>{"gps,glonass"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "satellite_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"),
+            std::optional<std::string>{"2"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "cell_count"), std::optional<std::string>{"2"});
+  EXPECT_NE(FindDiagnosticValue(*msm_summary, "age_ns"), std::nullopt);
+
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_gps_msm7"),
+            nullptr);
+  EXPECT_NE(FindDiagnosticStatusByName(
+                diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_glonass_msm7"),
             nullptr);
 }
 
