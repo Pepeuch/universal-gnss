@@ -152,7 +152,8 @@ Current implemented layers:
     `RTCMSTATUSA`, `SATSINFOA`, `BESTSATA`, `JAMSTATUSA`, `FREQJAMSTATUSA`,
     `HWSTATUSA`, `AGCA`
   - Unicore binary `N4` semantic parsing: `BESTNAVB`, `PVTSLNB`
-  - RTCM3 framing, CRC24Q, and message-type extraction/classification
+  - RTCM3 framing, CRC24Q, message-type extraction/classification, and
+    semantic decode for `1005`, `1006`, and `1230`
 - `gnss_driver`
   - receiver profile declarations
   - protocol support and feature flags

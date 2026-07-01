@@ -49,7 +49,7 @@ Validation boundary:
 - safe rollback
 - receiver metadata
 - RTCM MSM summary
-- RTCM 1230
+- RTCM semantic expansion beyond `1005` / `1006` / `1230`
 - Generic NMEA completion
 
 ### Runtime observability

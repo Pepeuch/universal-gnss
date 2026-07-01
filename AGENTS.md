@@ -44,3 +44,7 @@ Every response must explicitly report:
 - push status
 
 Never omit changes performed during the task.
+
+## Vendors documentations
+
+All specific vendor protocols are in `docs/vendors` PATH

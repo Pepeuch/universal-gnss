@@ -29,7 +29,6 @@ Recently completed:
 - [ ] production-safe failure handling and rollback expectations
 - [ ] live receiver identity / model / firmware metadata in discovery and planning output
 - [ ] RTCM MSM satellite/signal summary
-- [ ] RTCM 1230 GLONASS bias decode
 - [ ] Generic NMEA: propagate GGA fix_quality 4/5 into normalized rtk_mode / fix_type
 - [ ] document and preserve generic NMEA runtime_only limitations until a portable write-side config contract exists
 
@@ -44,6 +43,7 @@ Recently completed:
 - [ ] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
+- [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230`
 - [ ] Generic NMEA improvement: propagate `GGA` fix_quality `4/5` into
   normalized `rtk_mode` / `fix_type`
 - [ ] document and preserve generic NMEA `runtime_only` limitations until a
@@ -59,7 +59,6 @@ Recently completed:
 - [ ] UDP transport
 - [ ] multi-caster support
 - [ ] local caster / base mode support
-- [ ] RTCM `1230` GLONASS bias decode
 - [ ] RTCM MSM signal/satellite summary
 
 ## Network / NTRIP
