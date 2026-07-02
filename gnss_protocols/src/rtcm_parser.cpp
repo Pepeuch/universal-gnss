@@ -8,8 +8,8 @@ namespace
 
 constexpr double kRtcmArpCoordinateScaleM = 0.0001;
 constexpr double kRtcmGlonassCodePhaseBiasScaleM = 0.02;
-constexpr std::size_t kRtcm1005Bits = 153u;
-constexpr std::size_t kRtcm1006Bits = 169u;
+constexpr std::size_t kRtcm1005Bits = 152u;
+constexpr std::size_t kRtcm1006Bits = 168u;
 constexpr std::size_t kRtcm1230HeaderBits = 32u;
 constexpr std::size_t kRtcmMsmHeaderBits = 169u;
 
@@ -241,7 +241,6 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
   const auto itrf_year = read_u(6u);
   const auto gps_indicator = read_u(1u);
   const auto glonass_indicator = read_u(1u);
-  const auto reserved_a = read_u(1u);
   const auto galileo_indicator = read_u(1u);
   const auto reference_station_indicator = read_u(1u);
   const auto ecef_x = read_s(38u);
@@ -251,7 +250,6 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
   const auto quarter_cycle_indicator = read_u(2u);
   const auto ecef_z = read_s(38u);
 
-  (void)reserved_a;
   (void)reserved_b;
 
   if (!parsed_message_type.has_value() || !station_id.has_value() || !itrf_year.has_value() ||

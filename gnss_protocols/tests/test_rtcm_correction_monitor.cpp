@@ -10,6 +10,7 @@
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
+#include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 
@@ -23,7 +24,9 @@ using universal_gnss_protocols::RtcmConstellation;
 using universal_gnss_protocols::RtcmCorrectionHealthOptions;
 using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmFrame;
+using universal_gnss_protocols::RtcmFrameFramer;
 using universal_gnss_protocols::RtcmMessageInfo;
+using universal_gnss_protocols::ParserStatus;
 
 struct TestContext
 {
@@ -131,6 +134,15 @@ std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
   return payload;
 }
 
+std::vector<std::uint8_t> CapturedRtcm1006FrameBytes()
+{
+  return {
+      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u, 0x4Bu,
+      0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au, 0x41u, 0x56u,
+      0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
+  };
+}
+
 void AppendZeroBits(std::vector<std::uint8_t>& payload,
                     std::size_t& bit_offset,
                     const std::size_t bit_count)
@@ -236,6 +248,27 @@ RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
   frame.payload = MakeRtcmPayload(message_type);
   frame.checksum_status = ChecksumStatus::kValid;
   return frame;
+}
+
+RtcmFrame ParseSingleFrame(const std::vector<std::uint8_t>& bytes)
+{
+  RtcmFrameFramer framer;
+  for (const auto byte : bytes)
+  {
+    auto result = framer.PushByte(byte);
+    if (result.status == ParserStatus::kRecordReady && result.record.has_value())
+    {
+      return *result.record;
+    }
+  }
+
+  const auto finalize = framer.Finalize();
+  if (finalize.status == ParserStatus::kRecordReady && finalize.record.has_value())
+  {
+    return *finalize.record;
+  }
+
+  return RtcmFrame{};
 }
 
 RtcmMessageInfo MakeMessageInfo(const std::uint16_t message_type)
@@ -449,6 +482,33 @@ void TestGlonassBiasDecodeTracking(TestContext& ctx)
                    monitor.last_glonass_code_phase_bias()->signal_mask == 0x05u,
                "decoded RTCM 1230 content should expose station id and signal mask");
   }
+}
+
+void TestBaseStationArpSemanticObservationFromCaptured1006(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  RtcmFrame frame = ParseSingleFrame(CapturedRtcm1006FrameBytes());
+  frame.timestamp_ns = 1000;
+  monitor.ObserveFrame(frame);
+
+  const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 1500);
+  const auto* base_station_arp = FindObservation(observations, "base_station_arp");
+
+  ctx.Expect(base_station_arp != nullptr &&
+                 base_station_arp->message_type == 1006u &&
+                 base_station_arp->seen &&
+                 base_station_arp->decoded &&
+                 base_station_arp->valid &&
+                 base_station_arp->decode_success_count == 1u &&
+                 base_station_arp->decode_failure_count == 0u &&
+                 base_station_arp->malformed_count == 0u &&
+                 base_station_arp->age_ns == std::optional<std::int64_t>(500),
+             "captured RTCM 1006 should produce a decoded and valid base-station semantic observation");
+  ctx.Expect(monitor.last_base_station_arp().has_value() &&
+                 monitor.last_base_station_arp()->message_type == 1006u &&
+                 monitor.last_base_station_arp()->station_id == 1u &&
+                 monitor.last_base_station_arp()->antenna_height_m.has_value(),
+             "captured RTCM 1006 should populate the correction monitor base-station record");
 }
 
 void TestMsmDecodeTracking(TestContext& ctx)
@@ -756,6 +816,7 @@ int main()
   TestBasePositionAndGlonassBiasTracking(ctx);
   TestInvalidFrameHandling(ctx);
   TestGlonassBiasDecodeTracking(ctx);
+  TestBaseStationArpSemanticObservationFromCaptured1006(ctx);
   TestMsmDecodeTracking(ctx);
   TestMsmSemanticObservations(ctx);
   TestMsmMalformedHealthEvent(ctx);

@@ -100,7 +100,6 @@ std::vector<std::uint8_t> BuildBaseStationArpPayload(const std::uint16_t message
   AppendUnsignedBits(payload, bit_offset, itrf_year, 6u);
   AppendUnsignedBits(payload, bit_offset, gps_indicator ? 1u : 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, glonass_indicator ? 1u : 0u, 1u);
-  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, galileo_indicator ? 1u : 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, reference_station_indicator ? 1u : 0u, 1u);
   AppendSignedBits(payload, bit_offset, ecef_x_0_1mm, 38u);
@@ -160,6 +159,15 @@ RtcmFrame ParseSingleFrame(const std::vector<std::uint8_t>& bytes)
   }
 
   return RtcmFrame{};
+}
+
+std::vector<std::uint8_t> CapturedRtcm1006FrameBytes()
+{
+  return {
+      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u, 0x4Bu,
+      0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au, 0x41u, 0x56u,
+      0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
+  };
 }
 
 RtcmFrame BuildBaseStationArpFrame(const std::uint16_t message_type,
@@ -261,6 +269,52 @@ void TestParseRtcm1006(TestContext& ctx)
   }
 }
 
+void TestParseCapturedRtcm1006Fixture(TestContext& ctx)
+{
+  const RtcmFrame frame = ParseSingleFrame(CapturedRtcm1006FrameBytes());
+  const auto parsed = universal_gnss_protocols::ParseRtcmBaseStationArp(frame);
+
+  ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
+             "captured live RTCM 1006 should parse successfully");
+  if (!parsed.record.has_value())
+  {
+    return;
+  }
+
+  ctx.Expect(parsed.record->message_type == 1006u,
+             "captured live RTCM 1006 should preserve the message type");
+  ctx.Expect(parsed.record->station_id == 1u,
+             "captured live RTCM 1006 should decode the station id");
+  ctx.Expect(parsed.record->antenna_height_m.has_value(),
+             "captured live RTCM 1006 should populate antenna height");
+  if (parsed.record->antenna_height_m.has_value())
+  {
+    ctx.ExpectNear(*parsed.record->antenna_height_m,
+                   0.0,
+                   1e-9,
+                   "captured live RTCM 1006 should decode the antenna height field");
+  }
+  ctx.ExpectNear(parsed.record->ecef_x_m,
+                 4595773.8058,
+                 1e-4,
+                 "captured live RTCM 1006 should decode ECEF X");
+  ctx.ExpectNear(parsed.record->ecef_y_m,
+                 176737.9384,
+                 1e-4,
+                 "captured live RTCM 1006 should decode ECEF Y");
+  ctx.ExpectNear(parsed.record->ecef_z_m,
+                 4404587.5617,
+                 1e-4,
+                 "captured live RTCM 1006 should decode ECEF Z");
+
+  const double ecef_radius_m =
+      std::sqrt(parsed.record->ecef_x_m * parsed.record->ecef_x_m +
+                parsed.record->ecef_y_m * parsed.record->ecef_y_m +
+                parsed.record->ecef_z_m * parsed.record->ecef_z_m);
+  ctx.Expect(ecef_radius_m > 6000000.0 && ecef_radius_m < 7000000.0,
+             "captured live RTCM 1006 should decode plausible ECEF coordinates");
+}
+
 void TestRejectWrongMessageTypeAndTruncation(TestContext& ctx)
 {
   const std::vector<std::uint8_t> wrong_type_payload = {
@@ -279,6 +333,13 @@ void TestRejectWrongMessageTypeAndTruncation(TestContext& ctx)
   ctx.Expect(universal_gnss_protocols::ParseRtcmBaseStationArp(truncated).status ==
                  ParserStatus::kInvalidData,
              "truncated 1005 payloads should be rejected");
+
+  RtcmFrame truncated_1006 = BuildBaseStationArpFrame(
+      1006u, 1u, 1u, true, false, false, false, 1LL, false, 2LL, 0u, 3LL, 4u);
+  truncated_1006.payload.pop_back();
+  ctx.Expect(universal_gnss_protocols::ParseRtcmBaseStationArp(truncated_1006).status ==
+                 ParserStatus::kInvalidData,
+             "truncated 1006 payloads should be rejected");
 }
 
 void TestCorrectionMonitorStoresLatestBasePosition(TestContext& ctx)
@@ -321,6 +382,7 @@ int main()
 
   TestParseRtcm1005(ctx);
   TestParseRtcm1006(ctx);
+  TestParseCapturedRtcm1006Fixture(ctx);
   TestRejectWrongMessageTypeAndTruncation(ctx);
   TestCorrectionMonitorStoresLatestBasePosition(ctx);
 

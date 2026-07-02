@@ -193,7 +193,6 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
   AppendUnsignedBits(payload, bit_offset, 21u, 6u);
   AppendUnsignedBits(payload, bit_offset, 1u, 1u);
   AppendUnsignedBits(payload, bit_offset, 1u, 1u);
-  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, 1u, 1u);
   AppendUnsignedBits(payload, bit_offset, 1u, 1u);
   AppendSignedBits(payload, bit_offset, ecef_x_0_1mm, 38u);
