@@ -27,6 +27,7 @@ Use these terms in Universal GNSS when they match the source semantics:
 | `rtk_mode` | Portable RTK state: None / Float / Fixed. |
 | `correction_stream` | RTCM/NTRIP correction-stream health and completeness. |
 | `course_over_ground_deg` | Motion-derived course over ground. |
+| `dual_antenna_baseline` | Boolean capability/value-backed baseline-validity field. |
 | `baseline_azimuth_deg` | Geodetic azimuth of a dual-antenna baseline. |
 | `baseline_pitch_deg` | Vertical pitch angle of a dual-antenna baseline. |
 | `baseline_length_m` | Distance between antennas in a dual-antenna baseline solution. |
@@ -54,15 +55,21 @@ Current repository state after this audit:
 - Unicore `PVTSLNA` / `PVTSLNB` semantic records now use explicit
   `baseline_*` names instead of ambiguous `heading_*` names for dual-antenna
   baseline geometry.
-- Current public runtime/ROS2 fields `heading_deg` and
-  `dual_antenna_heading` remain stable in `v0.6.x`, but they are the main
-  terminology debt still visible in the API.
+- Public runtime/ROS2 baseline fields now exist:
+  - `dual_antenna_baseline`
+  - `baseline_azimuth_deg`
+  - `baseline_pitch_deg`
+  - `baseline_length_m`
+  - `baseline_solution_status`
+- Current public runtime/ROS2 fields `heading_deg`,
+  `heading_accuracy_deg`, and `dual_antenna_heading` remain stable in
+  `v0.6.x` as compatibility fields only.
 
 ## Audit Table
 
 | Term | Current scope | Decision |
 | --- | --- | --- |
-| `heading` | Core runtime, ROS2 status, tools, some docs | Keep temporarily as the public generic heading field. Treat it as GNSS heading only, never robot yaw. |
+| `heading` | Core runtime, ROS2 status, tools, some docs | Keep only as a compatibility/public-generic heading field during `v0.6.x`. Treat it as GNSS heading only, never robot yaw. |
 | `yaw` | Downstream/robot docs only | Forbidden in Universal GNSS core and ROS2 APIs. Allowed only in downstream explanatory material. |
 | `bearing` | Not used as a core public field | Keep avoided unless a protocol explicitly reports a bearing quantity. |
 | `course` | NMEA, UBX semantic records, docs | Canonical for motion-derived travel direction. |
@@ -90,9 +97,9 @@ These were considered low-risk and semantically wrong enough to fix now:
 
 ## Risky Public Names Kept For Compatibility
 
-These public names are still exposed and are intentionally not renamed in this
-branch because they affect the portable runtime contract and ROS2 message
-compatibility:
+These public names are still exposed for compatibility and are intentionally
+not removed in this branch because they affect the portable runtime contract
+and ROS2 message compatibility:
 
 | Current public name | Current meaning | Problem |
 | --- | --- | --- |
@@ -103,21 +110,24 @@ compatibility:
 
 ## Compatibility / Deprecation Plan
 
-Planned direction after `v0.6.x` stabilization:
+Current direction after this branch:
 
-1. Introduce explicit public baseline fields in `GnssRuntimeState` and
-   `GnssStatus` when the portable model is ready:
+1. Public baseline fields now exist in `GnssRuntimeState` and `GnssStatus`:
+   - `dual_antenna_baseline`
    - `baseline_azimuth_deg`
    - `baseline_pitch_deg`
    - `baseline_length_m`
-   - `baseline_solution_status` or a narrower boolean/enum if the portable
-     contract stays intentionally small
-2. Keep `heading_deg` as a compatibility field for one transition window.
+   - `baseline_solution_status`
+2. Keep `heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` as
+   compatibility fields through the `v0.6.x` transition window.
 3. Define exact projection rules:
    - source-native vehicle heading may still map to generic `heading_deg`
-   - dual-antenna baseline azimuth should prefer the explicit baseline field
-4. Mark `dual_antenna_heading` as deprecated once an explicit baseline
-   validity/status field exists.
-5. Update downstream integrations such as MowgliNext only after the new
-   canonical fields are available; downstream code should never assume that a
-   GNSS heading equals robot yaw without its own transform.
+   - dual-antenna baseline azimuth should prefer explicit `baseline_*` fields
+   - during `v0.6.x`, baseline azimuth may also mirror into `heading_deg`
+     when the normalized source semantics are a solved GNSS baseline
+4. Mark `dual_antenna_heading` and the ambiguous heading compatibility bits as
+   deprecated once downstream consumers have moved to the explicit baseline
+   fields.
+5. Update downstream integrations such as MowgliNext to consume the canonical
+   baseline fields first; downstream code should never assume that a GNSS
+   heading equals robot yaw without its own transform.

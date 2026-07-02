@@ -412,6 +412,12 @@ Current JSONL schema includes:
 - `max_cn0_dbhz`
 - `correction_age_s`
 - `heading_deg`
+- `dual_antenna_heading`
+- `dual_antenna_baseline`
+- `baseline_azimuth_deg`
+- `baseline_pitch_deg`
+- `baseline_length_m`
+- `baseline_solution_status`
 - `interference_detected`
 - `jamming_detected`
 

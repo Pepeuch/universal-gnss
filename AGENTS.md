@@ -96,9 +96,16 @@ Use canonical GNSS/geodetic terms such as:
 * `correction_stream`
 * `rtk_mode`
 
-`heading_deg` may remain as a generic portable runtime field only when the
-source already publishes a heading/azimuth-like quantity and Universal GNSS
-does not yet expose a more specific public baseline field.
+Canonical public baseline data must use:
+
+* `dual_antenna_baseline`
+* `baseline_azimuth_deg`
+* `baseline_pitch_deg`
+* `baseline_length_m`
+* `baseline_solution_status`
+
+`heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` are
+compatibility surfaces only during the current `v0.6.x` transition window.
 
 Avoid robot/application-specific terms in Universal GNSS APIs unless the data truly comes from that domain.
 

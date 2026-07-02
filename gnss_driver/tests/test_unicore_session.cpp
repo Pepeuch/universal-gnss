@@ -18,6 +18,7 @@ namespace
 {
 
 using universal_gnss::GnssCapability;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
@@ -227,11 +228,35 @@ std::vector<std::uint8_t> MakePvtslnBPayload()
   WriteLittleEndianFloat32(payload, 28u, 0.1500f);
   WriteLittleEndianFloat32(payload, 32u, 0.1800f);
   WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  WriteLittleEndian32(payload, 40u, 16u);
+  WriteLittleEndianFloat32(payload, 44u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 48u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 56u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 64u, -8.4923f);
   payload[68u] = 46u;
   payload[69u] = 28u;
+  payload[70u] = 46u;
+  payload[71u] = 28u;
+  WriteLittleEndianFloat64(payload, 72u, 0.0009);
+  WriteLittleEndianFloat64(payload, 80u, -0.0031);
+  WriteLittleEndianFloat64(payload, 88u, 0.0032);
   WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 100u, 1.5000f);
   WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 108u, 0.1000f);
+  payload[112u] = 28u;
+  payload[113u] = 25u;
+  payload[114u] = 12u;
+  payload[115u] = 8u;
+  WriteLittleEndianFloat32(payload, 116u, 2.1753f);
+  WriteLittleEndianFloat32(payload, 120u, 1.3480f);
   WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  WriteLittleEndianFloat32(payload, 128u, 1.8392f);
+  WriteLittleEndianFloat32(payload, 132u, 1.7072f);
+  WriteLittleEndianFloat32(payload, 136u, 5.0f);
+  payload[140u] = 28u;
+  payload[141u] = 25u;
+  payload[142u] = 26u;
   return payload;
 }
 
@@ -283,8 +308,16 @@ void TestPvtslnUpdatesHeading(TestContext& ctx)
              "PVTSLNA should expose RTK fixed state");
   ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
                  HasValueAvailable(state, GnssCapability::kHeading) &&
-                 state.heading_deg == std::optional<double>(182.25),
-             "PVTSLNA should update heading when the message reports a computed heading");
+                 HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
+                 state.heading_deg == std::optional<double>(182.25) &&
+                 state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kComputed) &&
+                 state.dual_antenna_heading == std::optional<bool>(true),
+             "PVTSLNA should update compatibility heading plus canonical baseline state");
 }
 
 void TestRtkStatusUpdatesDualAntenna(TestContext& ctx)
@@ -298,9 +331,12 @@ void TestRtkStatusUpdatesDualAntenna(TestContext& ctx)
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "RTKSTATUSA should update RTK fixed state");
   ctx.Expect(HasCapability(state, GnssCapability::kDualAntennaHeading) &&
+                 HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
                  HasValueAvailable(state, GnssCapability::kDualAntennaHeading) &&
-                 state.dual_antenna_heading == std::optional<bool>(true),
-             "RTKSTATUSA should update dual-antenna heading state");
+                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+                 state.dual_antenna_heading == std::optional<bool>(true) &&
+                 state.dual_antenna_baseline == std::optional<bool>(true),
+             "RTKSTATUSA should update compatibility and canonical baseline state");
 }
 
 void TestSatsInfoUpdatesTrackedAndCn0(TestContext& ctx)
@@ -575,9 +611,13 @@ void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
                  std::fabs(*state.correction_age_s - 0.9f) < 1e-6f &&
                  state.heading_deg.has_value() &&
                  NearlyEqual(*state.heading_deg, 182.25, 1e-6) &&
+                 state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
+                 state.baseline_pitch_deg == std::optional<float>(0.1f) &&
+                 state.baseline_length_m == std::optional<float>(1.5f) &&
                  state.hdop.has_value() &&
                  std::fabs(*state.hdop - 0.684f) < 1e-6f,
-             "PVTSLNB should carry accuracy, correction age, heading, and HDOP");
+             "PVTSLNB should carry accuracy, baseline geometry, correction age, heading, and HDOP");
 }
 
 void TestStartupBinaryResyncSuppressesFirstMalformedFrame(TestContext& ctx)

@@ -99,6 +99,56 @@ universal_gnss::GnssRtkMode FromMsgRtkMode(const std::uint8_t rtk_mode)
   }
 }
 
+std::uint8_t ToMsgBaselineSolutionStatus(
+    const universal_gnss::GnssBaselineSolutionStatus status)
+{
+  switch (status)
+  {
+    case universal_gnss::GnssBaselineSolutionStatus::kComputed:
+      return Msg::BASELINE_STATUS_COMPUTED;
+    case universal_gnss::GnssBaselineSolutionStatus::kNotSolved:
+      return Msg::BASELINE_STATUS_NOT_SOLVED;
+    case universal_gnss::GnssBaselineSolutionStatus::kInsufficientObservations:
+      return Msg::BASELINE_STATUS_INSUFFICIENT_OBSERVATIONS;
+    case universal_gnss::GnssBaselineSolutionStatus::kNoConvergence:
+      return Msg::BASELINE_STATUS_NO_CONVERGENCE;
+    case universal_gnss::GnssBaselineSolutionStatus::kOutOfTolerance:
+      return Msg::BASELINE_STATUS_OUT_OF_TOLERANCE;
+    case universal_gnss::GnssBaselineSolutionStatus::kCovarianceTraceExceeded:
+      return Msg::BASELINE_STATUS_COVARIANCE_TRACE_EXCEEDED;
+    case universal_gnss::GnssBaselineSolutionStatus::kNotConfigured:
+      return Msg::BASELINE_STATUS_NOT_CONFIGURED;
+    case universal_gnss::GnssBaselineSolutionStatus::kUnknown:
+    default:
+      return Msg::BASELINE_STATUS_UNKNOWN;
+  }
+}
+
+universal_gnss::GnssBaselineSolutionStatus FromMsgBaselineSolutionStatus(
+    const std::uint8_t status)
+{
+  switch (status)
+  {
+    case Msg::BASELINE_STATUS_COMPUTED:
+      return universal_gnss::GnssBaselineSolutionStatus::kComputed;
+    case Msg::BASELINE_STATUS_NOT_SOLVED:
+      return universal_gnss::GnssBaselineSolutionStatus::kNotSolved;
+    case Msg::BASELINE_STATUS_INSUFFICIENT_OBSERVATIONS:
+      return universal_gnss::GnssBaselineSolutionStatus::kInsufficientObservations;
+    case Msg::BASELINE_STATUS_NO_CONVERGENCE:
+      return universal_gnss::GnssBaselineSolutionStatus::kNoConvergence;
+    case Msg::BASELINE_STATUS_OUT_OF_TOLERANCE:
+      return universal_gnss::GnssBaselineSolutionStatus::kOutOfTolerance;
+    case Msg::BASELINE_STATUS_COVARIANCE_TRACE_EXCEEDED:
+      return universal_gnss::GnssBaselineSolutionStatus::kCovarianceTraceExceeded;
+    case Msg::BASELINE_STATUS_NOT_CONFIGURED:
+      return universal_gnss::GnssBaselineSolutionStatus::kNotConfigured;
+    case Msg::BASELINE_STATUS_UNKNOWN:
+    default:
+      return universal_gnss::GnssBaselineSolutionStatus::kUnknown;
+  }
+}
+
 template <typename T>
 void AssignOptionalWithNaN(T& destination, const std::optional<T>& source)
 {
@@ -273,6 +323,14 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
       (message.value_flags & Msg::CAP_CORRECTIONS_ACTIVE) != 0u;
   const bool has_dual_antenna_heading =
       (message.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u;
+  const bool has_dual_antenna_baseline =
+      (message.value_flags & Msg::CAP_DUAL_ANTENNA_BASELINE) != 0u;
+  const bool has_baseline_azimuth =
+      (message.value_flags & Msg::CAP_BASELINE_AZIMUTH) != 0u;
+  const bool has_baseline_pitch = (message.value_flags & Msg::CAP_BASELINE_PITCH) != 0u;
+  const bool has_baseline_length = (message.value_flags & Msg::CAP_BASELINE_LENGTH) != 0u;
+  const bool has_baseline_solution_status =
+      (message.value_flags & Msg::CAP_BASELINE_SOLUTION_STATUS) != 0u;
   const bool has_interference_state =
       (message.value_flags & Msg::CAP_INTERFERENCE_STATE) != 0u;
   const bool has_jamming_state = (message.value_flags & Msg::CAP_JAMMING_STATE) != 0u;
@@ -306,6 +364,19 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
       message.corrections_active, state.corrections_active, has_corrections_active);
   AssignFlaggedOptional(
       message.dual_antenna_heading, state.dual_antenna_heading, has_dual_antenna_heading);
+  AssignFlaggedOptional(message.dual_antenna_baseline,
+                        state.dual_antenna_baseline,
+                        has_dual_antenna_baseline);
+  AssignFlaggedOptional(
+      message.baseline_azimuth_deg, state.baseline_azimuth_deg, has_baseline_azimuth);
+  AssignFlaggedOptional(
+      message.baseline_pitch_deg, state.baseline_pitch_deg, has_baseline_pitch);
+  AssignFlaggedOptional(
+      message.baseline_length_m, state.baseline_length_m, has_baseline_length);
+  if (has_baseline_solution_status && state.baseline_solution_status.has_value())
+  {
+    message.baseline_solution_status = ToMsgBaselineSolutionStatus(*state.baseline_solution_status);
+  }
   AssignFlaggedOptional(
       message.interference_detected, state.interference_detected, has_interference_state);
   AssignFlaggedOptional(message.jamming_detected, state.jamming_detected, has_jamming_state);
@@ -376,6 +447,23 @@ universal_gnss::GnssRuntimeState FromGnssStatusMessage(
   AssignOptionalField(state.dual_antenna_heading,
                       message.dual_antenna_heading,
                       (state.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u);
+  AssignOptionalField(state.dual_antenna_baseline,
+                      message.dual_antenna_baseline,
+                      (state.value_flags & Msg::CAP_DUAL_ANTENNA_BASELINE) != 0u);
+  AssignOptionalField(state.baseline_azimuth_deg,
+                      message.baseline_azimuth_deg,
+                      (state.value_flags & Msg::CAP_BASELINE_AZIMUTH) != 0u);
+  AssignOptionalField(state.baseline_pitch_deg,
+                      message.baseline_pitch_deg,
+                      (state.value_flags & Msg::CAP_BASELINE_PITCH) != 0u);
+  AssignOptionalField(state.baseline_length_m,
+                      message.baseline_length_m,
+                      (state.value_flags & Msg::CAP_BASELINE_LENGTH) != 0u);
+  if ((state.value_flags & Msg::CAP_BASELINE_SOLUTION_STATUS) != 0u)
+  {
+    state.baseline_solution_status =
+        FromMsgBaselineSolutionStatus(message.baseline_solution_status);
+  }
   AssignOptionalField(state.interference_detected,
                       message.interference_detected,
                       (state.value_flags & Msg::CAP_INTERFERENCE_STATE) != 0u);

@@ -327,7 +327,7 @@ Implemented behaviors:
 - Unicore binary `N4` framing through a dedicated incremental framer
 - fixed-layout semantic decode for the messages above
 - conservative `GnssRuntimeState` mapping helpers for position / RTK / heading /
-  correction-age fields that are explicitly documented
+  correction-age / baseline fields that are explicitly documented
 - current live/offline routing for `BESTNAVB` and `PVTSLNB` through
   `UnicoreSession`, `ReceiverSession` auto-detect, `gnss_inspect`,
   `gnss_replay`, `gnss_quality_report`, and `gnss_export`
@@ -347,13 +347,13 @@ Current Unicore notes:
   `BESTNAVA` for fix, RTK, position, accuracy, correction age, and satellite
   counts
 - `PVTSLNB` mirrors the documented conservative runtime projection of
-  `PVTSLNA` for fix, RTK, position, accuracy, heading, correction age, and
-  satellite counts
-- `PVTSLNA` is the richest current Unicore position / heading source
+  `PVTSLNA` for fix, RTK, position, accuracy, baseline azimuth/length/pitch,
+  compatibility heading, correction age, and satellite counts
+- `PVTSLNA` is the richest current Unicore position / baseline source
 - `BESTNAVA` provides stable position-quality, accuracy, and correction-age
   fields
-- `RTKSTATUSA` complements position messages with RTK-mode and dual-antenna
-  status
+- `RTKSTATUSA` complements position messages with RTK-mode and canonical
+  baseline solution status / validity state
 - `BESTSATA` provides tracked-satellite counts and signal-mask-derived
   used-satellite counts
 - `SATSINFOA` provides tracked-satellite counts and CN0 summaries
@@ -409,9 +409,13 @@ satellites_visible       NMEA GSV, UBX NAV-SAT
 satellites_tracked       Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore BESTSATA, Unicore SATSINFOA
 mean_cn0 / max_cn0       NMEA GSV, UBX NAV-SAT, Unicore SATSINFOA
 heading                  UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB
+dual_antenna_baseline    Unicore PVTSLNA, Unicore PVTSLNB, Unicore RTKSTATUSA
+baseline_azimuth_deg     Unicore PVTSLNA, Unicore PVTSLNB
+baseline_pitch_deg       Unicore PVTSLNA, Unicore PVTSLNB
+baseline_length_m        Unicore PVTSLNA, Unicore PVTSLNB
+baseline_solution_status Unicore PVTSLNA, Unicore PVTSLNB, Unicore RTKSTATUSA
 interference / jamming   UBX MON-HW, UBX MON-RF, Unicore JAMSTATUSA, Unicore FREQJAMSTATUSA
 correction_age           Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB
-dual antenna state       Unicore RTKSTATUSA
 ```
 
 ### Mapping Policy
@@ -469,8 +473,8 @@ It does not guarantee:
 The following are intentionally deferred:
 
 - UBX `CFG-*` messages
-- full RTCM semantic decoding
-- RTCM MSM satellite / signal parsing
+- broader RTCM semantic decoding
+- RTCM observation payload extraction beyond the current portable MSM summary
 - NTRIP
 - concrete receiver drivers
 - serial transport

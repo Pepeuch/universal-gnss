@@ -24,6 +24,7 @@ enum class ReceiverFeature : ReceiverFeatureFlags
   kCfgValset = 1u << 9,
   kSignalGroups = 1u << 10,
   kAsciiCommandConfig = 1u << 11,
+  kDualAntennaBaseline = 1u << 12,
 };
 
 static_assert(

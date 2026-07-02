@@ -148,11 +148,35 @@ std::vector<std::uint8_t> MakePvtslnBinaryPayload()
   WriteLittleEndianFloat32(payload, 28u, 0.1500f);
   WriteLittleEndianFloat32(payload, 32u, 0.1800f);
   WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  WriteLittleEndian32(payload, 40u, 16u);
+  WriteLittleEndianFloat32(payload, 44u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 48u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 56u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 64u, -8.4923f);
   payload[68u] = 46u;
   payload[69u] = 28u;
+  payload[70u] = 46u;
+  payload[71u] = 28u;
+  WriteLittleEndianFloat64(payload, 72u, 0.0009);
+  WriteLittleEndianFloat64(payload, 80u, -0.0031);
+  WriteLittleEndianFloat64(payload, 88u, 0.0032);
   WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 100u, 1.5000f);
   WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 108u, 0.1000f);
+  payload[112u] = 28u;
+  payload[113u] = 25u;
+  payload[114u] = 12u;
+  payload[115u] = 8u;
+  WriteLittleEndianFloat32(payload, 116u, 2.1753f);
+  WriteLittleEndianFloat32(payload, 120u, 1.3480f);
   WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  WriteLittleEndianFloat32(payload, 128u, 1.8392f);
+  WriteLittleEndianFloat32(payload, 132u, 1.7072f);
+  WriteLittleEndianFloat32(payload, 136u, 5.0f);
+  payload[140u] = 28u;
+  payload[141u] = 25u;
+  payload[142u] = 26u;
   return payload;
 }
 
@@ -178,6 +202,8 @@ void TestNmeaJsonlExport(TestContext& ctx)
              "the GST export line should carry conservative accuracy values");
   ctx.Expect(lines.front().find("\"satellites_tracked\":null") != std::string::npos &&
                  lines.front().find("\"dual_antenna_heading\":null") != std::string::npos &&
+                 lines.front().find("\"dual_antenna_baseline\":null") != std::string::npos &&
+                 lines.front().find("\"baseline_solution_status\":null") != std::string::npos &&
                  lines.front().find("\"interference_detected\":null") != std::string::npos,
              "missing optional fields should be exported as null consistently");
 }
@@ -222,8 +248,14 @@ void TestUnicoreBinaryJsonlExport(TestContext& ctx)
              "binary Unicore export should preserve high-precision coordinates in JSONL");
   ctx.Expect(lines.back().find("\"message\":\"PVTSLNB\"") != std::string::npos &&
                  lines.back().find("\"heading_deg\":182.25") != std::string::npos &&
+                 lines.back().find("\"dual_antenna_baseline\":true") != std::string::npos &&
+                 lines.back().find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
+                 lines.back().find("\"baseline_pitch_deg\":0.1") != std::string::npos &&
+                 lines.back().find("\"baseline_length_m\":1.5") != std::string::npos &&
+                 lines.back().find("\"baseline_solution_status\":\"computed\"") !=
+                     std::string::npos &&
                  lines.back().find("\"hdop\":0.684") != std::string::npos,
-             "binary Unicore export should preserve routed PVTSLNB heading and DOP fields");
+             "binary Unicore export should preserve routed PVTSLNB baseline, heading, and DOP fields");
 }
 
 void TestPrettyJsonlExport(TestContext& ctx)

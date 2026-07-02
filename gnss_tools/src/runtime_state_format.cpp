@@ -51,6 +51,31 @@ const char* ToString(const universal_gnss::GnssRtkMode rtk_mode)
   return "unknown";
 }
 
+const char* ToString(const universal_gnss::GnssBaselineSolutionStatus status)
+{
+  switch (status)
+  {
+    case universal_gnss::GnssBaselineSolutionStatus::kUnknown:
+      return "unknown";
+    case universal_gnss::GnssBaselineSolutionStatus::kComputed:
+      return "computed";
+    case universal_gnss::GnssBaselineSolutionStatus::kNotSolved:
+      return "not_solved";
+    case universal_gnss::GnssBaselineSolutionStatus::kInsufficientObservations:
+      return "insufficient_observations";
+    case universal_gnss::GnssBaselineSolutionStatus::kNoConvergence:
+      return "no_convergence";
+    case universal_gnss::GnssBaselineSolutionStatus::kOutOfTolerance:
+      return "out_of_tolerance";
+    case universal_gnss::GnssBaselineSolutionStatus::kCovarianceTraceExceeded:
+      return "covariance_trace_exceeded";
+    case universal_gnss::GnssBaselineSolutionStatus::kNotConfigured:
+      return "not_configured";
+  }
+
+  return "unknown";
+}
+
 std::string EscapeJson(const std::string& value)
 {
   std::ostringstream escaped;
@@ -115,6 +140,18 @@ void AppendOptionalBool(std::ostringstream& stream,
 }
 
 template <typename T>
+void AppendOptionalEnum(std::ostringstream& stream,
+                        const char* label,
+                        const std::optional<T>& value,
+                        const char* (*describe)(T))
+{
+  if (value.has_value())
+  {
+    stream << ' ' << label << '=' << describe(*value);
+  }
+}
+
+template <typename T>
 void AppendJsonOptionalNumber(std::ostringstream& stream,
                               const char* label,
                               const std::optional<T>& value)
@@ -162,6 +199,23 @@ void AppendJsonOptionalBool(std::ostringstream& stream,
   }
 }
 
+template <typename T>
+void AppendJsonOptionalEnum(std::ostringstream& stream,
+                            const char* label,
+                            const std::optional<T>& value,
+                            const char* (*describe)(T))
+{
+  stream << '"' << label << "\":";
+  if (value.has_value())
+  {
+    stream << '"' << EscapeJson(describe(*value)) << '"';
+  }
+  else
+  {
+    stream << "null";
+  }
+}
+
 }  // namespace
 
 std::string FormatRuntimeStateCompact(
@@ -202,7 +256,15 @@ std::string FormatRuntimeStateCompact(
   AppendOptionalFloat(stream, "cn0_max_db_hz", state.max_cn0_db_hz, 1);
   AppendOptionalFloat(stream, "corr_age_s", state.correction_age_s, 2);
   AppendOptionalFloat(stream, "heading_deg", state.heading_deg, 2);
-  AppendOptionalBool(stream, "dual_antenna", state.dual_antenna_heading);
+  AppendOptionalBool(stream, "dual_antenna_heading", state.dual_antenna_heading);
+  AppendOptionalBool(stream, "dual_antenna_baseline", state.dual_antenna_baseline);
+  AppendOptionalFloat(stream, "baseline_azimuth_deg", state.baseline_azimuth_deg, 2);
+  AppendOptionalFloat(stream, "baseline_pitch_deg", state.baseline_pitch_deg, 2);
+  AppendOptionalFloat(stream, "baseline_length_m", state.baseline_length_m, 3);
+  AppendOptionalEnum(stream,
+                     "baseline_solution_status",
+                     state.baseline_solution_status,
+                     ToString);
   AppendOptionalBool(stream, "interference", state.interference_detected);
   AppendOptionalBool(stream, "jamming", state.jamming_detected);
 
@@ -271,6 +333,19 @@ std::string FormatRuntimeStateJson(
   AppendJsonOptionalNumber(stream, "heading_deg", state.heading_deg);
   stream << ',';
   AppendJsonOptionalBool(stream, "dual_antenna_heading", state.dual_antenna_heading);
+  stream << ',';
+  AppendJsonOptionalBool(stream, "dual_antenna_baseline", state.dual_antenna_baseline);
+  stream << ',';
+  AppendJsonOptionalNumber(stream, "baseline_azimuth_deg", state.baseline_azimuth_deg);
+  stream << ',';
+  AppendJsonOptionalNumber(stream, "baseline_pitch_deg", state.baseline_pitch_deg);
+  stream << ',';
+  AppendJsonOptionalNumber(stream, "baseline_length_m", state.baseline_length_m);
+  stream << ',';
+  AppendJsonOptionalEnum(stream,
+                         "baseline_solution_status",
+                         state.baseline_solution_status,
+                         ToString);
   stream << ',';
   AppendJsonOptionalBool(stream, "interference_detected", state.interference_detected);
   stream << ',';

@@ -61,6 +61,37 @@ const char* DescribeRtkMode(const std::optional<universal_gnss::GnssRtkMode>& rt
   return "unknown";
 }
 
+const char* DescribeBaselineSolutionStatus(
+    const std::optional<universal_gnss::GnssBaselineSolutionStatus>& status)
+{
+  if (!status.has_value())
+  {
+    return nullptr;
+  }
+
+  switch (*status)
+  {
+    case universal_gnss::GnssBaselineSolutionStatus::kUnknown:
+      return "unknown";
+    case universal_gnss::GnssBaselineSolutionStatus::kComputed:
+      return "computed";
+    case universal_gnss::GnssBaselineSolutionStatus::kNotSolved:
+      return "not_solved";
+    case universal_gnss::GnssBaselineSolutionStatus::kInsufficientObservations:
+      return "insufficient_observations";
+    case universal_gnss::GnssBaselineSolutionStatus::kNoConvergence:
+      return "no_convergence";
+    case universal_gnss::GnssBaselineSolutionStatus::kOutOfTolerance:
+      return "out_of_tolerance";
+    case universal_gnss::GnssBaselineSolutionStatus::kCovarianceTraceExceeded:
+      return "covariance_trace_exceeded";
+    case universal_gnss::GnssBaselineSolutionStatus::kNotConfigured:
+      return "not_configured";
+  }
+
+  return "unknown";
+}
+
 std::string EscapeJsonString(const std::string& text)
 {
   std::ostringstream output;
@@ -234,6 +265,24 @@ void WriteJsonOptionalBool(std::ostream& output,
   }
 }
 
+void WriteJsonOptionalString(std::ostream& output,
+                             const char* key,
+                             const char* value,
+                             const bool pretty,
+                             bool& first_field)
+{
+  WriteFieldPrefix(output, pretty, first_field);
+  output << '"' << key << '"' << (pretty ? ": " : ":");
+  if (value == nullptr)
+  {
+    output << "null";
+  }
+  else
+  {
+    output << '"' << EscapeJsonString(value) << '"';
+  }
+}
+
 void WriteRuntimeUpdateJson(std::ostream& output,
                             const GnssReplayEvent& event,
                             const RuntimeExportOptions& options)
@@ -282,6 +331,19 @@ void WriteRuntimeUpdateJson(std::ostream& output,
   WriteJsonOptionalNumber(output, "heading_deg", state.heading_deg, pretty, first_field);
   WriteJsonOptionalBool(
       output, "dual_antenna_heading", state.dual_antenna_heading, pretty, first_field);
+  WriteJsonOptionalBool(
+      output, "dual_antenna_baseline", state.dual_antenna_baseline, pretty, first_field);
+  WriteJsonOptionalNumber(
+      output, "baseline_azimuth_deg", state.baseline_azimuth_deg, pretty, first_field);
+  WriteJsonOptionalNumber(
+      output, "baseline_pitch_deg", state.baseline_pitch_deg, pretty, first_field);
+  WriteJsonOptionalNumber(
+      output, "baseline_length_m", state.baseline_length_m, pretty, first_field);
+  WriteJsonOptionalString(output,
+                          "baseline_solution_status",
+                          DescribeBaselineSolutionStatus(state.baseline_solution_status),
+                          pretty,
+                          first_field);
   WriteJsonOptionalBool(
       output, "interference_detected", state.interference_detected, pretty, first_field);
   WriteJsonOptionalBool(output, "jamming_detected", state.jamming_detected, pretty, first_field);

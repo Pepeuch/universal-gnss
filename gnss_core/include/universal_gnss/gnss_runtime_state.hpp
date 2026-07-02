@@ -42,6 +42,11 @@ struct GnssRuntimeState
   std::optional<bool> differential_corrections{};
   std::optional<bool> corrections_active{};
   std::optional<bool> dual_antenna_heading{};
+  std::optional<bool> dual_antenna_baseline{};
+  std::optional<float> baseline_azimuth_deg{};
+  std::optional<float> baseline_pitch_deg{};
+  std::optional<float> baseline_length_m{};
+  std::optional<GnssBaselineSolutionStatus> baseline_solution_status{};
   std::optional<bool> interference_detected{};
   std::optional<bool> jamming_detected{};
 
@@ -197,6 +202,31 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
       state.dual_antenna_heading.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kDualAntennaHeading);
+  }
+  if (HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+      state.dual_antenna_baseline.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kDualAntennaBaseline);
+  }
+  if (HasCapability(state, GnssCapability::kBaselineAzimuth) &&
+      state.baseline_azimuth_deg.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kBaselineAzimuth);
+  }
+  if (HasCapability(state, GnssCapability::kBaselinePitch) &&
+      state.baseline_pitch_deg.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kBaselinePitch);
+  }
+  if (HasCapability(state, GnssCapability::kBaselineLength) &&
+      state.baseline_length_m.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kBaselineLength);
+  }
+  if (HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
+      state.baseline_solution_status.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kBaselineSolutionStatus);
   }
   if (HasCapability(state, GnssCapability::kInterferenceState) &&
       state.interference_detected.has_value())

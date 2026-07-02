@@ -26,6 +26,8 @@ Recently completed:
   MowgliNext
 - generic NMEA `GGA fix_quality` runtime mapping into normalized `rtk_mode`
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
+- additive public dual-antenna baseline capability/runtime/ROS2 surface with
+  `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`
 
 ## Immediate correctness
 
@@ -45,8 +47,9 @@ Recently completed:
 - [ ] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
-- [ ] explicit public baseline vocabulary migration plan for `heading_deg` /
-  `dual_antenna_heading`
+- [ ] finalize the deprecation/removal plan for compatibility fields
+  `heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` after
+  `v0.6.x`
 - [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230` / MSM summary
 - [ ] `gnss_replay` timing mode outside the ROS2 replay node
 - [ ] TLS support

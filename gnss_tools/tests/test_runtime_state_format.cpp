@@ -42,6 +42,12 @@ void TestCompactFormatting(TestContext& ctx)
   state.horizontal_accuracy_m = 0.25f;
   state.satellites_used = 18u;
   state.mean_cn0_db_hz = 35.5f;
+  state.dual_antenna_heading = true;
+  state.dual_antenna_baseline = true;
+  state.baseline_azimuth_deg = 182.25f;
+  state.baseline_pitch_deg = 0.1f;
+  state.baseline_length_m = 1.5f;
+  state.baseline_solution_status = universal_gnss::GnssBaselineSolutionStatus::kComputed;
   state.interference_detected = false;
 
   const std::string formatted =
@@ -55,6 +61,11 @@ void TestCompactFormatting(TestContext& ctx)
              "compact formatting should preserve nine decimal places for coordinates");
   ctx.Expect(formatted.find("interference=false") != std::string::npos,
              "compact formatting should include optional booleans when available");
+  ctx.Expect(formatted.find("dual_antenna_heading=true") != std::string::npos &&
+                 formatted.find("dual_antenna_baseline=true") != std::string::npos &&
+                 formatted.find("baseline_azimuth_deg=182.25") != std::string::npos &&
+                 formatted.find("baseline_solution_status=computed") != std::string::npos,
+             "compact formatting should include compatibility and additive baseline fields");
 }
 
 void TestJsonFormatting(TestContext& ctx)
@@ -65,6 +76,9 @@ void TestJsonFormatting(TestContext& ctx)
   state.latitude_deg = 40.0789588272;
   state.longitude_deg = 116.2365102982;
   state.satellites_visible = 24u;
+  state.dual_antenna_baseline = true;
+  state.baseline_azimuth_deg = 182.25f;
+  state.baseline_solution_status = universal_gnss::GnssBaselineSolutionStatus::kComputed;
   state.jamming_detected = true;
 
   const std::string formatted = universal_gnss_tools::FormatRuntimeStateJson(state, std::nullopt);
@@ -77,6 +91,11 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should preserve at least nine decimal places for coordinates");
   ctx.Expect(formatted.find("\"satellites_visible\":24") != std::string::npos,
              "json formatting should include available satellite counters");
+  ctx.Expect(formatted.find("\"dual_antenna_baseline\":true") != std::string::npos &&
+                 formatted.find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
+                 formatted.find("\"baseline_solution_status\":\"computed\"") !=
+                     std::string::npos,
+             "json formatting should include additive baseline fields");
   ctx.Expect(formatted.find("\"jamming_detected\":true") != std::string::npos,
              "json formatting should include available boolean fields");
 }

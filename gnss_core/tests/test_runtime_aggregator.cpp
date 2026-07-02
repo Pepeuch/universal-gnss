@@ -13,6 +13,7 @@ namespace
 {
 
 using universal_gnss::GnssCapability;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRuntimeAggregator;
 using universal_gnss::GnssRuntimeState;
@@ -226,6 +227,11 @@ void TestNoInventedRtkOrRfFields(TestContext& ctx)
   ctx.Expect(!HasCapability(state, GnssCapability::kJammingState) &&
                  !state.jamming_detected.has_value(),
              "aggregator should not invent jamming state");
+  ctx.Expect(!HasCapability(state, GnssCapability::kBaselineAzimuth) &&
+                 !state.baseline_azimuth_deg.has_value() &&
+                 !HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                 !state.dual_antenna_baseline.has_value(),
+             "aggregator should not invent antenna-baseline state");
 }
 
 void TestKnownFalseBooleanStateSurvivesAggregation(TestContext& ctx)
@@ -244,6 +250,60 @@ void TestKnownFalseBooleanStateSurvivesAggregation(TestContext& ctx)
              "aggregate should retain a known false corrections-active value");
   ctx.Expect(aggregator.state().corrections_active == std::optional<bool>(false),
              "aggregate should preserve false without treating it as unknown");
+}
+
+void TestBaselineFoundationFieldsMergeIndependently(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+
+  GnssRuntimeState geometry;
+  geometry.timestamp_ns = 100;
+  SetCapability(geometry, GnssCapability::kHeading);
+  SetCapability(geometry, GnssCapability::kBaselineAzimuth);
+  SetCapability(geometry, GnssCapability::kBaselinePitch);
+  SetCapability(geometry, GnssCapability::kBaselineLength);
+  ctx.Expect(SetOptionalValue(geometry, GnssCapability::kHeading, geometry.heading_deg, 182.25f),
+             "baseline geometry fixture should accept compatibility heading");
+  ctx.Expect(SetOptionalValue(
+                 geometry, GnssCapability::kBaselineAzimuth, geometry.baseline_azimuth_deg, 182.25f),
+             "baseline geometry fixture should accept baseline azimuth");
+  ctx.Expect(SetOptionalValue(
+                 geometry, GnssCapability::kBaselinePitch, geometry.baseline_pitch_deg, 0.1f),
+             "baseline geometry fixture should accept baseline pitch");
+  ctx.Expect(SetOptionalValue(
+                 geometry, GnssCapability::kBaselineLength, geometry.baseline_length_m, 1.5f),
+             "baseline geometry fixture should accept baseline length");
+
+  GnssRuntimeState status;
+  status.timestamp_ns = 110;
+  SetCapability(status, GnssCapability::kDualAntennaBaseline);
+  SetCapability(status, GnssCapability::kBaselineSolutionStatus);
+  ctx.Expect(SetOptionalValue(
+                 status,
+                 GnssCapability::kDualAntennaBaseline,
+                 status.dual_antenna_baseline,
+                 true),
+             "baseline status fixture should accept boolean baseline state");
+  ctx.Expect(SetOptionalValue(status,
+                              GnssCapability::kBaselineSolutionStatus,
+                              status.baseline_solution_status,
+                              GnssBaselineSolutionStatus::kComputed),
+             "baseline status fixture should accept solution status");
+
+  ctx.Expect(aggregator.Merge(geometry), "baseline geometry update should merge");
+  ctx.Expect(aggregator.Merge(status), "baseline status update should merge");
+
+  const auto& state = aggregator.state();
+  ctx.Expect(state.heading_deg == std::optional<float>(182.25f) &&
+                 state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
+                 state.baseline_pitch_deg == std::optional<float>(0.1f) &&
+                 state.baseline_length_m == std::optional<float>(1.5f),
+             "aggregator should preserve additive baseline geometry fields");
+  ctx.Expect(state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kComputed),
+             "aggregator should merge additive baseline status fields");
 }
 
 void TestAggregateTimestampTracksNewestKnownSample(TestContext& ctx)
@@ -277,6 +337,7 @@ int main()
   TestInvalidValueFlagsDoNotLeakIntoAggregate(ctx);
   TestNoInventedRtkOrRfFields(ctx);
   TestKnownFalseBooleanStateSurvivesAggregation(ctx);
+  TestBaselineFoundationFieldsMergeIndependently(ctx);
   TestAggregateTimestampTracksNewestKnownSample(ctx);
 
   if (ctx.failures != 0)

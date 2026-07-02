@@ -12,6 +12,7 @@ namespace
 using universal_gnss::ComputeValueFlagsFromFields;
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssCapabilityFlags;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::GnssRuntimeState;
@@ -111,6 +112,11 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
   SetCapability(state, GnssCapability::kDifferentialCorrections);
   SetCapability(state, GnssCapability::kCorrectionsActive);
   SetCapability(state, GnssCapability::kDualAntennaHeading);
+  SetCapability(state, GnssCapability::kDualAntennaBaseline);
+  SetCapability(state, GnssCapability::kBaselineAzimuth);
+  SetCapability(state, GnssCapability::kBaselinePitch);
+  SetCapability(state, GnssCapability::kBaselineLength);
+  SetCapability(state, GnssCapability::kBaselineSolutionStatus);
   SetCapability(state, GnssCapability::kJammingState);
 
   ctx.Expect(SetOptionalValue(state, GnssCapability::kRtkMode, state.rtk_mode, GnssRtkMode::kFixed),
@@ -138,6 +144,23 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
   ctx.Expect(SetOptionalValue(
                  state, GnssCapability::kDualAntennaHeading, state.dual_antenna_heading, true),
              "dual_antenna_heading should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kDualAntennaBaseline, state.dual_antenna_baseline, true),
+             "dual_antenna_baseline should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg, 182.25f),
+             "baseline_azimuth_deg should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kBaselinePitch, state.baseline_pitch_deg, 0.1f),
+             "baseline_pitch_deg should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(
+                 state, GnssCapability::kBaselineLength, state.baseline_length_m, 1.5f),
+             "baseline_length_m should be assignable when capability exists");
+  ctx.Expect(SetOptionalValue(state,
+                              GnssCapability::kBaselineSolutionStatus,
+                              state.baseline_solution_status,
+                              GnssBaselineSolutionStatus::kComputed),
+             "baseline_solution_status should be assignable when capability exists");
   ctx.Expect(SetOptionalValue(state, GnssCapability::kJammingState, state.jamming_detected, false),
              "jamming_detected should be assignable when capability exists");
 
@@ -161,6 +184,16 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
              "value_flags should expose a known false corrections-active state");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kDualAntennaHeading),
              "value_flags should expose dual antenna state availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kDualAntennaBaseline),
+             "value_flags should expose dual antenna baseline availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kBaselineAzimuth),
+             "value_flags should expose baseline azimuth availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kBaselinePitch),
+             "value_flags should expose baseline pitch availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kBaselineLength),
+             "value_flags should expose baseline length availability");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus),
+             "value_flags should expose baseline solution status availability");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kJammingState),
              "value_flags should expose jamming state availability");
   ctx.Expect(HasValidCapabilityValueInvariant(state),
@@ -173,7 +206,7 @@ void TestCapabilityBitsFitInUint32(TestContext& ctx)
              "GnssCapability bits must fit in uint32_t");
   ctx.Expect(sizeof(GnssCapabilityFlags) == sizeof(std::uint32_t),
              "GnssCapabilityFlags must fit in uint32_t");
-  ctx.Expect(ToFlag(GnssCapability::kCorrectionsActive) != 0u,
+  ctx.Expect(ToFlag(GnssCapability::kBaselineSolutionStatus) != 0u,
              "highest currently defined capability bit should be non-zero");
 }
 

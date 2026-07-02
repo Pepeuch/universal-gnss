@@ -195,10 +195,12 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
                  universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kRtk) &&
                  universal_gnss_driver::HasReceiverFeature(
+                     unicore_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
+                 universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
                  universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
-             "Unicore driver should advertise RTK, signal-group config, and ASCII command config support");
+             "Unicore driver should advertise RTK, baseline, signal-group config, and ASCII command config support");
 
   ctx.Expect(!universal_gnss_driver::SupportsInputProtocol(
                  nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&

@@ -18,6 +18,7 @@ namespace
 {
 
 using universal_gnss::GnssCapability;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
@@ -235,17 +236,34 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
                  HasCapability(state, GnssCapability::kVerticalAccuracy) &&
                  HasCapability(state, GnssCapability::kCorrectionAge) &&
                  HasCapability(state, GnssCapability::kHeading) &&
+                 HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasCapability(state, GnssCapability::kBaselineAzimuth) &&
+                 HasCapability(state, GnssCapability::kBaselinePitch) &&
+                 HasCapability(state, GnssCapability::kBaselineLength) &&
+                 HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
                  HasCapability(state, GnssCapability::kHdop),
              "PVTSLNB runtime mapping should advertise documented optional fields");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
                  HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
                  HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
                  HasValueAvailable(state, GnssCapability::kHeading) &&
+                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasValueAvailable(state, GnssCapability::kBaselineAzimuth) &&
+                 HasValueAvailable(state, GnssCapability::kBaselinePitch) &&
+                 HasValueAvailable(state, GnssCapability::kBaselineLength) &&
+                 HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
                  HasValueAvailable(state, GnssCapability::kHdop) &&
                  state.heading_deg == 182.2500f &&
+                 state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 state.baseline_azimuth_deg == std::optional<float>(182.2500f) &&
+                 state.baseline_pitch_deg == std::optional<float>(0.1000f) &&
+                 state.baseline_length_m == std::optional<float>(1.5000f) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kComputed) &&
                  state.correction_age_s == 0.9000f &&
                  state.hdop == 0.6840f,
-             "PVTSLNB runtime mapping should expose documented heading, DOP, and age values");
+             "PVTSLNB runtime mapping should expose documented baseline, heading, DOP, and age values");
   ctx.Expect(!HasCapability(state, GnssCapability::kInterferenceState) &&
                  !HasCapability(state, GnssCapability::kJammingState),
              "PVTSLNB should not invent RF runtime fields");
@@ -268,8 +286,17 @@ void TestHeadingIsGatedByHeadingSolutionStatus(TestContext& ctx)
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
              "PVTSLNB should expose RTK float from NARROW_FLOAT");
   ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
-                 !HasValueAvailable(state, GnssCapability::kHeading),
-             "PVTSLNB should only publish heading when the documented heading status is valid");
+                 !HasValueAvailable(state, GnssCapability::kHeading) &&
+                 HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
+                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+                 HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
+                 state.dual_antenna_baseline == std::optional<bool>(false) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kInsufficientObservations) &&
+                 !HasValueAvailable(state, GnssCapability::kBaselineAzimuth),
+             "PVTSLNB should gate baseline geometry while still exposing a known unsolved baseline state");
 }
 
 void TestWrongIdAndMalformedPayloadRejected(TestContext& ctx)

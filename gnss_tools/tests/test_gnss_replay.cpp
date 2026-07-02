@@ -348,11 +348,35 @@ std::vector<std::uint8_t> MakePvtslnBinaryPayload()
   WriteLittleEndianFloat32(payload, 28u, 0.1500f);
   WriteLittleEndianFloat32(payload, 32u, 0.1800f);
   WriteLittleEndianFloat32(payload, 36u, 0.9000f);
+  WriteLittleEndian32(payload, 40u, 16u);
+  WriteLittleEndianFloat32(payload, 44u, 60.5060f);
+  WriteLittleEndianFloat64(payload, 48u, 40.07898130522);
+  WriteLittleEndianFloat64(payload, 56u, 116.23663134427);
+  WriteLittleEndianFloat32(payload, 64u, -8.4923f);
   payload[68u] = 46u;
   payload[69u] = 28u;
+  payload[70u] = 46u;
+  payload[71u] = 28u;
+  WriteLittleEndianFloat64(payload, 72u, 0.0009);
+  WriteLittleEndianFloat64(payload, 80u, -0.0031);
+  WriteLittleEndianFloat64(payload, 88u, 0.0032);
   WriteLittleEndian32(payload, 96u, 0u);
+  WriteLittleEndianFloat32(payload, 100u, 1.5000f);
   WriteLittleEndianFloat32(payload, 104u, 182.2500f);
+  WriteLittleEndianFloat32(payload, 108u, 0.1000f);
+  payload[112u] = 28u;
+  payload[113u] = 25u;
+  payload[114u] = 12u;
+  payload[115u] = 8u;
+  WriteLittleEndianFloat32(payload, 116u, 2.1753f);
+  WriteLittleEndianFloat32(payload, 120u, 1.3480f);
   WriteLittleEndianFloat32(payload, 124u, 0.6840f);
+  WriteLittleEndianFloat32(payload, 128u, 1.8392f);
+  WriteLittleEndianFloat32(payload, 132u, 1.7072f);
+  WriteLittleEndianFloat32(payload, 136u, 5.0f);
+  payload[140u] = 28u;
+  payload[141u] = 25u;
+  payload[142u] = 26u;
   return payload;
 }
 
@@ -609,11 +633,15 @@ void TestReplayUnicoreBinaryAndAsciiRouting(TestContext& ctx)
           final_state.mean_cn0_db_hz == std::optional<float>(46.0f) &&
           final_state.max_cn0_db_hz == std::optional<float>(50.0f) &&
           final_state.correction_age_s == std::optional<float>(0.9f) &&
+          final_state.dual_antenna_baseline == std::optional<bool>(true) &&
+          final_state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
+          final_state.baseline_pitch_deg == std::optional<float>(0.1f) &&
+          final_state.baseline_length_m == std::optional<float>(1.5f) &&
           final_state.heading_deg.has_value() &&
           std::fabs(*final_state.heading_deg - 182.25) < 1e-6 &&
           final_state.interference_detected == std::optional<bool>(true) &&
           final_state.jamming_detected == std::optional<bool>(true),
-      "mixed Unicore replay should expose accuracy, DOP, satellites, CN0, heading, and RF state");
+      "mixed Unicore replay should expose accuracy, baseline geometry, DOP, satellites, CN0, heading, and RF state");
 }
 
 void TestReplayMergesMixedRuntimeState(TestContext& ctx)

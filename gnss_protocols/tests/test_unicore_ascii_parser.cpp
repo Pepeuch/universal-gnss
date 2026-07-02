@@ -13,6 +13,7 @@ namespace
 {
 
 using universal_gnss::GnssCapability;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss_protocols::ParseUnicoreBestSat;
@@ -131,18 +132,36 @@ void TestPvtslnParsingAndRuntimeMapping(TestContext& ctx)
                  universal_gnss::HasCapability(state, GnssCapability::kCorrectionAge) &&
                  universal_gnss::HasCapability(state, GnssCapability::kDifferentialCorrections) &&
                  universal_gnss::HasCapability(state, GnssCapability::kCorrectionsActive) &&
-                 universal_gnss::HasCapability(state, GnssCapability::kHeading),
+                 universal_gnss::HasCapability(state, GnssCapability::kHeading) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselineAzimuth) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselinePitch) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselineLength) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselineSolutionStatus),
              "PVTSLNA runtime mapping should advertise supported optional fields");
   ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kDifferentialCorrections) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionsActive) &&
-                 universal_gnss::HasValueAvailable(state, GnssCapability::kHeading),
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kHeading) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kBaselineAzimuth) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kBaselinePitch) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kBaselineLength) &&
+                 universal_gnss::HasValueAvailable(
+                     state, GnssCapability::kBaselineSolutionStatus),
              "PVTSLNA runtime mapping should expose present optional values");
   ctx.Expect(state.differential_corrections == std::optional<bool>(true) &&
-                 state.corrections_active == std::optional<bool>(true),
-             "PVTSLNA RTK solutions should expose known true correction state");
+                 state.corrections_active == std::optional<bool>(true) &&
+                 state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
+                 state.baseline_pitch_deg == std::optional<float>(0.1f) &&
+                 state.baseline_length_m == std::optional<float>(1.5f) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kComputed),
+             "PVTSLNA RTK solutions should expose correction and baseline state");
   ctx.Expect(!universal_gnss::HasCapability(state, GnssCapability::kInterferenceState) &&
                  !universal_gnss::HasCapability(state, GnssCapability::kJammingState),
              "PVTSLNA should not invent RF or jamming capabilities");
@@ -255,6 +274,18 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
                    state.fix_type == GnssFixType::kRtkFixed &&
                    state.rtk_mode == GnssRtkMode::kFixed,
                "RTKSTATUSA runtime mapping should expose RTK fixed state");
+    ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+                   universal_gnss::HasCapability(
+                       state, GnssCapability::kBaselineSolutionStatus) &&
+                   universal_gnss::HasValueAvailable(
+                       state, GnssCapability::kDualAntennaBaseline) &&
+                   universal_gnss::HasValueAvailable(
+                       state, GnssCapability::kBaselineSolutionStatus) &&
+                   state.dual_antenna_baseline == std::optional<bool>(true) &&
+                   state.baseline_solution_status ==
+                       std::optional<GnssBaselineSolutionStatus>(
+                           GnssBaselineSolutionStatus::kComputed),
+               "RTKSTATUSA should expose the canonical baseline status foundation");
     ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kDualAntennaHeading) &&
                    universal_gnss::HasValueAvailable(state, GnssCapability::kDualAntennaHeading) &&
                    state.dual_antenna_heading == true,
@@ -277,6 +308,15 @@ void TestRtkStatusAndRtcmStatusParsing(TestContext& ctx)
                    state.rtk_mode == GnssRtkMode::kFloat &&
                    state.dual_antenna_heading == false,
                "RTKSTATUSA should expose float RTK and a non-within-limit dual-antenna state");
+    ctx.Expect(universal_gnss::HasValueAvailable(
+                   state, GnssCapability::kDualAntennaBaseline) &&
+                   universal_gnss::HasValueAvailable(
+                       state, GnssCapability::kBaselineSolutionStatus) &&
+                   state.dual_antenna_baseline == std::optional<bool>(false) &&
+                   state.baseline_solution_status ==
+                       std::optional<GnssBaselineSolutionStatus>(
+                           GnssBaselineSolutionStatus::kOutOfTolerance),
+               "RTKSTATUSA should expose a known false canonical baseline state when out of limit");
   }
 
   const std::string rtcm_line = WithUnicoreAsciiCrc(

@@ -78,6 +78,7 @@ output.
 - RTK
 - heading
 - dual antenna
+- dual-antenna baseline
 - RF / jamming monitoring
 - PPS
 - survey-in
@@ -498,6 +499,9 @@ Current role:
 - expose current normalized runtime state
 - accept byte/string input and forward it into the wrapped vendor session
 - build prepared `ReceiverCommand` sequences for supported high-level profiles
+- keep driver capability claims aligned with the portable runtime surface,
+  including additive baseline capabilities only when a backend really provides
+  them
 
 Current concrete drivers:
 
@@ -531,7 +535,8 @@ Current vendor coverage:
   - family: `UM98x`
   - profiles: rover, diagnostics
   - runtime state: delegated to `UnicoreSession`
-  - capabilities: RTK, heading, dual antenna, signal-group configuration,
+  - capabilities: RTK, heading compatibility, dual antenna,
+    dual-antenna baseline, signal-group configuration,
     ASCII command configuration, rover mode, PPS
 
 Still deferred:
