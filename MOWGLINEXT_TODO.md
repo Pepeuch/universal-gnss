@@ -15,10 +15,38 @@ not automatically a robot yaw source. Any robot-frame heading/orientation use
 must remain downstream of explicit antenna mounting transform/calibration and
 localization policy.
 
-## 1. Staged roadmap — short-term GUI status display in the GPS/GNSS panel
+Immediate UI pass scope to preserve:
+
+* make the GPS/GNSS panel readable using existing downstream data surfaces only
+* prioritize bargraphs / compact visual summaries for:
+  * `satellites_used`
+  * `satellites_visible`
+  * `satellites_tracked`
+  * `mean_cn0_db_hz`
+  * `max_cn0_db_hz`
+  * `correction_stream_status`
+  * `msm_summary_*`
+* keep the implementation portable by using existing `GnssStatus` projection
+  and existing diagnostics forwarding only
+
+Explicitly not in this UI pass:
+
+* robot-frame baseline heading/yaw use
+* Sensors panel antenna mounting configuration work
+* Localization panel policy/fusion work
+* a new RTCM parser or observation extractor inside MowgliNext
+* navigation/autonomy decisions driven by baseline/MSM/correction state
+
+## 1. Current UI pass — make the GPS/GNSS panel readable with satellite / C/N0 / MSM bargraphs
 
 What Universal GNSS already provides:
 
+* satellite / RF summary fields already present in the public projection:
+  * `satellites_used`
+  * `satellites_visible`
+  * `satellites_tracked`
+  * `mean_cn0_db_hz`
+  * `max_cn0_db_hz`
 * canonical dual-antenna baseline state:
   * `dual_antenna_baseline`
   * `baseline_azimuth_deg`
@@ -33,7 +61,18 @@ What Universal GNSS already provides:
 
 What MowgliNext should still add:
 
-* show those raw Universal GNSS fields together in the GPS/GNSS status panel
+* render readable satellite bargraphs or equivalent compact visual summaries
+  for `satellites_used`, `satellites_visible`, and `satellites_tracked`
+* render readable C/N0 bargraphs or equivalent compact visual summaries for
+  `mean_cn0_db_hz` and `max_cn0_db_hz`
+* show `correction_stream_status` and `msm_summary_*` in the same panel as the
+  satellite / C/N0 summaries so operators can read signal quality and
+  correction completeness together
+* keep the implementation downstream of existing `GnssStatus` and diagnostics
+  surfaces; do not add a second RTCM parser or per-message observation parser
+  inside MowgliNext
+* show the existing raw Universal GNSS baseline fields only as GNSS/geodesy
+  state if they remain visible in the same panel
 * preserve canonical labels such as `baseline_azimuth_deg`,
   `baseline_pitch_deg`, `baseline_length_m`, and
   `baseline_solution_status`
@@ -49,6 +88,9 @@ Suggested operator wording constraint:
   raw GPS/GNSS panel
 * do not rename `baseline_azimuth_deg` to `yaw` or `heading` unless a
   robot-frame transform has actually been applied downstream
+* if the panel mixes baseline, satellites, C/N0, and MSM information, make it
+  visually obvious which items are raw GNSS/geodesy state versus correction
+  transport/semantic state
 
 ## 2. Staged roadmap — Sensors UI / physical antenna mounting configuration
 
