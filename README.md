@@ -64,6 +64,8 @@ Current project state includes:
   - safe unknown-model fallback that skips `CONFIG SIGNALGROUP`
   - documented UM982 dual-antenna baseline gating
   - documented UM980 / UB9A0 single-antenna signal-group validation
+  - explicit known non-baseline model selection for UM960 / UM981 without
+    guessing undocumented signal-group mappings
 - Unicore binary `N4` regression coverage for valid unknown-frame accounting,
   malformed/rejected decode handling, and ASCII/Binary portable-field
   consistency on shared `PVTSLN*` mappings
@@ -120,6 +122,8 @@ Current receiver-family support:
   - `rover_high_precision_debug`
   - `factory_reset` planning/preview/live recovery apply
   - model-aware signal-group planning:
+    - `UM960` and `UM981` are known non-baseline models and stay conservative
+      when signal-group mappings are undocumented
     - `UM982` may emit the documented dual-antenna rover selection
       `CONFIG SIGNALGROUP 3 6`
     - `UM980` and `UB9A0` expose documented explicit signal-group selections

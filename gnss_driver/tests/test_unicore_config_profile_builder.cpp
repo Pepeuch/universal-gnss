@@ -123,6 +123,40 @@ void TestRoverProfileGeneration(TestContext& ctx)
 
 void TestModelAwareRoverProfileGeneration(TestContext& ctx)
 {
+  {
+    const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+        ResolveUnicoreModelProfile("UM960"),
+        UnicorePersistenceTarget::kRuntimeOnly);
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                   result.commands.size() == 14u,
+               "UM960 rover helper should stay known non-baseline and skip undocumented signal-group commands");
+    ctx.Expect(std::none_of(result.commands.begin(),
+                            result.commands.end(),
+                            [](const ReceiverCommand& command) {
+                              return ContainsText(command, "CONFIG SIGNALGROUP");
+                            }),
+               "UM960 rover helper should not guess a signal-group selection");
+  }
+
+  {
+    const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+        ResolveUnicoreModelProfile("UM981"),
+        UnicorePersistenceTarget::kRuntimeOnly);
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                   result.commands.size() == 14u,
+               "UM981 rover helper should stay known non-baseline and skip undocumented signal-group commands");
+    ctx.Expect(std::none_of(result.commands.begin(),
+                            result.commands.end(),
+                            [](const ReceiverCommand& command) {
+                              return ContainsText(command, "CONFIG SIGNALGROUP");
+                            }),
+               "UM981 rover helper should not guess a signal-group selection");
+  }
+
   const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
       ResolveUnicoreModelProfile("UM982"),
       UnicorePersistenceTarget::kRuntimeOnly);

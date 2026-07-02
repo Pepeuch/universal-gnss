@@ -53,6 +53,23 @@ const UnicoreModelProfile& GenericUnicoreProfile()
   return profile;
 }
 
+const UnicoreModelProfile& Um960Profile()
+{
+  // The current repo sources confirm UM960 as a known single-antenna/non-baseline
+  // model, but they do not document a portable CONFIG SIGNALGROUP mapping for
+  // it. Keep the model selectable without guessing any signal-group behavior.
+  static const UnicoreModelProfile profile{
+      UnicoreModel::kUm960,
+      "UM98x",
+      "UM960",
+      "unicore_um960",
+      false,
+      MakeUnicoreCapabilities(false, false),
+      {},
+  };
+  return profile;
+}
+
 const UnicoreModelProfile& Um980Profile()
 {
   static const UnicoreModelProfile profile{
@@ -67,6 +84,23 @@ const UnicoreModelProfile& Um980Profile()
           {{2u}, "documented single-antenna all-frequency signal group", false, false, false, false},
           {{8u}, "documented single-antenna 50 Hz signal group", false, false, false, false},
       },
+  };
+  return profile;
+}
+
+const UnicoreModelProfile& Um981Profile()
+{
+  // The current repo sources confirm UM981 as a known single-antenna/non-baseline
+  // model, but they do not document a portable CONFIG SIGNALGROUP mapping for
+  // it. Keep the model selectable without guessing any signal-group behavior.
+  static const UnicoreModelProfile profile{
+      UnicoreModel::kUm981,
+      "UM98x",
+      "UM981",
+      "unicore_um981",
+      false,
+      MakeUnicoreCapabilities(false, false),
+      {},
   };
   return profile;
 }
@@ -129,9 +163,17 @@ std::string NormalizeUnicoreModelName(const std::string_view model)
 std::optional<UnicoreModel> ParseUnicoreModel(const std::string_view model)
 {
   const std::string normalized = NormalizeUnicoreModelName(model);
+  if (normalized == "UM960")
+  {
+    return UnicoreModel::kUm960;
+  }
   if (normalized == "UM980")
   {
     return UnicoreModel::kUm980;
+  }
+  if (normalized == "UM981")
+  {
+    return UnicoreModel::kUm981;
   }
   if (normalized == "UM982")
   {
@@ -149,8 +191,12 @@ const char* ToString(const UnicoreModel model)
 {
   switch (model)
   {
+    case UnicoreModel::kUm960:
+      return "UM960";
     case UnicoreModel::kUm980:
       return "UM980";
+    case UnicoreModel::kUm981:
+      return "UM981";
     case UnicoreModel::kUm982:
       return "UM982";
     case UnicoreModel::kUb9a0:
@@ -178,8 +224,12 @@ const UnicoreModelProfile& ResolveUnicoreModelProfile(
 
   switch (*parsed)
   {
+    case UnicoreModel::kUm960:
+      return Um960Profile();
     case UnicoreModel::kUm980:
       return Um980Profile();
+    case UnicoreModel::kUm981:
+      return Um981Profile();
     case UnicoreModel::kUm982:
       return Um982Profile();
     case UnicoreModel::kUb9a0:

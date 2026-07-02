@@ -13,7 +13,7 @@ void PrintUsage(const char* program_name)
       << "Usage: " << program_name
       << " [--json] [--persistent] [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
       << " [--signal-group <\"2\"|\"3 6\"|...>]"
-      << " [--model <UM980|UM982|UB9A0>]"
+      << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
       << " [--output-port <usb|uart1|uart2|all|auto>]"
       << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
       << "Examples:\n"
@@ -23,6 +23,7 @@ void PrintUsage(const char* program_name)
       << "  " << program_name << " ublox rover_high_precision --output-port usb\n"
       << "  " << program_name << " unicore rover_high_precision --model UM982 --signal-profile high_precision\n"
       << "  " << program_name << " unicore rover_high_precision --model UM980 --signal-group 2\n"
+      << "  " << program_name << " unicore rover_high_precision --model UM981\n"
       << "  " << program_name << " ublox rover_high_precision --rate-hz 5 --config-baud 921600\n"
       << "  " << program_name << " unicore factory_reset --json\n"
       << "Notes:\n"

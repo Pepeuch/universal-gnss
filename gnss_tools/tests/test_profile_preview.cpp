@@ -203,20 +203,36 @@ void TestSignalProfilePreview(TestContext& ctx)
   ProfilePreviewOptions unknown_model_options;
   unknown_model_options.vendor = "unicore";
   unknown_model_options.profile = "rover_high_precision";
-  unknown_model_options.receiver_model = "UM981";
+  unknown_model_options.receiver_model = "UM952";
   unknown_model_options.signal_profile =
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
   const auto unknown_model_result = BuildProfilePreview(unknown_model_options);
   const std::string unknown_model_text = FormatProfilePreviewText(unknown_model_result);
   ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kOk &&
                  unknown_model_result.receiver_model ==
-                     std::optional<std::string>{"UM981"} &&
+                     std::optional<std::string>{"UM952"} &&
                  unknown_model_result.summary.commands_total == 14u &&
-                 unknown_model_text.find("Receiver model: UM981") != std::string::npos &&
+                 unknown_model_text.find("Receiver model: UM952") != std::string::npos &&
                  unknown_model_text.find("safe generic non-baseline fallback") !=
                      std::string::npos &&
                  !HasTextCommand(unknown_model_result, "CONFIG SIGNALGROUP"),
              "unknown-model preview should report the safe fallback and skip CONFIG SIGNALGROUP");
+
+  ProfilePreviewOptions known_non_baseline_options;
+  known_non_baseline_options.vendor = "unicore";
+  known_non_baseline_options.profile = "rover_high_precision";
+  known_non_baseline_options.receiver_model = "UM960";
+  const auto known_non_baseline_result = BuildProfilePreview(known_non_baseline_options);
+  const std::string known_non_baseline_text = FormatProfilePreviewText(known_non_baseline_result);
+  ctx.Expect(known_non_baseline_result.status == ProfilePreviewStatus::kOk &&
+                 known_non_baseline_result.receiver_model ==
+                     std::optional<std::string>{"UM960"} &&
+                 known_non_baseline_result.summary.commands_total == 14u &&
+                 known_non_baseline_text.find("Receiver model: UM960") != std::string::npos &&
+                 known_non_baseline_text.find("safe generic non-baseline fallback") ==
+                     std::string::npos &&
+                 !HasTextCommand(known_non_baseline_result, "CONFIG SIGNALGROUP"),
+             "known non-baseline Unicore models such as UM960 should be accepted without falling back to the unknown-model path");
 }
 
 void TestUbloxOutputPortPreview(TestContext& ctx)

@@ -510,6 +510,27 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
              "prepared apply text should surface the reduced minimal signal-profile command set");
 }
 
+void TestKnownNonBaselineUnicoreModelPreparation(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM981";
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+  const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.plan.receiver_model == std::optional<std::string>{"UM981"} &&
+                 result.plan.summary.commands_total == 14u &&
+                 text.find("Receiver model: UM981") != std::string::npos &&
+                 text.find("safe generic non-baseline fallback") == std::string::npos,
+             "config apply should accept UM981 as a known non-baseline Unicore model without falling back to the unknown-model path");
+}
+
 void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -795,6 +816,7 @@ int main()
   TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
   TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(ctx);
   TestSignalProfilePreparationFlowsIntoApplyPlan(ctx);
+  TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);

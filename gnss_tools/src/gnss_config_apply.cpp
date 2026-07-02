@@ -52,7 +52,7 @@ void PrintUsage(const char* program_name)
       << "       [--apply-mode <dry-run|runtime-only|persistent>]\n"
       << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
       << " [--signal-group <\"2\"|\"3 6\"|...>]"
-      << " [--model <UM980|UM982|UB9A0>]"
+      << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
       << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
       << "       [--timeout-ms <value>] [--confirm|--yes]\n"
       << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
@@ -72,6 +72,8 @@ void PrintUsage(const char* program_name)
       << " --family unicore --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm\n"
       << "  " << program_name
       << " --family unicore --model UM980 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --signal-group 2 --apply-mode persistent --confirm\n"
+      << "  " << program_name
+      << " --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --apply-mode runtime-only --confirm\n"
       << "  " << program_name
       << " --family nmea --profile runtime_only\n"
       << "Notes:\n"

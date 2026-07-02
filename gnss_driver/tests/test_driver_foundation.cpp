@@ -173,7 +173,7 @@ void TestProtocolAndFeatureFlags(TestContext& ctx)
 void TestProfiles(TestContext& ctx)
 {
   const auto& profiles = universal_gnss_driver::GetBuiltInReceiverProfiles();
-  ctx.Expect(profiles.size() == 7u, "built-in receiver profile set should contain the documented vendor/model profiles");
+  ctx.Expect(profiles.size() == 9u, "built-in receiver profile set should contain the documented vendor/model profiles");
 
   const ReceiverProfile& generic = RequireProfile(ctx, "generic_nmea");
   ctx.Expect(universal_gnss_driver::SupportsOutputProtocol(
@@ -216,6 +216,13 @@ void TestProfiles(TestContext& ctx)
                  !universal_gnss_driver::HasReceiverFeature(
                      unicore.capabilities, ReceiverFeature::kDualAntenna),
              "generic Unicore placeholder should stay safe and not assume dual-antenna baseline capability");
+  const ReceiverProfile& unicore_um960 = RequireProfile(ctx, "unicore_um960");
+  ctx.Expect(!unicore_um960.placeholder &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     unicore_um960.capabilities, ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     unicore_um960.capabilities, ReceiverFeature::kDualAntennaBaseline),
+             "UM960 profile should stay known single-antenna/non-baseline without guessing signal-group support");
   const ReceiverProfile& unicore_um980 = RequireProfile(ctx, "unicore_um980");
   ctx.Expect(!unicore_um980.placeholder &&
                  universal_gnss_driver::HasReceiverFeature(
@@ -223,6 +230,13 @@ void TestProfiles(TestContext& ctx)
                  !universal_gnss_driver::HasReceiverFeature(
                      unicore_um980.capabilities, ReceiverFeature::kDualAntennaBaseline),
              "UM980 profile should expose documented single-antenna signal-group support without baseline capability");
+  const ReceiverProfile& unicore_um981 = RequireProfile(ctx, "unicore_um981");
+  ctx.Expect(!unicore_um981.placeholder &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     unicore_um981.capabilities, ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     unicore_um981.capabilities, ReceiverFeature::kDualAntennaBaseline),
+             "UM981 profile should stay known single-antenna/non-baseline without guessing signal-group support");
   const ReceiverProfile& unicore_um982 = RequireProfile(ctx, "unicore_um982");
   ctx.Expect(!unicore_um982.placeholder &&
                  universal_gnss_driver::HasReceiverFeature(

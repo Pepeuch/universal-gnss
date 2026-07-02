@@ -132,9 +132,15 @@ Current documented Unicore model profiles are intentionally narrow:
 - unknown/generic
   - safe non-baseline fallback
   - no automatic `CONFIG SIGNALGROUP`
+- `UM960`
+  - known non-baseline
+  - no documented signal-group selections in the current repo sources
 - `UM980`
   - non-baseline
   - documented explicit signal-group selections only
+- `UM981`
+  - known non-baseline
+  - no documented signal-group selections in the current repo sources
 - `UM982`
   - documented dual-antenna baseline capable
   - documented portable rover signal-group default
@@ -570,6 +576,8 @@ Current vendor coverage:
   - capabilities: model-aware
   - generic/unknown fallback:
     RTK, ASCII command configuration, rover mode, base mode, survey-in, PPS
+  - `UM960` and `UM981` stay known non-baseline models without documented
+    signal-group support in the current repo sources
   - `UM982` additionally advertises heading compatibility, dual antenna,
     dual-antenna baseline, and documented signal-group configuration
   - `UM980` and `UB9A0` advertise documented signal-group configuration only;

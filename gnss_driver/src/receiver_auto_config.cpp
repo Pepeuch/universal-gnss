@@ -905,8 +905,17 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       if (!HasReceiverFeature(model_profile.capabilities, ReceiverFeature::kSignalGroups))
       {
         plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
-        plan.error_message =
-            "cannot apply a Unicore signal-group override without a documented model profile; supply a confirmed model such as UM980, UM982, or UB9A0";
+        if (model_profile.model_id == UnicoreModel::kUnknown)
+        {
+          plan.error_message =
+              "cannot apply a Unicore signal-group override without a documented model/signal-group profile; supply a confirmed model with documented signal-group support such as UM980, UM982, or UB9A0";
+        }
+        else
+        {
+          plan.error_message =
+              "model " + std::string(model_profile.model) +
+              " has no documented portable signal-group profile yet; explicit overrides are currently confirmed only for UM980, UM982, and UB9A0";
+        }
         return plan;
       }
 
@@ -1231,8 +1240,11 @@ std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
   }
 
   // Documented N4 CONFIG SIGNALGROUP forms are either one field
-  // (single-antenna products such as UM980 / UB9A0) or two fields
-  // (dual-antenna products such as UM982). Anything else is malformed.
+  // (single-antenna products with repo-local mappings such as UM980 / UB9A0)
+  // or two fields (dual-antenna products such as UM982). Known non-baseline
+  // models without repo-local SIGNALGROUP mappings, such as UM960 / UM981,
+  // intentionally stay on the no-documented-signal-group path. Anything else
+  // is malformed.
   if (groups.empty() || groups.size() > 2u)
   {
     return std::nullopt;

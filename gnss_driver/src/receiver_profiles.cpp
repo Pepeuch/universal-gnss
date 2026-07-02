@@ -31,9 +31,9 @@ ReceiverProfile BuildUnicoreProfile(const UnicoreModelProfile& model_profile,
 
 }  // namespace
 
-const std::array<ReceiverProfile, 7>& GetBuiltInReceiverProfiles()
+const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
 {
-  static const std::array<ReceiverProfile, 7> profiles = {
+  static const std::array<ReceiverProfile, 9> profiles = {
       ReceiverProfile{
           "generic_nmea",
           "Generic NMEA Receiver",
@@ -62,7 +62,9 @@ const std::array<ReceiverProfile, 7>& GetBuiltInReceiverProfiles()
                                ToFlag(ReceiverFeature::kRoverMode)),
       },
       BuildUnicoreProfile(ResolveUnicoreModelProfile(), "Unicore N4 Generic"),
+      BuildUnicoreProfile(ResolveUnicoreModelProfile("UM960"), "Unicore UM960"),
       BuildUnicoreProfile(ResolveUnicoreModelProfile("UM980"), "Unicore UM980"),
+      BuildUnicoreProfile(ResolveUnicoreModelProfile("UM981"), "Unicore UM981"),
       BuildUnicoreProfile(ResolveUnicoreModelProfile("UM982"), "Unicore UM982"),
       BuildUnicoreProfile(ResolveUnicoreModelProfile("UB9A0"), "Unicore UB9A0"),
       ReceiverProfile{

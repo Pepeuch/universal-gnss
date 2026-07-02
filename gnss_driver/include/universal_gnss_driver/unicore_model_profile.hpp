@@ -15,9 +15,11 @@ namespace universal_gnss_driver
 enum class UnicoreModel : std::uint8_t
 {
   kUnknown = 0,
-  kUm980 = 1,
-  kUm982 = 2,
-  kUb9a0 = 3,
+  kUm960 = 1,
+  kUm980 = 2,
+  kUm981 = 3,
+  kUm982 = 4,
+  kUb9a0 = 5,
 };
 
 struct UnicoreSignalGroupSelection

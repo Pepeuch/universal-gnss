@@ -152,20 +152,36 @@ void TestSignalProfilePlanning(TestContext& ctx)
   ConfigPlanOptions unknown_unicore_options;
   unknown_unicore_options.vendor = "unicore";
   unknown_unicore_options.profile = "rover_high_precision";
-  unknown_unicore_options.receiver_model = "UM981";
+  unknown_unicore_options.receiver_model = "UM952";
   unknown_unicore_options.signal_profile =
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
   const auto unknown_unicore_result = BuildConfigPlan(unknown_unicore_options);
   const std::string unknown_unicore_text = FormatConfigPlanText(unknown_unicore_result);
   ctx.Expect(unknown_unicore_result.status == ConfigPlanStatus::kOk &&
                  unknown_unicore_result.receiver_model ==
-                     std::optional<std::string>{"UM981"} &&
+                     std::optional<std::string>{"UM952"} &&
                  unknown_unicore_result.summary.commands_total == 14u &&
-                 unknown_unicore_text.find("Receiver model: UM981") != std::string::npos &&
+                 unknown_unicore_text.find("Receiver model: UM952") != std::string::npos &&
                  unknown_unicore_text.find("safe generic non-baseline fallback") !=
                      std::string::npos &&
                  !HasTextCommand(unknown_unicore_result, "CONFIG SIGNALGROUP"),
              "unknown Unicore model plan text should report the safe fallback and skip CONFIG SIGNALGROUP");
+
+  ConfigPlanOptions known_non_baseline_options;
+  known_non_baseline_options.vendor = "unicore";
+  known_non_baseline_options.profile = "rover_high_precision";
+  known_non_baseline_options.receiver_model = "UM981";
+  const auto known_non_baseline_result = BuildConfigPlan(known_non_baseline_options);
+  const std::string known_non_baseline_text = FormatConfigPlanText(known_non_baseline_result);
+  ctx.Expect(known_non_baseline_result.status == ConfigPlanStatus::kOk &&
+                 known_non_baseline_result.receiver_model ==
+                     std::optional<std::string>{"UM981"} &&
+                 known_non_baseline_result.summary.commands_total == 14u &&
+                 known_non_baseline_text.find("Receiver model: UM981") != std::string::npos &&
+                 known_non_baseline_text.find("safe generic non-baseline fallback") ==
+                     std::string::npos &&
+                 !HasTextCommand(known_non_baseline_result, "CONFIG SIGNALGROUP"),
+             "known non-baseline Unicore models such as UM981 should be accepted without falling back to the unknown-model path");
 
   ConfigPlanOptions nmea_options;
   nmea_options.vendor = "nmea";

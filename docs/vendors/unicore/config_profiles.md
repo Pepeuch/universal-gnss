@@ -53,9 +53,17 @@ Current documented model profiles are intentionally narrow:
   - safe non-baseline fallback
   - no documented signal-group selections
   - no automatic `CONFIG SIGNALGROUP`
+- `UM960`
+  - known non-baseline
+  - no documented `CONFIG SIGNALGROUP` selections in the current repo sources
+  - no automatic rover signal-group selection
 - `UM980`
   - non-baseline
   - documented explicit selections: `1`, `2`, `8`
+  - no automatic rover signal-group selection
+- `UM981`
+  - known non-baseline
+  - no documented `CONFIG SIGNALGROUP` selections in the current repo sources
   - no automatic rover signal-group selection
 - `UM982`
   - documented dual-antenna baseline capable
@@ -169,6 +177,8 @@ Model-specific signal-group behavior:
 
 - `UM982` adds the documented portable rover selection
   `CONFIG SIGNALGROUP 3 6`
+- `UM960` and `UM981` stay known non-baseline, but the current repo sources do
+  not document portable signal-group selections for them
 - `UM980` and `UB9A0` do not get an automatic signal-group command because the
   current portable layer has no documented automatic rover selection for those
   models
@@ -254,7 +264,9 @@ severity:
 
 Current documented explicit override selections are:
 
+- `UM960`: none documented in the current repo sources
 - `UM980`: `1`, `2`, `8`
+- `UM981`: none documented in the current repo sources
 - `UM982`: `4 5`, `3 6`, `5 0`, `7 0`
 - `UB9A0`: `2`, `9`
 

@@ -323,6 +323,12 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   ReceiverAutoConfigRequest um980_request = generic_request;
   um980_request.receiver_model = "UM980";
   const auto um980_plan = BuildReceiverAutoConfigPlan(um980_request);
+  ReceiverAutoConfigRequest um960_request = generic_request;
+  um960_request.receiver_model = "UM960";
+  const auto um960_plan = BuildReceiverAutoConfigPlan(um960_request);
+  ReceiverAutoConfigRequest um981_request = generic_request;
+  um981_request.receiver_model = "UM981";
+  const auto um981_plan = BuildReceiverAutoConfigPlan(um981_request);
   ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um980_plan.validation.generated_command_count == 14u &&
                  um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
@@ -330,6 +336,22 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
                  ContainsWarning(um980_plan, "model UM980") &&
                  !HasReceiverFeature(um980_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
              "known single-antenna Unicore models should not emit a dual-antenna signal-group command and should keep baseline capability disabled");
+  ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 um960_plan.validation.generated_command_count == 14u &&
+                 um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
+                 !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
+                 ContainsWarning(um960_plan, "model UM960") &&
+                 !ContainsWarning(um960_plan, "safe generic non-baseline fallback") &&
+                 !HasReceiverFeature(um960_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
+             "UM960 should be treated as a known non-baseline Unicore model without a documented automatic signal-group selection");
+  ctx.Expect(um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 um981_plan.validation.generated_command_count == 14u &&
+                 um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
+                 !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
+                 ContainsWarning(um981_plan, "model UM981") &&
+                 !ContainsWarning(um981_plan, "safe generic non-baseline fallback") &&
+                 !HasReceiverFeature(um981_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
+             "UM981 should be treated as a known non-baseline Unicore model without a documented automatic signal-group selection");
 }
 
 void TestSignalProfileCapabilityMapping(TestContext& ctx)
@@ -382,14 +404,36 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
                  ContainsWarning(um980_plan, "model UM980"),
              "single-antenna Unicore signal-profile planning should skip dual-antenna signal-group changes and warn instead of guessing");
 
+  ReceiverAutoConfigRequest um960_request = unicore_request;
+  um960_request.receiver_model = "UM960";
+  um960_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
+  const auto um960_plan = BuildReceiverAutoConfigPlan(um960_request);
+  ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
+                 !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
+                 ContainsWarning(um960_plan, "model UM960") &&
+                 !ContainsWarning(um960_plan, "safe generic non-baseline fallback"),
+             "UM960 signal-profile planning should stay known non-baseline and skip undocumented signal-group changes");
+
+  ReceiverAutoConfigRequest um981_request = unicore_request;
+  um981_request.receiver_model = "UM981";
+  um981_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
+  const auto um981_plan = BuildReceiverAutoConfigPlan(um981_request);
+  ctx.Expect(um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
+                 !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
+                 ContainsWarning(um981_plan, "model UM981") &&
+                 !ContainsWarning(um981_plan, "safe generic non-baseline fallback"),
+             "UM981 signal-profile planning should stay known non-baseline and skip undocumented signal-group changes");
+
   ReceiverAutoConfigRequest unknown_model_request = unicore_request;
-  unknown_model_request.receiver_model = "UM981";
+  unknown_model_request.receiver_model = "UM952";
   unknown_model_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
   const auto unknown_model_plan = BuildReceiverAutoConfigPlan(unknown_model_request);
   ctx.Expect(unknown_model_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 unknown_model_plan.receiver_model == std::optional<std::string>{"UM981"} &&
+                 unknown_model_plan.receiver_model == std::optional<std::string>{"UM952"} &&
                  !ContainsCommandText(unknown_model_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(unknown_model_plan, "UM981") &&
+                 ContainsWarning(unknown_model_plan, "UM952") &&
                  ContainsWarning(unknown_model_plan, "safe generic non-baseline fallback"),
              "unknown Unicore models should keep the safe non-baseline fallback and report why CONFIG SIGNALGROUP was skipped");
 
@@ -611,12 +655,22 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
              "unsupported signal-group overrides should be rejected with model-specific guidance");
 
   request.receiver_model = "UM981";
+  const auto known_model_without_signal_groups_override_plan =
+      BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(known_model_without_signal_groups_override_plan.status ==
+                     ReceiverAutoConfigPlanStatus::kInvalidArgument &&
+                 known_model_without_signal_groups_override_plan.error_message.find(
+                     "model UM981 has no documented portable signal-group profile") !=
+                     std::string::npos,
+             "signal-group overrides should be rejected for known non-baseline models that still lack documented signal-group mappings");
+
+  request.receiver_model = "UM952";
   const auto unknown_model_override_plan = BuildReceiverAutoConfigPlan(request);
   ctx.Expect(unknown_model_override_plan.status ==
                      ReceiverAutoConfigPlanStatus::kInvalidArgument &&
-                 unknown_model_override_plan.error_message.find("documented model profile") !=
+                 unknown_model_override_plan.error_message.find("documented model/signal-group profile") !=
                      std::string::npos,
-             "signal-group overrides should be rejected when the Unicore model is unknown or undocumented");
+             "signal-group overrides should still be rejected when the Unicore model is unknown or undocumented");
 
   // A runtime-only profile manages no signal groups, so an override must not
   // inject an unsolicited SIGNALGROUP command.

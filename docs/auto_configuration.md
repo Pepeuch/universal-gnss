@@ -374,9 +374,10 @@ Current capability-oriented translation policy:
     exposes one
   - current documented portable rover default:
     `UM982 -> CONFIG SIGNALGROUP 3 6`
-  - known non-baseline or not-confirmed-baseline models such as `UM980` and
-    `UB9A0` keep their current signal-group configuration unless the operator
-    explicitly selects a documented model-specific override
+  - known non-baseline or not-confirmed-baseline models such as `UM960`,
+    `UM980`, `UM981`, and `UB9A0` keep their current signal-group
+    configuration unless the operator explicitly selects a documented
+    model-specific override
   - unknown/unconfirmed models skip `CONFIG SIGNALGROUP` and warn with the safe
     generic non-baseline fallback
   - `rate_hz` currently retimes `BESTNAVA` while keeping `GPGGA`, `GPGSV`,
@@ -402,8 +403,8 @@ Current policy:
 
 - Unicore uses an optional model selector seam for capability and
   signal-group planning
-- the planner may answer differently for `UM980`, `UM982`, `UB9A0`, or an
-  unknown model
+- the planner may answer differently for `UM960`, `UM980`, `UM981`, `UM982`,
+  `UB9A0`, or an unknown model
 - unknown models fall back safely and skip model-specific commands such as
   `CONFIG SIGNALGROUP`
 - config planning does not depend on parsed navigation/runtime state

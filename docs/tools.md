@@ -478,6 +478,8 @@ Current behavior:
   `--baud`, `--rate-hz`, and `--output-port`
 - for `unicore`, accepts an optional `--model` selector so preview can apply
   documented model/capability-aware signal-group rules
+- current recognized Unicore model selectors are:
+  `UM960`, `UM980`, `UM981`, `UM982`, and `UB9A0`
 - for `unicore`, unknown or undocumented models skip `CONFIG SIGNALGROUP` and
   report the safe fallback instead of guessing
 - for `ublox`, separates the current host transport from the receiver output
@@ -508,6 +510,7 @@ gnss_profile_preview nmea runtime_only
 gnss_profile_preview ublox rover_high_precision
 gnss_profile_preview ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_profile_preview ublox rover_high_precision_debug --json
+gnss_profile_preview unicore rover_high_precision --model UM960
 gnss_profile_preview unicore rover_high_precision
 gnss_profile_preview unicore rover_high_precision --model UM982 --signal-profile minimal --rate-hz 1
 gnss_profile_preview unicore rover_high_precision --model UM982 --persistent --rate-hz 5
@@ -554,6 +557,8 @@ Current behavior:
 - accepts vendor-neutral `--signal-profile balanced|high_precision|all_signals|minimal|custom`
 - for `unicore`, accepts an optional `--model` selector so planning can apply
   documented model/capability-aware signal-group rules
+- current recognized Unicore model selectors are:
+  `UM960`, `UM980`, `UM981`, `UM982`, and `UB9A0`
 - accepts `--output-port usb|uart1|uart2|all|auto` for `ublox` interface
   selection
 - supports the same portable profile names and legacy aliases as
@@ -604,6 +609,7 @@ gnss_config_plan nmea runtime_only
 gnss_config_plan ublox rover_high_precision
 gnss_config_plan ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_config_plan ublox rover_high_precision --output-port uart1 --config-baud 460800 --rate-hz 7
+gnss_config_plan unicore rover_high_precision --model UM981
 gnss_config_plan unicore rover_high_precision_debug
 gnss_config_plan unicore rover_high_precision --model UM982 --signal-profile minimal --rate-hz 1
 gnss_config_plan ublox rover_high_precision --persistent
@@ -658,6 +664,8 @@ Current behavior:
   `gnss_config_plan`
 - for `unicore`, accepts the same optional `--model` selector used by preview
   and plan
+- current recognized Unicore model selectors are:
+  `UM960`, `UM980`, `UM981`, `UM982`, and `UB9A0`
 - accepts the same `--output-port usb|uart1|uart2|all|auto` values as
   `gnss_config_plan`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
@@ -701,6 +709,7 @@ Examples:
 ```text
 gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only --confirm
+gnss_config_apply --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --apply-mode runtime-only --confirm
 gnss_config_apply --family unicore --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
 gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --output-port usb --apply-mode runtime-only --confirm
 gnss_config_apply --receiver auto --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
