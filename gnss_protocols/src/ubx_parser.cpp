@@ -396,7 +396,7 @@ ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame)
   record.vel_east_mm_s = ReadLeI4(frame.payload, 52u);
   record.vel_down_mm_s = ReadLeI4(frame.payload, 56u);
   record.ground_speed_mm_s = ReadLeI4(frame.payload, 60u);
-  record.heading_motion_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 64u));
+  record.course_over_ground_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 64u));
   record.heading_accuracy_deg = static_cast<float>(ReadLeU4(frame.payload, 72u)) * 1e-5f;
   record.heading_vehicle_deg = ScaleHeading1e5ToDegrees(ReadLeI4(frame.payload, 84u));
 

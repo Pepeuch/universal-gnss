@@ -53,6 +53,7 @@ Validation boundary:
 - runtime arbitration
 - safe rollback
 - receiver metadata
+- terminology stabilization and public heading/baseline compatibility plan
 - RTCM observation-level decode beyond MSM summary
 - RTCM semantic expansion beyond `1005` / `1006` / `1230` / MSM summary
 - remaining Generic NMEA completion:

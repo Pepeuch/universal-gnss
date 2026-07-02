@@ -127,6 +127,8 @@ Current mapping details:
 - `hAcc` and `vAcc` are converted from millimeters to meters
 - `numSV` is mapped to `satellites_used`
 - `carrSoln` is mapped to normalized `rtk_mode`
+- `headMot` is retained in the UBX semantic record as
+  `course_over_ground_deg` only
 - heading is mapped from `headVeh` only when `headVehValid` is true and the
   position itself is valid
 

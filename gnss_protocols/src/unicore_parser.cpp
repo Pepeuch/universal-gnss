@@ -1048,23 +1048,24 @@ void SetTrackedAndUsedSatellites(universal_gnss::GnssRuntimeState& state,
   }
 }
 
-void SetHeading(universal_gnss::GnssRuntimeState& state,
-                const UnicoreSolutionStatus heading_status,
-                const std::optional<float> heading_deg)
+void SetHeadingFromBaselineAzimuth(universal_gnss::GnssRuntimeState& state,
+                                   const UnicoreSolutionStatus baseline_solution_status,
+                                   const std::optional<float> baseline_azimuth_deg)
 {
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
-  if (heading_status == UnicoreSolutionStatus::kSolComputed && heading_deg.has_value())
+  if (baseline_solution_status == UnicoreSolutionStatus::kSolComputed &&
+      baseline_azimuth_deg.has_value())
   {
     universal_gnss::SetOptionalValue(
         state,
         universal_gnss::GnssCapability::kHeading,
         state.heading_deg,
-        *heading_deg);
+        *baseline_azimuth_deg);
   }
 }
 
-void SetDualAntennaState(universal_gnss::GnssRuntimeState& state,
-                         const UnicoreDualAntennaStatus status)
+void SetBaselineSolutionState(universal_gnss::GnssRuntimeState& state,
+                              const UnicoreDualAntennaStatus status)
 {
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDualAntennaHeading);
   switch (status)
@@ -1212,31 +1213,31 @@ ParserResult<UnicorePvtslnRecord> ParseUnicorePvtsln(const UnicoreFrame& frame)
 
   if (field_count > 20u)
   {
-    record.heading_status = ParseSolutionStatus(fields[20]);
+    record.baseline_solution_status = ParseSolutionStatus(fields[20]);
   }
   if (field_count > 21u &&
-      ParseOptionalFloat(fields[21], record.heading_length_m) == OptionalFieldStatus::kInvalid)
+      ParseOptionalFloat(fields[21], record.baseline_length_m) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
   if (field_count > 22u &&
-      ParseOptionalFloat(fields[22], record.heading_deg) == OptionalFieldStatus::kInvalid)
+      ParseOptionalFloat(fields[22], record.baseline_azimuth_deg) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
   if (field_count > 23u &&
-      ParseOptionalFloat(fields[23], record.heading_pitch_deg) == OptionalFieldStatus::kInvalid)
+      ParseOptionalFloat(fields[23], record.baseline_pitch_deg) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
   if (field_count > 24u &&
-      ParseOptionalUnsigned16(fields[24], record.heading_tracked_satellites) ==
+      ParseOptionalUnsigned16(fields[24], record.baseline_tracked_satellites) ==
           OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
   if (field_count > 25u &&
-      ParseOptionalUnsigned16(fields[25], record.heading_used_satellites) ==
+      ParseOptionalUnsigned16(fields[25], record.baseline_used_satellites) ==
           OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
@@ -1856,12 +1857,13 @@ ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame&
   record.psr_tracked_satellites = static_cast<std::uint16_t>(frame.payload[70u]);
   record.psr_used_satellites = static_cast<std::uint16_t>(frame.payload[71u]);
 
-  record.heading_status = ParseBinarySolutionStatus(ReadLittleEndian32(frame.payload.data() + 96u));
-  record.heading_length_m = ReadLittleEndianFloat32(frame.payload.data() + 100u);
-  record.heading_deg = ReadLittleEndianFloat32(frame.payload.data() + 104u);
-  record.heading_pitch_deg = ReadLittleEndianFloat32(frame.payload.data() + 108u);
-  record.heading_tracked_satellites = static_cast<std::uint16_t>(frame.payload[112u]);
-  record.heading_used_satellites = static_cast<std::uint16_t>(frame.payload[113u]);
+  record.baseline_solution_status =
+      ParseBinarySolutionStatus(ReadLittleEndian32(frame.payload.data() + 96u));
+  record.baseline_length_m = ReadLittleEndianFloat32(frame.payload.data() + 100u);
+  record.baseline_azimuth_deg = ReadLittleEndianFloat32(frame.payload.data() + 104u);
+  record.baseline_pitch_deg = ReadLittleEndianFloat32(frame.payload.data() + 108u);
+  record.baseline_tracked_satellites = static_cast<std::uint16_t>(frame.payload[112u]);
+  record.baseline_used_satellites = static_cast<std::uint16_t>(frame.payload[113u]);
 
   record.gdop = ReadLittleEndianFloat32(frame.payload.data() + 116u);
   record.pdop = ReadLittleEndianFloat32(frame.payload.data() + 120u);
@@ -1903,7 +1905,8 @@ universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtsln
         *record.hdop);
   }
 
-  SetHeading(state, record.heading_status, record.heading_deg);
+  SetHeadingFromBaselineAzimuth(
+      state, record.baseline_solution_status, record.baseline_azimuth_deg);
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }
@@ -2008,7 +2011,8 @@ universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
         *record.hdop);
   }
 
-  SetHeading(state, record.heading_status, record.heading_deg);
+  SetHeadingFromBaselineAzimuth(
+      state, record.baseline_solution_status, record.baseline_azimuth_deg);
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }
@@ -2022,7 +2026,7 @@ universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
   ApplyFixType(state, record.position_type);
   ApplyRtkMode(state, record.position_type);
   ApplyCorrectionState(state, record.position_type);
-  SetDualAntennaState(state, record.dual_antenna_status);
+  SetBaselineSolutionState(state, record.dual_antenna_status);
 
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;

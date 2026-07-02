@@ -248,6 +248,10 @@ example of connecting Universal GNSS `fix` output to
 See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
 runtime mapping coverage, and intentionally deferred protocol support.
 
+See [docs/terminology.md](docs/terminology.md) for the canonical
+GNSS/geodesy-first vocabulary, the current terminology audit, and the
+compatibility plan for ambiguous public names such as `heading_deg`.
+
 See [docs/vendors/ublox/runtime_mapping.md](docs/vendors/ublox/runtime_mapping.md)
 for the current u-blox-specific runtime mapping policy used by the UBX semantic
 layer.

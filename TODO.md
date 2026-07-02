@@ -45,6 +45,8 @@ Recently completed:
 - [ ] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
+- [ ] explicit public baseline vocabulary migration plan for `heading_deg` /
+  `dual_antenna_heading`
 - [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230` / MSM summary
 - [ ] `gnss_replay` timing mode outside the ROS2 replay node
 - [ ] TLS support

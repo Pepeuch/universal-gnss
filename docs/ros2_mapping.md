@@ -63,8 +63,8 @@ Legend:
 | `mean_cn0_db_hz` | yes | no | no | Preserved only in `GnssStatus`. |
 | `max_cn0_db_hz` | yes | no | no | Preserved only in `GnssStatus`. |
 | `correction_age_s` | yes | no | no | Useful for RTK / correction monitoring, but not projected into `NavSatFix`. |
-| `heading_deg` | yes | no | no | Preserved in `GnssStatus`; no `NavSatFix` equivalent exists. |
-| `dual_antenna_heading` | yes | no | no | Preserves heading-availability state only. |
+| `heading_deg` | yes | no | no | Preserved in `GnssStatus`; no `NavSatFix` equivalent exists. This is a current public compatibility name, not robot yaw. |
+| `dual_antenna_heading` | yes | no | no | Preserves baseline-solution availability only; the name is kept for compatibility during `v0.6.x`. |
 | `interference_detected` | yes | no | no | Preserved in `GnssStatus`; diagnostics come from `GnssHealthSummary`, not the runtime message directly. |
 | `jamming_detected` | yes | no | no | Preserved in `GnssStatus`; diagnostics come from `GnssHealthSummary`, not the runtime message directly. |
 

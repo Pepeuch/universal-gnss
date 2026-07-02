@@ -115,15 +115,18 @@ Current mappings:
 - `bestpos_hgtstd` -> vertical accuracy
 - `bestpos_diffage` -> correction age
 - `bestpos_svs`, `bestpos_solnsvs` -> satellites tracked / used
-- `heading_type` + `heading_degree` -> heading only when heading status is
-  `SOL_COMPUTED`
+- documented baseline solution fields `heading_type` + `heading_degree` ->
+  protocol-level `baseline_solution_status` + `baseline_azimuth_deg`, then the
+  current public compatibility field `heading_deg` only when the baseline
+  solution status is `SOL_COMPUTED`
 - `hdop` -> `hdop`
 
 Conservative rules:
 
 - horizontal accuracy is the larger of latitude and longitude sigma
-- heading is not published unless the message explicitly reports a computed
-  heading solution
+- baseline azimuth is not projected into the current public `heading_deg`
+  compatibility field unless the message explicitly reports a computed baseline
+  solution
 - no RF, jamming, or correction transport state is inferred
 
 ## BESTNAVA
@@ -190,8 +193,10 @@ Current mappings:
 - binary `bestpos_hgtstd` -> vertical accuracy
 - binary `bestpos_diffage` -> correction age
 - binary `bestpos_svs`, `bestpos_solnsvs` -> satellites tracked / used
-- binary `heading_type` + `heading_degree` -> heading only when heading status
-  is `SOL_COMPUTED`
+- documented binary baseline fields `heading_type` + `heading_degree` ->
+  protocol-level `baseline_solution_status` + `baseline_azimuth_deg`, then the
+  current public compatibility field `heading_deg` only when the baseline
+  solution status is `SOL_COMPUTED`
 - binary `hdop` -> `hdop`
 
 Current non-mappings:
@@ -212,7 +217,8 @@ Current mappings:
 
 - documented RTK position type -> generic `fix_type`
 - documented RTK position type -> generic `rtk_mode`
-- documented dual-antenna status -> `dual_antenna_heading`
+- documented dual-antenna status -> current public compatibility flag
+  `dual_antenna_heading`
 
 Dual-antenna mapping:
 

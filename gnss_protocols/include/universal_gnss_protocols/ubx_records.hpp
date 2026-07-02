@@ -127,7 +127,7 @@ struct UbxNavPvtRecord
   std::int32_t vel_east_mm_s{0};
   std::int32_t vel_down_mm_s{0};
   std::int32_t ground_speed_mm_s{0};
-  float heading_motion_deg{0.0f};
+  float course_over_ground_deg{0.0f};
   float heading_vehicle_deg{0.0f};
   float heading_accuracy_deg{0.0f};
 };

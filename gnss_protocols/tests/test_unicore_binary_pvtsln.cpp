@@ -145,7 +145,7 @@ UnicoreBinaryFrame BuildBinaryFrame(const std::uint16_t message_id,
 }
 
 std::vector<std::uint8_t> MakePvtslnPayload(const std::uint32_t best_position_type_code,
-                                            const std::uint32_t heading_status_code)
+                                            const std::uint32_t baseline_status_code)
 {
   std::vector<std::uint8_t> payload(224u, 0u);
 
@@ -173,7 +173,7 @@ std::vector<std::uint8_t> MakePvtslnPayload(const std::uint32_t best_position_ty
   WriteLittleEndianFloat64(payload, 80u, -0.0031);
   WriteLittleEndianFloat64(payload, 88u, 0.0032);
 
-  WriteLittleEndian32(payload, 96u, heading_status_code);
+  WriteLittleEndian32(payload, 96u, baseline_status_code);
   WriteLittleEndianFloat32(payload, 100u, 1.5000f);
   WriteLittleEndianFloat32(payload, 104u, 182.2500f);
   WriteLittleEndianFloat32(payload, 108u, 0.1000f);
@@ -212,9 +212,9 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
              "PVTSLNB should preserve binary header metadata");
   ctx.Expect(record.best_position_type ==
                  universal_gnss_protocols::UnicorePositionType::kNarrowInt &&
-                 record.heading_status ==
+                 record.baseline_solution_status ==
                      universal_gnss_protocols::UnicoreSolutionStatus::kSolComputed,
-             "PVTSLNB should decode documented position and heading status fields");
+             "PVTSLNB should decode documented position and baseline solution fields");
   ctx.Expect(NearlyEqual(record.best_altitude_m, 60.5060) &&
                  NearlyEqual(record.best_latitude_deg, 40.07898130522) &&
                  NearlyEqual(record.best_longitude_deg, 116.23663134427),
@@ -223,8 +223,8 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
                  record.best_tracked_satellites == 46u &&
                  record.best_used_satellites == 28u &&
                  record.hdop == 0.6840f &&
-                 record.heading_deg == 182.2500f,
-             "PVTSLNB should decode documented age, satellite, DOP, and heading fields");
+                 record.baseline_azimuth_deg == 182.2500f,
+             "PVTSLNB should decode documented age, satellite, DOP, and baseline azimuth fields");
 
   const auto state = UnicorePvtslnBToRuntimeState(record);
   ctx.Expect(state.fix_valid &&

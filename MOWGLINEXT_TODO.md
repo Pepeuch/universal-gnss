@@ -130,6 +130,50 @@ Suggested field-validation checks:
 * verify localization/safety logic reacts to Float -> Fixed -> None transitions
   on the generic NMEA path
 
+### 0c. Pending MowgliNext work — keep GNSS terminology separate from robot yaw
+
+What new Universal GNSS capability exists:
+
+* Universal GNSS now documents a canonical GNSS/geodesy-first terminology
+  contract in `docs/terminology.md`.
+* Dual-antenna Unicore protocol records now use explicit `baseline_*` terms in
+  the low-level layer.
+* Current public ROS2/runtime names such as `heading_deg` remain stable in
+  `v0.6.x`, but they must be treated as GNSS-domain terms, not robot body yaw.
+
+Why it matters for the robot:
+
+* a GNSS heading or baseline azimuth is not automatically the mower's final yaw
+* robot yaw still depends on antenna placement, frame conventions, and any
+  downstream mounting transform
+
+Where MowgliNext should consume it:
+
+* GPS sidecar status/diagnostics adapters
+* localization bridges that convert GNSS heading into robot orientation
+* operator GUI wording and telemetry labels
+
+Expected GUI/operator behavior:
+
+* label GNSS-derived direction as GNSS heading / baseline azimuth until the
+  robot-frame transform is applied
+* avoid presenting raw Universal GNSS `heading_deg` as robot yaw unless the
+  downstream transform has already been performed
+
+Expected safety/localization behavior if relevant:
+
+* any localization logic that uses GNSS direction must make the antenna/body
+  transform explicit
+* future Universal GNSS baseline-specific public fields should be consumed as
+  geodetic inputs first, then converted downstream into robot orientation
+
+Suggested field-validation checks:
+
+* verify UI labels do not collapse GNSS heading into robot yaw prematurely
+* verify localization code documents and tests the antenna mounting transform
+* verify future baseline-specific Universal GNSS fields can be integrated
+  without breaking existing operator concepts
+
 ### 1. Update Universal GNSS dependency
 
 * [ ] Update the Universal GNSS version/submodule/branch used by MowgliNext.
