@@ -38,6 +38,8 @@ Already delivered in `v0.6.0` and its follow-up fixes:
 - UM982 / Unicore runtime validation through downstream MowgliNext field use
 - generic NMEA `GGA fix_quality` mapping into normalized `rtk_mode` for
   runtime-only receivers
+- additive portable dual-antenna baseline capability/runtime/ROS2 surface with
+  `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`
 
 Validation boundary:
 
@@ -53,6 +55,8 @@ Validation boundary:
 - runtime arbitration
 - safe rollback
 - receiver metadata
+- finish the post-`v0.6.x` deprecation plan for compatibility-only heading
+  fields now that canonical baseline fields exist
 - RTCM observation-level decode beyond MSM summary
 - RTCM semantic expansion beyond `1005` / `1006` / `1230` / MSM summary
 - remaining Generic NMEA completion:

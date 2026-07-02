@@ -63,8 +63,13 @@ Legend:
 | `mean_cn0_db_hz` | yes | no | no | Preserved only in `GnssStatus`. |
 | `max_cn0_db_hz` | yes | no | no | Preserved only in `GnssStatus`. |
 | `correction_age_s` | yes | no | no | Useful for RTK / correction monitoring, but not projected into `NavSatFix`. |
-| `heading_deg` | yes | no | no | Preserved in `GnssStatus`; no `NavSatFix` equivalent exists. |
-| `dual_antenna_heading` | yes | no | no | Preserves heading-availability state only. |
+| `heading_deg` | yes | no | no | Preserved in `GnssStatus`; no `NavSatFix` equivalent exists. This is a current public compatibility name, not robot yaw. |
+| `dual_antenna_heading` | yes | no | no | Preserves baseline-solution availability only; the name is kept for compatibility during `v0.6.x`. |
+| `dual_antenna_baseline` | yes | no | no | Canonical boolean baseline-validity field in `GnssStatus`; capability/value-gated like other optional booleans. |
+| `baseline_azimuth_deg` | yes | no | no | Canonical dual-antenna baseline azimuth in `GnssStatus`; downstream robot yaw transforms remain out of scope. |
+| `baseline_pitch_deg` | yes | no | no | Canonical dual-antenna baseline pitch in `GnssStatus`; no `NavSatFix` equivalent exists. |
+| `baseline_length_m` | yes | no | no | Canonical dual-antenna baseline length in `GnssStatus`; no `NavSatFix` equivalent exists. |
+| `baseline_solution_status` | yes | no | no | Canonical baseline status enum in `GnssStatus`; preserves solved vs known-unsolved states without implying robot orientation. |
 | `interference_detected` | yes | no | no | Preserved in `GnssStatus`; diagnostics come from `GnssHealthSummary`, not the runtime message directly. |
 | `jamming_detected` | yes | no | no | Preserved in `GnssStatus`; diagnostics come from `GnssHealthSummary`, not the runtime message directly. |
 
@@ -162,7 +167,8 @@ This makes `GnssStatus` the preferred ROS message for:
 - satellite counts
 - CN0 summaries
 - correction age
-- heading state
+- heading compatibility state
+- canonical dual-antenna baseline fields and status
 - RF / jamming booleans
 
 ## Diagnostics Mapping Foundation

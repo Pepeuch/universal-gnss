@@ -102,8 +102,11 @@ Examples:
 - satellites used / visible / tracked
 - mean / max CN0
 - correction age
-- heading
-- dual-antenna state
+- heading compatibility
+- dual-antenna heading compatibility state
+- dual-antenna baseline validity
+- baseline azimuth / pitch / length
+- baseline solution status
 - interference state
 - jamming state
 

@@ -49,6 +49,16 @@ Current project state includes:
 - portable RTCM MSM correction-stream summary observability through the shared
   semantic monitor/tools surface
 - ROS2 RTCM semantic diagnostics for base-station ARP, `1230`, and MSM summary
+- additive portable dual-antenna baseline runtime/ROS2 surface:
+  - capabilities:
+    `dual_antenna_baseline`, `baseline_azimuth`, `baseline_pitch`,
+    `baseline_length`, `baseline_solution_status`
+  - runtime / `GnssStatus` fields:
+    `dual_antenna_baseline`, `baseline_azimuth_deg`,
+    `baseline_pitch_deg`, `baseline_length_m`,
+    `baseline_solution_status`
+  - compatibility fields:
+    `heading_deg` and `dual_antenna_heading` remain during `v0.6.x`
 - u-blox persistent FLASH configuration and output-port selection
 - UM982 / Unicore runtime field validation through downstream MowgliNext use
 - decimal-degree latitude/longitude outputs preserving at least 9 decimal
@@ -146,6 +156,7 @@ Current implemented layers:
   - runtime aggregation of partial normalized updates
   - fix / RTK enums
   - capability and value flag system
+  - canonical dual-antenna baseline fields plus `v0.6.x` heading compatibility
   - no ROS 2 dependency
 - `gnss_protocols`
   - portable framing and checksum helpers
@@ -192,6 +203,7 @@ Current implemented layers:
   - `GnssRuntimeState -> GnssStatus` adapter
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
+  - additive `GnssStatus` baseline capability constants and baseline fields
   - `ReceiverNode` publishing `fix`, `status`, and `diagnostics`
   - `ReceiverNode` serial auto-discovery support for
     `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
@@ -247,6 +259,10 @@ example of connecting Universal GNSS `fix` output to
 
 See [docs/protocols.md](docs/protocols.md) for the current parser coverage,
 runtime mapping coverage, and intentionally deferred protocol support.
+
+See [docs/terminology.md](docs/terminology.md) for the canonical
+GNSS/geodesy-first vocabulary, the current terminology audit, and the
+compatibility plan for ambiguous public names such as `heading_deg`.
 
 See [docs/vendors/ublox/runtime_mapping.md](docs/vendors/ublox/runtime_mapping.md)
 for the current u-blox-specific runtime mapping policy used by the UBX semantic

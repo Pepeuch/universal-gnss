@@ -114,6 +114,8 @@ The runtime state is intentionally richer than `NavSatFix`. For example:
 
 - RTK mode is explicit
 - heading can exist independently of position quality
+- canonical dual-antenna baseline geometry/status can exist independently of
+  the legacy heading compatibility fields
 - CN0, satellite counts, and correction age are first-class optional values
 
 This lets future drivers normalize richer receiver telemetry before any ROS
@@ -192,8 +194,11 @@ Capability-gated optional fields:
 - satellites used / visible / tracked
 - mean / max CN0
 - correction age
-- heading
-- dual antenna heading state
+- heading compatibility
+- dual-antenna heading compatibility state
+- dual-antenna baseline validity
+- baseline azimuth / pitch / length
+- baseline solution status
 - interference state
 - jamming state
 
@@ -220,9 +225,20 @@ Timestamp semantics:
 
 Heading semantics:
 
-- heading is just a normalized optional field
+- `heading_deg` is a normalized optional compatibility field
 - it does not imply RTK-fixed position quality
 - dual-antenna heading availability is tracked separately from numeric heading
+- canonical dual-antenna baseline data uses:
+  - `dual_antenna_baseline`
+  - `baseline_azimuth_deg`
+  - `baseline_pitch_deg`
+  - `baseline_length_m`
+  - `baseline_solution_status`
+- during `v0.6.x`, solved baseline azimuth may also mirror into `heading_deg`
+  for compatibility
+- ROS2 consumers should prefer the canonical baseline fields over
+  `heading_deg` / `dual_antenna_heading` when the source semantics are a
+  dual-antenna baseline
 
 Backend-agnostic guarantee:
 

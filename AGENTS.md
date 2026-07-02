@@ -78,3 +78,48 @@ When updating `MOWGLINEXT_TODO.md`, describe:
 * suggested robot field-validation checks
 
 Mark these items as pending MowgliNext integration work, not as completed Universal GNSS work.
+
+## Universal GNSS terminology rule
+
+Universal GNSS uses GNSS/geodesy-first terminology in core APIs, protocol records, diagnostics, documentation, and ROS2 surfaces.
+
+ROS2 integration must preserve the canonical Universal GNSS vocabulary instead of translating GNSS concepts into robot-specific terms.
+
+Use canonical GNSS/geodetic terms such as:
+
+* `baseline_azimuth_deg`
+* `baseline_length_m`
+* `baseline_pitch_deg`
+* `baseline_solution_status`
+* `antenna_baseline`
+* `course_over_ground_deg`
+* `correction_stream`
+* `rtk_mode`
+
+Canonical public baseline data must use:
+
+* `dual_antenna_baseline`
+* `baseline_azimuth_deg`
+* `baseline_pitch_deg`
+* `baseline_length_m`
+* `baseline_solution_status`
+
+`heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` are
+compatibility surfaces only during the current `v0.6.x` transition window.
+
+Avoid robot/application-specific terms in Universal GNSS APIs unless the data truly comes from that domain.
+
+Do not use these terms for dual-antenna GNSS baseline data in Universal GNSS core or ROS2 surfaces:
+
+* `yaw`
+* `robot_yaw`
+* `vehicle_yaw`
+* `robot_heading`
+* `body_heading`
+
+Documentation may mention common aliases such as “GNSS heading” or “vehicle heading” only as explanatory text, but the canonical field name should remain geodetic.
+
+When a risky public term cannot be renamed immediately, document the
+compatibility/deprecation plan in `docs/terminology.md`.
+
+Downstream applications such as MowgliNext may convert `baseline_azimuth_deg` into robot yaw or vehicle heading after applying their own antenna mounting transform.

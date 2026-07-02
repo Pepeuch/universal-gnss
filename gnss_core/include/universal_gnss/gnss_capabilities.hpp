@@ -28,6 +28,11 @@ enum class GnssCapability : GnssCapabilityFlags
   kHeadingAccuracy = 1u << 15,
   kDifferentialCorrections = 1u << 16,
   kCorrectionsActive = 1u << 17,
+  kDualAntennaBaseline = 1u << 18,
+  kBaselineAzimuth = 1u << 19,
+  kBaselinePitch = 1u << 20,
+  kBaselineLength = 1u << 21,
+  kBaselineSolutionStatus = 1u << 22,
 };
 
 static_assert(std::is_same<std::underlying_type<GnssCapability>::type, GnssCapabilityFlags>::value,

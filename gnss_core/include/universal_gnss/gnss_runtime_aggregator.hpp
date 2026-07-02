@@ -174,6 +174,41 @@ public:
               applied;
     applied = MergeCapabilityField(update.timestamp_ns,
                                    effective_value_flags,
+                                   GnssCapability::kDualAntennaBaseline,
+                                   FieldSlot::kDualAntennaBaseline,
+                                   update.dual_antenna_baseline,
+                                   state_.dual_antenna_baseline) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kBaselineAzimuth,
+                                   FieldSlot::kBaselineAzimuth,
+                                   update.baseline_azimuth_deg,
+                                   state_.baseline_azimuth_deg) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kBaselinePitch,
+                                   FieldSlot::kBaselinePitch,
+                                   update.baseline_pitch_deg,
+                                   state_.baseline_pitch_deg) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kBaselineLength,
+                                   FieldSlot::kBaselineLength,
+                                   update.baseline_length_m,
+                                   state_.baseline_length_m) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kBaselineSolutionStatus,
+                                   FieldSlot::kBaselineSolutionStatus,
+                                   update.baseline_solution_status,
+                                   state_.baseline_solution_status) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
                                    GnssCapability::kInterferenceState,
                                    FieldSlot::kInterferenceState,
                                    update.interference_detected,
@@ -220,6 +255,11 @@ private:
     kDifferentialCorrections,
     kCorrectionsActive,
     kDualAntennaHeading,
+    kDualAntennaBaseline,
+    kBaselineAzimuth,
+    kBaselinePitch,
+    kBaselineLength,
+    kBaselineSolutionStatus,
     kInterferenceState,
     kJammingState,
     kCount,

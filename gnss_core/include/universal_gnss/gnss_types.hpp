@@ -25,4 +25,16 @@ enum class GnssRtkMode : std::uint8_t
   kFixed = 3,
 };
 
+enum class GnssBaselineSolutionStatus : std::uint8_t
+{
+  kUnknown = 0,
+  kComputed = 1,
+  kNotSolved = 2,
+  kInsufficientObservations = 3,
+  kNoConvergence = 4,
+  kOutOfTolerance = 5,
+  kCovarianceTraceExceeded = 6,
+  kNotConfigured = 7,
+};
+
 }  // namespace universal_gnss

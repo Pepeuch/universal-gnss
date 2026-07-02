@@ -91,7 +91,8 @@ When a Unicore receiver emits a mixed stream of proprietary records and NMEA,
 the session keeps the richer proprietary runtime sources authoritative:
 
 - `BESTNAVA`, `BESTNAVB`, `PVTSLNA`, `PVTSLNB`, and `RTKSTATUSA` remain the
-  primary fix / RTK / position / heading sources
+  primary fix / RTK / position / baseline sources, with `heading_deg`
+  preserved only as a compatibility projection where applicable
 - `GSV` is used to fill conservative `satellites_tracked` (from parsed
   per-satellite entries), `satellites_visible`, and CN0 metrics when the
   current proprietary satellite summaries are missing or sparse
@@ -115,15 +116,21 @@ Current mappings:
 - `bestpos_hgtstd` -> vertical accuracy
 - `bestpos_diffage` -> correction age
 - `bestpos_svs`, `bestpos_solnsvs` -> satellites tracked / used
-- `heading_type` + `heading_degree` -> heading only when heading status is
-  `SOL_COMPUTED`
+- documented baseline solution fields `heading_type`, `heading_length`,
+  `heading_degree`, and `pitch` -> canonical `baseline_solution_status`,
+  `dual_antenna_baseline`, `baseline_length_m`, `baseline_azimuth_deg`, and
+  `baseline_pitch_deg`, then the current public compatibility field
+  `heading_deg` only when the baseline solution status is `SOL_COMPUTED`
 - `hdop` -> `hdop`
 
 Conservative rules:
 
 - horizontal accuracy is the larger of latitude and longitude sigma
-- heading is not published unless the message explicitly reports a computed
-  heading solution
+- baseline azimuth is not projected into the current public `heading_deg`
+  compatibility field unless the message explicitly reports a computed baseline
+  solution
+- the compatibility flag `dual_antenna_heading` is mirrored from the canonical
+  solved / known-false baseline status during the `v0.6.x` transition window
 - no RF, jamming, or correction transport state is inferred
 
 ## BESTNAVA
@@ -190,16 +197,19 @@ Current mappings:
 - binary `bestpos_hgtstd` -> vertical accuracy
 - binary `bestpos_diffage` -> correction age
 - binary `bestpos_svs`, `bestpos_solnsvs` -> satellites tracked / used
-- binary `heading_type` + `heading_degree` -> heading only when heading status
-  is `SOL_COMPUTED`
+- documented binary baseline fields `heading_type`, `heading_length`,
+  `heading_degree`, and `pitch` -> canonical `baseline_solution_status`,
+  `dual_antenna_baseline`, `baseline_length_m`, `baseline_azimuth_deg`, and
+  `baseline_pitch_deg`, then the current public compatibility field
+  `heading_deg` only when the baseline solution status is `SOL_COMPUTED`
 - binary `hdop` -> `hdop`
 
 Current non-mappings:
 
 - documented PSR position fields are parsed semantically but not projected into
   core yet
-- documented velocity, pitch, baseline length, tracked-PRN list, and other
-  DOP fields are intentionally left out of the portable runtime in this step
+- documented velocity, tracked-PRN list, and other DOP fields are
+  intentionally left out of the portable runtime in this step
 - no RF, jamming, or CN0 state is inferred from `PVTSLNB`
 - `PVTSLNB` is routed through `UnicoreSession`, `gnss_replay`,
   `gnss_quality_report`, and JSONL export
@@ -212,13 +222,23 @@ Current mappings:
 
 - documented RTK position type -> generic `fix_type`
 - documented RTK position type -> generic `rtk_mode`
-- documented dual-antenna status -> `dual_antenna_heading`
+- documented dual-antenna status -> canonical `baseline_solution_status` and
+  `dual_antenna_baseline`
+- documented dual-antenna status -> current public compatibility flag
+  `dual_antenna_heading` during the `v0.6.x` transition window
 
 Dual-antenna mapping:
 
-- `within limit` -> `true`
-- `not solved`, `out of limit`, `not configured` -> `false`
-- unknown / malformed status -> capability may exist, but the value stays unset
+- `within limit` -> `baseline_solution_status=computed`,
+  `dual_antenna_baseline=true`
+- `not solved` -> `baseline_solution_status=not_solved`,
+  `dual_antenna_baseline=false`
+- `out of limit` -> `baseline_solution_status=out_of_tolerance`,
+  `dual_antenna_baseline=false`
+- `not configured` -> `baseline_solution_status=not_configured`,
+  `dual_antenna_baseline=false`
+- unknown / malformed status -> capabilities may exist, but the values stay
+  unset
 
 Current non-mappings:
 
@@ -458,11 +478,11 @@ Examples:
 
 - `BESTNAVA` can refresh coordinates, accuracy, and correction age
 - `BESTNAVB` can do the same from documented binary fields
-- `PVTSLNB` can do the same for position / heading where the documented binary
-  heading status is `SOL_COMPUTED`
+- `PVTSLNB` can do the same for position / baseline geometry where the
+  documented binary baseline status is `SOL_COMPUTED`
 - `BESTSATA` can refresh tracked- and used-satellite counts without claiming
   CN0 or visibility
-- `RTKSTATUSA` can refresh RTK mode and dual-antenna state
+- `RTKSTATUSA` can refresh RTK mode and baseline validity/status
 - `SATSINFOA` can refresh tracked-satellite count and CN0 summaries
 - `JAMSTATUSA` and `FREQJAMSTATUSA` can refresh portable
   jamming/interference booleans

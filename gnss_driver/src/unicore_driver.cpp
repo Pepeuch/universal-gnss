@@ -134,6 +134,7 @@ const ReceiverCapabilities& UnicoreDriver::DriverCapabilities()
     AddReceiverFeature(value, ReceiverFeature::kRtk);
     AddReceiverFeature(value, ReceiverFeature::kHeading);
     AddReceiverFeature(value, ReceiverFeature::kDualAntenna);
+    AddReceiverFeature(value, ReceiverFeature::kDualAntennaBaseline);
     AddReceiverFeature(value, ReceiverFeature::kPps);
     AddReceiverFeature(value, ReceiverFeature::kRoverMode);
     AddReceiverFeature(value, ReceiverFeature::kSignalGroups);

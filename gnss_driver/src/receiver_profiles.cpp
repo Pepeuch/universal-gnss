@@ -58,6 +58,7 @@ constexpr ReceiverProfile kBuiltInProfiles[] = {
                          ToFlag(ReceiverFeature::kRtk) |
                              ToFlag(ReceiverFeature::kHeading) |
                              ToFlag(ReceiverFeature::kDualAntenna) |
+                             ToFlag(ReceiverFeature::kDualAntennaBaseline) |
                              ToFlag(ReceiverFeature::kPps) |
                              ToFlag(ReceiverFeature::kSurveyIn) |
                              ToFlag(ReceiverFeature::kBaseMode) |

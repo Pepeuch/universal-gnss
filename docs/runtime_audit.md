@@ -1,7 +1,7 @@
 # Runtime Routing Audit
 
-This document records the current end-to-end runtime path audit before ROS 2
-receiver-node work begins.
+This document records the current end-to-end runtime path audit across parser,
+session, export, and ROS2 surfaces.
 
 Scope:
 
@@ -13,7 +13,7 @@ Scope:
 - JSONL runtime-export visibility
 - current ROS 2 adapter visibility
 
-Date of audit: `2026-06-01`
+Date of audit: `2026-07-02`
 
 ## Audit Summary
 
@@ -39,8 +39,9 @@ The main gaps found in this audit were:
   and `ACK-NAK`.
 - `RTCMSTATUSA` was documented as semantic-only, but still produced a
   timestamp-only runtime update in session mode.
-- `dual_antenna_heading` existed in the runtime model and ROS 2 status adapter,
-  but was missing from JSONL runtime export.
+- public baseline-specific runtime/ROS2 fields did not exist yet, so
+  dual-antenna semantics were only partially visible through compatibility
+  fields such as `heading_deg` and `dual_antenna_heading`.
 
 Fixes made in this audit:
 
@@ -51,7 +52,9 @@ Fixes made in this audit:
 - Added UBX structural names for `NAV-DOP`, `RXM-RTCM`, `ACK-ACK`, and
   `ACK-NAK`.
 - Removed the timestamp-only `RTCMSTATUSA` runtime projection.
-- Added `dual_antenna_heading` to JSONL runtime export.
+- Added canonical dual-antenna baseline runtime fields and ROS2 `GnssStatus`
+  projection, while preserving `heading_deg` / `dual_antenna_heading`
+  compatibility for `v0.6.x`.
 
 ## Runtime Model Audit
 
@@ -65,8 +68,11 @@ portable runtime fields:
 - satellites used / tracked / visible
 - mean / max CN0
 - correction age
-- heading
-- dual-antenna heading state
+- heading compatibility
+- dual-antenna heading compatibility state
+- dual-antenna baseline validity
+- baseline azimuth / pitch / length
+- baseline solution status
 - interference / jamming state
 
 Current intentional model limits:
@@ -151,7 +157,7 @@ Legend:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `PVTSLNA` | yes | yes | yes | yes | yes | yes | status + navsat | richest current Unicore ASCII runtime source |
 | `BESTNAVA` | yes | yes | yes | yes | yes | yes | status + navsat | stable position / accuracy / correction-age source |
-| `RTKSTATUSA` | yes | yes | yes | yes | yes | yes | status | RTK + dual-antenna state, no position |
+| `RTKSTATUSA` | yes | yes | yes | yes | yes | yes | status | RTK + baseline validity/status, no position |
 | `RTCMSTATUSA` | yes | no | yes | no | no | no | no | semantic inspection only; no longer produces timestamp-only runtime updates |
 | `SATSINFOA` | yes | yes | yes | yes | yes | yes | status | tracked-satellite count + CN0 summary only |
 | `BESTSATA` | yes | yes | yes | yes | yes | yes | status | tracked / used counts only; no CN0 or visibility |
@@ -165,7 +171,7 @@ Legend:
 | Message | Parser | Runtime map | Live session | Replay | Quality report | JSONL | ROS 2 | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `BESTNAVB` | yes | yes | yes | yes | yes | yes | status + navsat | binary counterpart to `BESTNAVA` |
-| `PVTSLNB` | yes | yes | yes | yes | yes | yes | status + navsat | binary counterpart to `PVTSLNA`; heading gated by documented solution status |
+| `PVTSLNB` | yes | yes | yes | yes | yes | yes | status + navsat | binary counterpart to `PVTSLNA`; baseline geometry and compatibility heading gated by documented solution status |
 
 ## Remaining Deferred Items
 

@@ -162,6 +162,9 @@ void TestProtocolAndFeatureFlags(TestContext& ctx)
                  universal_gnss_driver::HasReceiverFeature(
                      capabilities, ReceiverFeature::kRoverMode),
              "receiver capabilities should track receiver feature flags");
+  ctx.Expect(!universal_gnss_driver::HasReceiverFeature(
+                 capabilities, ReceiverFeature::kDualAntennaBaseline),
+             "receiver capabilities should not invent unsupported baseline features");
   ctx.Expect(!universal_gnss_driver::SupportsOutputProtocol(
                  capabilities, ReceiverProtocol::kUbx),
              "receiver capabilities should not imply unsupported outputs");
@@ -197,6 +200,8 @@ void TestProfiles(TestContext& ctx)
                  universal_gnss_driver::HasReceiverFeature(
                      ublox.capabilities, ReceiverFeature::kRfMonitoring) &&
                  !universal_gnss_driver::HasReceiverFeature(
+                     ublox.capabilities, ReceiverFeature::kDualAntennaBaseline) &&
+                 !universal_gnss_driver::HasReceiverFeature(
                      ublox.capabilities, ReceiverFeature::kDualAntenna) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      ublox.capabilities, ReceiverFeature::kSurveyIn),
@@ -206,6 +211,8 @@ void TestProfiles(TestContext& ctx)
   ctx.Expect(unicore.placeholder &&
                  universal_gnss_driver::SupportsInputProtocol(
                      unicore.capabilities, ReceiverProtocol::kUnicoreAscii) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore.capabilities, ReceiverFeature::kDualAntennaBaseline) &&
                  universal_gnss_driver::HasReceiverFeature(
                      unicore.capabilities, ReceiverFeature::kDualAntenna),
              "Unicore placeholder should expose expected high-level placeholder capabilities");

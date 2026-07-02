@@ -100,12 +100,12 @@ struct UnicorePvtslnBRecord
   std::optional<std::uint16_t> psr_tracked_satellites{};
   std::optional<std::uint16_t> psr_used_satellites{};
 
-  UnicoreSolutionStatus heading_status{UnicoreSolutionStatus::kUnknown};
-  std::optional<float> heading_length_m{};
-  std::optional<float> heading_deg{};
-  std::optional<float> heading_pitch_deg{};
-  std::optional<std::uint16_t> heading_tracked_satellites{};
-  std::optional<std::uint16_t> heading_used_satellites{};
+  UnicoreSolutionStatus baseline_solution_status{UnicoreSolutionStatus::kUnknown};
+  std::optional<float> baseline_length_m{};
+  std::optional<float> baseline_azimuth_deg{};
+  std::optional<float> baseline_pitch_deg{};
+  std::optional<std::uint16_t> baseline_tracked_satellites{};
+  std::optional<std::uint16_t> baseline_used_satellites{};
 
   std::optional<float> gdop{};
   std::optional<float> pdop{};

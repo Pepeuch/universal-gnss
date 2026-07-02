@@ -373,6 +373,53 @@ void WriteRuntimeStateJson(std::ostringstream& output, const GnssRuntimeState& s
   {
     write_bool("dual_antenna_heading", *state.dual_antenna_heading);
   }
+  if (state.dual_antenna_baseline.has_value())
+  {
+    write_bool("dual_antenna_baseline", *state.dual_antenna_baseline);
+  }
+  if (state.baseline_azimuth_deg.has_value())
+  {
+    write_number("baseline_azimuth_deg", *state.baseline_azimuth_deg);
+  }
+  if (state.baseline_pitch_deg.has_value())
+  {
+    write_number("baseline_pitch_deg", *state.baseline_pitch_deg);
+  }
+  if (state.baseline_length_m.has_value())
+  {
+    write_number("baseline_length_m", *state.baseline_length_m);
+  }
+  if (state.baseline_solution_status.has_value())
+  {
+    switch (*state.baseline_solution_status)
+    {
+      case universal_gnss::GnssBaselineSolutionStatus::kComputed:
+        write_string("baseline_solution_status", "computed");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kNotSolved:
+        write_string("baseline_solution_status", "not_solved");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kInsufficientObservations:
+        write_string("baseline_solution_status", "insufficient_observations");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kNoConvergence:
+        write_string("baseline_solution_status", "no_convergence");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kOutOfTolerance:
+        write_string("baseline_solution_status", "out_of_tolerance");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kCovarianceTraceExceeded:
+        write_string("baseline_solution_status", "covariance_trace_exceeded");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kNotConfigured:
+        write_string("baseline_solution_status", "not_configured");
+        break;
+      case universal_gnss::GnssBaselineSolutionStatus::kUnknown:
+      default:
+        write_string("baseline_solution_status", "unknown");
+        break;
+    }
+  }
   if (state.interference_detected.has_value())
   {
     write_bool("interference_detected", *state.interference_detected);
