@@ -10,13 +10,6 @@ namespace universal_gnss_driver
 namespace
 {
 
-constexpr ReceiverTargetSelector kUnicoreTarget{
-    ReceiverVendor::kUnicore,
-    "UM98x",
-    "placeholder",
-    "unicore_um98x_placeholder",
-};
-
 constexpr const char* kCrLf = "\r\n";
 
 std::string FormatPeriodSeconds(const double period_s)
@@ -51,13 +44,14 @@ std::string BuildCom1Command(const std::uint32_t baud_rate)
 }
 
 ReceiverCommand MakeTextCommand(const ReceiverCommandKind kind,
+                                const ReceiverTargetSelector& target,
                                 const ReceiverCommandSafetyLevel safety_level,
                                 const ReceiverResponseKind expected_response,
                                 const std::string& text_command)
 {
   ReceiverCommand command;
   command.kind = kind;
-  command.target = kUnicoreTarget;
+  command.target = target;
   command.expected_response = expected_response;
   command.safety_level = safety_level;
   SetTextPayload(command, FormatTextCommand(text_command));
@@ -244,6 +238,7 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
 }
 
 void AppendCommand(std::vector<ReceiverCommand>& commands,
+                   const ReceiverTargetSelector& target,
                    const ReceiverCommandKind kind,
                    const ReceiverCommandSafetyLevel safety_level,
                    const ReceiverResponseKind expected_response,
@@ -251,7 +246,7 @@ void AppendCommand(std::vector<ReceiverCommand>& commands,
 {
   if (!text_command.empty())
   {
-    commands.push_back(MakeTextCommand(kind, safety_level, expected_response, text_command));
+    commands.push_back(MakeTextCommand(kind, target, safety_level, expected_response, text_command));
   }
 }
 
@@ -280,9 +275,15 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
     return result;
   }
 
+  const ReceiverTargetSelector target =
+      profile.target.vendor == ReceiverVendor::kUnicore
+          ? profile.target
+          : BuildUnicoreTargetSelector(ResolveUnicoreModelProfile());
+
   if (profile.factory_reset)
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kReset,
                   ReceiverCommandSafetyLevel::kFactoryReset,
                   ReceiverResponseKind::kNone,
@@ -293,6 +294,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.com1_baud_rate.has_value())
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kNone,
@@ -300,6 +302,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   }
 
   AppendCommand(result.commands,
+                target,
                 ReceiverCommandKind::kApplyConfigProfile,
                 ReceiverCommandSafetyLevel::kRuntime,
                 ReceiverResponseKind::kTextPayload,
@@ -308,6 +311,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.nmea_version.has_value())
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -318,6 +322,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.rtk_timeout_s.has_value())
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -328,6 +333,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   {
     AppendCommand(
         result.commands,
+        target,
         ReceiverCommandKind::kApplyConfigProfile,
         ReceiverCommandSafetyLevel::kRuntime,
         ReceiverResponseKind::kTextPayload,
@@ -338,6 +344,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.dgps_timeout_s.has_value())
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -352,6 +359,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
       command += " " + std::to_string(group);
     }
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -361,6 +369,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.clear_current_port_outputs)
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kSetProtocolOutputs,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -370,6 +379,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   for (const auto& output : profile.output_messages)
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kSetProtocolOutputs,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
@@ -379,6 +389,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   if (profile.persistence == UnicorePersistenceTarget::kSaveConfig)
   {
     AppendCommand(result.commands,
+                  target,
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kPersistent,
                   ReceiverResponseKind::kTextPayload,
@@ -391,14 +402,26 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
 UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
     const UnicorePersistenceTarget persistence)
 {
+  return BuildUnicoreRoverProfile(ResolveUnicoreModelProfile(), persistence);
+}
+
+UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+    const UnicoreModelProfile& model_profile,
+    const UnicorePersistenceTarget persistence)
+{
   UnicoreConfigProfile profile;
+  profile.target = BuildUnicoreTargetSelector(model_profile);
   profile.config_kind = ReceiverConfigProfileKind::kRover;
   profile.mode = UnicoreMode::kRover;
   profile.nmea_version = UnicoreNmeaVersion::kV411;
   profile.rtk_timeout_s = 10u;
   profile.rtk_reliability = UnicoreRtkReliability{3, 1};
   profile.dgps_timeout_s = 600u;
-  profile.signal_config = UnicoreSignalConfig{{3u, 6u}};
+  if (const auto* signal_group = FindUnicorePortableRoverSignalGroupSelection(model_profile);
+      signal_group != nullptr)
+  {
+    profile.signal_config = UnicoreSignalConfig{signal_group->groups};
+  }
   profile.clear_current_port_outputs = true;
   profile.output_messages = {
       {UnicoreOutputMessageKind::kGpgga, 1.0},
@@ -417,7 +440,14 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
 UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(
     const UnicorePersistenceTarget persistence)
 {
-  UnicoreConfigProfile profile = BuildUnicoreRoverProfile(persistence);
+  return BuildUnicoreDiagnosticsProfile(ResolveUnicoreModelProfile(), persistence);
+}
+
+UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(
+    const UnicoreModelProfile& model_profile,
+    const UnicorePersistenceTarget persistence)
+{
+  UnicoreConfigProfile profile = BuildUnicoreRoverProfile(model_profile, persistence);
   profile.config_kind = ReceiverConfigProfileKind::kDiagnosticsOutput;
   SetOutputPeriod(profile, UnicoreOutputMessageKind::kPvtslna, 0.2);
   return profile;
@@ -426,6 +456,7 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile
 UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile()
 {
   UnicoreConfigProfile profile;
+  profile.target = BuildUnicoreTargetSelector(ResolveUnicoreModelProfile());
   profile.factory_reset = true;
   return profile;
 }

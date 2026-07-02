@@ -26,6 +26,7 @@ struct ConfigPlanOptions
 {
   std::string vendor{};
   std::string profile{};
+  std::optional<std::string> receiver_model{};
   bool persistent{false};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::vector<std::uint8_t>> signal_group_override{};
@@ -58,6 +59,7 @@ struct ConfigPlanResult
   ConfigPlanStatus status{ConfigPlanStatus::kOk};
   std::string vendor{};
   std::string receiver_family{};
+  std::optional<std::string> receiver_model{};
   std::string profile{};
   std::string apply_mode{};
   bool persistent{false};

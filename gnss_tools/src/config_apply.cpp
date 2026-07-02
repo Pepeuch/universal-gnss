@@ -1398,6 +1398,7 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.discovery_result = options.discovery_result;
   request.requested_profile = options.profile;
   request.apply_mode = options.apply_mode;
+  request.receiver_model = options.receiver_model;
   request.signal_profile = options.signal_profile;
   request.signal_group_override = options.signal_group_override;
   request.output_port = options.output_port;
@@ -1667,6 +1668,10 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   std::ostringstream output;
   output << "Status: " << ToString(result.status) << "\n";
   output << "Receiver family: " << result.plan.receiver_family << "\n";
+  if (result.plan.receiver_model.has_value())
+  {
+    output << "Receiver model: " << *result.plan.receiver_model << "\n";
+  }
   output << "Profile: " << result.plan.vendor << ' ' << result.plan.profile << "\n";
   output << "Apply mode: " << result.plan.apply_mode << "\n";
   output << "Dry run: " << (result.dry_run ? "yes" : "no") << "\n";
@@ -1814,6 +1819,16 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "  \"profile\": {\n";
   output << "    \"vendor\": \"" << EscapeJson(result.plan.vendor) << "\",\n";
   output << "    \"receiver_family\": \"" << EscapeJson(result.plan.receiver_family) << "\",\n";
+  output << "    \"receiver_model\": ";
+  if (result.plan.receiver_model.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.receiver_model) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "    \"name\": \"" << EscapeJson(result.plan.profile) << "\",\n";
   output << "    \"apply_mode\": \"" << EscapeJson(result.plan.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.plan.persistent ? "true" : "false") << ",\n";

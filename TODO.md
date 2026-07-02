@@ -22,6 +22,11 @@ Recently completed:
 - operator-driven runtime-only apply for u-blox and Unicore
 - Unicore persistent / `factory_reset` reset-recovery apply
 - u-blox persistent FLASH configuration and output-port selection
+- model-aware Unicore signal-group planning/profile selection with safe
+  unknown-model fallback and documented UM982 baseline gating
+- Unicore binary `N4` regression coverage for valid unknown-frame accounting,
+  malformed/rejected decode handling, and ASCII/Binary portable-field
+  consistency on shared `PVTSLN*` mappings
 - UM982 / Unicore runtime hardening and downstream field validation through
   MowgliNext
 - generic NMEA `GGA fix_quality` runtime mapping into normalized `rtk_mode`
@@ -38,7 +43,7 @@ Recently completed:
 
 ## Universal GNSS core tasks
 
-- [ ] capability/profile consistency cleanup between built-in receiver profiles and driver support
+- [ ] continue capability/profile consistency cleanup between built-in receiver profiles and driver support beyond the current Unicore model-aware signal-group gating
 - [ ] correction age estimation
 - [ ] automatic periodic GGA sending
 - [ ] runtime state CSV export

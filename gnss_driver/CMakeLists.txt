@@ -7,6 +7,7 @@ add_library(
   src/receiver_config_application.cpp
   src/receiver_command_dispatcher.cpp
   src/unicore_driver.cpp
+  src/unicore_model_profile.cpp
   src/receiver_command_transaction_engine.cpp
   src/ublox_driver.cpp
   src/receiver_profiles.cpp

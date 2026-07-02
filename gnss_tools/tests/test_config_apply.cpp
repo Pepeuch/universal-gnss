@@ -436,6 +436,7 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
   options.confirm = true;
 
   const auto result = PrepareConfigApply(options);
@@ -457,6 +458,7 @@ void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContex
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
   options.config_baud = 460800u;
   options.confirm = true;
 
@@ -488,6 +490,7 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
   options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
   options.rate_hz = 1.0;
   options.confirm = true;
@@ -514,6 +517,7 @@ void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kFactoryReset;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
   options.confirm = true;
 
   const auto result = PrepareConfigApply(options);
@@ -535,6 +539,7 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
@@ -565,6 +570,7 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kFactoryReset;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
   options.confirm = true;
 
   ScriptedByteDuplex transport({});
@@ -627,6 +633,7 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
   options.confirm = true;
 
   ScriptedByteDuplex transport({});
@@ -691,6 +698,7 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
   options.config_baud = 460800u;
   options.confirm = true;
 

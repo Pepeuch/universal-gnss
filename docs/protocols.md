@@ -342,6 +342,9 @@ Current Unicore notes:
   - unknown binary message ids preserved as valid binary frames when frame
     integrity is valid
   - semantic decoding for `BESTNAVB` and `PVTSLNB`
+- wrong-message-id, truncated-payload, and other malformed binary semantic
+  decodes are rejected cleanly; valid-but-unsupported `N4` frames stay unknown
+  and do not invent runtime fields
 - `BESTNAVB` and `PVTSLNB` are the first binary semantic decoders
 - `BESTNAVB` mirrors the documented conservative runtime projection of
   `BESTNAVA` for fix, RTK, position, accuracy, correction age, and satellite
@@ -349,6 +352,8 @@ Current Unicore notes:
 - `PVTSLNB` mirrors the documented conservative runtime projection of
   `PVTSLNA` for fix, RTK, position, accuracy, baseline azimuth/length/pitch,
   compatibility heading, correction age, and satellite counts
+- shared ASCII/Binary portable fields now follow the same runtime-mapping
+  contract where both documented message variants expose the same data
 - `PVTSLNA` is the richest current Unicore position / baseline source
 - `BESTNAVA` provides stable position-quality, accuracy, and correction-age
   fields
@@ -373,6 +378,9 @@ Current Unicore notes:
     `gnss_replay`
 - ASCII remains the richest Unicore runtime source today because most binary
   `N4` semantic messages beyond `BESTNAVB` / `PVTSLNB` are still deferred
+- receiver model identity, `dual_antenna_baseline` capability, and
+  `CONFIG SIGNALGROUP` legality are driver/profile concerns; the protocol layer
+  does not infer them from runtime traffic
 
 See [docs/vendors/unicore/runtime_mapping.md](vendors/unicore/runtime_mapping.md)
 for the current message-by-message Unicore runtime mapping contract.
@@ -446,6 +454,9 @@ Examples:
   RTK mode, or position
 - Unicore `PVTSLNA`, `PVTSLNB`, `BESTNAVA`, and `BESTNAVB` can set RTK mode
   only from documented position-type enums, not from indirect heuristics
+- Unicore runtime traffic does not imply that a receiver model supports
+  `dual_antenna_baseline` or any specific `CONFIG SIGNALGROUP` selection; that
+  capability gating lives in the driver/profile layer
 - Unicore `JAMSTATUSA` and `FREQJAMSTATUSA` only map documented jamming state;
   they do not imply fix, RTK, or correction quality
 - Unicore `HWSTATUSA` emits conservative receiver diagnostics only

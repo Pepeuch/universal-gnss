@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "universal_gnss_driver/receiver_auto_config.hpp"
+#include "universal_gnss_driver/unicore_model_profile.hpp"
 #include "universal_gnss_protocols/ubx_cfg_builder.hpp"
 
 namespace universal_gnss_tools
@@ -637,9 +638,11 @@ ProfilePreviewResult MakeErrorResult(const ProfilePreviewOptions& options,
   ProfilePreviewResult result;
   result.status = status;
   result.vendor = ToLowerCopy(options.vendor);
+  result.receiver_model = options.receiver_model;
   result.profile = ToLowerCopy(options.profile);
   result.persistent = options.persistent;
   result.signal_profile = options.signal_profile;
+  result.signal_group_override = options.signal_group_override;
   result.output_port = options.output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
@@ -757,7 +760,9 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   request.requested_profile = *profile;
   request.apply_mode = options.persistent ? ReceiverAutoConfigApplyMode::kPersistent
                                           : ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  request.receiver_model = options.receiver_model;
   request.signal_profile = options.signal_profile;
+  request.signal_group_override = options.signal_group_override;
   request.output_port = options.output_port;
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
@@ -767,16 +772,20 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   ProfilePreviewResult result;
   result.status = MapPlanStatus(plan.status);
   result.vendor = ToLowerCopy(options.vendor);
+  result.receiver_family = plan.receiver_family_name;
+  result.receiver_model = plan.receiver_model;
   result.profile =
       plan.status == ReceiverAutoConfigPlanStatus::kOk
           ? universal_gnss_driver::ToString(plan.request.requested_profile)
           : ToLowerCopy(options.profile);
   result.persistent = options.persistent;
   result.signal_profile = plan.request.signal_profile;
+  result.signal_group_override = plan.request.signal_group_override;
   result.output_port = plan.request.output_port;
   result.resolved_output_port = plan.resolved_output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
+  result.warnings = plan.warnings;
   result.error_message =
       plan.status == ReceiverAutoConfigPlanStatus::kOk ? std::string{} : SelectPlanErrorMessage(plan);
 
@@ -808,6 +817,14 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
   }
 
   output << "Profile: " << result.vendor << ' ' << result.profile << "\n";
+  if (!result.receiver_family.empty())
+  {
+    output << "Receiver family: " << result.receiver_family << "\n";
+  }
+  if (result.receiver_model.has_value())
+  {
+    output << "Receiver model: " << *result.receiver_model << "\n";
+  }
   output << "Preview: offline only, no receiver communication\n";
   if (result.persistent)
   {
@@ -817,6 +834,13 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
   {
     output << "Signal profile override: "
            << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
+  }
+  if (result.signal_group_override.has_value())
+  {
+    output << "Signal-group override: "
+           << universal_gnss_driver::FormatUnicoreSignalGroupSelection(
+                  *result.signal_group_override)
+           << "\n";
   }
   if (result.vendor == "ublox")
   {
@@ -882,6 +906,16 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
     output << '\n';
   }
 
+  if (!result.warnings.empty())
+  {
+    output << "Warnings:\n";
+    for (const auto& warning : result.warnings)
+    {
+      output << "- " << warning << "\n";
+    }
+    output << '\n';
+  }
+
   output << "Summary:\n";
   output << "  commands: " << result.summary.commands_total << "\n";
   output << "  runtime: " << result.summary.runtime_commands << "\n";
@@ -898,6 +932,17 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
          << (result.status == ProfilePreviewStatus::kOk ? "ok" : "error") << "\",\n";
   output << "  \"preview_only\": true,\n";
   output << "  \"vendor\": \"" << EscapeJson(result.vendor) << "\",\n";
+  output << "  \"receiver_family\": \"" << EscapeJson(result.receiver_family) << "\",\n";
+  output << "  \"receiver_model\": ";
+  if (result.receiver_model.has_value())
+  {
+    output << "\"" << EscapeJson(*result.receiver_model) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "  \"profile\": \"" << EscapeJson(result.profile) << "\",\n";
   output << "  \"persistent\": " << (result.persistent ? "true" : "false") << ",\n";
   output << "  \"signal_profile\": ";
@@ -905,6 +950,19 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   {
     output << "\""
            << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "  \"signal_group_override\": ";
+  if (result.signal_group_override.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::FormatUnicoreSignalGroupSelection(
+                  *result.signal_group_override))
            << "\"";
   }
   else
@@ -982,6 +1040,17 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   }
   output << ",\n";
   output << "  \"error_message\": \"" << EscapeJson(result.error_message) << "\",\n";
+  output << "  \"warnings\": [\n";
+  for (std::size_t index = 0; index < result.warnings.size(); ++index)
+  {
+    output << "    \"" << EscapeJson(result.warnings[index]) << "\"";
+    if (index + 1u != result.warnings.size())
+    {
+      output << ",";
+    }
+    output << "\n";
+  }
+  output << "  ],\n";
   output << "  \"commands\": [\n";
 
   for (std::size_t index = 0; index < result.commands.size(); ++index)

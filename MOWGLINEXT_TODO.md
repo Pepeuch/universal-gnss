@@ -170,6 +170,66 @@ Suggested field-validation checks:
   are present
 * verify any future degraded-mode policy is visible in logs and operator UI
 
+## 4. Pending MowgliNext work — consume Unicore model/capability metadata in any configurator UI
+
+What new Universal GNSS capability exists:
+
+* Universal GNSS now has a model-aware Unicore profile layer that can answer:
+  * which Unicore model is selected
+  * whether that model supports `dual_antenna_baseline`
+  * which `CONFIG SIGNALGROUP` selections are documented and allowed
+  * when `CONFIG SIGNALGROUP` must be skipped because the model is unknown or
+    because no documented automatic rover selection exists
+* The current portable CLIs expose that seam through an optional Unicore
+  `--model` selector and warning/report output.
+
+Why it matters for the robot:
+
+* a receiver can support RTK positioning without supporting antenna baseline
+* the operator UI should not offer dual-antenna/baseline-only signal-group
+  choices to single-antenna receivers
+* unknown Unicore models should fail safe instead of inheriting a family-wide
+  `CONFIG SIGNALGROUP` guess
+
+Where MowgliNext should consume it:
+
+* any GNSS setup/configuration wizard or plan/apply wrapper
+* any backend API that builds `gnss_profile_preview`, `gnss_config_plan`, or
+  `gnss_config_apply` requests
+* operator review screens that explain why a requested Unicore config item was
+  applied, rejected, or skipped
+
+Expected GUI/operator behavior:
+
+* when the receiver model is known, show only the documented signal-group
+  selections for that model
+* when the receiver model is unknown, disable or hide Unicore
+  `CONFIG SIGNALGROUP` choices and explain that the command was skipped for
+  safety
+* do not present baseline-only signal groups for non-baseline models such as
+  UM980 or UB9A0
+* keep unsupported or undocumented models explicit instead of silently mapping
+  them onto UM982 behavior
+
+Expected safety/localization behavior if relevant:
+
+* prevent operators from applying dual-antenna baseline-specific configuration
+  to single-antenna receivers
+* keep robot-side localization policy separate from config policy; the
+  configurator should not infer baseline capability from current RTK mode or
+  runtime baseline fields
+
+Suggested field-validation checks:
+
+* verify a confirmed UM982 path surfaces the documented portable rover choice
+  and does not offer undocumented combinations
+* verify UM980 and UB9A0 paths do not surface baseline-only signal-group
+  choices
+* verify unknown or undocumented Unicore models visibly skip
+  `CONFIG SIGNALGROUP` and explain why
+* verify operator review pages preserve the selected receiver model and any
+  skip/rejection warning in logs or exported plans
+
 ## Notes
 
 Universal GNSS MSM support currently provides correction-stream observability

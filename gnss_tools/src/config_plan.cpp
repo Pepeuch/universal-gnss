@@ -307,6 +307,7 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
   result.status = MapPlanStatus(plan.status);
   result.vendor = ToString(plan.request.receiver_family);
   result.receiver_family = plan.receiver_family_name;
+  result.receiver_model = plan.receiver_model;
   result.profile = universal_gnss_driver::ToString(plan.request.requested_profile);
   result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
   result.persistent = plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
@@ -372,6 +373,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   ConfigPlanResult result;
   result.vendor = ToLowerCopy(options.vendor);
   result.profile = ToLowerCopy(options.profile);
+  result.receiver_model = options.receiver_model;
   result.apply_mode = options.persistent ? "persistent" : "runtime_only";
   result.persistent = options.persistent;
   result.signal_profile = options.signal_profile;
@@ -408,6 +410,7 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   request.receiver_family = *family;
   request.requested_profile = *profile;
   request.apply_mode = ResolveApplyMode(options);
+  request.receiver_model = options.receiver_model;
   request.signal_profile = options.signal_profile;
   request.signal_group_override = options.signal_group_override;
   request.output_port = options.output_port;
@@ -441,6 +444,10 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   }
 
   output << "Receiver family: " << result.receiver_family << "\n";
+  if (result.receiver_model.has_value())
+  {
+    output << "Receiver model: " << *result.receiver_model << "\n";
+  }
   output << "Profile: " << result.vendor << ' ' << result.profile << "\n";
   output << "Apply mode: " << result.apply_mode << "\n";
   output << "Dry run: yes\n";
@@ -575,6 +582,16 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "  \"profile\": {\n";
   output << "    \"vendor\": \"" << EscapeJson(result.vendor) << "\",\n";
   output << "    \"receiver_family\": \"" << EscapeJson(result.receiver_family) << "\",\n";
+  output << "    \"receiver_model\": ";
+  if (result.receiver_model.has_value())
+  {
+    output << "\"" << EscapeJson(*result.receiver_model) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
   output << "    \"name\": \"" << EscapeJson(result.profile) << "\",\n";
   output << "    \"apply_mode\": \"" << EscapeJson(result.apply_mode) << "\",\n";
   output << "    \"persistent\": " << (result.persistent ? "true" : "false") << ",\n";

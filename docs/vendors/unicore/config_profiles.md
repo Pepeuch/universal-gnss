@@ -28,10 +28,47 @@ sequence of CRLF-terminated text commands.
 
 Current implementation lives in:
 
+- `gnss_driver/include/universal_gnss_driver/unicore_model_profile.hpp`
+- `gnss_driver/src/unicore_model_profile.cpp`
 - `gnss_driver/include/universal_gnss_driver/unicore_config_profile_builder.hpp`
 - `gnss_driver/src/unicore_config_profile_builder.cpp`
 - `gnss_driver/include/universal_gnss_driver/unicore_response_router.hpp`
 - `gnss_driver/src/unicore_response_router.cpp`
+
+## Model-aware profile seam
+
+Unicore configuration planning no longer relies on a family-wide
+`CONFIG SIGNALGROUP 3 6` default.
+
+The current `UnicoreModelProfile` layer answers four backend-only questions:
+
+- what model is this
+- does it support `dual_antenna_baseline`
+- which `CONFIG SIGNALGROUP` selections are documented and allowed
+- what should be skipped for unknown or non-baseline models
+
+Current documented model profiles are intentionally narrow:
+
+- unknown/generic
+  - safe non-baseline fallback
+  - no documented signal-group selections
+  - no automatic `CONFIG SIGNALGROUP`
+- `UM980`
+  - non-baseline
+  - documented explicit selections: `1`, `2`, `8`
+  - no automatic rover signal-group selection
+- `UM982`
+  - documented dual-antenna baseline capable
+  - documented explicit selections: `4 5`, `3 6`, `5 0`, `7 0`
+  - documented portable rover default: `3 6`
+- `UB9A0`
+  - non-baseline
+  - documented explicit selections: `2`, `9`
+  - no automatic rover signal-group selection
+
+Undocumented or unconfirmed models stay on the generic fallback. The planner
+warns and skips `CONFIG SIGNALGROUP` instead of guessing from family, RTK mode,
+or runtime baseline fields.
 
 ## Reference Inputs
 
@@ -67,7 +104,7 @@ Current runtime-safe command families:
 - `CONFIG RTK TIMEOUT <seconds>`
 - `CONFIG RTK RELIABILITY <a> <b>`
 - `CONFIG DGPS TIMEOUT <seconds>`
-- `CONFIG SIGNALGROUP ...`
+- model-validated `CONFIG SIGNALGROUP ...`
 - `UNLOG`
 - output enable commands for:
   - `GPGGA`
@@ -110,14 +147,14 @@ sequence for it.
 
 ### `rover_high_precision`
 
-Current `rover_high_precision` helper generates:
+Current `rover_high_precision` helper always generates the core rover/runtime
+commands:
 
 - `MODE ROVER`
 - `CONFIG NMEA0183 V411`
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
-- `CONFIG SIGNALGROUP 3 6`
 - `UNLOG`
 - `LOG GPGGA ONTIME 1`
 - `GPGSV 1`
@@ -128,9 +165,20 @@ Current `rover_high_precision` helper generates:
 - `RTCMSTATUSA ONCHANGED`
 - `SATSINFOA 1`
 
-This keeps the primary rover state on `BESTNAVA` at 5 Hz while trimming the
-fallback/observability logs down to 1 Hz so live serial output stays lighter on
-UM982 deployments.
+Model-specific signal-group behavior:
+
+- `UM982` adds the documented portable rover selection
+  `CONFIG SIGNALGROUP 3 6`
+- `UM980` and `UB9A0` do not get an automatic signal-group command because the
+  current portable layer has no documented automatic rover selection for those
+  models
+- unknown or undocumented models skip `CONFIG SIGNALGROUP` and keep the
+  receiver's current signal-group configuration unchanged
+
+This keeps the primary rover state on `BESTNAVA` at `5 Hz` while trimming the
+fallback/observability logs down to `1 Hz`. It also keeps dual-antenna
+signal-group choices gated by the confirmed receiver model instead of by RTK
+state or runtime baseline fields.
 
 If persistent mode is requested, the builder appends only:
 
@@ -143,13 +191,14 @@ Legacy CLI alias:
 ### `rover_high_precision_debug`
 
 Current `rover_high_precision_debug` helper extends
-`rover_high_precision` by restoring the heavier heading/status log:
+`rover_high_precision` by restoring the heavier baseline/status log:
 
 - `LOG PVTSLNA ONTIME 0.2`
 
 This debug profile is intentionally higher-bandwidth than
 `rover_high_precision` and is meant for short-lived capture or troubleshooting
-sessions, not normal runtime.
+sessions, not normal runtime. It inherits the same model-aware
+`CONFIG SIGNALGROUP` gating as `rover_high_precision`.
 
 Legacy CLI alias:
 
@@ -193,6 +242,21 @@ This means:
   `VERSIONA` response, recover `COM1` with the explicit
   `CONFIG COM1 <baud> 8 n 1` form, and then verify reachability again at the
   restored baud before continuing
+
+`CONFIG SIGNALGROUP` remains a runtime command. Safety comes from
+model-profile validation rather than from upgrading it to persistent/factory
+severity:
+
+- only documented selections are accepted
+- unknown models skip the command and warn
+- explicit overrides are rejected when the selected model does not document the
+  requested combination
+
+Current documented explicit override selections are:
+
+- `UM980`: `1`, `2`, `8`
+- `UM982`: `4 5`, `3 6`, `5 0`, `7 0`
+- `UB9A0`: `2`, `9`
 
 ## Conservative response routing
 

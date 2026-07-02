@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -12,6 +13,7 @@
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
 
 namespace
@@ -25,8 +27,12 @@ using universal_gnss::HasCapability;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ComputeUnicoreBinaryCrc32;
+using universal_gnss_protocols::ParseUnicorePvtsln;
 using universal_gnss_protocols::ParseUnicorePvtslnB;
 using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
+using universal_gnss_protocols::UnicorePvtslnToRuntimeState;
 using universal_gnss_protocols::UnicoreBinaryFrame;
 using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicorePvtslnBToRuntimeState;
@@ -191,6 +197,46 @@ std::vector<std::uint8_t> MakePvtslnPayload(const std::uint32_t best_position_ty
   return payload;
 }
 
+std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
+{
+  const auto crc = ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+
+  char checksum[9] = {};
+  std::snprintf(checksum, sizeof(checksum), "%08x", crc);
+  return frame_without_crc + "*" + checksum + "\r\n";
+}
+
+UnicoreFrame BuildAsciiFrame(const std::string& line,
+                             const std::optional<std::int64_t> timestamp_ns = std::nullopt)
+{
+  UnicoreFrameFramer framer;
+  universal_gnss_protocols::ParserResult<UnicoreFrame> result;
+  for (const char ch : line)
+  {
+    result = framer.PushByte(static_cast<std::uint8_t>(ch), timestamp_ns);
+  }
+
+  if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
+  {
+    std::cerr << "FAILED: could not frame PVTSLNA test line\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  return *result.record;
+}
+
+std::string MakePvtslnAsciiLine()
+{
+  return WithUnicoreAsciiCrc(
+      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
+      "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
+      "SINGLE,60.5060,40.07898130522,116.23663134427,-8.4923,46,28,46,28,0.0009,-0.0031,0.0032,"
+      "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
+      "28,25,26");
+}
+
 void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
 {
   const UnicoreBinaryFrame frame =
@@ -269,6 +315,48 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
              "PVTSLNB should not invent RF runtime fields");
 }
 
+void TestAsciiAndBinaryRuntimeConsistency(TestContext& ctx)
+{
+  const auto binary_result =
+      ParseUnicorePvtslnB(BuildBinaryFrame(1021u, MakePvtslnPayload(50u, 0u), 4444));
+  const auto ascii_result = ParseUnicorePvtsln(BuildAsciiFrame(MakePvtslnAsciiLine(), 4444));
+  ctx.Expect(binary_result.status == ParserStatus::kRecordReady &&
+                 binary_result.record.has_value() &&
+                 ascii_result.status == ParserStatus::kRecordReady &&
+                 ascii_result.record.has_value(),
+             "matching PVTSLNB and PVTSLNA test vectors should both parse successfully");
+  if (!binary_result.record.has_value() || !ascii_result.record.has_value())
+  {
+    return;
+  }
+
+  const auto binary_state = UnicorePvtslnBToRuntimeState(*binary_result.record);
+  const auto ascii_state = UnicorePvtslnToRuntimeState(*ascii_result.record);
+  ctx.Expect(binary_state.timestamp_ns == ascii_state.timestamp_ns &&
+                 binary_state.fix_type == ascii_state.fix_type &&
+                 binary_state.rtk_mode == ascii_state.rtk_mode &&
+                 binary_state.dual_antenna_baseline == ascii_state.dual_antenna_baseline &&
+                 binary_state.baseline_solution_status == ascii_state.baseline_solution_status,
+             "ASCII and binary PVTSLN runtime mapping should agree on fix and baseline status");
+  ctx.Expect(binary_state.latitude_deg.has_value() &&
+                 ascii_state.latitude_deg.has_value() &&
+                 NearlyEqual(*binary_state.latitude_deg, *ascii_state.latitude_deg) &&
+                 binary_state.longitude_deg.has_value() &&
+                 ascii_state.longitude_deg.has_value() &&
+                 NearlyEqual(*binary_state.longitude_deg, *ascii_state.longitude_deg) &&
+                 binary_state.altitude_m.has_value() &&
+                 ascii_state.altitude_m.has_value() &&
+                 NearlyEqual(*binary_state.altitude_m, *ascii_state.altitude_m, 1e-4),
+             "ASCII and binary PVTSLN runtime mapping should agree on coordinates and altitude");
+  ctx.Expect(binary_state.baseline_azimuth_deg == ascii_state.baseline_azimuth_deg &&
+                 binary_state.baseline_pitch_deg == ascii_state.baseline_pitch_deg &&
+                 binary_state.baseline_length_m == ascii_state.baseline_length_m &&
+                 binary_state.heading_deg == ascii_state.heading_deg &&
+                 binary_state.hdop == ascii_state.hdop &&
+                 binary_state.correction_age_s == ascii_state.correction_age_s,
+             "ASCII and binary PVTSLN runtime mapping should agree on shared baseline geometry, heading compatibility, HDOP, and correction age");
+}
+
 void TestHeadingIsGatedByHeadingSolutionStatus(TestContext& ctx)
 {
   const auto result = ParseUnicorePvtslnB(
@@ -320,6 +408,7 @@ int main()
   TestContext ctx;
 
   TestValidPvtslnBParseAndRuntimeMapping(ctx);
+  TestAsciiAndBinaryRuntimeConsistency(ctx);
   TestHeadingIsGatedByHeadingSolutionStatus(ctx);
   TestWrongIdAndMalformedPayloadRejected(ctx);
 

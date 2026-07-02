@@ -28,6 +28,22 @@ struct TestContext
   }
 };
 
+bool HasTextCommand(const universal_gnss_tools::ProfilePreviewResult& result,
+                    const std::string& command_text)
+{
+  for (const auto& command : result.commands)
+  {
+    if (command.command.payload.kind ==
+            universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+        command.command.payload.text.find(command_text) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void TestUbloxRoverHighPrecisionPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
@@ -62,21 +78,31 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 15u,
-             "Unicore rover_high_precision preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 15u &&
-                 result.summary.runtime_commands == 15u &&
+                 result.commands.size() == 14u,
+             "generic Unicore rover_high_precision preview should build the expected safe command count");
+  ctx.Expect(result.summary.commands_total == 14u &&
+                 result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
-             "Unicore rover_high_precision preview summary should count runtime commands");
+             "generic Unicore rover_high_precision preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
                  result.commands.front().description == "set receiver mode to rover",
              "Unicore rover_high_precision preview should decode the MODE ROVER description");
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
-                 text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
                  text.find("LOG PVTSLNA ONTIME 1") != std::string::npos &&
-                 text.find("SATSINFOA 1") != std::string::npos,
-             "Unicore rover_high_precision preview text should expose human-readable text commands");
+                 text.find("SATSINFOA 1") != std::string::npos &&
+                 text.find("model identity is unknown") != std::string::npos &&
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
+             "generic Unicore rover_high_precision preview text should expose the safe fallback and skip CONFIG SIGNALGROUP");
+
+  options.receiver_model = "UM982";
+  const auto um982_result = BuildProfilePreview(options);
+  const std::string um982_text = FormatProfilePreviewText(um982_result);
+  ctx.Expect(um982_result.status == ProfilePreviewStatus::kOk &&
+                 um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
+                 um982_result.commands.size() == 15u &&
+                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos,
+             "UM982 preview should expose the documented dual-antenna signal-group selection");
 }
 
 void TestRuntimeOnlyPreview(TestContext& ctx)
@@ -117,11 +143,11 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
 
   const auto unicore_result = BuildProfilePreview(unicore_options);
   ctx.Expect(unicore_result.status == ProfilePreviewStatus::kOk &&
-                 unicore_result.summary.commands_total == 18u &&
-                 unicore_result.summary.runtime_commands == 16u &&
+                 unicore_result.summary.commands_total == 17u &&
+                 unicore_result.summary.runtime_commands == 15u &&
                  unicore_result.summary.persistent_commands == 1u &&
                  unicore_result.summary.factory_reset_commands == 1u,
-             "persistent Unicore previews should expose the reset-first recovery workflow plus SAVECONFIG");
+             "generic persistent Unicore previews should expose the reset-first recovery workflow plus SAVECONFIG without guessing signal groups");
 }
 
 void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
@@ -129,6 +155,7 @@ void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "unicore";
   options.profile = "rover_high_precision";
+  options.receiver_model = "UM982";
   options.persistent = true;
   options.baud = 460800u;
 
@@ -154,6 +181,7 @@ void TestSignalProfilePreview(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "unicore";
   options.profile = "rover_high_precision";
+  options.receiver_model = "UM982";
   options.signal_profile =
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
   options.rate_hz = 1.0;
@@ -171,6 +199,24 @@ void TestSignalProfilePreview(TestContext& ctx)
                  text.find("BESTNAVA 1") != std::string::npos &&
                  text.find("GPGSV") == std::string::npos,
              "minimal signal-profile preview text should show the reduced output plan");
+
+  ProfilePreviewOptions unknown_model_options;
+  unknown_model_options.vendor = "unicore";
+  unknown_model_options.profile = "rover_high_precision";
+  unknown_model_options.receiver_model = "UM981";
+  unknown_model_options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
+  const auto unknown_model_result = BuildProfilePreview(unknown_model_options);
+  const std::string unknown_model_text = FormatProfilePreviewText(unknown_model_result);
+  ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kOk &&
+                 unknown_model_result.receiver_model ==
+                     std::optional<std::string>{"UM981"} &&
+                 unknown_model_result.summary.commands_total == 14u &&
+                 unknown_model_text.find("Receiver model: UM981") != std::string::npos &&
+                 unknown_model_text.find("safe generic non-baseline fallback") !=
+                     std::string::npos &&
+                 !HasTextCommand(unknown_model_result, "CONFIG SIGNALGROUP"),
+             "unknown-model preview should report the safe fallback and skip CONFIG SIGNALGROUP");
 }
 
 void TestUbloxOutputPortPreview(TestContext& ctx)
@@ -229,8 +275,8 @@ void TestFactoryResetPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 17u &&
-                 result.summary.runtime_commands == 16u &&
+                 result.commands.size() == 16u &&
+                 result.summary.runtime_commands == 15u &&
                  result.summary.factory_reset_commands == 1u,
              "Unicore factory_reset preview should expose reset plus runtime recovery commands");
   ctx.Expect(!result.commands.empty() &&
@@ -255,6 +301,7 @@ void TestJsonFormatting(TestContext& ctx)
   ctx.Expect(result.status == ProfilePreviewStatus::kOk,
              "JSON formatting test setup should build successfully");
   ctx.Expect(json.find("\"vendor\": \"ublox\"") != std::string::npos &&
+                 json.find("\"receiver_family\": \"F9/F10\"") != std::string::npos &&
                  json.find("\"profile\": \"rover_high_precision\"") != std::string::npos &&
                  json.find("\"signal_profile\": \"all_signals\"") != std::string::npos &&
                  json.find("\"summary\"") != std::string::npos,

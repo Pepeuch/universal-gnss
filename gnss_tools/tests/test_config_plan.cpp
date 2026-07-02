@@ -28,6 +28,22 @@ struct TestContext
   }
 };
 
+bool HasTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
+                    const std::string& command_text)
+{
+  for (const auto& command : result.commands)
+  {
+    if (command.command.payload.kind ==
+            universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+        command.command.payload.text.find(command_text) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void TestUbloxRoverHighPrecisionPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -61,15 +77,25 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.receiver_family == "UM98x",
              "Unicore rover_high_precision_debug plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 15u &&
-                 result.summary.runtime_commands == 15u &&
+  ctx.Expect(result.summary.commands_total == 14u &&
+                 result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
-             "Unicore rover_high_precision_debug plan should report the expected default command counts");
+             "generic Unicore rover_high_precision_debug plans should report the expected safe command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
-                 text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  text.find("UNLOG") != std::string::npos &&
-                 text.find("LOG PVTSLNA ONTIME 0.2") != std::string::npos,
-             "Unicore rover_high_precision_debug plan text should show the verbose PVTSLNA command sequence");
+                 text.find("LOG PVTSLNA ONTIME 0.2") != std::string::npos &&
+                 text.find("model identity is unknown") != std::string::npos &&
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
+             "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe unknown-model fallback");
+
+  options.receiver_model = "UM982";
+  const auto um982_result = BuildConfigPlan(options);
+  const std::string um982_text = FormatConfigPlanText(um982_result);
+  ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
+                 um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
+                 um982_result.summary.commands_total == 15u &&
+                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos,
+             "UM982 config plans should expose the documented dual-antenna signal-group selection");
 }
 
 void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
@@ -77,6 +103,7 @@ void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
   ConfigPlanOptions options;
   options.vendor = "unicore";
   options.profile = "rover_high_precision";
+  options.receiver_model = "UM982";
   options.persistent = true;
   options.baud = 460800u;
 
@@ -102,6 +129,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
   ConfigPlanOptions unicore_options;
   unicore_options.vendor = "unicore";
   unicore_options.profile = "rover_high_precision";
+  unicore_options.receiver_model = "UM982";
   unicore_options.signal_profile =
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
   unicore_options.rate_hz = 1.0;
@@ -120,6 +148,24 @@ void TestSignalProfilePlanning(TestContext& ctx)
                  unicore_text.find("GPGSV") == std::string::npos &&
                  unicore_text.find("PVTSLNA") == std::string::npos,
              "Unicore minimal signal-profile plan text should show the reduced runtime command set");
+
+  ConfigPlanOptions unknown_unicore_options;
+  unknown_unicore_options.vendor = "unicore";
+  unknown_unicore_options.profile = "rover_high_precision";
+  unknown_unicore_options.receiver_model = "UM981";
+  unknown_unicore_options.signal_profile =
+      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
+  const auto unknown_unicore_result = BuildConfigPlan(unknown_unicore_options);
+  const std::string unknown_unicore_text = FormatConfigPlanText(unknown_unicore_result);
+  ctx.Expect(unknown_unicore_result.status == ConfigPlanStatus::kOk &&
+                 unknown_unicore_result.receiver_model ==
+                     std::optional<std::string>{"UM981"} &&
+                 unknown_unicore_result.summary.commands_total == 14u &&
+                 unknown_unicore_text.find("Receiver model: UM981") != std::string::npos &&
+                 unknown_unicore_text.find("safe generic non-baseline fallback") !=
+                     std::string::npos &&
+                 !HasTextCommand(unknown_unicore_result, "CONFIG SIGNALGROUP"),
+             "unknown Unicore model plan text should report the safe fallback and skip CONFIG SIGNALGROUP");
 
   ConfigPlanOptions nmea_options;
   nmea_options.vendor = "nmea";
@@ -258,7 +304,7 @@ void TestFactoryResetPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.summary.factory_reset_commands == 1u &&
-                 result.summary.runtime_commands == 16u &&
+                 result.summary.runtime_commands == 15u &&
                  result.production_ready &&
                  result.ready_to_execute,
              "factory_reset plans should expose the production-ready recovery sequence so operators can review it before execution");

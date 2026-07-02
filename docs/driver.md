@@ -98,6 +98,9 @@ These are receiver-level claims, not protocol parser claims.
 - `generic_nmea`
 - `ublox_f9_f10`
 - `unicore_um98x_placeholder`
+- `unicore_um980`
+- `unicore_um982`
+- `unicore_ub9a0`
 - `quectel_placeholder`
 
 These profiles are intentionally conservative.
@@ -113,6 +116,31 @@ They are not yet:
 - full SKU databases
 - hardware probes
 - guarantees about every model in a vendor family
+
+For Unicore, the built-in profile table is now paired with
+`unicore_model_profile.*`, a small model-aware seam that answers four driver
+questions without mixing runtime parser state into config planning:
+
+- what model is selected
+- whether that model supports `dual_antenna_baseline`
+- which `CONFIG SIGNALGROUP` selections are documented and allowed
+- when `CONFIG SIGNALGROUP` should be skipped because the model is unknown or
+  because no documented automatic rover selection exists
+
+Current documented Unicore model profiles are intentionally narrow:
+
+- unknown/generic
+  - safe non-baseline fallback
+  - no automatic `CONFIG SIGNALGROUP`
+- `UM980`
+  - non-baseline
+  - documented explicit signal-group selections only
+- `UM982`
+  - documented dual-antenna baseline capable
+  - documented portable rover signal-group default
+- `UB9A0`
+  - non-baseline
+  - documented explicit signal-group selections only
 
 ### Receiver command model
 
@@ -428,7 +456,7 @@ Current coverage:
 - `CONFIG RTK TIMEOUT`
 - `CONFIG RTK RELIABILITY`
 - `CONFIG DGPS TIMEOUT`
-- `CONFIG SIGNALGROUP`
+- model-validated `CONFIG SIGNALGROUP`
 - output-message enables for:
   - `GPGGA`
   - `PVTSLNA`
@@ -445,8 +473,12 @@ Current policy:
   - direct-period syntax for `BESTNAVA`, `RTKSTATUSA`, and `SATSINFOA`
   - `ONCHANGED` for `RTCMSTATUSA`
 - `SAVECONFIG` is generated only when persistent storage is explicitly requested
-- `CONFIG SIGNALGROUP` is treated as persistent/safety-gated because it is
-  model-specific and not a lightweight runtime tweak
+- `CONFIG SIGNALGROUP` remains a runtime command, but it is only generated
+  when the selected `UnicoreModelProfile` confirms that exact documented
+  selection
+- unknown or undocumented Unicore models keep the receiver's current
+  signal-group configuration unchanged and surface a warning instead of
+  guessing
 - generation is deterministic and transport-agnostic
 
 What this does not do:
@@ -535,9 +567,13 @@ Current vendor coverage:
   - family: `UM98x`
   - profiles: rover, diagnostics
   - runtime state: delegated to `UnicoreSession`
-  - capabilities: RTK, heading compatibility, dual antenna,
-    dual-antenna baseline, signal-group configuration,
-    ASCII command configuration, rover mode, PPS
+  - capabilities: model-aware
+  - generic/unknown fallback:
+    RTK, ASCII command configuration, rover mode, base mode, survey-in, PPS
+  - `UM982` additionally advertises heading compatibility, dual antenna,
+    dual-antenna baseline, and documented signal-group configuration
+  - `UM980` and `UB9A0` advertise documented signal-group configuration only;
+    they are not treated as baseline-capable
 
 Still deferred:
 

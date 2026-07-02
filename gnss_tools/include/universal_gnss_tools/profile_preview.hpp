@@ -25,8 +25,10 @@ struct ProfilePreviewOptions
 {
   std::string vendor{};
   std::string profile{};
+  std::optional<std::string> receiver_model{};
   bool persistent{false};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
+  std::optional<std::vector<std::uint8_t>> signal_group_override{};
   std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
@@ -51,15 +53,19 @@ struct ProfilePreviewResult
 {
   ProfilePreviewStatus status{ProfilePreviewStatus::kOk};
   std::string vendor{};
+  std::string receiver_family{};
+  std::optional<std::string> receiver_model{};
   std::string profile{};
   bool persistent{false};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
+  std::optional<std::vector<std::uint8_t>> signal_group_override{};
   std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> output_port{};
   std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> resolved_output_port{};
   std::optional<std::uint32_t> baud{};
   std::optional<double> rate_hz{};
   std::vector<ProfilePreviewCommand> commands{};
   ProfilePreviewSummary summary{};
+  std::vector<std::string> warnings{};
   std::string error_message{};
 };
 

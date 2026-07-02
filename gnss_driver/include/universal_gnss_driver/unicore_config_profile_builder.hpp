@@ -7,6 +7,7 @@
 
 #include "universal_gnss_driver/receiver_command.hpp"
 #include "universal_gnss_driver/receiver_config_profile.hpp"
+#include "universal_gnss_driver/unicore_model_profile.hpp"
 
 namespace universal_gnss_driver
 {
@@ -68,6 +69,7 @@ struct UnicoreOutputMessageRate
 
 struct UnicoreConfigProfile
 {
+  ReceiverTargetSelector target{};
   ReceiverConfigProfileKind config_kind{ReceiverConfigProfileKind::kRover};
   bool factory_reset{false};
   UnicoreMode mode{UnicoreMode::kUnspecified};
@@ -97,7 +99,15 @@ public:
   static UnicoreConfigProfile BuildUnicoreRoverProfile(
       UnicorePersistenceTarget persistence = UnicorePersistenceTarget::kRuntimeOnly);
 
+  static UnicoreConfigProfile BuildUnicoreRoverProfile(
+      const UnicoreModelProfile& model_profile,
+      UnicorePersistenceTarget persistence = UnicorePersistenceTarget::kRuntimeOnly);
+
   static UnicoreConfigProfile BuildUnicoreDiagnosticsProfile(
+      UnicorePersistenceTarget persistence = UnicorePersistenceTarget::kRuntimeOnly);
+
+  static UnicoreConfigProfile BuildUnicoreDiagnosticsProfile(
+      const UnicoreModelProfile& model_profile,
       UnicorePersistenceTarget persistence = UnicorePersistenceTarget::kRuntimeOnly);
 
   static UnicoreConfigProfile BuildUnicoreFactoryResetProfile();

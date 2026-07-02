@@ -1,5 +1,7 @@
 #include "universal_gnss_driver/receiver_profiles.hpp"
 
+#include "universal_gnss_driver/unicore_model_profile.hpp"
+
 namespace universal_gnss_driver
 {
 
@@ -13,81 +15,69 @@ constexpr ReceiverCapabilities MakeCapabilities(const ProtocolSupportFlags input
   return ReceiverCapabilities{input_protocols, output_protocols, features};
 }
 
-constexpr ReceiverProfile kBuiltInProfiles[] = {
-    ReceiverProfile{
-        "generic_nmea",
-        "Generic NMEA Receiver",
-        ReceiverVendor::kGeneric,
-        "Generic",
-        "NMEA",
-        false,
-        MakeCapabilities(0u,
-                         ToFlag(ReceiverProtocol::kNmea),
-                         ToFlag(ReceiverFeature::kRtk) |
-                             ToFlag(ReceiverFeature::kRoverMode)),
-    },
-    ReceiverProfile{
-        "ublox_f9_f10",
-        "u-blox F9/F10 Family",
-        ReceiverVendor::kUblox,
-        "F9/F10",
-        "family",
-        false,
-        MakeCapabilities(ToFlag(ReceiverProtocol::kUbx) |
-                             ToFlag(ReceiverProtocol::kRtcm3),
-                         ToFlag(ReceiverProtocol::kNmea) |
-                             ToFlag(ReceiverProtocol::kUbx),
-                         ToFlag(ReceiverFeature::kRfMonitoring) |
-                             ToFlag(ReceiverFeature::kPps) |
-                             ToFlag(ReceiverFeature::kRoverMode)),
-    },
-    ReceiverProfile{
-        "unicore_um98x_placeholder",
-        "Unicore UM98x Placeholder",
-        ReceiverVendor::kUnicore,
-        "UM98x",
-        "placeholder",
-        true,
-        MakeCapabilities(ToFlag(ReceiverProtocol::kRtcm3) |
-                             ToFlag(ReceiverProtocol::kUnicoreAscii) |
-                             ToFlag(ReceiverProtocol::kUnicoreBinary),
-                         ToFlag(ReceiverProtocol::kNmea) |
-                             ToFlag(ReceiverProtocol::kRtcm3) |
-                             ToFlag(ReceiverProtocol::kUnicoreAscii) |
-                             ToFlag(ReceiverProtocol::kUnicoreBinary),
-                         ToFlag(ReceiverFeature::kRtk) |
-                             ToFlag(ReceiverFeature::kHeading) |
-                             ToFlag(ReceiverFeature::kDualAntenna) |
-                             ToFlag(ReceiverFeature::kDualAntennaBaseline) |
-                             ToFlag(ReceiverFeature::kPps) |
-                             ToFlag(ReceiverFeature::kSurveyIn) |
-                             ToFlag(ReceiverFeature::kBaseMode) |
-                             ToFlag(ReceiverFeature::kRoverMode)),
-    },
-    ReceiverProfile{
-        "quectel_placeholder",
-        "Quectel Placeholder",
-        ReceiverVendor::kQuectel,
-        "Quectel",
-        "placeholder",
-        true,
-        MakeCapabilities(ToFlag(ReceiverProtocol::kRtcm3),
-                         ToFlag(ReceiverProtocol::kNmea),
-                         ToFlag(ReceiverFeature::kRtk) |
-                             ToFlag(ReceiverFeature::kPps) |
-                             ToFlag(ReceiverFeature::kRoverMode)),
-    },
-};
+ReceiverProfile BuildUnicoreProfile(const UnicoreModelProfile& model_profile,
+                                    const char* display_name)
+{
+  return ReceiverProfile{
+      model_profile.profile_id,
+      display_name,
+      ReceiverVendor::kUnicore,
+      model_profile.family,
+      model_profile.model,
+      model_profile.placeholder,
+      model_profile.capabilities,
+  };
+}
 
 }  // namespace
 
-const std::array<ReceiverProfile, 4>& GetBuiltInReceiverProfiles()
+const std::array<ReceiverProfile, 7>& GetBuiltInReceiverProfiles()
 {
-  static const std::array<ReceiverProfile, 4> profiles = {
-      kBuiltInProfiles[0],
-      kBuiltInProfiles[1],
-      kBuiltInProfiles[2],
-      kBuiltInProfiles[3],
+  static const std::array<ReceiverProfile, 7> profiles = {
+      ReceiverProfile{
+          "generic_nmea",
+          "Generic NMEA Receiver",
+          ReceiverVendor::kGeneric,
+          "Generic",
+          "NMEA",
+          false,
+          MakeCapabilities(0u,
+                           ToFlag(ReceiverProtocol::kNmea),
+                           ToFlag(ReceiverFeature::kRtk) |
+                               ToFlag(ReceiverFeature::kRoverMode)),
+      },
+      ReceiverProfile{
+          "ublox_f9_f10",
+          "u-blox F9/F10 Family",
+          ReceiverVendor::kUblox,
+          "F9/F10",
+          "family",
+          false,
+          MakeCapabilities(ToFlag(ReceiverProtocol::kUbx) |
+                               ToFlag(ReceiverProtocol::kRtcm3),
+                           ToFlag(ReceiverProtocol::kNmea) |
+                               ToFlag(ReceiverProtocol::kUbx),
+                           ToFlag(ReceiverFeature::kRfMonitoring) |
+                               ToFlag(ReceiverFeature::kPps) |
+                               ToFlag(ReceiverFeature::kRoverMode)),
+      },
+      BuildUnicoreProfile(ResolveUnicoreModelProfile(), "Unicore N4 Generic"),
+      BuildUnicoreProfile(ResolveUnicoreModelProfile("UM980"), "Unicore UM980"),
+      BuildUnicoreProfile(ResolveUnicoreModelProfile("UM982"), "Unicore UM982"),
+      BuildUnicoreProfile(ResolveUnicoreModelProfile("UB9A0"), "Unicore UB9A0"),
+      ReceiverProfile{
+          "quectel_placeholder",
+          "Quectel Placeholder",
+          ReceiverVendor::kQuectel,
+          "Quectel",
+          "placeholder",
+          true,
+          MakeCapabilities(ToFlag(ReceiverProtocol::kRtcm3),
+                           ToFlag(ReceiverProtocol::kNmea),
+                           ToFlag(ReceiverFeature::kRtk) |
+                               ToFlag(ReceiverFeature::kPps) |
+                               ToFlag(ReceiverFeature::kRoverMode)),
+      },
   };
   return profiles;
 }

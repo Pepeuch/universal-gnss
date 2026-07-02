@@ -35,6 +35,11 @@ Already delivered in `v0.6.0` and its follow-up fixes:
   - `factory_reset`
 - operator-driven Unicore reset/recovery persistent apply
 - u-blox persistent FLASH configuration and output-port selection
+- model-aware Unicore signal-group planning/profile selection with safe
+  unknown-model fallback and documented UM982 baseline gating
+- Unicore binary `N4` regression coverage for valid unknown-frame accounting,
+  malformed/rejected decode handling, and ASCII/Binary portable-field
+  consistency on shared `PVTSLN*` mappings
 - UM982 / Unicore runtime validation through downstream MowgliNext field use
 - generic NMEA `GGA fix_quality` mapping into normalized `rtk_mode` for
   runtime-only receivers

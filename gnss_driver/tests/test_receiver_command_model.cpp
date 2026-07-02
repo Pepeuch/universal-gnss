@@ -139,6 +139,7 @@ void TestConfigProfilesAgainstReceiverProfiles(TestContext& ctx)
   const ReceiverProfile& generic = RequireProfile(ctx, "generic_nmea");
   const ReceiverProfile& ublox = RequireProfile(ctx, "ublox_f9_f10");
   const ReceiverProfile& unicore = RequireProfile(ctx, "unicore_um98x_placeholder");
+  const ReceiverProfile& unicore_um982 = RequireProfile(ctx, "unicore_um982");
 
   ctx.Expect(universal_gnss_driver::CanApplyConfigProfile(generic.capabilities, rover) &&
                  universal_gnss_driver::CanApplyConfigProfile(generic.capabilities, nmea_output) &&
@@ -153,6 +154,9 @@ void TestConfigProfilesAgainstReceiverProfiles(TestContext& ctx)
                  universal_gnss_driver::CanApplyConfigProfile(unicore.capabilities, survey_in) &&
                  universal_gnss_driver::CanApplyConfigProfile(unicore.capabilities, rtcm_output),
              "Unicore placeholder should advertise base, survey-in, and RTCM output support");
+  ctx.Expect(universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rover) &&
+                 universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rtcm_output),
+             "model-specific UM982 profiles should remain compatible with rover and RTCM-output generic intents");
 }
 
 }  // namespace

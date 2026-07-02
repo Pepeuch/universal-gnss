@@ -476,6 +476,10 @@ Current behavior:
 - can emit JSON for scripting and review
 - can apply offline overrides like `--persistent`, `--signal-profile`,
   `--baud`, `--rate-hz`, and `--output-port`
+- for `unicore`, accepts an optional `--model` selector so preview can apply
+  documented model/capability-aware signal-group rules
+- for `unicore`, unknown or undocumented models skip `CONFIG SIGNALGROUP` and
+  report the safe fallback instead of guessing
 - for `ublox`, separates the current host transport from the receiver output
   interface being configured:
   - `--output-port usb` enables the required `CFG-MSGOUT-*USB` keys only
@@ -504,19 +508,22 @@ gnss_profile_preview nmea runtime_only
 gnss_profile_preview ublox rover_high_precision
 gnss_profile_preview ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_profile_preview ublox rover_high_precision_debug --json
-gnss_profile_preview unicore rover_high_precision --signal-profile minimal --rate-hz 1
-gnss_profile_preview unicore rover_high_precision --persistent --rate-hz 5
+gnss_profile_preview unicore rover_high_precision
+gnss_profile_preview unicore rover_high_precision --model UM982 --signal-profile minimal --rate-hz 1
+gnss_profile_preview unicore rover_high_precision --model UM982 --persistent --rate-hz 5
 gnss_profile_preview unicore factory_reset
 ```
 
 Text output includes:
 
 - profile metadata and requested overrides
+- receiver model when present
 - signal-profile intent when present
 - requested and resolved output-port context when present
 - one command at a time with kind, safety level, payload kind, payload size, and description
 - raw text commands for ASCII-based profiles
 - raw binary hex only when `--verbose` is enabled
+- warnings when a requested Unicore signal-group command was skipped for safety
 - a summary with total, runtime, persistent, and factory-reset command counts
 
 JSON output includes:
@@ -545,6 +552,8 @@ Current behavior:
 - highlights whether explicit safety confirmation would be required before dispatch
 - marks persistent and factory-reset commands clearly in the sequence
 - accepts vendor-neutral `--signal-profile balanced|high_precision|all_signals|minimal|custom`
+- for `unicore`, accepts an optional `--model` selector so planning can apply
+  documented model/capability-aware signal-group rules
 - accepts `--output-port usb|uart1|uart2|all|auto` for `ublox` interface
   selection
 - supports the same portable profile names and legacy aliases as
@@ -576,6 +585,9 @@ u-blox interface-planning notes:
 - the same USB inference also accepts container-local aliases such as
   `/dev/usb-u-blox_*`
 - otherwise it warns and falls back to `uart1`
+- when no Unicore model is supplied, the planner keeps the receiver's current
+  signal-group configuration unchanged and warns instead of applying a
+  family-wide guess
 
 Current non-goals:
 
@@ -593,7 +605,7 @@ gnss_config_plan ublox rover_high_precision
 gnss_config_plan ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_config_plan ublox rover_high_precision --output-port uart1 --config-baud 460800 --rate-hz 7
 gnss_config_plan unicore rover_high_precision_debug
-gnss_config_plan unicore rover_high_precision --signal-profile minimal --rate-hz 1
+gnss_config_plan unicore rover_high_precision --model UM982 --signal-profile minimal --rate-hz 1
 gnss_config_plan ublox rover_high_precision --persistent
 gnss_config_plan ublox rover_high_precision --rate-hz 5 --config-baud 921600
 gnss_config_plan unicore factory_reset --json
@@ -602,6 +614,7 @@ gnss_config_plan unicore factory_reset --json
 Text output includes:
 
 - receiver family and profile metadata
+- receiver model when present
 - signal-profile intent and other requested overrides
 - requested and resolved output-port context when present
 - requested apply mode
@@ -643,6 +656,8 @@ Current behavior:
   `gnss_profile_preview`
 - accepts the same vendor-neutral `--signal-profile` values as
   `gnss_config_plan`
+- for `unicore`, accepts the same optional `--model` selector used by preview
+  and plan
 - accepts the same `--output-port usb|uart1|uart2|all|auto` values as
   `gnss_config_plan`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
@@ -686,10 +701,10 @@ Examples:
 ```text
 gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only --confirm
-gnss_config_apply --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
+gnss_config_apply --family unicore --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
 gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --output-port usb --apply-mode runtime-only --confirm
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
-gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode persistent --confirm
+gnss_config_apply --receiver auto --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000
+gnss_config_apply --receiver auto --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode persistent --confirm
 ```
 
 Hardware notes from the `v0.6-4` operator validation pass:
@@ -706,7 +721,9 @@ Hardware notes from the `v0.6-4` operator validation pass:
 - the validated UM982 persistent workflow now performs
   `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600`
   before replaying the rover profile and finishing with `SAVECONFIG`
-- the UM982 rover profile now includes `CONFIG SIGNALGROUP 3 6`
+- the documented UM982 model-aware rover profile now includes
+  `CONFIG SIGNALGROUP 3 6`; unknown or non-baseline Unicore models now skip
+  that command instead of inheriting a family-wide default
 - after a full Unicore reset/recovery apply, the receiver may need a couple of
   minutes to reacquire satellites and corrections even though the GNSS runtime
   is already healthy and publishing at `5 Hz`
@@ -714,6 +731,7 @@ Hardware notes from the `v0.6-4` operator validation pass:
 Text output includes:
 
 - discovered device/family/baud context when available
+- receiver model when present
 - plan validation, warnings, and rollback expectations
 - signal-profile intent and its translated command-plan impact when present
 - requested and resolved output-port context when present

@@ -158,10 +158,14 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
 {
   UbloxDriver ublox;
   UnicoreDriver unicore;
+  UnicoreDriver unicore_um982("UM982");
+  UnicoreDriver unicore_um980("UM980");
   NmeaDriver nmea;
 
   const ReceiverDriver& ublox_driver = ublox;
   const ReceiverDriver& unicore_driver = unicore;
+  const ReceiverDriver& unicore_um982_driver = unicore_um982;
+  const ReceiverDriver& unicore_um980_driver = unicore_um980;
   const ReceiverDriver& nmea_driver = nmea;
 
   ctx.Expect(ublox_driver.vendor() == ReceiverVendor::kUblox &&
@@ -194,13 +198,22 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
                      unicore_driver.capabilities(), ReceiverProtocol::kUnicoreBinary) &&
                  universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kRtk) &&
-                 universal_gnss_driver::HasReceiverFeature(
+                 !universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 universal_gnss_driver::HasReceiverFeature(
+                 !universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
                  universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
-             "Unicore driver should advertise RTK, baseline, signal-group config, and ASCII command config support");
+             "generic Unicore drivers should stay safe: RTK plus ASCII config support without assuming baseline or signal-group capabilities");
+  ctx.Expect(universal_gnss_driver::HasReceiverFeature(
+                 unicore_um982_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore_um982_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(
+                     unicore_um980_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
+                 universal_gnss_driver::HasReceiverFeature(
+                     unicore_um980_driver.capabilities(), ReceiverFeature::kSignalGroups),
+             "model-aware Unicore drivers should advertise baseline only for confirmed dual-antenna models while keeping documented signal-group support on single-antenna models");
 
   ctx.Expect(!universal_gnss_driver::SupportsInputProtocol(
                  nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
@@ -219,10 +232,12 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
 {
   UbloxDriver ublox;
   UnicoreDriver unicore;
+  UnicoreDriver unicore_um982("UM982");
   NmeaDriver nmea;
 
   const ReceiverDriver& ublox_driver = ublox;
   const ReceiverDriver& unicore_driver = unicore;
+  const ReceiverDriver& unicore_um982_driver = unicore_um982;
   const ReceiverDriver& nmea_driver = nmea;
 
   ctx.Expect(ublox_driver.SupportsProfile(ReceiverConfigProfileKind::kRover) &&
@@ -259,17 +274,21 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
 
   const auto unicore_rover = unicore_driver.BuildRoverProfile();
   const auto unicore_diag = unicore_driver.BuildDiagnosticsProfile();
+  const auto unicore_um982_rover = unicore_um982_driver.BuildRoverProfile();
   const auto unicore_base = unicore_driver.BuildBaseProfile();
   const auto nmea_rover = nmea_driver.BuildRoverProfile();
   const auto nmea_diag = nmea_driver.BuildDiagnosticsProfile();
   ctx.Expect(unicore_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
-                 unicore_rover.commands.size() == 15u,
-             "Unicore rover driver profile should delegate to the existing rover builder");
+                 unicore_rover.commands.size() == 14u,
+             "generic Unicore rover driver profiles should skip model-specific signal-group configuration");
   ctx.Expect(unicore_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
-                 unicore_diag.commands.size() == 15u,
-             "Unicore diagnostics driver profile should delegate to the existing diagnostics builder");
+                 unicore_diag.commands.size() == 14u,
+             "generic Unicore diagnostics driver profiles should stay model-safe and skip CONFIG SIGNALGROUP");
+  ctx.Expect(unicore_um982_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
+                 unicore_um982_rover.commands.size() == 15u,
+             "UM982 driver profiles should emit the documented dual-antenna rover signal-group command");
   ctx.Expect(unicore_base.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
                  unicore_base.profile_kind == ReceiverConfigProfileKind::kBase,
              "Unicore drivers should report base profile generation as unsupported");

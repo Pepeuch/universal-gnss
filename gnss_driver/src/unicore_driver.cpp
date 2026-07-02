@@ -55,6 +55,13 @@ UnicoreDriver::UnicoreDriver(UnicoreSessionConfig session_config)
 {
 }
 
+UnicoreDriver::UnicoreDriver(std::string_view receiver_model,
+                             UnicoreSessionConfig session_config)
+    : session_(std::move(session_config)),
+      model_profile_(&ResolveUnicoreModelProfile(receiver_model))
+{
+}
+
 ReceiverVendor UnicoreDriver::vendor() const
 {
   return ReceiverVendor::kUnicore;
@@ -67,7 +74,7 @@ std::string_view UnicoreDriver::family() const
 
 const ReceiverCapabilities& UnicoreDriver::capabilities() const
 {
-  return DriverCapabilities();
+  return model_profile_->capabilities;
 }
 
 const std::vector<ReceiverConfigProfileKind>& UnicoreDriver::supported_profiles() const
@@ -120,30 +127,6 @@ const UnicoreSession& UnicoreDriver::session() const
   return session_;
 }
 
-const ReceiverCapabilities& UnicoreDriver::DriverCapabilities()
-{
-  static const ReceiverCapabilities capabilities = [] {
-    ReceiverCapabilities value;
-    AddSupportedInputProtocol(value, ReceiverProtocol::kRtcm3);
-    AddSupportedInputProtocol(value, ReceiverProtocol::kUnicoreAscii);
-    AddSupportedInputProtocol(value, ReceiverProtocol::kUnicoreBinary);
-    AddSupportedOutputProtocol(value, ReceiverProtocol::kNmea);
-    AddSupportedOutputProtocol(value, ReceiverProtocol::kRtcm3);
-    AddSupportedOutputProtocol(value, ReceiverProtocol::kUnicoreAscii);
-    AddSupportedOutputProtocol(value, ReceiverProtocol::kUnicoreBinary);
-    AddReceiverFeature(value, ReceiverFeature::kRtk);
-    AddReceiverFeature(value, ReceiverFeature::kHeading);
-    AddReceiverFeature(value, ReceiverFeature::kDualAntenna);
-    AddReceiverFeature(value, ReceiverFeature::kDualAntennaBaseline);
-    AddReceiverFeature(value, ReceiverFeature::kPps);
-    AddReceiverFeature(value, ReceiverFeature::kRoverMode);
-    AddReceiverFeature(value, ReceiverFeature::kSignalGroups);
-    AddReceiverFeature(value, ReceiverFeature::kAsciiCommandConfig);
-    return value;
-  }();
-  return capabilities;
-}
-
 const std::vector<ReceiverConfigProfileKind>& UnicoreDriver::SupportedProfileKinds()
 {
   static const std::vector<ReceiverConfigProfileKind> supported{
@@ -155,7 +138,7 @@ const std::vector<ReceiverConfigProfileKind>& UnicoreDriver::SupportedProfileKin
 
 ReceiverDriverProfileBuildResult UnicoreDriver::BuildProfile(
     const ReceiverConfigProfileKind profile_kind,
-    const ReceiverCommandSafetyLevel safety_level)
+    const ReceiverCommandSafetyLevel safety_level) const
 {
   if (safety_level == ReceiverCommandSafetyLevel::kFactoryReset)
   {
@@ -169,10 +152,12 @@ ReceiverDriverProfileBuildResult UnicoreDriver::BuildProfile(
   switch (profile_kind)
   {
     case ReceiverConfigProfileKind::kRover:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(*model_profile_,
+                                                                      persistence);
       break;
     case ReceiverConfigProfileKind::kDiagnosticsOutput:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(*model_profile_,
+                                                                            persistence);
       break;
     default:
     {

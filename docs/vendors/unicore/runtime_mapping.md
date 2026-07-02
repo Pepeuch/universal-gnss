@@ -40,7 +40,7 @@ Current mixed NMEA sentences accepted on a Unicore runtime stream:
 Not implemented yet:
 
 - broader binary `N4` semantic decode beyond `BESTNAVB` and `PVTSLNB`
-- Unicore configuration commands like `MODE`, `CONFIG`, and `LOG`
+- runtime mapping for configuration commands such as `MODE`, `CONFIG`, and `LOG`
 
 Binary `N4` framing now exists separately from the ASCII parser:
 
@@ -53,6 +53,16 @@ Binary `N4` framing now exists separately from the ASCII parser:
 That binary path now includes two semantic decoders: `BESTNAVB` and
 `PVTSLNB`. Those two binary messages now flow through the same portable live
 and offline runtime path as the current ASCII position messages.
+
+Current `N4` validity boundary:
+
+- valid frames with unknown/unsupported `message_id` values remain valid
+  unknown binary records
+- malformed, truncated, or wrong-message semantic decodes are rejected cleanly
+- parser/session counters can distinguish valid unknown frames from malformed
+  or rejected decodes
+- neither path infers receiver model identity, baseline capability, or
+  signal-group legality from runtime traffic
 
 ## Data Flow
 
@@ -70,6 +80,12 @@ coherent portable runtime state
 
 Each Unicore message can contribute only part of the runtime view. The
 aggregator is responsible for merging those pieces.
+
+The runtime parser and aggregator intentionally do not answer receiver-model
+questions such as whether a target supports `dual_antenna_baseline` or which
+`CONFIG SIGNALGROUP` combinations are documented. That model/capability gating
+lives in the Unicore driver/profile layer so ASCII/Binary runtime parsing stays
+independent from config planning.
 
 Some Unicore messages are diagnostics-only rather than direct runtime-state
 producers:
@@ -213,6 +229,8 @@ Current non-mappings:
 - no RF, jamming, or CN0 state is inferred from `PVTSLNB`
 - `PVTSLNB` is routed through `UnicoreSession`, `gnss_replay`,
   `gnss_quality_report`, and JSONL export
+- shared `PVTSLNA` / `PVTSLNB` portable fields are expected to stay aligned
+  where both documented message variants expose the same semantics
 
 ## RTKSTATUSA
 

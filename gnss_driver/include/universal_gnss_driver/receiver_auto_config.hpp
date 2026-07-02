@@ -61,13 +61,15 @@ struct ReceiverAutoConfigRequest
 {
   ReceiverDetectedFamily receiver_family{ReceiverDetectedFamily::kUnknown};
   std::optional<ReceiverProbeResult> discovery_result{};
+  std::optional<std::string> receiver_model{};
   ReceiverAutoConfigProfile requested_profile{
       ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<ReceiverAutoConfigSignalProfile> signal_profile{};
-  // Explicit Unicore CONFIG SIGNALGROUP override (e.g. {2} for UM980/UM981,
+  // Explicit Unicore CONFIG SIGNALGROUP override (e.g. {2} for UM980 or
   // {3, 6} for UM982). When set it replaces the profile/signal_profile default,
-  // letting the operator match the receiver model. Ignored by non-Unicore plans.
+  // but it is only accepted when the requested Unicore model has a documented
+  // portable signal-group profile. Ignored by non-Unicore plans.
   std::optional<std::vector<std::uint8_t>> signal_group_override{};
   std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
@@ -105,6 +107,7 @@ struct ReceiverAutoConfigPlan
   std::string receiver_family_name{};
   bool capabilities_known{false};
   ReceiverCapabilities capabilities{};
+  std::optional<std::string> receiver_model{};
   std::optional<std::string> detected_device{};
   std::optional<std::string> detected_stable_id{};
   std::optional<std::uint32_t> detected_baud{};

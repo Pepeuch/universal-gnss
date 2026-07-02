@@ -8,7 +8,7 @@
 namespace universal_gnss_driver
 {
 
-const std::array<ReceiverProfile, 4>& GetBuiltInReceiverProfiles();
+const std::array<ReceiverProfile, 7>& GetBuiltInReceiverProfiles();
 
 const ReceiverProfile* FindBuiltInReceiverProfile(std::string_view profile_id);
 

@@ -367,12 +367,22 @@ Design rules:
 Current capability-oriented translation policy:
 
 - Unicore
-  - `balanced`, `high_precision`, and `all_signals` map to the validated UM982
-    `CONFIG SIGNALGROUP 3 6` portable runtime setting
+  - translation is model-aware and never guesses from RTK mode or runtime
+    baseline fields
+  - `balanced`, `high_precision`, and `all_signals` apply the documented
+    portable rover signal-group selection only when the selected model profile
+    exposes one
+  - current documented portable rover default:
+    `UM982 -> CONFIG SIGNALGROUP 3 6`
+  - known non-baseline or not-confirmed-baseline models such as `UM980` and
+    `UB9A0` keep their current signal-group configuration unless the operator
+    explicitly selects a documented model-specific override
+  - unknown/unconfirmed models skip `CONFIG SIGNALGROUP` and warn with the safe
+    generic non-baseline fallback
   - `rate_hz` currently retimes `BESTNAVA` while keeping `GPGGA`, `GPGSV`,
     `GPGST`, `RTKSTATUSA`, and `SATSINFOA` at conservative default rates
-  - `minimal` keeps that validated signal-group mapping but reduces auxiliary
-    rover output messages to lower serial-link load
+  - `minimal` uses the same model-aware signal-group rule and reduces
+    auxiliary rover output messages to lower serial-link load
   - `custom` currently warns and preserves the default portable profile mapping
 - u-blox
   - `balanced` and `high_precision` resolve to the existing documented
@@ -382,6 +392,23 @@ Current capability-oriented translation policy:
 - generic NMEA
   - signal-profile requests remain warning-only no-ops under `runtime_only`
     because generic NMEA has no portable receiver-side configuration standard
+
+### Unicore model selector seam
+
+Portable planning may accept a receiver-model hint when a backend needs
+documented model-specific behavior.
+
+Current policy:
+
+- Unicore uses an optional model selector seam for capability and
+  signal-group planning
+- the planner may answer differently for `UM980`, `UM982`, `UB9A0`, or an
+  unknown model
+- unknown models fall back safely and skip model-specific commands such as
+  `CONFIG SIGNALGROUP`
+- config planning does not depend on parsed navigation/runtime state
+- runtime parsers do not infer capability or config legality from observed
+  telemetry
 
 ### u-blox interface abstraction
 
@@ -587,8 +614,10 @@ Validated in `v0.6-4` on real hardware:
 - follow-up UM982 persistent validation confirmed the full
   `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600 ->
   rover_high_precision -> SAVECONFIG` recovery workflow
-- that same validation also promoted `CONFIG SIGNALGROUP 3 6` into the portable
-  UM982 rover profile
+- that same validation also confirmed the documented model-aware UM982 rover
+  signal-group selection `CONFIG SIGNALGROUP 3 6`; unknown or non-baseline
+  Unicore models now skip that command instead of inheriting a family-wide
+  default
 - short passive post-apply captures still may not show `RTCMSTATUSA` because
   the portable `rover_high_precision` helper enables it with `ONCHANGED`
   semantics rather than a fixed periodic rate

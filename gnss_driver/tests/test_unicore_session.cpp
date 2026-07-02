@@ -620,6 +620,23 @@ void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
              "PVTSLNB should carry accuracy, baseline geometry, correction age, heading, and HDOP");
 }
 
+void TestUnknownBinaryFrameCountsWithoutRuntimeUpdate(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(BuildUnicoreBinaryFrame(9999u, std::vector<std::uint8_t>(8u, 0x42u)), 9250);
+
+  const auto& metrics = session.metrics();
+  ctx.Expect(metrics.binary_frames_seen == 1u &&
+                 metrics.unknown_records == 1u &&
+                 metrics.records_parsed == 0u &&
+                 metrics.records_rejected == 0u &&
+                 metrics.runtime_updates == 0u,
+             "valid but unsupported Unicore binary message ids should remain unknown and must not be decoded as runtime state");
+  ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
+                 !session.current_state().timestamp_ns.has_value(),
+             "unknown Unicore binary frames should not invent runtime state");
+}
+
 void TestStartupBinaryResyncSuppressesFirstMalformedFrame(TestContext& ctx)
 {
   UnicoreSession session;
@@ -774,6 +791,7 @@ int main()
   TestPartialChunksAcrossFeeds(ctx);
   TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(ctx);
   TestBinaryBestNavAndPvtslnRouting(ctx);
+  TestUnknownBinaryFrameCountsWithoutRuntimeUpdate(ctx);
   TestStartupBinaryResyncSuppressesFirstMalformedFrame(ctx);
   TestStartupAsciiResyncSuppressesFirstMalformedLine(ctx);
   TestMalformedBinaryFrameAfterSyncCounts(ctx);

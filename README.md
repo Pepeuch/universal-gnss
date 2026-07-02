@@ -60,6 +60,13 @@ Current project state includes:
   - compatibility fields:
     `heading_deg` and `dual_antenna_heading` remain during `v0.6.x`
 - u-blox persistent FLASH configuration and output-port selection
+- model-aware Unicore signal-group planning/profile selection with:
+  - safe unknown-model fallback that skips `CONFIG SIGNALGROUP`
+  - documented UM982 dual-antenna baseline gating
+  - documented UM980 / UB9A0 single-antenna signal-group validation
+- Unicore binary `N4` regression coverage for valid unknown-frame accounting,
+  malformed/rejected decode handling, and ASCII/Binary portable-field
+  consistency on shared `PVTSLN*` mappings
 - UM982 / Unicore runtime field validation through downstream MowgliNext use
 - decimal-degree latitude/longitude outputs preserving at least 9 decimal
   places
@@ -70,6 +77,10 @@ Current release guidance:
   explicit `--confirm` or `--yes`
 - Unicore persistent apply is available through the reset/recovery workflow and
   remains an operator-driven path with manual rollback expectations
+- Unicore `gnss_profile_preview`, `gnss_config_plan`, and `gnss_config_apply`
+  accept an optional `--model` selector; when the model is unknown, the safe
+  fallback skips `CONFIG SIGNALGROUP` and leaves the receiver's current
+  signal-group configuration unchanged
 - Unicore `factory_reset` live execution now uses the same reconnect / active
   probe recovery workflow
 - stable `/dev/serial/by-id/*` paths are recommended over transient
@@ -108,6 +119,13 @@ Current receiver-family support:
   - `rover_high_precision`
   - `rover_high_precision_debug`
   - `factory_reset` planning/preview/live recovery apply
+  - model-aware signal-group planning:
+    - `UM982` may emit the documented dual-antenna rover selection
+      `CONFIG SIGNALGROUP 3 6`
+    - `UM980` and `UB9A0` expose documented explicit signal-group selections
+      but do not auto-enable dual-antenna baseline groups
+    - unknown/unconfirmed models skip `CONFIG SIGNALGROUP` and warn instead of
+      guessing
 - u-blox
   - `runtime_only`
   - `rover_high_precision`

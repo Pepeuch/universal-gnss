@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "universal_gnss_driver/receiver_driver.hpp"
+#include "universal_gnss_driver/unicore_model_profile.hpp"
 #include "universal_gnss_driver/unicore_session.hpp"
 
 namespace universal_gnss_driver
@@ -13,6 +14,9 @@ class UnicoreDriver : public ReceiverDriver
 {
 public:
   explicit UnicoreDriver(UnicoreSessionConfig session_config = {});
+
+  UnicoreDriver(std::string_view receiver_model,
+                UnicoreSessionConfig session_config = {});
 
   ReceiverVendor vendor() const override;
 
@@ -44,15 +48,14 @@ public:
   const UnicoreSession& session() const;
 
 private:
-  static const ReceiverCapabilities& DriverCapabilities();
-
   static const std::vector<ReceiverConfigProfileKind>& SupportedProfileKinds();
 
-  static ReceiverDriverProfileBuildResult BuildProfile(
+  ReceiverDriverProfileBuildResult BuildProfile(
       const ReceiverConfigProfileKind profile_kind,
-      ReceiverCommandSafetyLevel safety_level);
+      ReceiverCommandSafetyLevel safety_level) const;
 
   UnicoreSession session_;
+  const UnicoreModelProfile* model_profile_{&ResolveUnicoreModelProfile()};
 };
 
 }  // namespace universal_gnss_driver

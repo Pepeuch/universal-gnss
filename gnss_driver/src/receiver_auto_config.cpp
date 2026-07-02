@@ -28,9 +28,6 @@ using universal_gnss_protocols::UbxCfgLayer;
 using universal_gnss_protocols::UbxCfgConstellation;
 using universal_gnss_driver::UbloxInterfacePort;
 
-constexpr std::uint8_t kUnicoreRecommendedSignalGroupPrimary = 3u;
-constexpr std::uint8_t kUnicoreRecommendedSignalGroupSecondary = 6u;
-
 std::string ToLowerCopy(std::string_view text)
 {
   std::string normalized(text);
@@ -329,6 +326,19 @@ void AppendRuntimeOnlySignalProfileWarning(ReceiverAutoConfigPlan& plan)
       " is unsupported with the runtime_only profile because runtime_only does not send receiver commands");
 }
 
+void AppendRuntimeOnlySignalGroupOverrideWarning(ReceiverAutoConfigPlan& plan)
+{
+  if (!plan.request.signal_group_override.has_value())
+  {
+    return;
+  }
+
+  plan.warnings.push_back(
+      "signal_group_override=" +
+      FormatUnicoreSignalGroupSelection(*plan.request.signal_group_override) +
+      " is unsupported with the runtime_only profile because runtime_only does not send receiver commands");
+}
+
 ReceiverAutoConfigPlan MakeNoChangePlan(
     const ReceiverAutoConfigRequest& request,
     const ReceiverVendor vendor,
@@ -370,6 +380,7 @@ ReceiverAutoConfigPlan MakeNoChangePlan(
   plan.validation.ready_to_execute =
       request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
   AppendRuntimeOnlySignalProfileWarning(plan);
+  AppendRuntimeOnlySignalGroupOverrideWarning(plan);
   AppendIgnoredOutputPortWarning(plan);
   plan.warnings.push_back(
       "runtime_only profile leaves the receiver configuration unchanged");
@@ -632,12 +643,6 @@ bool IsRateControlledUnicoreMessage(const UnicoreOutputMessageKind message)
   return message == UnicoreOutputMessageKind::kBestnava;
 }
 
-void ApplyUnicoreRecommendedSignalGroup(UnicoreConfigProfile& profile)
-{
-  profile.signal_config = UnicoreSignalConfig{
-      {kUnicoreRecommendedSignalGroupPrimary, kUnicoreRecommendedSignalGroupSecondary}};
-}
-
 void ApplyUnicoreMinimalOutputLoad(UnicoreConfigProfile& profile)
 {
   profile.output_messages.erase(
@@ -652,8 +657,50 @@ void ApplyUnicoreMinimalOutputLoad(UnicoreConfigProfile& profile)
       profile.output_messages.end());
 }
 
+void ApplyUnicoreSignalGroupSelection(UnicoreConfigProfile& profile,
+                                      const UnicoreSignalGroupSelection& selection)
+{
+  profile.signal_config = UnicoreSignalConfig{selection.groups};
+}
+
+void AppendUnicoreSkippedSignalGroupWarning(
+    ReceiverAutoConfigPlan& plan,
+    const UnicoreModelProfile& model_profile,
+    const std::string_view context_prefix)
+{
+  std::string warning(context_prefix);
+  if (!warning.empty())
+  {
+    warning += ' ';
+  }
+
+  if (model_profile.model_id == UnicoreModel::kUnknown)
+  {
+    warning +=
+        "skipped CONFIG SIGNALGROUP because the Unicore model identity is unknown; "
+        "safe fallback keeps the receiver's current signal-group configuration unchanged";
+  }
+  else if (model_profile.signal_group_options.empty())
+  {
+    warning += "skipped CONFIG SIGNALGROUP because model " +
+               std::string(model_profile.model) +
+               " has no documented portable signal-group profile";
+  }
+  else
+  {
+    warning += "kept the current receiver signal-group configuration for model " +
+               std::string(model_profile.model) +
+               " because the portable planner has no documented automatic rover "
+               "signal-group selection for this model; supported explicit selections: " +
+               DescribeUnicoreSupportedSignalGroups(model_profile);
+  }
+
+  plan.warnings.push_back(std::move(warning));
+}
+
 void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
                                ReceiverAutoConfigPlan& plan,
+                               const UnicoreModelProfile& model_profile,
                                UnicoreConfigProfile& profile)
 {
   if (!request.signal_profile.has_value() ||
@@ -667,13 +714,35 @@ void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
     case ReceiverAutoConfigSignalProfile::kBalanced:
     case ReceiverAutoConfigSignalProfile::kHighPrecision:
     case ReceiverAutoConfigSignalProfile::kAllSignals:
-      ApplyUnicoreRecommendedSignalGroup(profile);
+      if (const auto* selection = FindUnicorePortableRoverSignalGroupSelection(model_profile);
+          selection != nullptr)
+      {
+        ApplyUnicoreSignalGroupSelection(profile, *selection);
+      }
+      else
+      {
+        AppendUnicoreSkippedSignalGroupWarning(
+            plan,
+            model_profile,
+            "signal_profile=" + std::string(ToString(*request.signal_profile)));
+      }
       return;
     case ReceiverAutoConfigSignalProfile::kMinimal:
-      ApplyUnicoreRecommendedSignalGroup(profile);
+      if (const auto* selection = FindUnicorePortableRoverSignalGroupSelection(model_profile);
+          selection != nullptr)
+      {
+        ApplyUnicoreSignalGroupSelection(profile, *selection);
+      }
+      else
+      {
+        AppendUnicoreSkippedSignalGroupWarning(
+            plan,
+            model_profile,
+            "signal_profile=minimal");
+      }
       ApplyUnicoreMinimalOutputLoad(profile);
       plan.warnings.push_back(
-          "signal_profile=minimal keeps the validated CONFIG SIGNALGROUP 3 6 mapping and reduces auxiliary Unicore output messages to lower serial link load");
+          "signal_profile=minimal reduces auxiliary Unicore output messages to lower serial link load");
       return;
     case ReceiverAutoConfigSignalProfile::kCustom:
       plan.warnings.push_back(
@@ -726,20 +795,49 @@ void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
 ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
+  const auto& model_profile =
+      ResolveUnicoreModelProfile(
+          request.receiver_model.has_value()
+              ? std::optional<std::string_view>{*request.receiver_model}
+              : std::nullopt);
+  const std::string normalized_requested_model =
+      request.receiver_model.has_value() ? NormalizeUnicoreModelName(*request.receiver_model)
+                                         : std::string{};
+
   plan.vendor = ReceiverVendor::kUnicore;
   plan.receiver_family_name = "UM98x";
   plan.capabilities_known = true;
-  plan.capabilities = UnicoreDriver{}.capabilities();
+  plan.capabilities = model_profile.capabilities;
+  if (!normalized_requested_model.empty())
+  {
+    plan.receiver_model = model_profile.model_id == UnicoreModel::kUnknown
+                              ? normalized_requested_model
+                              : std::string(model_profile.model);
+  }
+  else if (model_profile.model_id != UnicoreModel::kUnknown)
+  {
+    plan.receiver_model = std::string(model_profile.model);
+  }
   plan.validation.receiver_recognized = true;
   plan.validation.config_supported = true;
   AppendIgnoredOutputPortWarning(plan);
 
+  if (!normalized_requested_model.empty() &&
+      model_profile.model_id == UnicoreModel::kUnknown)
+  {
+    plan.warnings.push_back(
+        "Unicore model " + normalized_requested_model +
+        " has no documented portable signal-group/capability profile yet; using the safe generic non-baseline fallback");
+  }
+
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
   {
-    return MakeNoChangePlan(request,
-                            ReceiverVendor::kUnicore,
-                            "UM98x",
-                            UnicoreDriver{}.capabilities());
+    auto no_change = MakeNoChangePlan(
+        request, ReceiverVendor::kUnicore, "UM98x", model_profile.capabilities);
+    no_change.receiver_model = plan.receiver_model;
+    no_change.warnings.insert(
+        no_change.warnings.end(), plan.warnings.begin(), plan.warnings.end());
+    return no_change;
   }
 
   if (!ValidateRateHz(request, plan))
@@ -775,27 +873,57 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   switch (request.requested_profile)
   {
     case ReceiverAutoConfigProfile::kRoverHighPrecision:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile,
+                                                                      persistence);
       break;
     case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(model_profile,
+                                                                            persistence);
       break;
     case ReceiverAutoConfigProfile::kFactoryReset:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile,
+                                                                      persistence);
       break;
     case ReceiverAutoConfigProfile::kRuntimeOnly:
       break;
   }
 
-  ApplyUnicoreSignalProfile(request, plan, profile);
+  ApplyUnicoreSignalProfile(request, plan, model_profile, profile);
 
-  // An explicit operator override wins over the profile/signal_profile default
-  // (e.g. CONFIG SIGNALGROUP 2 for a single-antenna UM980 vs the UM982 "3 6"
-  // default). Only applied when the profile actually manages signal groups so
-  // runtime-only plans stay free of an unsolicited SIGNALGROUP command.
-  if (request.signal_group_override.has_value() && profile.signal_config.has_value())
+  if (!request.signal_profile.has_value() && !profile.signal_config.has_value())
   {
-    profile.signal_config = UnicoreSignalConfig{*request.signal_group_override};
+    AppendUnicoreSkippedSignalGroupWarning(plan, model_profile, "");
+  }
+
+  // An explicit operator override wins over the profile/signal_profile default,
+  // but only when the selected Unicore model has a documented signal-group
+  // profile that confirms the requested combination.
+  if (request.signal_group_override.has_value())
+  {
+    if (request.requested_profile != ReceiverAutoConfigProfile::kRuntimeOnly)
+    {
+      if (!HasReceiverFeature(model_profile.capabilities, ReceiverFeature::kSignalGroups))
+      {
+        plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+        plan.error_message =
+            "cannot apply a Unicore signal-group override without a documented model profile; supply a confirmed model such as UM980, UM982, or UB9A0";
+        return plan;
+      }
+
+      if (FindUnicoreSignalGroupSelection(model_profile, *request.signal_group_override) ==
+          nullptr)
+      {
+        plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+        plan.error_message =
+            "unsupported Unicore signal-group override " +
+            FormatUnicoreSignalGroupSelection(*request.signal_group_override) +
+            " for model " + std::string(model_profile.model) + "; supported selections: " +
+            DescribeUnicoreSupportedSignalGroups(model_profile);
+        return plan;
+      }
+
+      profile.signal_config = UnicoreSignalConfig{*request.signal_group_override};
+    }
   }
 
   if (requires_clean_reset_workflow)
@@ -816,8 +944,9 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       }
     }
 
-    const auto reset_result = UnicoreConfigProfileBuilder::Build(
-        UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile());
+    auto reset_profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
+    reset_profile.target = BuildUnicoreTargetSelector(model_profile);
+    const auto reset_result = UnicoreConfigProfileBuilder::Build(reset_profile);
     if (reset_result.status != UnicoreConfigProfileBuildStatus::kOk)
     {
       plan.status = ReceiverAutoConfigPlanStatus::kBuildError;
@@ -1101,8 +1230,9 @@ std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
     groups.push_back(static_cast<std::uint8_t>(value));
   }
 
-  // Unicore CONFIG SIGNALGROUP accepts one field (UM980/UM981) or two
-  // (UM982 master + slave). Anything else is a malformed override.
+  // Documented N4 CONFIG SIGNALGROUP forms are either one field
+  // (single-antenna products such as UM980 / UB9A0) or two fields
+  // (dual-antenna products such as UM982). Anything else is malformed.
   if (groups.empty() || groups.size() > 2u)
   {
     return std::nullopt;
