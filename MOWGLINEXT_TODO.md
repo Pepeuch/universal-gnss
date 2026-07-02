@@ -10,58 +10,110 @@ transitions, malformed MSM summaries, and generic NMEA `rtk_mode`.
 
 The remaining items below are still-pending downstream follow-up work only.
 
-## 1. Pending MowgliNext work — live field validation of canonical GNSS baseline and correction surfaces
+Dual-antenna GNSS baseline is now a first-class GNSS/geodesy surface, but it is
+not automatically a robot yaw source. Any robot-frame heading/orientation use
+must remain downstream of explicit antenna mounting transform/calibration and
+localization policy.
 
-What new Universal GNSS capability exists:
+## 1. Staged roadmap — short-term GUI status display in the GPS/GNSS panel
 
-* Universal GNSS `main` now exposes canonical GNSS/geodesy-first runtime fields
-  and diagnostics through ROS2 `/gps/status` and `/diagnostics`, including:
+What Universal GNSS already provides:
+
+* canonical dual-antenna baseline state:
   * `dual_antenna_baseline`
   * `baseline_azimuth_deg`
   * `baseline_pitch_deg`
   * `baseline_length_m`
   * `baseline_solution_status`
+* adjacent receiver/correction state already present in the public projection:
+  * `receiver_model`
   * `rtk_mode`
   * `correction_stream_status`
   * `msm_summary_*`
-* Generic NMEA `GGA fix_quality` is now normalized into `rtk_mode` on the
-  shared `receiver_family=nmea` path.
 
-Why it matters for the robot:
+What MowgliNext should still add:
 
-* dual-antenna baseline validity can now be distinguished from RTK position
-  validity
-* operator UX can separate GNSS receiver health, correction health, and RTCM
-  semantic completeness instead of collapsing them into one status
-* generic NMEA receivers can now report RTK Float / Fixed without a
-  vendor-specific backend
-
-Where MowgliNext should consume it:
-
-* the public `mowgli_interfaces/GnssStatus` projection
-* GPS sidecar runtime/diagnostic bridges
-* operator GNSS status panels, diagnostics pages, and validation tooling
-
-Expected GUI/operator behavior:
-
+* show those raw Universal GNSS fields together in the GPS/GNSS status panel
 * preserve canonical labels such as `baseline_azimuth_deg`,
   `baseline_pitch_deg`, `baseline_length_m`, and
   `baseline_solution_status`
-* do not present `baseline_azimuth_deg` as robot yaw or robot heading unless a
-  downstream robot-frame transform has actually been applied
-* show correction-stream state as explicit `Unknown`, `Waiting`, `Active`,
-  `Unavailable`, or `Error`
 * keep supported-but-unknown baseline/MSM states explicit instead of silently
   inventing false values
+* add clear operator wording that `baseline_azimuth_deg` is GNSS
+  antenna-baseline azimuth, not robot yaw, unless downstream antenna mounting
+  calibration/transform is configured
 
-Expected safety/localization behavior if relevant:
+Suggested operator wording constraint:
 
-* any robot-yaw use of GNSS baseline azimuth must apply an explicit antenna
-  mounting transform downstream
-* localization/autonomy logic should not infer correction health from RTK fix
-  state alone when the diagnostics surface is available
+* do not present `baseline_azimuth_deg` as robot yaw or robot heading in the
+  raw GPS/GNSS panel
+* do not rename `baseline_azimuth_deg` to `yaw` or `heading` unless a
+  robot-frame transform has actually been applied downstream
 
-Suggested field-validation checks:
+## 2. Staged roadmap — Sensors UI / physical antenna mounting configuration
+
+Why this is separate from the GPS/GNSS panel:
+
+* the GPS/GNSS panel reports raw receiver/geodesy state
+* the Sensors panel describes physical installation relative to `base_link`
+
+What MowgliNext should still add:
+
+* a GNSS dual-antenna baseline mounting section in the Sensors UI
+* primary antenna position relative to `base_link`
+* secondary antenna position relative to `base_link`
+* expected baseline length computed from mounting offsets
+* live comparison between expected length and `baseline_length_m`
+* antenna vector direction relative to the robot frame
+* preparation for calibration/validation of baseline direction and sign
+
+Required downstream rule:
+
+* robot heading/yaw use requires an explicit antenna mounting
+  transform/calibration downstream
+* baseline geometry should not be inferred from RTK mode or from raw
+  `baseline_azimuth_deg` alone
+
+## 3. Staged roadmap — Localization UI / heading source policy
+
+Why this is separate from Sensors and GPS/GNSS display:
+
+* GPS/GNSS shows raw receiver state
+* Sensors describes physical mounting
+* Localization decides how and whether that information is fused into robot
+  orientation
+
+What MowgliNext should still add:
+
+* GNSS baseline as a possible heading/orientation source in localization policy
+* explicit separation from magnetometer policy and IMU gyro/odometry policy
+* policy choices such as:
+  * never use GNSS baseline
+  * use only when `baseline_solution_status` is computed/valid
+  * use only when live `baseline_length_m` is consistent with configured
+    mounting geometry
+  * use only with acceptable covariance/confidence settings, if exposed
+    downstream
+  * fall back to IMU / magnetometer / odometry when baseline is unavailable
+    or degraded
+
+Required downstream rule:
+
+* do not infer robot yaw directly from `baseline_azimuth_deg` without the
+  configured transform/calibration from antenna baseline frame into robot frame
+
+## 4. Staged roadmap — validation / field testing
+
+What must be validated downstream:
+
+* live UM982 baseline data on hardware
+* `baseline_azimuth_deg` direction and sign against the robot frame after
+  mounting configuration/calibration exists
+* `baseline_length_m` against measured physical antenna spacing
+* behavior when baseline is unavailable, unknown, pending, or degraded
+* localization fallback behavior when baseline drops out
+
+Additional GNSS status checks to keep in scope:
 
 * verify solved UM982/Unicore streams publish
   `baseline_azimuth_deg`, `baseline_pitch_deg`, `baseline_length_m`, and
@@ -79,48 +131,54 @@ Suggested field-validation checks:
 * verify generic NMEA receivers that output GGA quality `1/4/5` transition
   `rtk_mode` through `NONE`, `FLOAT`, and `FIXED`
 
-## 2. Pending MowgliNext work — expose richer RTCM semantic diagnostics if operators need deeper correction debugging
+## 5. Architecture notes — raw GNSS/geodesy vs robot-frame use
 
-What new Universal GNSS capability exists:
+Architecture split to preserve:
 
-* Universal GNSS also publishes richer ROS2 diagnostics beyond
-  `correction_stream_status` and `msm_summary`, including:
+* GPS/GNSS panel shows raw receiver/geodesy state
+* Sensors panel describes physical antenna mounting and expected geometry
+* Localization panel decides how and whether to use/fuse GNSS baseline as
+  robot heading/orientation
+
+Terminology rules to preserve:
+
+* `baseline_azimuth_deg` is GNSS antenna-baseline azimuth, not robot yaw
+* MowgliNext must not rename `baseline_azimuth_deg` to `yaw` or `heading`
+  unless a robot-frame transform has actually been applied
+* `baseline_pitch_deg`, `baseline_length_m`, and
+  `baseline_solution_status` should stay canonical until transformed
+  downstream
+
+Ownership rules to preserve:
+
+* Universal GNSS remains the source of GNSS/geodesy fields
+* MowgliNext owns robot-frame mounting configuration, calibration UX, and
+  localization policy
+* downstream localization/autonomy logic should not infer correction health
+  from RTK fix state alone when richer diagnostics are available
+
+## 6. Additional downstream GNSS follow-up — expose richer RTCM semantic diagnostics if operators need deeper correction debugging
+
+What Universal GNSS already provides:
+
+* richer ROS2 diagnostics beyond `correction_stream_status` and
+  `msm_summary_*`, including:
   * `rtcm_semantic/base_station_arp`
   * `rtcm_semantic/glonass_code_phase_bias`
   * per-message MSM diagnostics such as `rtcm_semantic/msm_gps_msm7`
   * counters such as `decode_success_count`, `decode_failure_count`, and
     `malformed_count`
-* MowgliNext currently consumes the portable downstream minimum:
-  `correction_stream_status` plus `msm_summary_*`.
 
-Why it matters for the robot:
+What MowgliNext should still add if needed:
 
-* operators may need deeper evidence when RTK silently degrades even though the
-  receiver still has a nominal fix
-* localization debugging benefits from explicit malformed-count or
-  message-class-specific failures instead of a generic “corrections bad” label
-
-Where MowgliNext should consume it:
-
-* diagnostics aggregation around `/diagnostics`
-* any backend API/websocket layer that already forwards GNSS diagnostics
-* expert/operator correction-health panels
-
-Expected GUI/operator behavior:
-
-* keep correction completeness separate from rover fix state
-* surface malformed counter growth or missing required RTCM classes without
+* correction-health panels that keep correction completeness separate from
+  rover fix state
+* malformed counter growth or missing required RTCM class visibility without
   inventing an in-app RTCM parser
-* tolerate optional per-message diagnostics appearing only after the message has
-  actually been seen
+* tolerant handling of optional per-message diagnostics that appear only after
+  those messages are seen
 
-Expected safety/localization behavior if relevant:
-
-* if autonomy or localization policy eventually reacts to correction health, it
-  should use Universal GNSS diagnostics as evidence rather than adding a second
-  ad-hoc RTCM parser inside MowgliNext
-
-Suggested field-validation checks:
+Suggested validation checks:
 
 * verify `station_id` and `constellations_seen` update on live correction
   streams
@@ -130,39 +188,21 @@ Suggested field-validation checks:
 * verify optional per-message MSM diagnostics can appear without breaking the
   public `GnssStatus` projection
 
-## 3. Pending MowgliNext work — decide robot-side policy for correction-health degradation
+## 7. Additional downstream GNSS follow-up — decide robot-side policy for correction-health degradation
 
-What new Universal GNSS capability exists:
+What MowgliNext can already observe:
 
-* MowgliNext can now observe RTK position state separately from correction
-  transport health and RTCM semantic completeness.
+* RTK position state separately from correction transport health and RTCM
+  semantic completeness
 
-Why it matters for the robot:
+What MowgliNext should still decide:
 
-* the mower should not silently appear healthy when RTK is degrading because
-  corrections are stale, malformed, or incomplete
-* future autonomy/localization policy can now react to explicit evidence rather
-  than guessing from fix type alone
+* whether autonomy should allow `RTK_FIXED` only, `RTK_FLOAT` in degraded
+  mode, plain GNSS, stale corrections, or missing MSM
+* how correction-health transitions should appear in mission/event logs and
+  operator UI
 
-Where MowgliNext should consume it:
-
-* localization gating or degraded-mode policy, if any
-* mission/event logging for post-run debugging
-* operator warnings around correction loss or stale streams
-
-Expected GUI/operator behavior:
-
-* avoid collapsing everything into a single `RTK OK` badge
-* make any degraded or unknown correction-health policy explicit to operators
-
-Expected safety/localization behavior if relevant:
-
-* decide whether autonomy should allow `RTK_FIXED` only, `RTK_FLOAT` in
-  degraded mode, plain GNSS, stale corrections, or missing MSM
-* log correction-health transitions during missions so post-run debugging can
-  explain RTK degradation
-
-Suggested field-validation checks:
+Suggested validation checks:
 
 * verify behavior during `RTK Float -> Fixed` transitions
 * verify behavior during `Fixed -> Float` or correction-loss transitions
@@ -170,61 +210,40 @@ Suggested field-validation checks:
   are present
 * verify any future degraded-mode policy is visible in logs and operator UI
 
-## 4. Pending MowgliNext work — consume Unicore model/capability metadata in any configurator UI
+## 8. Additional downstream GNSS follow-up — keep model-aware Unicore configurator UI aligned with portable Universal GNSS behavior
 
-What new Universal GNSS capability exists:
+What Universal GNSS already provides:
 
-* Universal GNSS now has a model-aware Unicore profile layer that can answer:
+* a model-aware Unicore profile layer that can answer:
   * which Unicore model is selected
   * whether that model supports `dual_antenna_baseline`
   * which `CONFIG SIGNALGROUP` selections are documented and allowed
   * when `CONFIG SIGNALGROUP` must be skipped because the model is unknown or
     because no documented automatic rover selection exists
-* The current portable CLIs expose that seam through an optional Unicore
-  `--model` selector and warning/report output.
+* portable CLI seams through optional `--model` selection and warning/report
+  output
 
-Why it matters for the robot:
-
-* a receiver can support RTK positioning without supporting antenna baseline
-* the operator UI should not offer dual-antenna/baseline-only signal-group
-  choices to single-antenna receivers
-* unknown Unicore models should fail safe instead of inheriting a family-wide
-  `CONFIG SIGNALGROUP` guess
-
-Where MowgliNext should consume it:
-
-* any GNSS setup/configuration wizard or plan/apply wrapper
-* any backend API that builds `gnss_profile_preview`, `gnss_config_plan`, or
-  `gnss_config_apply` requests
-* operator review screens that explain why a requested Unicore config item was
-  applied, rejected, or skipped
-
-Expected GUI/operator behavior:
+What MowgliNext should still preserve:
 
 * when the receiver model is known, show only the documented signal-group
   selections for that model
 * when the receiver model is unknown, disable or hide Unicore
   `CONFIG SIGNALGROUP` choices and explain that the command was skipped for
   safety
-* do not present baseline-only signal groups for non-baseline models such as
-  UM980 or UB9A0
+* do not present baseline-only signal-group choices for non-baseline models
+  such as UM960, UM980, or UM981
 * keep unsupported or undocumented models explicit instead of silently mapping
   them onto UM982 behavior
+* keep configurator policy separate from localization policy; the configurator
+  should not infer baseline capability from current RTK mode or runtime
+  baseline fields
 
-Expected safety/localization behavior if relevant:
-
-* prevent operators from applying dual-antenna baseline-specific configuration
-  to single-antenna receivers
-* keep robot-side localization policy separate from config policy; the
-  configurator should not infer baseline capability from current RTK mode or
-  runtime baseline fields
-
-Suggested field-validation checks:
+Suggested validation checks:
 
 * verify a confirmed UM982 path surfaces the documented portable rover choice
   and does not offer undocumented combinations
-* verify UM980 and UB9A0 paths do not surface baseline-only signal-group
-  choices
+* verify UM960, UM980, and UM981 paths do not surface baseline-only
+  signal-group choices
 * verify unknown or undocumented Unicore models visibly skip
   `CONFIG SIGNALGROUP` and explain why
 * verify operator review pages preserve the selected receiver model and any
