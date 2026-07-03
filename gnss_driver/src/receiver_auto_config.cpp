@@ -24,9 +24,9 @@ namespace universal_gnss_driver
 namespace
 {
 
-using universal_gnss_protocols::UbxCfgLayer;
-using universal_gnss_protocols::UbxCfgConstellation;
 using universal_gnss_driver::UbloxInterfacePort;
+using universal_gnss_protocols::UbxCfgConstellation;
+using universal_gnss_protocols::UbxCfgLayer;
 
 std::string ToLowerCopy(std::string_view text)
 {
@@ -52,17 +52,14 @@ ReceiverAutoConfigPlan MakeBasePlan(const ReceiverAutoConfigRequest& request)
   return plan;
 }
 
-std::optional<std::string_view> ResolveTransportPathView(
-    const ReceiverAutoConfigRequest& request)
+std::optional<std::string_view> ResolveTransportPathView(const ReceiverAutoConfigRequest& request)
 {
-  if (request.discovery_result.has_value() &&
-      !request.discovery_result->path.empty())
+  if (request.discovery_result.has_value() && !request.discovery_result->path.empty())
   {
     return request.discovery_result->path;
   }
 
-  if (request.transport_device_path.has_value() &&
-      !request.transport_device_path->empty())
+  if (request.transport_device_path.has_value() && !request.transport_device_path->empty())
   {
     return *request.transport_device_path;
   }
@@ -134,8 +131,7 @@ void ApplyPersistentWarningsAndRollback(ReceiverAutoConfigPlan& plan)
       "executed with explicit operator confirmation");
   plan.rollback_expectation.changes_are_temporary = false;
   plan.rollback_expectation.operator_action_required = true;
-  plan.rollback_expectation.summary =
-      "persistent configuration changes are not auto-rolled back";
+  plan.rollback_expectation.summary = "persistent configuration changes are not auto-rolled back";
   plan.rollback_expectation.operator_action =
       "reapply a known-good profile or use vendor tooling to restore the desired state";
 
@@ -146,8 +142,7 @@ void ApplyPersistentWarningsAndRollback(ReceiverAutoConfigPlan& plan)
   }
   else if (plan.request.receiver_family == ReceiverDetectedFamily::kUnicore)
   {
-    plan.warnings.push_back(
-        "Unicore persistent planning currently relies on SAVECONFIG");
+    plan.warnings.push_back("Unicore persistent planning currently relies on SAVECONFIG");
   }
 }
 
@@ -167,15 +162,14 @@ void ApplyRuntimeRollback(ReceiverAutoConfigPlan& plan)
 
   if (plan.request.receiver_family == ReceiverDetectedFamily::kUnicore)
   {
-    plan.rollback_expectation.summary =
-        "runtime-only Unicore planning does not emit SAVECONFIG";
+    plan.rollback_expectation.summary = "runtime-only Unicore planning does not emit SAVECONFIG";
     plan.rollback_expectation.operator_action =
-        "restart the receiver or reapply a known-good runtime profile if temporary changes need to be cleared";
+        "restart the receiver or reapply a known-good runtime profile if temporary changes need to "
+        "be cleared";
     return;
   }
 
-  plan.rollback_expectation.summary =
-      "runtime-only plans should remain temporary";
+  plan.rollback_expectation.summary = "runtime-only plans should remain temporary";
   plan.rollback_expectation.operator_action =
       "reconnect or restart the receiver if temporary changes need to be cleared";
 }
@@ -207,8 +201,7 @@ void ApplyFactoryResetWarningsAndRollback(ReceiverAutoConfigPlan& plan)
   plan.validation.ready_to_execute = false;
   plan.warnings.push_back(
       "factory reset clears saved receiver configuration and restarts the receiver");
-  plan.warnings.push_back(
-      "Unicore FRESET resets the active serial baud rate to 115200 bps");
+  plan.warnings.push_back("Unicore FRESET resets the active serial baud rate to 115200 bps");
   plan.warnings.push_back(
       "live factory-reset execution remains guarded until reconnect/probe handling is implemented");
   plan.rollback_expectation.changes_are_temporary = false;
@@ -227,22 +220,25 @@ void ApplyFactoryResetRecoveryWarningsAndRollback(ReceiverAutoConfigPlan& plan,
       plan.request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
   plan.warnings.push_back(
       "factory reset clears saved receiver configuration and restarts the receiver");
+  plan.warnings.push_back("Unicore FRESET resets the active serial baud rate to 115200 bps");
   plan.warnings.push_back(
-      "Unicore FRESET resets the active serial baud rate to 115200 bps");
-  plan.warnings.push_back(
-      "live apply must reconnect/probe at 115200 bps with an active VERSIONA query, reconfigure COM1, then continue at " +
+      "live apply must reconnect/probe at 115200 bps with an active VERSIONA query, reconfigure "
+      "COM1, then continue at " +
       std::to_string(recovery_baud) + " bps");
   plan.warnings.push_back(
-      "after FRESET the receiver may need about 30 seconds or slightly more before it starts responding again");
+      "after FRESET the receiver may need about 30 seconds or slightly more before it starts "
+      "responding again");
 
   if (plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
     plan.warnings.push_back(
-        "persistent Unicore profile apply performs FRESET first so the saved profile is rebuilt from a clean baseline");
+        "persistent Unicore profile apply performs FRESET first so the saved profile is rebuilt "
+        "from a clean baseline");
     plan.warnings.push_back(
         "persistent recovery will finish with SAVECONFIG after the post-reset profile is restored");
     plan.rollback_expectation.summary =
-        "factory reset clears saved receiver configuration before restoring a saved Unicore profile";
+        "factory reset clears saved receiver configuration before restoring a saved Unicore "
+        "profile";
     plan.rollback_expectation.operator_action =
         "reconnect at " + std::to_string(recovery_baud) +
         " bps and reapply a different saved profile if rollback is needed";
@@ -250,9 +246,11 @@ void ApplyFactoryResetRecoveryWarningsAndRollback(ReceiverAutoConfigPlan& plan,
   else
   {
     plan.warnings.push_back(
-        "runtime-only recovery re-enables a known-good rover profile after the reset but does not save it; the receiver will keep factory defaults after the next reboot");
+        "runtime-only recovery re-enables a known-good rover profile after the reset but does not "
+        "save it; the receiver will keep factory defaults after the next reboot");
     plan.rollback_expectation.summary =
-        "factory reset permanently restores saved defaults before a temporary rover profile is re-applied";
+        "factory reset permanently restores saved defaults before a temporary rover profile is "
+        "re-applied";
     plan.rollback_expectation.operator_action =
         "reconnect at " + std::to_string(recovery_baud) +
         " bps and rerun a persistent profile if factory defaults should not remain saved";
@@ -291,12 +289,11 @@ std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& reques
   return 921600u;
 }
 
-ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(
-    const ReceiverAutoConfigRequest& request,
-    const ReceiverVendor vendor,
-    std::string family_name,
-    const ReceiverCapabilities& capabilities,
-    const std::string& message)
+ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(const ReceiverAutoConfigRequest& request,
+                                                  const ReceiverVendor vendor,
+                                                  std::string family_name,
+                                                  const ReceiverCapabilities& capabilities,
+                                                  const std::string& message)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
   plan.vendor = vendor;
@@ -321,9 +318,9 @@ void AppendRuntimeOnlySignalProfileWarning(ReceiverAutoConfigPlan& plan)
     return;
   }
 
-  plan.warnings.push_back(
-      "signal_profile=" + std::string(ToString(*plan.request.signal_profile)) +
-      " is unsupported with the runtime_only profile because runtime_only does not send receiver commands");
+  plan.warnings.push_back("signal_profile=" + std::string(ToString(*plan.request.signal_profile)) +
+                          " is unsupported with the runtime_only profile because runtime_only does "
+                          "not send receiver commands");
 }
 
 void AppendRuntimeOnlySignalGroupOverrideWarning(ReceiverAutoConfigPlan& plan)
@@ -333,17 +330,16 @@ void AppendRuntimeOnlySignalGroupOverrideWarning(ReceiverAutoConfigPlan& plan)
     return;
   }
 
-  plan.warnings.push_back(
-      "signal_group_override=" +
-      FormatUnicoreSignalGroupSelection(*plan.request.signal_group_override) +
-      " is unsupported with the runtime_only profile because runtime_only does not send receiver commands");
+  plan.warnings.push_back("signal_group_override=" +
+                          FormatUnicoreSignalGroupSelection(*plan.request.signal_group_override) +
+                          " is unsupported with the runtime_only profile because runtime_only does "
+                          "not send receiver commands");
 }
 
-ReceiverAutoConfigPlan MakeNoChangePlan(
-    const ReceiverAutoConfigRequest& request,
-    const ReceiverVendor vendor,
-    std::string family_name,
-    const ReceiverCapabilities& capabilities)
+ReceiverAutoConfigPlan MakeNoChangePlan(const ReceiverAutoConfigRequest& request,
+                                        const ReceiverVendor vendor,
+                                        std::string family_name,
+                                        const ReceiverCapabilities& capabilities)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
   plan.vendor = vendor;
@@ -359,7 +355,8 @@ ReceiverAutoConfigPlan MakeNoChangePlan(
     plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode;
     plan.validation.apply_mode_supported = false;
     plan.error_message =
-        "runtime_only profile does not support persistent apply because it does not modify receiver configuration";
+        "runtime_only profile does not support persistent apply because it does not modify "
+        "receiver configuration";
     plan.unsupported_reason = plan.error_message;
     ApplyNoChangeRollback(plan);
     return plan;
@@ -371,25 +368,23 @@ ReceiverAutoConfigPlan MakeNoChangePlan(
   {
     plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
     plan.error_message =
-        "runtime_only profile does not accept configuration overrides because it does not send receiver commands";
+        "runtime_only profile does not accept configuration overrides because it does not send "
+        "receiver commands";
     ApplyNoChangeRollback(plan);
     return plan;
   }
 
   plan.validation.production_ready = true;
-  plan.validation.ready_to_execute =
-      request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  plan.validation.ready_to_execute = request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
   AppendRuntimeOnlySignalProfileWarning(plan);
   AppendRuntimeOnlySignalGroupOverrideWarning(plan);
   AppendIgnoredOutputPortWarning(plan);
-  plan.warnings.push_back(
-      "runtime_only profile leaves the receiver configuration unchanged");
+  plan.warnings.push_back("runtime_only profile leaves the receiver configuration unchanged");
   ApplyNoChangeRollback(plan);
   return plan;
 }
 
-bool ValidateRateHz(const ReceiverAutoConfigRequest& request,
-                    ReceiverAutoConfigPlan& plan)
+bool ValidateRateHz(const ReceiverAutoConfigRequest& request, ReceiverAutoConfigPlan& plan)
 {
   if (!request.rate_hz.has_value())
   {
@@ -406,8 +401,7 @@ bool ValidateRateHz(const ReceiverAutoConfigRequest& request,
   return true;
 }
 
-bool ValidateConfigBaud(const ReceiverAutoConfigRequest& request,
-                        ReceiverAutoConfigPlan& plan)
+bool ValidateConfigBaud(const ReceiverAutoConfigRequest& request, ReceiverAutoConfigPlan& plan)
 {
   if (!request.config_baud.has_value())
   {
@@ -455,7 +449,9 @@ UbloxOutputPortResolution ResolveUbloxOutputPort(const ReceiverAutoConfigRequest
         transport_path.has_value() && TransportPathLooksUsb(*transport_path))
     {
       plan.warnings.push_back(
-          "u-blox planning kept the legacy default output-port set (UART1 + USB) because no explicit output_port was provided; this transport looks USB-attached, so prefer output_port=usb or output_port=auto for interface-specific plans");
+          "u-blox planning kept the legacy default output-port set (UART1 + USB) because no "
+          "explicit output_port was provided; this transport looks USB-attached, so prefer "
+          "output_port=usb or output_port=auto for interface-specific plans");
     }
     return resolution;
   }
@@ -487,8 +483,7 @@ UbloxOutputPortResolution ResolveUbloxOutputPort(const ReceiverAutoConfigRequest
       resolution.apply_uart2_baud = true;
       return resolution;
     case ReceiverAutoConfigOutputPort::kAuto:
-      if (const auto transport_path = ResolveTransportPathView(request);
-          transport_path.has_value())
+      if (const auto transport_path = ResolveTransportPathView(request); transport_path.has_value())
       {
         if (TransportPathLooksUsb(*transport_path))
         {
@@ -514,7 +509,8 @@ UbloxOutputPortResolution ResolveUbloxOutputPort(const ReceiverAutoConfigRequest
       resolution.resolved_output_port = ReceiverAutoConfigOutputPort::kUart1;
       resolution.apply_uart1_baud = true;
       plan.warnings.push_back(
-          "output_port=auto could not safely infer the receiver interface from the available transport context; defaulting to uart1");
+          "output_port=auto could not safely infer the receiver interface from the available "
+          "transport context; defaulting to uart1");
       return resolution;
   }
 
@@ -563,14 +559,16 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
     case ReceiverAutoConfigProfile::kRoverHighPrecision:
       plan.validation.apply_mode_supported = true;
       plan.validation.profile_supported = true;
-      profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
-          safety_level, layers, output_port.output_ports);
+      profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(safety_level,
+                                                                  layers,
+                                                                  output_port.output_ports);
       break;
     case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
       plan.validation.apply_mode_supported = true;
       plan.validation.profile_supported = true;
-      profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(
-          safety_level, layers, output_port.output_ports);
+      profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(safety_level,
+                                                                        layers,
+                                                                        output_port.output_ports);
       break;
     case ReceiverAutoConfigProfile::kFactoryReset:
       return MakeUnsupportedProfilePlan(
@@ -596,14 +594,15 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
     if (!output_port.apply_uart1_baud && !output_port.apply_uart2_baud)
     {
       plan.warnings.push_back(
-          "config-baud does not apply to USB output-port plans; no UART baud command was generated");
+          "config-baud does not apply to USB output-port plans; no UART baud command was "
+          "generated");
     }
     else if (request.output_port ==
-             std::optional<ReceiverAutoConfigOutputPort>{
-                 ReceiverAutoConfigOutputPort::kAll})
+             std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kAll})
     {
       plan.warnings.push_back(
-          "output_port=all applies config-baud to both UART1 and UART2; verify any attached correction or downstream serial links before live apply");
+          "output_port=all applies config-baud to both UART1 and UART2; verify any attached "
+          "correction or downstream serial links before live apply");
     }
   }
   if (request.rate_hz.has_value())
@@ -623,8 +622,7 @@ ReceiverAutoConfigPlan BuildUbloxPlan(const ReceiverAutoConfigRequest& request)
   plan.commands = build_result.commands;
   SummarizeCommands(plan);
   plan.validation.production_ready = true;
-  plan.validation.ready_to_execute =
-      request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  plan.validation.ready_to_execute = request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
 
   if (request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
@@ -645,16 +643,18 @@ bool IsRateControlledUnicoreMessage(const UnicoreOutputMessageKind message)
 
 void ApplyUnicoreMinimalOutputLoad(UnicoreConfigProfile& profile)
 {
-  profile.output_messages.erase(
-      std::remove_if(
-          profile.output_messages.begin(),
-          profile.output_messages.end(),
-          [](const UnicoreOutputMessageRate& output) {
-            return output.message == UnicoreOutputMessageKind::kGpgsv ||
-                   output.message == UnicoreOutputMessageKind::kGpgst ||
-                   output.message == UnicoreOutputMessageKind::kPvtslna;
-          }),
-      profile.output_messages.end());
+  profile.output_messages.erase(std::remove_if(profile.output_messages.begin(),
+                                               profile.output_messages.end(),
+                                               [](const UnicoreOutputMessageRate& output)
+                                               {
+                                                 return output.message ==
+                                                            UnicoreOutputMessageKind::kGpgsv ||
+                                                        output.message ==
+                                                            UnicoreOutputMessageKind::kGpgst ||
+                                                        output.message ==
+                                                            UnicoreOutputMessageKind::kPvtslna;
+                                               }),
+                                profile.output_messages.end());
 }
 
 void ApplyUnicoreSignalGroupSelection(UnicoreConfigProfile& profile,
@@ -663,10 +663,9 @@ void ApplyUnicoreSignalGroupSelection(UnicoreConfigProfile& profile,
   profile.signal_config = UnicoreSignalConfig{selection.groups};
 }
 
-void AppendUnicoreSkippedSignalGroupWarning(
-    ReceiverAutoConfigPlan& plan,
-    const UnicoreModelProfile& model_profile,
-    const std::string_view context_prefix)
+void AppendUnicoreSkippedSignalGroupWarning(ReceiverAutoConfigPlan& plan,
+                                            const UnicoreModelProfile& model_profile,
+                                            const std::string_view context_prefix)
 {
   std::string warning(context_prefix);
   if (!warning.empty())
@@ -682,8 +681,7 @@ void AppendUnicoreSkippedSignalGroupWarning(
   }
   else if (model_profile.signal_group_options.empty())
   {
-    warning += "skipped CONFIG SIGNALGROUP because model " +
-               std::string(model_profile.model) +
+    warning += "skipped CONFIG SIGNALGROUP because model " + std::string(model_profile.model) +
                " has no documented portable signal-group profile";
   }
   else
@@ -721,10 +719,10 @@ void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
       }
       else
       {
-        AppendUnicoreSkippedSignalGroupWarning(
-            plan,
-            model_profile,
-            "signal_profile=" + std::string(ToString(*request.signal_profile)));
+        AppendUnicoreSkippedSignalGroupWarning(plan,
+                                               model_profile,
+                                               "signal_profile=" +
+                                                   std::string(ToString(*request.signal_profile)));
       }
       return;
     case ReceiverAutoConfigSignalProfile::kMinimal:
@@ -735,18 +733,17 @@ void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
       }
       else
       {
-        AppendUnicoreSkippedSignalGroupWarning(
-            plan,
-            model_profile,
-            "signal_profile=minimal");
+        AppendUnicoreSkippedSignalGroupWarning(plan, model_profile, "signal_profile=minimal");
       }
       ApplyUnicoreMinimalOutputLoad(profile);
       plan.warnings.push_back(
-          "signal_profile=minimal reduces auxiliary Unicore output messages to lower serial link load");
+          "signal_profile=minimal reduces auxiliary Unicore output messages to lower serial link "
+          "load");
       return;
     case ReceiverAutoConfigSignalProfile::kCustom:
       plan.warnings.push_back(
-          "custom signal_profile is reserved for vendor-specific advanced settings; the portable Unicore planner kept the default validated runtime mapping");
+          "custom signal_profile is reserved for vendor-specific advanced settings; the portable "
+          "Unicore planner kept the default validated runtime mapping");
       return;
   }
 }
@@ -779,11 +776,13 @@ void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
       return;
     case ReceiverAutoConfigSignalProfile::kAllSignals:
       plan.warnings.push_back(
-          "signal_profile=all_signals is not yet mapped to documented portable u-blox per-signal configuration; keeping the standard GPS/Galileo/BeiDou/GLONASS plan");
+          "signal_profile=all_signals is not yet mapped to documented portable u-blox per-signal "
+          "configuration; keeping the standard GPS/Galileo/BeiDou/GLONASS plan");
       return;
     case ReceiverAutoConfigSignalProfile::kMinimal:
       plan.warnings.push_back(
-          "signal_profile=minimal is not yet mapped to a documented portable u-blox reduced-signal plan; keeping the standard GPS/Galileo/BeiDou/GLONASS configuration");
+          "signal_profile=minimal is not yet mapped to a documented portable u-blox reduced-signal "
+          "plan; keeping the standard GPS/Galileo/BeiDou/GLONASS configuration");
       return;
     case ReceiverAutoConfigSignalProfile::kCustom:
       plan.warnings.push_back(
@@ -795,11 +794,9 @@ void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
 ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
-  const auto& model_profile =
-      ResolveUnicoreModelProfile(
-          request.receiver_model.has_value()
-              ? std::optional<std::string_view>{*request.receiver_model}
-              : std::nullopt);
+  const auto& model_profile = ResolveUnicoreModelProfile(
+      request.receiver_model.has_value() ? std::optional<std::string_view>{*request.receiver_model}
+                                         : std::nullopt);
   const std::string normalized_requested_model =
       request.receiver_model.has_value() ? NormalizeUnicoreModelName(*request.receiver_model)
                                          : std::string{};
@@ -822,21 +819,19 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   plan.validation.config_supported = true;
   AppendIgnoredOutputPortWarning(plan);
 
-  if (!normalized_requested_model.empty() &&
-      model_profile.model_id == UnicoreModel::kUnknown)
+  if (!normalized_requested_model.empty() && model_profile.model_id == UnicoreModel::kUnknown)
   {
-    plan.warnings.push_back(
-        "Unicore model " + normalized_requested_model +
-        " has no documented portable signal-group/capability profile yet; using the safe generic non-baseline fallback");
+    plan.warnings.push_back("Unicore model " + normalized_requested_model +
+                            " has no documented portable signal-group/capability profile yet; "
+                            "using the safe generic non-baseline fallback");
   }
 
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
   {
-    auto no_change = MakeNoChangePlan(
-        request, ReceiverVendor::kUnicore, "UM98x", model_profile.capabilities);
+    auto no_change =
+        MakeNoChangePlan(request, ReceiverVendor::kUnicore, "UM98x", model_profile.capabilities);
     no_change.receiver_model = plan.receiver_model;
-    no_change.warnings.insert(
-        no_change.warnings.end(), plan.warnings.begin(), plan.warnings.end());
+    no_change.warnings.insert(no_change.warnings.end(), plan.warnings.begin(), plan.warnings.end());
     return no_change;
   }
 
@@ -854,14 +849,6 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset ||
       request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
 
-  if (request.config_baud.has_value() && !requires_clean_reset_workflow)
-  {
-    plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
-    plan.error_message =
-        "Unicore auto-configuration planning only supports baud overrides through the clean reset/recovery workflow";
-    return plan;
-  }
-
   plan.validation.profile_supported = true;
   plan.validation.apply_mode_supported = true;
 
@@ -873,16 +860,14 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   switch (request.requested_profile)
   {
     case ReceiverAutoConfigProfile::kRoverHighPrecision:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile,
-                                                                      persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile, persistence);
       break;
     case ReceiverAutoConfigProfile::kRoverHighPrecisionDebug:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(model_profile,
-                                                                            persistence);
+      profile =
+          UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(model_profile, persistence);
       break;
     case ReceiverAutoConfigProfile::kFactoryReset:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile,
-                                                                      persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(model_profile, persistence);
       break;
     case ReceiverAutoConfigProfile::kRuntimeOnly:
       break;
@@ -908,26 +893,27 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
         if (model_profile.model_id == UnicoreModel::kUnknown)
         {
           plan.error_message =
-              "cannot apply a Unicore signal-group override without a documented model/signal-group profile; supply a confirmed model with documented signal-group support such as UM980, UM982, or UB9A0";
+              "cannot apply a Unicore signal-group override without a documented "
+              "model/signal-group profile; supply a confirmed model with documented signal-group "
+              "support such as UM980, UM982, or UB9A0";
         }
         else
         {
-          plan.error_message =
-              "model " + std::string(model_profile.model) +
-              " has no documented portable signal-group profile yet; explicit overrides are currently confirmed only for UM980, UM982, and UB9A0";
+          plan.error_message = "model " + std::string(model_profile.model) +
+                               " has no documented portable signal-group profile yet; explicit "
+                               "overrides are currently confirmed only for UM980, UM982, and UB9A0";
         }
         return plan;
       }
 
-      if (FindUnicoreSignalGroupSelection(model_profile, *request.signal_group_override) ==
-          nullptr)
+      if (FindUnicoreSignalGroupSelection(model_profile, *request.signal_group_override) == nullptr)
       {
         plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
         plan.error_message =
             "unsupported Unicore signal-group override " +
-            FormatUnicoreSignalGroupSelection(*request.signal_group_override) +
-            " for model " + std::string(model_profile.model) + "; supported selections: " +
-            DescribeUnicoreSupportedSignalGroups(model_profile);
+            FormatUnicoreSignalGroupSelection(*request.signal_group_override) + " for model " +
+            std::string(model_profile.model) +
+            "; supported selections: " + DescribeUnicoreSupportedSignalGroups(model_profile);
         return plan;
       }
 
@@ -940,8 +926,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
     profile.com1_baud_rate = recovery_baud;
 
-    if (request.rate_hz.has_value() &&
-        ProfileSupportsRateOverride(request.requested_profile))
+    if (request.rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
     {
       const double period_s = 1.0 / *request.rate_hz;
       for (auto& output : profile.output_messages)
@@ -972,17 +957,15 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     }
 
     plan.commands = reset_result.commands;
-    plan.commands.insert(
-        plan.commands.end(),
-        recovery_result.commands.begin(),
-        recovery_result.commands.end());
+    plan.commands.insert(plan.commands.end(),
+                         recovery_result.commands.begin(),
+                         recovery_result.commands.end());
     SummarizeCommands(plan);
     ApplyFactoryResetRecoveryWarningsAndRollback(plan, recovery_baud);
     return plan;
   }
 
-  if (request.rate_hz.has_value() &&
-      ProfileSupportsRateOverride(request.requested_profile))
+  if (request.rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
   {
     const double period_s = 1.0 / *request.rate_hz;
     for (auto& output : profile.output_messages)
@@ -992,6 +975,11 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
         output.period_s = period_s;
       }
     }
+  }
+
+  if (request.config_baud.has_value())
+  {
+    profile.com1_baud_rate = *request.config_baud;
   }
 
   const auto build_result = UnicoreConfigProfileBuilder::Build(profile);
@@ -1011,8 +999,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   }
 
   plan.validation.production_ready = true;
-  plan.validation.ready_to_execute =
-      request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
+  plan.validation.ready_to_execute = request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
 
   if (request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
@@ -1030,16 +1017,16 @@ ReceiverAutoConfigPlan BuildNmeaPlan(const ReceiverAutoConfigRequest& request)
 {
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
   {
-    return MakeNoChangePlan(
-        request, ReceiverVendor::kGeneric, "NMEA", NmeaDriver{}.capabilities());
+    return MakeNoChangePlan(request, ReceiverVendor::kGeneric, "NMEA", NmeaDriver{}.capabilities());
   }
 
-  ReceiverAutoConfigPlan plan = MakeUnsupportedProfilePlan(
-      request,
-      ReceiverVendor::kGeneric,
-      "NMEA",
-      NmeaDriver{}.capabilities(),
-      "generic NMEA receivers only support the runtime_only profile because portable write-side configuration is not standardized");
+  ReceiverAutoConfigPlan plan =
+      MakeUnsupportedProfilePlan(request,
+                                 ReceiverVendor::kGeneric,
+                                 "NMEA",
+                                 NmeaDriver{}.capabilities(),
+                                 "generic NMEA receivers only support the runtime_only profile "
+                                 "because portable write-side configuration is not standardized");
   plan.validation.config_supported = false;
   AppendIgnoredOutputPortWarning(plan);
   return plan;
@@ -1047,8 +1034,7 @@ ReceiverAutoConfigPlan BuildNmeaPlan(const ReceiverAutoConfigRequest& request)
 
 }  // namespace
 
-ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
-    const ReceiverAutoConfigRequest& request)
+ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(const ReceiverAutoConfigRequest& request)
 {
   ReceiverAutoConfigPlan plan = MakeBasePlan(request);
   CopyDiscoveryContext(plan);
@@ -1061,8 +1047,7 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
         request.receiver_family != discovery.detected_family)
     {
       plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
-      plan.error_message =
-          "receiver family request does not match the supplied discovery result";
+      plan.error_message = "receiver family request does not match the supplied discovery result";
       return plan;
     }
     effective_family = discovery.detected_family;
@@ -1075,11 +1060,11 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
     plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedReceiver;
     plan.validation.receiver_recognized = false;
     plan.rollback_expectation.summary = "no receiver configuration changes are planned";
-    plan.error_message = request.discovery_result.has_value()
-                             ? (!request.discovery_result->reason.empty()
-                                    ? request.discovery_result->reason
-                                    : request.discovery_result->note)
-                             : "receiver family is unknown";
+    plan.error_message =
+        request.discovery_result.has_value()
+            ? (!request.discovery_result->reason.empty() ? request.discovery_result->reason
+                                                         : request.discovery_result->note)
+            : "receiver family is unknown";
     if (plan.error_message.empty())
     {
       plan.error_message = "receiver family is unknown";
@@ -1108,13 +1093,11 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
   if (plan.status == ReceiverAutoConfigPlanStatus::kOk &&
       request.apply_mode == ReceiverAutoConfigApplyMode::kDryRun)
   {
-    plan.warnings.push_back(
-        "dry-run planning does not perform receiver writes");
+    plan.warnings.push_back("dry-run planning does not perform receiver writes");
     plan.validation.ready_to_execute = false;
   }
 
-  if (plan.status != ReceiverAutoConfigPlanStatus::kOk &&
-      plan.unsupported_reason.empty() &&
+  if (plan.status != ReceiverAutoConfigPlanStatus::kOk && plan.unsupported_reason.empty() &&
       !plan.error_message.empty() &&
       (plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver ||
        plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedProfile ||
@@ -1173,8 +1156,7 @@ std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
   {
     return ReceiverAutoConfigProfile::kRoverHighPrecision;
   }
-  if (normalized == "rover_high_precision_debug" ||
-      normalized == "rover-high-precision-debug" ||
+  if (normalized == "rover_high_precision_debug" || normalized == "rover-high-precision-debug" ||
       normalized == "diagnostics")
   {
     return ReceiverAutoConfigProfile::kRoverHighPrecisionDebug;
@@ -1202,8 +1184,7 @@ std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProf
   {
     return ReceiverAutoConfigSignalProfile::kAllSignals;
   }
-  if (normalized == "minimal" || normalized == "low_bandwidth" ||
-      normalized == "low-bandwidth")
+  if (normalized == "minimal" || normalized == "low_bandwidth" || normalized == "low-bandwidth")
   {
     return ReceiverAutoConfigSignalProfile::kMinimal;
   }

@@ -243,6 +243,22 @@ bool ParseProbeBaudList(const std::string& text, std::vector<std::uint32_t>& bau
   return true;
 }
 
+void DeduplicateBaudCandidates(std::vector<std::uint32_t>& baud_candidates)
+{
+  std::vector<std::uint32_t> deduplicated{};
+  deduplicated.reserve(baud_candidates.size());
+  for (const auto baud : baud_candidates)
+  {
+    if (baud == 0u ||
+        std::find(deduplicated.begin(), deduplicated.end(), baud) != deduplicated.end())
+    {
+      continue;
+    }
+    deduplicated.push_back(baud);
+  }
+  baud_candidates = std::move(deduplicated);
+}
+
 void PrintResult(const universal_gnss_tools::ConfigApplyResult& result, const bool json_output)
 {
   if (json_output)
@@ -280,6 +296,7 @@ std::optional<ReceiverProbeResult> DiscoverRequestedReceiver(const CliOptions& c
   if (cli_options.baud_auto && !cli_options.probe_baud_candidates.empty())
   {
     config.baud_candidates = cli_options.probe_baud_candidates;
+    DeduplicateBaudCandidates(config.baud_candidates);
   }
   else if (!cli_options.baud_auto && cli_options.apply.transport_baud_rate != 0u)
   {

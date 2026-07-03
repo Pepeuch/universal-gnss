@@ -61,6 +61,8 @@ constexpr std::uint32_t kUnicoreFactoryResetRecoveryWindowMs = 60000u;
 constexpr std::uint32_t kUnicoreBaudSwitchRecoveryWindowMs = 10000u;
 constexpr std::uint32_t kProbeAttemptReadTimeoutMs = 250u;
 constexpr std::uint32_t kUnicoreActiveProbeAttemptWindowMs = 2000u;
+constexpr std::uint32_t kUnicoreRuntimeBaudSwitchProbeWindowMs = 750u;
+constexpr std::uint32_t kUnicoreRuntimeBaudSwitchMaxAttempts = 3u;
 constexpr auto kRecoveryProbeRetrySleep = std::chrono::milliseconds(500);
 constexpr auto kUnicoreRecoveryQueryRetry = std::chrono::milliseconds(1000);
 constexpr std::string_view kUnicoreRecoveryQuery = "VERSIONA\r\n";
@@ -602,6 +604,23 @@ struct UnicoreActiveProbeOutcome
   std::string error_message{};
 };
 
+std::uint32_t ComputeProbeReadAttemptLimit(const std::uint32_t window_ms)
+{
+  if (window_ms == 0u)
+  {
+    return 1u;
+  }
+
+  const auto sleep_ms = static_cast<std::uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(kRecoveryProbeRetrySleep).count());
+  if (sleep_ms == 0u)
+  {
+    return 1u;
+  }
+
+  return std::max<std::uint32_t>(1u, (window_ms + sleep_ms - 1u) / sleep_ms);
+}
+
 UnicoreActiveProbeOutcome ProbeUnicoreActiveResponse(ByteDuplex& transport,
                                                      const std::uint32_t baud_rate,
                                                      const std::uint32_t window_ms)
@@ -612,8 +631,10 @@ UnicoreActiveProbeOutcome ProbeUnicoreActiveResponse(ByteDuplex& transport,
   std::vector<std::uint8_t> read_buffer(256u, 0u);
   const auto deadline = Clock::now() + std::chrono::milliseconds(static_cast<int>(window_ms));
   auto next_query_time = Clock::now();
+  const auto max_read_attempts = ComputeProbeReadAttemptLimit(window_ms);
+  std::uint32_t read_attempt = 0u;
 
-  while (Clock::now() < deadline)
+  while (Clock::now() < deadline && read_attempt < max_read_attempts)
   {
     const auto now = Clock::now();
     if (now >= next_query_time)
@@ -648,6 +669,7 @@ UnicoreActiveProbeOutcome ProbeUnicoreActiveResponse(ByteDuplex& transport,
 
     if (read_result.bytes_read == 0u)
     {
+      ++read_attempt;
       std::this_thread::sleep_for(kRecoveryProbeRetrySleep);
       continue;
     }
@@ -675,6 +697,8 @@ UnicoreActiveProbeOutcome ProbeUnicoreActiveResponse(ByteDuplex& transport,
         return outcome;
       }
     }
+
+    ++read_attempt;
   }
 
   outcome.status = UnicoreActiveProbeStatus::kTimedOut;
@@ -1422,45 +1446,37 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
     return result;
   }
 
-  std::uint32_t open_baud = current_baud;
   std::uint32_t active_baud = current_baud;
   bool continue_at_target = false;
   bool continue_at_old = false;
   std::string last_error = "no receiver response on probed baud rates after CONFIG COM1: old " +
                            std::to_string(current_baud) + " bps, target " +
                            std::to_string(*target_baud) + " bps";
-  const auto deadline = Clock::now() + std::chrono::milliseconds(
-                                           static_cast<int>(kUnicoreBaudSwitchRecoveryWindowMs));
+  result.progress_log.push_back("Verifying which Unicore baud is live after CONFIG COM1: old " +
+                                std::to_string(current_baud) + " bps, target " +
+                                std::to_string(*target_baud) + " bps");
 
-  while (Clock::now() < deadline)
+  for (std::uint32_t attempt = 1u; attempt <= kUnicoreRuntimeBaudSwitchMaxAttempts; ++attempt)
   {
-    result.progress_log.push_back("Probing previously detected Unicore baud " +
-                                  std::to_string(current_baud) + " bps after CONFIG COM1");
-    if (!static_cast<universal_gnss_transport::ByteSource&>(transport).IsOpen())
-    {
-      std::string reopen_error;
-      if (!hooks.ReopenTransport(
-              transport, result.device_path, current_baud, transport_read_timeout_ms, reopen_error))
-      {
-        last_error = reopen_error;
-      }
-      else
-      {
-        open_baud = current_baud;
-      }
-    }
+    result.progress_log.push_back("Post-CONFIG COM1 probe attempt " + std::to_string(attempt) +
+                                  "/" + std::to_string(kUnicoreRuntimeBaudSwitchMaxAttempts));
 
-    bool old_baud_responsive = false;
-    if (static_cast<universal_gnss_transport::ByteSource&>(transport).IsOpen() &&
-        open_baud == current_baud)
+    static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+    std::string reopen_error;
+    if (!hooks.ReopenTransport(
+            transport, result.device_path, current_baud, transport_read_timeout_ms, reopen_error))
     {
-      const auto old_probe =
-          ProbeUnicoreActiveResponse(transport, current_baud, kUnicoreActiveProbeAttemptWindowMs);
+      last_error = reopen_error;
+    }
+    bool old_baud_responsive = false;
+    if (static_cast<universal_gnss_transport::ByteSource&>(transport).IsOpen())
+    {
+      const auto old_probe = ProbeUnicoreActiveResponse(transport,
+                                                        current_baud,
+                                                        kUnicoreRuntimeBaudSwitchProbeWindowMs);
       if (old_probe.status == UnicoreActiveProbeStatus::kResponsive)
       {
         old_baud_responsive = true;
-        result.progress_log.push_back("Previously detected baud " + std::to_string(current_baud) +
-                                      " bps still answers VERSIONA after CONFIG COM1");
       }
       else
       {
@@ -1469,10 +1485,6 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
     }
 
     static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
-    open_baud = 0u;
-    result.progress_log.push_back("Probing target Unicore baud " + std::to_string(*target_baud) +
-                                  " bps after CONFIG COM1");
-
     std::string target_reopen_error;
     if (hooks.ReopenTransport(transport,
                               result.device_path,
@@ -1480,9 +1492,9 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
                               transport_read_timeout_ms,
                               target_reopen_error))
     {
-      open_baud = *target_baud;
-      const auto target_probe =
-          ProbeUnicoreActiveResponse(transport, *target_baud, kUnicoreActiveProbeAttemptWindowMs);
+      const auto target_probe = ProbeUnicoreActiveResponse(transport,
+                                                           *target_baud,
+                                                           kUnicoreRuntimeBaudSwitchProbeWindowMs);
       if (target_probe.status == UnicoreActiveProbeStatus::kResponsive)
       {
         continue_at_target = true;
@@ -1508,7 +1520,6 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
                                 transport_read_timeout_ms,
                                 old_reopen_error))
       {
-        open_baud = current_baud;
         active_baud = current_baud;
         continue_at_old = true;
         result.progress_log.push_back(
@@ -1526,15 +1537,39 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
       last_error = old_reopen_error;
     }
 
-    std::this_thread::sleep_for(kRecoveryProbeRetrySleep);
+    if (attempt < kUnicoreRuntimeBaudSwitchMaxAttempts)
+    {
+      std::this_thread::sleep_for(kRecoveryProbeRetrySleep);
+    }
   }
 
   if (!continue_at_target && !continue_at_old)
   {
     result.status = ConfigApplyStatus::kTransportUnavailable;
-    result.error_message = last_error;
+    result.error_message = "no receiver response on probed baud rates after CONFIG COM1: old " +
+                           std::to_string(current_baud) + " bps, target " +
+                           std::to_string(*target_baud) + " bps";
     result.execution_summary.final_status = "transport_unavailable";
     return result;
+  }
+
+  if (continue_at_target)
+  {
+    static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+    std::string target_reopen_error;
+    if (!hooks.ReopenTransport(transport,
+                               result.device_path,
+                               active_baud,
+                               transport_read_timeout_ms,
+                               target_reopen_error))
+    {
+      result.status = ConfigApplyStatus::kTransportUnavailable;
+      result.error_message = target_reopen_error.empty()
+                                 ? "failed to reopen the verified target baud transport"
+                                 : target_reopen_error;
+      result.execution_summary.final_status = "transport_unavailable";
+      return result;
+    }
   }
 
   phase = ExecuteUnicoreCommandPhase(result, transport, profile_phase, options, baud_phase.size());
