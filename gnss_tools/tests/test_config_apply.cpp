@@ -59,17 +59,13 @@ ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
   result.source = ReceiverPortSource::kExplicitPath;
   result.selected_baud = baud;
   result.detected_family = family;
-  result.confidence = family == ReceiverDetectedFamily::kNmea
-                          ? ReceiverProbeConfidence::kMedium
-                          : ReceiverProbeConfidence::kHigh;
+  result.confidence = family == ReceiverDetectedFamily::kNmea ? ReceiverProbeConfidence::kMedium
+                                                              : ReceiverProbeConfidence::kHigh;
   result.discovery_score = family == ReceiverDetectedFamily::kNmea ? 20 : 100;
-  result.reason = family == ReceiverDetectedFamily::kUblox
-                      ? "valid_ubx_frame:+100"
-                      : family == ReceiverDetectedFamily::kUnicore
-                            ? "PVTSLNA:+100"
-                            : family == ReceiverDetectedFamily::kNmea
-                                  ? "valid_GGA:+20"
-                                  : "no_data";
+  result.reason = family == ReceiverDetectedFamily::kUblox     ? "valid_ubx_frame:+100"
+                  : family == ReceiverDetectedFamily::kUnicore ? "PVTSLNA:+100"
+                  : family == ReceiverDetectedFamily::kNmea    ? "valid_GGA:+20"
+                                                               : "no_data";
   result.note = result.reason;
   return result;
 }
@@ -108,8 +104,7 @@ std::vector<std::uint8_t> BuildAckFramesForPlan(
       std::exit(EXIT_FAILURE);
     }
 
-    const auto ack =
-        BuildUbxFrame(0x05u, 0x01u, {identity->class_id, identity->message_id});
+    const auto ack = BuildUbxFrame(0x05u, 0x01u, {identity->class_id, identity->message_id});
     bytes.insert(bytes.end(), ack.begin(), ack.end());
   }
 
@@ -134,8 +129,7 @@ std::string BuildUnicoreVersionResponse()
 class ScriptedByteDuplex final : public ByteDuplex
 {
 public:
-  explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {})
-      : input_(std::move(input))
+  explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {}) : input_(std::move(input))
   {
   }
 
@@ -163,10 +157,9 @@ public:
 
     const auto available = input_.size() - read_offset_;
     const auto bytes_to_copy = std::min(capacity, available);
-    std::copy_n(
-        input_.data() + static_cast<std::ptrdiff_t>(read_offset_),
-        static_cast<std::ptrdiff_t>(bytes_to_copy),
-        destination);
+    std::copy_n(input_.data() + static_cast<std::ptrdiff_t>(read_offset_),
+                static_cast<std::ptrdiff_t>(bytes_to_copy),
+                destination);
     read_offset_ += bytes_to_copy;
     return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
   }
@@ -188,10 +181,7 @@ public:
       return WriteResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
     }
 
-    written_.insert(
-        written_.end(),
-        data,
-        data + static_cast<std::ptrdiff_t>(size));
+    written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
     return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
   }
 
@@ -242,8 +232,7 @@ public:
     std::vector<std::uint8_t> input{};
   };
 
-  explicit ScriptedConfigApplyHooks(ScriptedByteDuplex& transport)
-      : transport_(transport)
+  explicit ScriptedConfigApplyHooks(ScriptedByteDuplex& transport) : transport_(transport)
   {
   }
 
@@ -296,8 +285,7 @@ public:
     }
 
     const auto& expected = reopen_steps_[reopen_index_++];
-    if (device_path != expected.device_path ||
-        baud_rate != expected.baud_rate ||
+    if (device_path != expected.device_path || baud_rate != expected.baud_rate ||
         (expected.read_timeout_ms != 0u && read_timeout_ms != expected.read_timeout_ms))
     {
       failure_ = "reopen request did not match the scripted recovery workflow";
@@ -322,8 +310,7 @@ public:
 
   bool AllStepsConsumed() const
   {
-    return probe_index_ == probe_steps_.size() &&
-           reopen_index_ == reopen_steps_.size();
+    return probe_index_ == probe_steps_.size() && reopen_index_ == reopen_steps_.size();
   }
 
   const std::string& failure() const
@@ -350,10 +337,8 @@ void TestDryRunDoesNotWrite(TestContext& ctx)
   MemoryByteDuplex transport({});
   const auto result = ExecuteConfigApply(transport, options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.dry_run &&
-                 !result.execute_requested &&
-                 !result.executed &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.dry_run &&
+                 !result.execute_requested && !result.executed &&
                  result.plan.summary.commands_total == 13u,
              "dry-run auto-config apply should succeed without dispatching commands");
   ctx.Expect(transport.written_bytes().empty(),
@@ -369,17 +354,14 @@ void TestRuntimeOnlyNoOpNeedsNoConfirmation(TestContext& ctx)
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
 
   const auto prepared = PrepareConfigApply(options);
-  ctx.Expect(prepared.status == ConfigApplyStatus::kOk &&
-                 !prepared.requires_runtime_confirmation &&
+  ctx.Expect(prepared.status == ConfigApplyStatus::kOk && !prepared.requires_runtime_confirmation &&
                  prepared.plan.summary.commands_total == 0u,
              "runtime_only no-op apply should not require confirmation when no commands exist");
 
   MemoryByteDuplex closed_transport({});
   closed_transport.Close();
   const auto executed = ExecuteConfigApply(closed_transport, options);
-  ctx.Expect(executed.status == ConfigApplyStatus::kOk &&
-                 !executed.dry_run &&
-                 executed.executed &&
+  ctx.Expect(executed.status == ConfigApplyStatus::kOk && !executed.dry_run && executed.executed &&
                  executed.execution_summary.final_status == "completed",
              "runtime_only no-op execution should complete without needing an open transport");
 }
@@ -395,8 +377,7 @@ void TestRuntimeOnlyRequiresConfirmation(TestContext& ctx)
   const auto result = PrepareConfigApply(options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kSafetyRejected &&
-                 result.requires_runtime_confirmation &&
-                 !result.execution_confirmed &&
+                 result.requires_runtime_confirmation && !result.execution_confirmed &&
                  result.error_message.find("--confirm") != std::string::npos,
              "runtime-only live apply should require explicit operator confirmation");
 }
@@ -441,10 +422,8 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.requires_runtime_confirmation &&
-                 result.requires_persistent_confirmation &&
-                 result.execution_confirmed &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.requires_runtime_confirmation &&
+                 result.requires_persistent_confirmation && result.execution_confirmed &&
                  result.plan.summary.commands_total == 18u &&
                  result.plan.summary.factory_reset_commands == 1u &&
                  result.plan.summary.persistent_commands == 1u,
@@ -474,13 +453,15 @@ void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContex
                  result.plan.commands.size() > 1u &&
                  result.plan.commands[1].command.payload.text.find("CONFIG COM1 460800 8 n 1") !=
                      std::string::npos,
-             "persistent Unicore apply should preserve a distinct target config baud override in the prepared plan");
+             "persistent Unicore apply should preserve a distinct target config baud override in "
+             "the prepared plan");
   ctx.Expect(text.find("Detected receiver baud: 921600") != std::string::npos &&
                  text.find("Current transport baud: 921600") != std::string::npos &&
                  text.find("Factory reset baud: 115200") != std::string::npos &&
                  text.find("Target configured baud: 460800") != std::string::npos &&
                  text.find("Config baud override: 460800") != std::string::npos,
-             "prepared Unicore apply text should distinguish detected, current, factory, and target baud values");
+             "prepared Unicore apply text should distinguish detected, current, factory, and "
+             "target baud values");
 }
 
 void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
@@ -528,7 +509,8 @@ void TestKnownNonBaselineUnicoreModelPreparation(TestContext& ctx)
                  result.plan.summary.commands_total == 14u &&
                  text.find("Receiver model: UM981") != std::string::npos &&
                  text.find("safe generic non-baseline fallback") == std::string::npos,
-             "config apply should accept UM981 as a known non-baseline Unicore model without falling back to the unknown-model path");
+             "config apply should accept UM981 as a known non-baseline Unicore model without "
+             "falling back to the unknown-model path");
 }
 
 void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
@@ -543,14 +525,13 @@ void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.requires_runtime_confirmation &&
-                 result.requires_persistent_confirmation &&
-                 result.execution_confirmed &&
-                 result.plan.summary.commands_total == 17u &&
-                 result.plan.summary.factory_reset_commands == 1u &&
-                 result.plan.summary.runtime_commands == 16u,
-             "factory_reset live apply should prepare the explicit reset/reprobe recovery sequence");
+  ctx.Expect(
+      result.status == ConfigApplyStatus::kOk && result.requires_runtime_confirmation &&
+          result.requires_persistent_confirmation && result.execution_confirmed &&
+          result.plan.summary.commands_total == 17u &&
+          result.plan.summary.factory_reset_commands == 1u &&
+          result.plan.summary.runtime_commands == 16u,
+      "factory_reset live apply should prepare the explicit reset/reprobe recovery sequence");
 }
 
 void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
@@ -566,14 +547,11 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   const auto prepared = PrepareConfigApply(options);
   const std::string responses =
       BuildRepeatedUnicoreOkResponses(prepared.plan.summary.commands_total);
-  MemoryByteDuplex transport(
-      std::vector<std::uint8_t>(responses.begin(), responses.end()));
+  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
 
   const auto result = ExecuteConfigApply(transport, options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 !result.dry_run &&
-                 result.executed &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && !result.dry_run && result.executed &&
                  result.execution_summary.commands_total == 15u &&
                  result.execution_summary.commands_completed == 15u &&
                  result.execution_summary.commands_failed == 0u &&
@@ -582,6 +560,108 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only Unicore apply should write command bytes to the transport");
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  ctx.Expect(written.find("VERSIONA\r\n") == std::string::npos,
+             "runtime-only Unicore apply should not probe VERSIONA when the current baud already "
+             "matches the target baud");
+}
+
+void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM981";
+  options.config_baud = 921600u;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const std::string first_phase_responses = BuildRepeatedUnicoreOkResponses(1u);
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(first_phase_responses.begin(), first_phase_responses.end()));
+  ScriptedConfigApplyHooks hooks(transport);
+  const std::string target_recovery_responses =
+      BuildUnicoreVersionResponse() +
+      BuildRepeatedUnicoreOkResponses(prepared.plan.summary.commands_total - 1u);
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(target_recovery_responses.begin(),
+                                                 target_recovery_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 921600u &&
+                 result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_completed ==
+                     prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.final_status == "completed",
+             "runtime-only Unicore apply should continue at the target baud when CONFIG COM1 "
+             "becomes active live");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() &&
+          written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+          written.find("VERSIONA\r\n") != std::string::npos &&
+          written.find("SAVECONFIG\r\n") == std::string::npos,
+      "runtime-only Unicore live baud-switch recovery should probe VERSIONA and avoid SAVECONFIG");
+}
+
+void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM980";
+  options.config_baud = 921600u;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const std::string old_probe_responses =
+      BuildRepeatedUnicoreOkResponses(1u) + BuildUnicoreVersionResponse();
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(old_probe_responses.begin(), old_probe_responses.end()));
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
+  const std::string remaining_profile_responses =
+      BuildRepeatedUnicoreOkResponses(prepared.plan.summary.commands_total - 1u);
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       115200u,
+                       100u,
+                       std::vector<std::uint8_t>(remaining_profile_responses.begin(),
+                                                 remaining_profile_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  bool warning_found = false;
+  for (const auto& warning : result.plan.warnings)
+  {
+    if (warning.find("did not become active live") != std::string::npos)
+    {
+      warning_found = true;
+      break;
+    }
+  }
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 115200u &&
+                 result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_completed ==
+                     prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.final_status == "completed",
+             "runtime-only Unicore apply should continue at the old baud when CONFIG COM1 does not "
+             "switch the live transport");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() && warning_found &&
+          written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+          written.find("VERSIONA\r\n") != std::string::npos &&
+          written.find("SAVECONFIG\r\n") == std::string::npos,
+      "runtime-only Unicore fallback should warn, keep the old live baud, and avoid SAVECONFIG");
 }
 
 void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
@@ -601,25 +681,19 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           first_probe_response.begin(),
-           first_probe_response.end())});
+       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           baud_recovery_responses.begin(),
-           baud_recovery_responses.end())});
+       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        921600u,
        100u,
-       std::vector<std::uint8_t>(
-           second_probe_response.begin(),
-           second_probe_response.end())});
+       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(15u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
@@ -637,14 +711,14 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
                  result.execution_summary.responses_applied == 15u &&
                  result.execution_summary.final_status == "completed",
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
-  ctx.Expect(hooks.AllStepsConsumed() &&
-                 hooks.failure().empty() &&
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("FRESET\r\n") != std::string::npos &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
                  written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
                  written.find("SAVECONFIG") == std::string::npos,
-             "factory_reset recovery apply should write reset and COM1 recovery commands without persisting the temporary rover profile");
+             "factory_reset recovery apply should write reset and COM1 recovery commands without "
+             "persisting the temporary rover profile");
 }
 
 void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
@@ -664,52 +738,44 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           first_probe_response.begin(),
-           first_probe_response.end())});
+       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           baud_recovery_responses.begin(),
-           baud_recovery_responses.end())});
+       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        921600u,
        100u,
-       std::vector<std::uint8_t>(
-           second_probe_response.begin(),
-           second_probe_response.end())});
+       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(16u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        921600u,
        100u,
-       std::vector<std::uint8_t>(
-           persistent_responses.begin(),
-           persistent_responses.end())});
+       std::vector<std::uint8_t>(persistent_responses.begin(), persistent_responses.end())});
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_total == 18u &&
-                 result.execution_summary.commands_completed == 18u &&
-                 result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 16u &&
-                 result.execution_summary.final_status == "completed",
-             "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
-  ctx.Expect(hooks.AllStepsConsumed() &&
-                 hooks.failure().empty() &&
+  ctx.Expect(
+      result.status == ConfigApplyStatus::kOk && result.execution_summary.commands_total == 18u &&
+          result.execution_summary.commands_completed == 18u &&
+          result.execution_summary.commands_failed == 0u &&
+          result.execution_summary.responses_applied == 16u &&
+          result.execution_summary.final_status == "completed",
+      "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("FRESET\r\n") != std::string::npos &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
                  written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
                  written.find("SAVECONFIG\r\n") != std::string::npos,
-             "persistent Unicore recovery apply should restore COM1, replay the rover profile, and save it");
+             "persistent Unicore recovery apply should restore COM1, replay the rover profile, and "
+             "save it");
 }
 
 void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
@@ -730,51 +796,42 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           first_probe_response.begin(),
-           first_probe_response.end())});
+       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        115200u,
        100u,
-       std::vector<std::uint8_t>(
-           baud_recovery_responses.begin(),
-           baud_recovery_responses.end())});
+       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        460800u,
        100u,
-       std::vector<std::uint8_t>(
-           second_probe_response.begin(),
-           second_probe_response.end())});
+       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   const std::string persistent_responses = BuildRepeatedUnicoreOkResponses(16u);
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
        460800u,
        100u,
-       std::vector<std::uint8_t>(
-           persistent_responses.begin(),
-           persistent_responses.end())});
+       std::vector<std::uint8_t>(persistent_responses.begin(), persistent_responses.end())});
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.transport_baud_rate == 460800u &&
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 460800u &&
                  result.execution_summary.commands_total == 18u &&
                  result.execution_summary.commands_completed == 18u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 16u &&
                  result.execution_summary.final_status == "completed",
              "persistent Unicore apply should finish at the overridden target config baud");
-  ctx.Expect(hooks.AllStepsConsumed() &&
-                 hooks.failure().empty() &&
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG COM1 921600 8 n 1\r\n") == std::string::npos &&
                  written.find("SAVECONFIG\r\n") != std::string::npos,
-             "persistent Unicore recovery apply should switch COM1 to the overridden target baud before saving");
+             "persistent Unicore recovery apply should switch COM1 to the overridden target baud "
+             "before saving");
 }
 
 void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
@@ -800,6 +857,9 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
              "confirmed runtime-only u-blox apply should complete through the UBX router path");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only u-blox apply should write the planned UBX commands");
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  ctx.Expect(written.find("VERSIONA\r\n") == std::string::npos,
+             "non-Unicore runtime apply should not use Unicore VERSIONA probing assumptions");
 }
 
 }  // namespace
@@ -819,6 +879,8 @@ int main()
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
+  TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
   TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(ctx);
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);

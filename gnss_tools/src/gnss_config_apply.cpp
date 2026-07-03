@@ -18,12 +18,12 @@ namespace
 
 using universal_gnss_driver::DiscoverReceivers;
 using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
+using universal_gnss_driver::ProbeReceiverPort;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
-using universal_gnss_driver::ProbeReceiverPort;
 
 #if defined(__linux__)
 using universal_gnss_tools::ConfigApplyTransportHooks;
@@ -38,6 +38,7 @@ struct CliOptions
   bool json_output{false};
   bool discover_receiver{false};
   bool baud_auto{false};
+  std::vector<std::uint32_t> probe_baud_candidates{};
   std::optional<std::string> family_text{};
   std::optional<std::string> profile_text{};
   universal_gnss_tools::ConfigApplyOptions apply{};
@@ -45,42 +46,60 @@ struct CliOptions
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name
-      << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>] [--config-baud <value>]\n"
-      << "       [--family <auto|ublox|unicore|nmea>] --profile <runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
-      << "       [--apply-mode <dry-run|runtime-only|persistent>]\n"
-      << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
-      << " [--signal-group <\"2\"|\"3 6\"|...>]"
-      << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
-      << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
-      << "       [--timeout-ms <value>] [--confirm|--yes]\n"
-      << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
-      << "                --confirm-persistent, and positional <family> <profile>\n"
-      << "Examples:\n"
-      << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only\n"
-      << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only\n"
-      << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm\n"
-      << "  " << program_name
-      << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision_debug --apply-mode runtime-only --confirm --timeout-ms 5000\n"
-      << "  " << program_name
-      << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --apply-mode persistent --config-baud 460800 --confirm\n"
-      << "  " << program_name
-      << " --family unicore --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm\n"
-      << "  " << program_name
-      << " --family unicore --model UM980 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --signal-group 2 --apply-mode persistent --confirm\n"
-      << "  " << program_name
-      << " --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --apply-mode runtime-only --confirm\n"
-      << "  " << program_name
-      << " --family nmea --profile runtime_only\n"
-      << "Notes:\n"
-      << "  no live writes occur unless --confirm or --yes is present\n"
-      << "  Unicore persistent/factory_reset apply uses a reset/reprobe workflow; other persistent workflows remain guarded\n"
-      << "  --baud selects the current transport baud; --config-baud selects the post-reset receiver baud\n"
-      << "  prefer /dev/serial/by-id/* paths when available\n";
+  std::cout << "Usage: " << program_name
+            << " [--json] [--receiver auto] [--device <path>] [--baud <value|auto>] [--probe-bauds "
+               "<b1,b2,...>] [--config-baud <value>]\n"
+            << "       [--family <auto|ublox|unicore|nmea>] --profile "
+               "<runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
+            << "       [--apply-mode <dry-run|runtime-only|persistent|factory-reset>]\n"
+            << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+            << " [--signal-group <\"2\"|\"3 6\"|...>]"
+            << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
+            << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
+            << "       [--timeout-ms <value>] [--confirm|--yes]\n"
+            << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
+            << "                --confirm-persistent, and positional <family> <profile>\n"
+            << "Examples:\n"
+            << "  " << program_name
+            << " --receiver auto --device "
+               "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud "
+               "auto --profile rover_high_precision --apply-mode runtime-only\n"
+            << "  " << program_name
+            << " --receiver auto --device "
+               "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud "
+               "auto --profile rover_high_precision --output-port auto --apply-mode runtime-only\n"
+            << "  " << program_name
+            << " --receiver auto --device "
+               "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud "
+               "auto --profile rover_high_precision --apply-mode runtime-only --confirm\n"
+            << "  " << program_name
+            << " --receiver auto --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud "
+               "auto --profile rover_high_precision_debug --apply-mode runtime-only --confirm "
+               "--timeout-ms 5000\n"
+            << "  " << program_name
+            << " --family unicore --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud "
+               "921600 --profile rover_high_precision --apply-mode persistent --config-baud 460800 "
+               "--confirm\n"
+            << "  " << program_name
+            << " --family unicore --model UM982 --device "
+               "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile "
+               "rover_high_precision --signal-profile high_precision --apply-mode runtime-only "
+               "--confirm\n"
+            << "  " << program_name
+            << " --family unicore --model UM980 --device /dev/ttyAMA4 --baud 921600 --profile "
+               "rover_high_precision --signal-group 2 --apply-mode persistent --confirm\n"
+            << "  " << program_name
+            << " --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile "
+               "rover_high_precision --apply-mode runtime-only --confirm\n"
+            << "  " << program_name << " --family nmea --profile runtime_only\n"
+            << "Notes:\n"
+            << "  no live writes occur unless --confirm or --yes is present\n"
+            << "  Unicore persistent/factory_reset apply uses a reset/reprobe workflow; other "
+               "persistent workflows remain guarded\n"
+            << "  --baud selects the current transport baud; --config-baud selects the target "
+               "receiver baud\n"
+            << "  --probe-bauds overrides the auto-probe baud order used with --baud auto\n"
+            << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)
@@ -118,11 +137,13 @@ bool ParseDouble(const std::string& text, double& value)
 
 std::string ToLowerCopy(std::string text)
 {
-  std::transform(
-      text.begin(),
-      text.end(),
-      text.begin(),
-      [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(text.begin(),
+                 text.end(),
+                 text.begin(),
+                 [](const unsigned char c)
+                 {
+                   return static_cast<char>(std::tolower(c));
+                 });
   return text;
 }
 
@@ -176,11 +197,53 @@ bool ParseApplyMode(const std::string& text, ReceiverAutoConfigApplyMode& apply_
     apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
     return true;
   }
+  if (normalized == "factory-reset" || normalized == "factory_reset")
+  {
+    apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+    return true;
+  }
   return false;
 }
 
-void PrintResult(const universal_gnss_tools::ConfigApplyResult& result,
-                 const bool json_output)
+bool ParseProbeBaudList(const std::string& text, std::vector<std::uint32_t>& baud_candidates)
+{
+  std::vector<std::uint32_t> parsed{};
+  std::size_t begin = 0u;
+  while (begin <= text.size())
+  {
+    const std::size_t end = text.find(',', begin);
+    const std::string token =
+        end == std::string::npos ? text.substr(begin) : text.substr(begin, end - begin);
+    if (!token.empty())
+    {
+      std::uint32_t baud = 0u;
+      if (!ParseUnsigned(token, baud) || baud == 0u)
+      {
+        return false;
+      }
+      if (std::find(parsed.begin(), parsed.end(), baud) == parsed.end())
+      {
+        parsed.push_back(baud);
+      }
+    }
+
+    if (end == std::string::npos)
+    {
+      break;
+    }
+    begin = end + 1u;
+  }
+
+  if (parsed.empty())
+  {
+    return false;
+  }
+
+  baud_candidates = std::move(parsed);
+  return true;
+}
+
+void PrintResult(const universal_gnss_tools::ConfigApplyResult& result, const bool json_output)
 {
   if (json_output)
   {
@@ -192,10 +255,9 @@ void PrintResult(const universal_gnss_tools::ConfigApplyResult& result,
   }
 }
 
-ReceiverProbeResult MakeUnknownDiscoveryResult(
-    const std::optional<std::string>& explicit_device,
-    const std::optional<std::uint32_t>& explicit_baud,
-    const std::string& reason)
+ReceiverProbeResult MakeUnknownDiscoveryResult(const std::optional<std::string>& explicit_device,
+                                               const std::optional<std::uint32_t>& explicit_baud,
+                                               const std::string& reason)
 {
   ReceiverProbeResult result;
   if (explicit_device.has_value())
@@ -212,11 +274,14 @@ ReceiverProbeResult MakeUnknownDiscoveryResult(
   return result;
 }
 
-std::optional<ReceiverProbeResult> DiscoverRequestedReceiver(
-    const CliOptions& cli_options)
+std::optional<ReceiverProbeResult> DiscoverRequestedReceiver(const CliOptions& cli_options)
 {
   ReceiverProbeConfig config;
-  if (!cli_options.baud_auto && cli_options.apply.transport_baud_rate != 0u)
+  if (cli_options.baud_auto && !cli_options.probe_baud_candidates.empty())
+  {
+    config.baud_candidates = cli_options.probe_baud_candidates;
+  }
+  else if (!cli_options.baud_auto && cli_options.apply.transport_baud_rate != 0u)
   {
     config.baud_candidates = {cli_options.apply.transport_baud_rate};
   }
@@ -228,13 +293,18 @@ std::optional<ReceiverProbeResult> DiscoverRequestedReceiver(
   auto results = DiscoverReceivers(config, explicit_device);
   if (results.empty())
   {
+    std::string reason = explicit_device.has_value() ? "no_recognizable_receiver_frames"
+                                                     : "no_receiver_candidates_found";
+    if (cli_options.baud_auto && explicit_device.has_value())
+    {
+      reason = "no receiver response on probed baud rates";
+    }
     return MakeUnknownDiscoveryResult(
         explicit_device,
         cli_options.apply.transport_baud_rate != 0u
             ? std::optional<std::uint32_t>{cli_options.apply.transport_baud_rate}
             : std::nullopt,
-        explicit_device.has_value() ? "no_recognizable_receiver_frames"
-                                    : "no_receiver_candidates_found");
+        reason);
   }
 
   return results.front();
@@ -260,8 +330,7 @@ public:
     config.baud_candidates = baud_candidates;
     config.read_timeout_ms = read_timeout_ms;
 
-    probe_result =
-        ProbeReceiverPort(MakeExplicitReceiverPortCandidate(device_path), config);
+    probe_result = ProbeReceiverPort(MakeExplicitReceiverPortCandidate(device_path), config);
     error_message.clear();
     return true;
   }
@@ -275,8 +344,7 @@ public:
     auto* posix_transport = dynamic_cast<PosixSerialTransport*>(&transport);
     if (posix_transport == nullptr)
     {
-      error_message =
-          "recovery workflow requires a POSIX serial transport instance";
+      error_message = "recovery workflow requires a POSIX serial transport instance";
       return false;
     }
 
@@ -289,8 +357,7 @@ public:
     const auto open_error = posix_transport->Open(serial_config);
     if (open_error != TransportError::kNone)
     {
-      error_message =
-          "failed to reopen serial transport during the recovery workflow";
+      error_message = "failed to reopen serial transport during the recovery workflow";
       return false;
     }
 
@@ -311,7 +378,8 @@ int main(int argc, char** argv)
   for (int index = 1; index < argc; ++index)
   {
     const std::string argument = argv[index];
-    auto require_value = [&](const char* flag_name) -> const char* {
+    auto require_value = [&](const char* flag_name) -> const char*
+    {
       if (index + 1 >= argc)
       {
         std::cerr << "error: missing value for " << flag_name << '\n';
@@ -370,6 +438,16 @@ int main(int argc, char** argv)
       cli_options.apply.transport_baud_rate = baud;
       continue;
     }
+    if (argument == "--probe-bauds")
+    {
+      if (!ParseProbeBaudList(require_value("--probe-bauds"), cli_options.probe_baud_candidates))
+      {
+        std::cerr << "error: invalid --probe-bauds value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      continue;
+    }
     if (argument == "--config-baud")
     {
       std::uint32_t baud = 0u;
@@ -424,8 +502,8 @@ int main(int argc, char** argv)
       }
       continue;
     }
-    if (argument == "--confirm" || argument == "--yes" ||
-        argument == "--confirm-runtime" || argument == "--confirm-persistent")
+    if (argument == "--confirm" || argument == "--yes" || argument == "--confirm-runtime" ||
+        argument == "--confirm-persistent")
     {
       cli_options.apply.confirm = true;
       continue;
@@ -455,8 +533,8 @@ int main(int argc, char** argv)
     }
     if (argument == "--signal-group")
     {
-      const auto parsed = universal_gnss_driver::ParseUnicoreSignalGroupOverride(
-          require_value("--signal-group"));
+      const auto parsed =
+          universal_gnss_driver::ParseUnicoreSignalGroupOverride(require_value("--signal-group"));
       if (!parsed.has_value())
       {
         std::cerr << "error: invalid --signal-group value (expected one or two "
@@ -477,8 +555,7 @@ int main(int argc, char** argv)
     if (argument == "--output-port")
     {
       const auto parsed =
-          universal_gnss_driver::ParseReceiverAutoConfigOutputPort(
-              require_value("--output-port"));
+          universal_gnss_driver::ParseReceiverAutoConfigOutputPort(require_value("--output-port"));
       if (!parsed.has_value())
       {
         std::cerr << "error: invalid --output-port value\n";
@@ -554,12 +631,25 @@ int main(int argc, char** argv)
   }
 
   const auto prepared = universal_gnss_tools::PrepareConfigApply(cli_options.apply);
+  if (LiveApplyRequested(cli_options.apply) && cli_options.baud_auto &&
+      prepared.status == universal_gnss_tools::ConfigApplyStatus::kUnsupportedReceiver)
+  {
+    auto failed = prepared;
+    failed.status = universal_gnss_tools::ConfigApplyStatus::kTransportUnavailable;
+    if (failed.error_message.empty())
+    {
+      failed.error_message = "no receiver response on probed baud rates";
+    }
+    failed.execution_summary.final_status = "transport_unavailable";
+    PrintResult(failed, cli_options.json_output);
+    return EXIT_FAILURE;
+  }
   if (!LiveApplyRequested(cli_options.apply) ||
       prepared.status != universal_gnss_tools::ConfigApplyStatus::kOk)
   {
     PrintResult(prepared, cli_options.json_output);
     return prepared.status == universal_gnss_tools::ConfigApplyStatus::kOk ? EXIT_SUCCESS
-                                                                            : EXIT_FAILURE;
+                                                                           : EXIT_FAILURE;
   }
 
 #if defined(__linux__)
@@ -589,11 +679,10 @@ int main(int argc, char** argv)
   PosixSerialConfig serial_config;
   serial_config.device_path = prepared.device_path;
   serial_config.baud_rate = prepared.transport_baud_rate;
-  serial_config.read_timeout_ms = cli_options.apply.timeout_ms > 100u
-                                      ? 100u
-                                      : (cli_options.apply.timeout_ms == 0u
-                                             ? 1u
-                                             : cli_options.apply.timeout_ms);
+  serial_config.read_timeout_ms =
+      cli_options.apply.timeout_ms > 100u
+          ? 100u
+          : (cli_options.apply.timeout_ms == 0u ? 1u : cli_options.apply.timeout_ms);
 
   const auto open_error = transport.Open(serial_config);
   if (open_error != universal_gnss_transport::TransportError::kNone)
@@ -611,7 +700,7 @@ int main(int argc, char** argv)
       universal_gnss_tools::ExecuteConfigApply(transport, cli_options.apply, &hooks);
   PrintResult(result, cli_options.json_output);
   return result.status == universal_gnss_tools::ConfigApplyStatus::kOk ? EXIT_SUCCESS
-                                                                        : EXIT_FAILURE;
+                                                                       : EXIT_FAILURE;
 #else
   auto unsupported = prepared;
   unsupported.status = universal_gnss_tools::ConfigApplyStatus::kTransportUnavailable;
