@@ -1,6 +1,7 @@
 #include "universal_gnss_tools/config_apply.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -61,11 +62,14 @@ constexpr std::uint32_t kUnicoreFactoryResetRecoveryWindowMs = 60000u;
 constexpr std::uint32_t kUnicoreBaudSwitchRecoveryWindowMs = 10000u;
 constexpr std::uint32_t kProbeAttemptReadTimeoutMs = 250u;
 constexpr std::uint32_t kUnicoreActiveProbeAttemptWindowMs = 2000u;
+constexpr std::uint32_t kUnicoreFactoryResetPreflightProbeWindowMs = 750u;
 constexpr std::uint32_t kUnicoreRuntimeBaudSwitchProbeWindowMs = 750u;
 constexpr std::uint32_t kUnicoreRuntimeBaudSwitchMaxAttempts = 3u;
 constexpr auto kRecoveryProbeRetrySleep = std::chrono::milliseconds(500);
 constexpr auto kUnicoreRecoveryQueryRetry = std::chrono::milliseconds(1000);
 constexpr std::string_view kUnicoreRecoveryQuery = "VERSIONA\r\n";
+constexpr std::array<std::uint32_t, 8u> kUnicoreFactoryResetPreflightBaudScan{
+    9600u, 19200u, 38400u, 57600u, 115200u, 230400u, 460800u, 921600u};
 
 ConfigApplyStatus MapPlanStatus(const ConfigPlanStatus status)
 {
@@ -667,6 +671,11 @@ UnicoreActiveProbeOutcome ProbeUnicoreActiveResponse(ByteDuplex& transport,
       return outcome;
     }
 
+    if (read_result.status == TransportStatus::kEndOfStream && read_result.bytes_read == 0u)
+    {
+      break;
+    }
+
     if (read_result.bytes_read == 0u)
     {
       ++read_attempt;
@@ -759,6 +768,49 @@ bool WaitForUnicoreActiveResponse(ByteDuplex& transport,
 
   error_message = outcome.error_message;
   return false;
+}
+
+std::optional<std::uint32_t> ScanUnicoreFactoryResetActiveBaud(ConfigApplyTransportHooks& hooks,
+                                                               ByteDuplex& transport,
+                                                               ConfigApplyResult& result,
+                                                               const std::uint32_t read_timeout_ms,
+                                                               std::string& error_message)
+{
+  result.progress_log.push_back(
+      "Scanning known Unicore baud rates with VERSIONA before sending FRESET");
+  static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+
+  for (const auto baud_rate : kUnicoreFactoryResetPreflightBaudScan)
+  {
+    result.progress_log.push_back("Preflight VERSIONA scan at " + std::to_string(baud_rate) +
+                                  " bps before FRESET");
+
+    std::string reopen_error;
+    if (!hooks.ReopenTransport(
+            transport, result.device_path, baud_rate, read_timeout_ms, reopen_error))
+    {
+      error_message = reopen_error;
+      static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+      continue;
+    }
+
+    const auto outcome = ProbeUnicoreActiveResponse(transport,
+                                                    baud_rate,
+                                                    kUnicoreFactoryResetPreflightProbeWindowMs);
+    if (outcome.status == UnicoreActiveProbeStatus::kResponsive)
+    {
+      result.progress_log.push_back("Detected active Unicore baud " + std::to_string(baud_rate) +
+                                    " bps before FRESET");
+      error_message.clear();
+      return baud_rate;
+    }
+
+    error_message = outcome.error_message;
+    static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
+  }
+
+  error_message = "receiver did not answer VERSIONA on any Unicore baud; factory reset not sent";
+  return std::nullopt;
 }
 
 std::string MakeCommandProgressPrefix(const std::size_t index,
@@ -1248,6 +1300,18 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   result.executed = true;
   result.execution_summary.commands_total = result.plan.summary.commands_total;
 
+  std::string transport_error;
+  const auto detected_active_baud = ScanUnicoreFactoryResetActiveBaud(
+      hooks, transport, result, transport_read_timeout_ms, transport_error);
+  if (!detected_active_baud.has_value())
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.error_message = transport_error;
+    result.execution_summary.final_status = "transport_unavailable";
+    return result;
+  }
+  result.transport_baud_rate = *detected_active_baud;
+
   auto phase = ExecuteUnicoreCommandPhase(result, transport, reset_phase, options, 0u);
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
@@ -1262,8 +1326,6 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   }
 
   static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
-
-  std::string transport_error;
   if (!ReopenTransportUntilReady(hooks,
                                  transport,
                                  result,

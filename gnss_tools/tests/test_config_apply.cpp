@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -125,6 +126,9 @@ std::string BuildUnicoreVersionResponse()
 {
   return "#VERSIONA,UM982*00\r\n";
 }
+
+constexpr std::array<std::uint32_t, 8u> kUnicoreFactoryResetScanBauds{
+    9600u, 19200u, 38400u, 57600u, 115200u, 230400u, 460800u, 921600u};
 
 bool IsUnicoreCom1BaudCommand(const universal_gnss_tools::ConfigPlanCommand& command)
 {
@@ -353,6 +357,27 @@ private:
   std::size_t reopen_index_{0u};
   std::string failure_{};
 };
+
+void AddUnicoreFactoryResetScanSteps(ScriptedConfigApplyHooks& hooks,
+                                     const std::string& device_path,
+                                     const std::optional<std::uint32_t> responsive_baud)
+{
+  for (const auto baud_rate : kUnicoreFactoryResetScanBauds)
+  {
+    if (responsive_baud.has_value() && baud_rate == *responsive_baud)
+    {
+      const std::string version_response = BuildUnicoreVersionResponse();
+      hooks.AddReopenStep(
+          {device_path,
+           baud_rate,
+           100u,
+           std::vector<std::uint8_t>(version_response.begin(), version_response.end())});
+      return;
+    }
+
+    hooks.AddReopenStep({device_path, baud_rate, 100u, {}});
+  }
+}
 
 void TestDryRunDoesNotWrite(TestContext& ctx)
 {
@@ -755,6 +780,7 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
 
   ScriptedByteDuplex transport({});
   ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
@@ -791,13 +817,147 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
                  result.execution_summary.final_status == "completed",
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
-                 written.find("FRESET\r\n") != std::string::npos &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("FRESET\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") < written.find("FRESET\r\n") &&
                  written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
                  written.find("SAVECONFIG") == std::string::npos,
              "factory_reset recovery apply should write reset and COM1 recovery commands without "
              "persisting the temporary rover profile");
+}
+
+void TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 38400u);
+  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
+  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
+  const std::string second_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
+  const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(15u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(recovery_responses.begin(), recovery_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_completed == 17u,
+             "factory_reset preflight should support receivers that are live at 38400 bps");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() &&
+          written.find("VERSIONA\r\n") != std::string::npos &&
+          written.find("FRESET\r\n") != std::string::npos &&
+          written.find("VERSIONA\r\n") < written.find("FRESET\r\n"),
+      "factory_reset preflight scan should find 38400 in the fixed baud order before FRESET");
+}
+
+void TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 921600u);
+  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
+  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       115200u,
+       100u,
+       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
+  const std::string second_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
+  const std::string recovery_responses = BuildRepeatedUnicoreOkResponses(15u);
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(recovery_responses.begin(), recovery_responses.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_completed == 17u,
+             "factory_reset preflight should support receivers that are live at 921600 bps");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() &&
+          written.find("VERSIONA\r\n") != std::string::npos &&
+          written.find("FRESET\r\n") != std::string::npos &&
+          written.find("VERSIONA\r\n") < written.find("FRESET\r\n"),
+      "factory_reset preflight scan should reach 921600 in the fixed baud order before FRESET");
+}
+
+void TestUnicoreFactoryResetPreflightAbortWhenNoBaudResponds(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", std::nullopt);
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.execution_summary.commands_completed == 0u &&
+                 result.execution_summary.final_status == "transport_unavailable" &&
+                 result.error_message ==
+                     "receiver did not answer VERSIONA on any Unicore baud; factory reset not sent",
+             "factory_reset preflight should abort cleanly when no known Unicore baud answers");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("FRESET\r\n") == std::string::npos,
+             "factory_reset preflight should never send FRESET before a successful VERSIONA scan");
 }
 
 void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
@@ -812,6 +972,7 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
 
   ScriptedByteDuplex transport({});
   ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
@@ -870,6 +1031,7 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
 
   ScriptedByteDuplex transport({});
   ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
       {"/dev/ttyUSB0",
@@ -962,6 +1124,9 @@ int main()
   TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
+  TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(ctx);
+  TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(ctx);
+  TestUnicoreFactoryResetPreflightAbortWhenNoBaudResponds(ctx);
   TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(ctx);
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
