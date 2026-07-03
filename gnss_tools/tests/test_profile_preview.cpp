@@ -33,8 +33,7 @@ bool HasTextCommand(const universal_gnss_tools::ProfilePreviewResult& result,
 {
   for (const auto& command : result.commands)
   {
-    if (command.command.payload.kind ==
-            universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+    if (command.command.payload.kind == universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
         command.command.payload.text.find(command_text) != std::string::npos)
     {
       return true;
@@ -53,19 +52,19 @@ void TestUbloxRoverHighPrecisionPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 13u,
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk && result.commands.size() == 13u,
              "u-blox rover_high_precision preview should build the expected command count");
-  ctx.Expect(result.summary.commands_total == 13u &&
-                 result.summary.runtime_commands == 13u &&
+  ctx.Expect(result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
                  result.summary.persistent_commands == 0u,
              "u-blox rover_high_precision preview summary should count runtime commands");
-  ctx.Expect(!result.commands.empty() &&
-                 result.commands.front().description.find("measurement rate") != std::string::npos,
-             "u-blox rover_high_precision preview should decode the measurement-rate command description");
+  ctx.Expect(
+      !result.commands.empty() &&
+          result.commands.front().description.find("measurement rate") != std::string::npos,
+      "u-blox rover_high_precision preview should decode the measurement-rate command description");
   ctx.Expect(text.find("Profile: ublox rover_high_precision") != std::string::npos &&
                  text.find("NAV-PVT") != std::string::npos,
-             "u-blox rover_high_precision preview text should show profile metadata and decoded message outputs");
+             "u-blox rover_high_precision preview text should show profile metadata and decoded "
+             "message outputs");
 }
 
 void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
@@ -77,11 +76,10 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 14u,
-             "generic Unicore rover_high_precision preview should build the expected safe command count");
-  ctx.Expect(result.summary.commands_total == 14u &&
-                 result.summary.runtime_commands == 14u &&
+  ctx.Expect(
+      result.status == ProfilePreviewStatus::kOk && result.commands.size() == 14u,
+      "generic Unicore rover_high_precision preview should build the expected safe command count");
+  ctx.Expect(result.summary.commands_total == 14u && result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u,
              "generic Unicore rover_high_precision preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
@@ -93,7 +91,8 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
                  text.find("SATSINFOA 1") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
                  !HasTextCommand(result, "CONFIG SIGNALGROUP"),
-             "generic Unicore rover_high_precision preview text should expose the safe fallback and skip CONFIG SIGNALGROUP");
+             "generic Unicore rover_high_precision preview text should expose the safe fallback "
+             "and skip CONFIG SIGNALGROUP");
 
   options.receiver_model = "UM982";
   const auto um982_result = BuildProfilePreview(options);
@@ -114,8 +113,7 @@ void TestRuntimeOnlyPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.empty() &&
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk && result.commands.empty() &&
                  result.summary.commands_total == 0u,
              "runtime_only preview should support a zero-command read-only plan");
   ctx.Expect(text.find("Profile: nmea runtime_only") != std::string::npos,
@@ -147,7 +145,8 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
                  unicore_result.summary.runtime_commands == 15u &&
                  unicore_result.summary.persistent_commands == 1u &&
                  unicore_result.summary.factory_reset_commands == 1u,
-             "generic persistent Unicore previews should expose the reset-first recovery workflow plus SAVECONFIG without guessing signal groups");
+             "generic persistent Unicore previews should expose the reset-first recovery workflow "
+             "plus SAVECONFIG without guessing signal groups");
 }
 
 void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
@@ -164,8 +163,7 @@ void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
                  result.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.summary.commands_total == 18u &&
-                 result.summary.runtime_commands == 16u &&
+                 result.summary.commands_total == 18u && result.summary.runtime_commands == 16u &&
                  result.summary.persistent_commands == 1u &&
                  result.summary.factory_reset_commands == 1u,
              "persistent Unicore previews should preserve a distinct target config baud override");
@@ -173,7 +171,8 @@ void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
                  text.find("Factory reset baud: 115200") != std::string::npos &&
                  text.find("Target configured baud: 460800") != std::string::npos &&
                  text.find("CONFIG COM1 460800 8 n 1") != std::string::npos,
-             "persistent Unicore preview text should distinguish override, factory baud, and target COM1 baud");
+             "persistent Unicore preview text should distinguish override, factory baud, and "
+             "target COM1 baud");
 }
 
 void TestSignalProfilePreview(TestContext& ctx)
@@ -182,8 +181,7 @@ void TestSignalProfilePreview(TestContext& ctx)
   options.vendor = "unicore";
   options.profile = "rover_high_precision";
   options.receiver_model = "UM982";
-  options.signal_profile =
-      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
+  options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
   options.rate_hz = 1.0;
 
   const auto result = BuildProfilePreview(options);
@@ -209,8 +207,7 @@ void TestSignalProfilePreview(TestContext& ctx)
   const auto unknown_model_result = BuildProfilePreview(unknown_model_options);
   const std::string unknown_model_text = FormatProfilePreviewText(unknown_model_result);
   ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kOk &&
-                 unknown_model_result.receiver_model ==
-                     std::optional<std::string>{"UM952"} &&
+                 unknown_model_result.receiver_model == std::optional<std::string>{"UM952"} &&
                  unknown_model_result.summary.commands_total == 14u &&
                  unknown_model_text.find("Receiver model: UM952") != std::string::npos &&
                  unknown_model_text.find("safe generic non-baseline fallback") !=
@@ -225,14 +222,14 @@ void TestSignalProfilePreview(TestContext& ctx)
   const auto known_non_baseline_result = BuildProfilePreview(known_non_baseline_options);
   const std::string known_non_baseline_text = FormatProfilePreviewText(known_non_baseline_result);
   ctx.Expect(known_non_baseline_result.status == ProfilePreviewStatus::kOk &&
-                 known_non_baseline_result.receiver_model ==
-                     std::optional<std::string>{"UM960"} &&
+                 known_non_baseline_result.receiver_model == std::optional<std::string>{"UM960"} &&
                  known_non_baseline_result.summary.commands_total == 14u &&
                  known_non_baseline_text.find("Receiver model: UM960") != std::string::npos &&
                  known_non_baseline_text.find("safe generic non-baseline fallback") ==
                      std::string::npos &&
                  !HasTextCommand(known_non_baseline_result, "CONFIG SIGNALGROUP"),
-             "known non-baseline Unicore models such as UM960 should be accepted without falling back to the unknown-model path");
+             "known non-baseline Unicore models such as UM960 should be accepted without falling "
+             "back to the unknown-model path");
 }
 
 void TestUbloxOutputPortPreview(TestContext& ctx)
@@ -240,8 +237,7 @@ void TestUbloxOutputPortPreview(TestContext& ctx)
   ProfilePreviewOptions usb_options;
   usb_options.vendor = "ublox";
   usb_options.profile = "rover_high_precision";
-  usb_options.output_port =
-      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
+  usb_options.output_port = universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
   usb_options.baud = 460800u;
 
   const auto usb_result = BuildProfilePreview(usb_options);
@@ -264,8 +260,7 @@ void TestUbloxOutputPortPreview(TestContext& ctx)
   ProfilePreviewOptions uart2_options;
   uart2_options.vendor = "ublox";
   uart2_options.profile = "rover_high_precision_debug";
-  uart2_options.output_port =
-      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart2;
+  uart2_options.output_port = universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart2;
   uart2_options.baud = 460800u;
 
   const auto uart2_result = BuildProfilePreview(uart2_options);
@@ -273,7 +268,8 @@ void TestUbloxOutputPortPreview(TestContext& ctx)
 
   ctx.Expect(uart2_result.status == ProfilePreviewStatus::kOk &&
                  uart2_result.summary.commands_total == 15u,
-             "UART2-only diagnostics preview should include a UART2 baud command, rate command, nine UART2 message outputs, and four constellation toggles");
+             "UART2-only diagnostics preview should include a UART2 baud command, rate command, "
+             "nine UART2 message outputs, and four constellation toggles");
   ctx.Expect(uart2_text.find("Output port: uart2") != std::string::npos &&
                  uart2_text.find("set UART2 baud rate to 460800") != std::string::npos &&
                  uart2_text.find("output on UART2") != std::string::npos &&
@@ -290,16 +286,16 @@ void TestFactoryResetPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
-                 result.commands.size() == 16u &&
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk && result.commands.size() == 16u &&
                  result.summary.runtime_commands == 15u &&
                  result.summary.factory_reset_commands == 1u,
              "Unicore factory_reset preview should expose reset plus runtime recovery commands");
-  ctx.Expect(!result.commands.empty() &&
-                 result.commands.front().description.find("115200") != std::string::npos &&
-                 text.find("command: FRESET") != std::string::npos &&
-                 text.find("CONFIG COM1 921600") != std::string::npos,
-             "factory_reset preview should document baud recovery and expose the recovery commands");
+  ctx.Expect(
+      !result.commands.empty() &&
+          result.commands.front().description.find("115200") != std::string::npos &&
+          text.find("command: FRESET") != std::string::npos &&
+          text.find("CONFIG COM1 921600") != std::string::npos,
+      "factory_reset preview should document baud recovery and expose the recovery commands");
 }
 
 void TestJsonFormatting(TestContext& ctx)
@@ -307,8 +303,7 @@ void TestJsonFormatting(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "ublox";
   options.profile = "rover_high_precision";
-  options.signal_profile =
-      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
+  options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
   options.rate_hz = 1.0;
 
   const auto result = BuildProfilePreview(options);
@@ -326,7 +321,7 @@ void TestJsonFormatting(TestContext& ctx)
              "verbose JSON preview output should include binary hex when requested");
 }
 
-void TestInvalidUnicoreBaudOverride(TestContext& ctx)
+void TestUnicoreRuntimeTargetBaudPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
   options.vendor = "unicore";
@@ -334,9 +329,24 @@ void TestInvalidUnicoreBaudOverride(TestContext& ctx)
   options.baud = 921600u;
 
   const auto result = BuildProfilePreview(options);
-  ctx.Expect(result.status == ProfilePreviewStatus::kInvalidArgument &&
-                 result.error_message.find("baud") != std::string::npos,
-             "unsupported Unicore baud overrides should fail with a clear error");
+  const std::string text = FormatProfilePreviewText(result);
+
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
+                 result.baud == std::optional<std::uint32_t>{921600u} &&
+                 result.summary.commands_total == 15u && result.summary.runtime_commands == 15u &&
+                 result.summary.persistent_commands == 0u &&
+                 result.summary.factory_reset_commands == 0u,
+             "runtime-only Unicore config baud overrides should preview successfully");
+  ctx.Expect(
+      text.find("Config baud override: 921600") != std::string::npos &&
+          text.find("Target configured baud: 921600") != std::string::npos &&
+          text.find("CONFIG COM1 921600 8 n 1") != std::string::npos &&
+          text.find("command: FRESET") == std::string::npos &&
+          text.find("SAVECONFIG") == std::string::npos,
+      "runtime-only Unicore baud preview should include CONFIG COM1 without FRESET or SAVECONFIG");
+  ctx.Expect(HasTextCommand(result, "CONFIG COM1 921600 8 n 1") &&
+                 !HasTextCommand(result, "FRESET") && !HasTextCommand(result, "SAVECONFIG"),
+             "runtime-only Unicore baud preview should emit only the live COM1 mutation");
 }
 
 }  // namespace
@@ -354,7 +364,7 @@ int main()
   TestUbloxOutputPortPreview(ctx);
   TestFactoryResetPreview(ctx);
   TestJsonFormatting(ctx);
-  TestInvalidUnicoreBaudOverride(ctx);
+  TestUnicoreRuntimeTargetBaudPreview(ctx);
 
   if (ctx.failures != 0)
   {
