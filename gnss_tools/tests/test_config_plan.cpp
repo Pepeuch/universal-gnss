@@ -110,7 +110,7 @@ void TestUnicoreDebugPlan(TestContext& ctx)
              "command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
                  text.find("UNLOG") == std::string::npos &&
-                 text.find("PVTSLNA COM1 0.2") != std::string::npos &&
+                 text.find("PVTSLNA 0.2") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
                  !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
              "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe "
@@ -120,7 +120,7 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   const auto um982_result = BuildConfigPlan(options);
   const std::string um982_text = FormatConfigPlanText(um982_result);
   const auto* um982_signalgroup = FindTextCommand(um982_result, "CONFIG SIGNALGROUP 3 6");
-  const auto* um982_gpgga = FindTextCommand(um982_result, "GPGGA COM1 1");
+  const auto* um982_gpgga = FindTextCommand(um982_result, "GPGGA 1");
   ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
                  um982_result.summary.commands_total == 14u &&
@@ -181,7 +181,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
              "Unicore minimal signal-profile plans should expose the reduced output plan");
   ctx.Expect(
       unicore_text.find("Signal profile override: minimal") != std::string::npos &&
-          unicore_text.find("BESTNAVA COM1 1") != std::string::npos &&
+          unicore_text.find("BESTNAVA 1") != std::string::npos &&
           unicore_text.find("GPGSV") == std::string::npos &&
           unicore_text.find("PVTSLNA") == std::string::npos,
       "Unicore minimal signal-profile plan text should show the reduced runtime command set");
@@ -194,7 +194,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
   const auto exact_five_hz_result = BuildConfigPlan(exact_rate_options);
   const std::string exact_five_hz_text = FormatConfigPlanText(exact_five_hz_result);
   ctx.Expect(exact_five_hz_result.status == ConfigPlanStatus::kOk &&
-                 exact_five_hz_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 exact_five_hz_text.find("BESTNAVA 0.2") != std::string::npos &&
                  !ContainsWarning(exact_five_hz_result, "using "),
              "exact 5 Hz Unicore config plans should preserve the documented 0.2 s BESTNAVA "
              "period without normalization warnings");
@@ -203,7 +203,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
   const auto exact_ten_hz_result = BuildConfigPlan(exact_rate_options);
   const std::string exact_ten_hz_text = FormatConfigPlanText(exact_ten_hz_result);
   ctx.Expect(exact_ten_hz_result.status == ConfigPlanStatus::kOk &&
-                 exact_ten_hz_text.find("BESTNAVA COM1 0.1") != std::string::npos &&
+                 exact_ten_hz_text.find("BESTNAVA 0.1") != std::string::npos &&
                  !ContainsWarning(exact_ten_hz_result, "using "),
              "exact 10 Hz Unicore config plans should preserve the documented 0.1 s BESTNAVA "
              "period without normalization warnings");
@@ -216,7 +216,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
   const auto rounded_rate_result = BuildConfigPlan(rounded_rate_options);
   const std::string rounded_rate_text = FormatConfigPlanText(rounded_rate_result);
   ctx.Expect(rounded_rate_result.status == ConfigPlanStatus::kOk &&
-                 rounded_rate_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 rounded_rate_text.find("BESTNAVA 0.2") != std::string::npos &&
                  ContainsWarning(rounded_rate_result, "using 5 Hz instead") &&
                  rounded_rate_text.find("0.143") == std::string::npos,
              "Unicore config plans should normalize unsupported rate-hz overrides to the nearest "

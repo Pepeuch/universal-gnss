@@ -724,7 +724,7 @@ Hardware notes from the `v0.6-4` operator validation pass:
   `rover_high_precision` apply after the mixed-stream response-router fix
   above, using `--timeout-ms 5000`
 - the UM982 `rover_high_precision` profile enables
-  `RTCMSTATUSA COM1 ONCHANGED`;
+  `RTCMSTATUSA ONCHANGED`;
   short read-only
   captures may therefore show the accepted apply response but still not show an
   emitted `RTCMSTATUSA` record until receiver-side correction state changes

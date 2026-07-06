@@ -617,7 +617,7 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
                  result.plan.summary.commands_total == 11u,
              "prepared apply plans should preserve the minimal signal-profile override");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
-                 text.find("BESTNAVA COM1 1") != std::string::npos &&
+                 text.find("BESTNAVA 1") != std::string::npos &&
                  text.find("GPGSV") == std::string::npos,
              "prepared apply text should surface the reduced minimal signal-profile command set");
 }
@@ -708,7 +708,7 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestCon
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
-  const auto gpgga_index = FindTextCommandIndex(prepared, "GPGGA COM1 1\r\n");
+  const auto gpgga_index = FindTextCommandIndex(prepared, "GPGGA 1\r\n");
   const auto signalgroup_index = FindTextCommandIndex(prepared, "CONFIG SIGNALGROUP 3 6\r\n");
   if (!gpgga_index.has_value() || !signalgroup_index.has_value())
   {

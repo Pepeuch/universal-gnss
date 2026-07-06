@@ -14,7 +14,6 @@ namespace
 {
 
 constexpr const char* kCrLf = "\r\n";
-constexpr const char* kUnicoreRuntimeOutputPort = "COM1";
 constexpr std::array<double, 6u> kSupportedUnicoreOutputPeriodsS{
     1.0,
     0.5,
@@ -150,11 +149,11 @@ std::string BuildOutputCommand(const UnicoreOutputMessageRate& output)
   const std::string message = ToOutputMessageName(output.message);
   if (UsesOnChangedSyntax(output.message))
   {
-    return message + " " + kUnicoreRuntimeOutputPort + " ONCHANGED";
+    return message + " ONCHANGED";
   }
 
   const std::string period_text = FormatPeriodSeconds(*output.period_s);
-  return message + " " + kUnicoreRuntimeOutputPort + " " + period_text;
+  return message + " " + period_text;
 }
 
 bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
@@ -197,8 +196,7 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result, const UnicoreConfi
     if (profile.mode != UnicoreMode::kUnspecified || profile.com1_baud_rate.has_value() ||
         profile.nmea_version.has_value() || profile.rtk_timeout_s.has_value() ||
         profile.dgps_timeout_s.has_value() || profile.rtk_reliability.has_value() ||
-        profile.signal_config.has_value() || profile.clear_current_port_outputs ||
-        !profile.output_messages.empty() ||
+        profile.signal_config.has_value() || !profile.output_messages.empty() ||
         profile.persistence != UnicorePersistenceTarget::kRuntimeOnly)
     {
       result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
@@ -385,16 +383,6 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
                   command);
-  }
-
-  if (profile.clear_current_port_outputs)
-  {
-    AppendCommand(result.commands,
-                  target,
-                  ReceiverCommandKind::kSetProtocolOutputs,
-                  ReceiverCommandSafetyLevel::kRuntime,
-                  ReceiverResponseKind::kTextPayload,
-                  "UNLOG");
   }
 
   for (const auto& output : profile.output_messages)

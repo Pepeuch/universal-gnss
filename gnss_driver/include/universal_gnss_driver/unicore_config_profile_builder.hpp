@@ -80,7 +80,6 @@ struct UnicoreConfigProfile
   std::optional<std::uint32_t> dgps_timeout_s{};
   std::optional<UnicoreRtkReliability> rtk_reliability{};
   std::optional<UnicoreSignalConfig> signal_config{};
-  bool clear_current_port_outputs{false};
   std::vector<UnicoreOutputMessageRate> output_messages{};
   UnicorePersistenceTarget persistence{UnicorePersistenceTarget::kRuntimeOnly};
 };

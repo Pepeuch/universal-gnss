@@ -98,8 +98,8 @@ What was reused conceptually:
 
 - a small set of practical rover/runtime commands
 - the documented Unicore output-command form:
-  - `MESSAGE COM1 <period>`
-  - `MESSAGE COM1 ONCHANGED`
+  - `MESSAGE <period>`
+  - `MESSAGE ONCHANGED`
 
 What was intentionally not copied:
 
@@ -142,9 +142,9 @@ Current safety-gated commands:
 
 ## Output Syntax Policy
 
-The builder uses the documented Unicore abbreviated ASCII output syntax with an
-explicit `COM1` target because the current portable runtime planner configures
-and applies Unicore profiles on `COM1`.
+The builder uses the documented Unicore abbreviated ASCII output syntax on the
+current port. `COM1` remains explicit only for `CONFIG COM1 ...` baud
+configuration commands.
 
 The vendor manual documents the generic abbreviated ASCII form as:
 
@@ -155,33 +155,36 @@ prefix even when the receiver emits `GN`, `GL`, `GB`, or `GA` sentences on the
 wire. For example, the documented request is `GPGGA 1`, while the documented
 message output is `$GNGGA,...`.
 
-- `GPGGA` -> `GPGGA COM1 <period>`
-- `GPGSV` -> `GPGSV COM1 <period>`
-- `GPGST` -> `GPGST COM1 <period>`
-- `PVTSLNA` -> `PVTSLNA COM1 <period>`
-- `BESTNAVA` -> `BESTNAVA COM1 <period>`
-- `RTKSTATUSA` -> `RTKSTATUSA COM1 <period>`
-- `SATSINFOA` -> `SATSINFOA COM1 <period>`
-- `RTCMSTATUSA` -> `RTCMSTATUSA COM1 ONCHANGED`
+- `GPGGA` -> `GPGGA <period>`
+- `GPGSV` -> `GPGSV <period>`
+- `GPGST` -> `GPGST <period>`
+- `PVTSLNA` -> `PVTSLNA <period>`
+- `BESTNAVA` -> `BESTNAVA <period>`
+- `RTKSTATUSA` -> `RTKSTATUSA <period>`
+- `SATSINFOA` -> `SATSINFOA <period>`
+- `RTCMSTATUSA` -> `RTCMSTATUSA ONCHANGED`
+
+The normal single-antenna rover profile does not request `GPGGAH`, `GPGSVH`,
+or `GPGSTH`. Those slave-antenna variants remain out of scope unless a
+dedicated dual-antenna output profile is introduced later.
 
 Live UM982 grammar probing at `460800` with `mowgli-gps` stopped confirmed the
 following on the current hardware path:
 
 | Message family | Vendor-documented examples | Live UM982 accepted forms | Builder policy |
 | --- | --- | --- | --- |
-| `GPGGA` | `GPGGA 1`, `GPGGA COM2 1` | `GPGGA 1`, `GPGGA COM1 1`, `GPGGA COM2 1`, `GNGGA 1`, `GNGGA COM1 1` | Keep `GPGGA COM1 <period>` because `GP` is documented and explicit `COM1` pins the active port. |
-| `GPGSV` | `GPGSV 1`, `GPGSV COM2 1` | `GPGSV 1`, `GPGSV COM1 1` | Keep `GPGSV COM1 <period>`. |
-| `GPGST` | `GPGST 1`, `GPGST COM2 1` | `GPGST 1`, `GPGST COM1 1` | Keep `GPGST COM1 <period>`. |
-| `PVTSLNA` | `PVTSLNA 1` under the generic optional-port syntax | `PVTSLNA 1`, `PVTSLNA COM1 1` | Keep `PVTSLNA COM1 <period>`. |
-| `BESTNAVA` | `BESTNAVA 1` under the generic optional-port syntax | `BESTNAVA 0.2`, `BESTNAVA COM1 0.2` | Keep `BESTNAVA COM1 <period>`. |
-| `RTKSTATUSA` | `RTKSTATUSA 1` under the generic optional-port syntax | `RTKSTATUSA 1`, `RTKSTATUSA COM1 1` | Keep `RTKSTATUSA COM1 <period>`. |
-| `SATSINFOA` | `SATSINFOA 1` under the generic optional-port syntax | `SATSINFOA 1`, `SATSINFOA COM1 1` | Keep `SATSINFOA COM1 <period>`. |
-| `RTCMSTATUSA` | `RTCMSTATUSA ONCHANGED` | `RTCMSTATUSA ONCHANGED`, `RTCMSTATUSA COM1 ONCHANGED` | Keep `RTCMSTATUSA COM1 ONCHANGED`. |
+| `GPGGA` | `GPGGA 1`, `GPGGA COM2 1` | `GPGGA 1`, `GPGGA COM1 1`, `GPGGA COM2 1`, `GNGGA 1`, `GNGGA COM1 1` | Keep `GPGGA <period>` because the current-port form is explicitly documented and matches the normal rover profile. |
+| `GPGSV` | `GPGSV 1`, `GPGSV COM2 1` | `GPGSV 1`, `GPGSV COM1 1` | Keep `GPGSV <period>`. |
+| `GPGST` | `GPGST 1`, `GPGST COM2 1` | `GPGST 1`, `GPGST COM1 1` | Keep `GPGST <period>`. |
+| `PVTSLNA` | `PVTSLNA 1` under the generic optional-port syntax | `PVTSLNA 1`, `PVTSLNA COM1 1` | Keep `PVTSLNA <period>`. |
+| `BESTNAVA` | `BESTNAVA 1` under the generic optional-port syntax | `BESTNAVA 0.2`, `BESTNAVA COM1 0.2` | Keep `BESTNAVA <period>`. |
+| `RTKSTATUSA` | `RTKSTATUSA 1` under the generic optional-port syntax | `RTKSTATUSA 1`, `RTKSTATUSA COM1 1` | Keep `RTKSTATUSA <period>`. |
+| `SATSINFOA` | `SATSINFOA 1` under the generic optional-port syntax | `SATSINFOA 1`, `SATSINFOA COM1 1` | Keep `SATSINFOA <period>`. |
+| `RTCMSTATUSA` | `RTCMSTATUSA ONCHANGED` | `RTCMSTATUSA ONCHANGED`, `RTCMSTATUSA COM1 ONCHANGED` | Keep `RTCMSTATUSA ONCHANGED`. |
 
-The live probe therefore does not justify switching away from the current
-`GP... COM1 ...` generation policy. It does confirm that the UM982 parser is
-more permissive than the documented minimal examples, especially for optional
-port arguments and some undocumented `GN...` aliases.
+The live probe therefore confirms that the documented current-port forms are
+accepted on the UM982, while the parser also tolerates explicit-port variants
+and some undocumented `GN...` aliases.
 
 The low-level builder only accepts documented Unicore periodic values:
 
@@ -222,14 +225,14 @@ commands:
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
-- `GPGGA COM1 1`
-- `GPGSV COM1 1`
-- `GPGST COM1 1`
-- `PVTSLNA COM1 1`
-- `BESTNAVA COM1 0.2`
-- `RTKSTATUSA COM1 1`
-- `RTCMSTATUSA COM1 ONCHANGED`
-- `SATSINFOA COM1 1`
+- `GPGGA 1`
+- `GPGSV 1`
+- `GPGST 1`
+- `PVTSLNA 1`
+- `BESTNAVA 0.2`
+- `RTKSTATUSA 1`
+- `RTCMSTATUSA ONCHANGED`
+- `SATSINFOA 1`
 
 Model-specific signal-group behavior:
 
@@ -269,7 +272,7 @@ Legacy CLI alias:
 Current `rover_high_precision_debug` helper extends
 `rover_high_precision` by restoring the heavier baseline/status log:
 
-- `PVTSLNA COM1 0.2`
+- `PVTSLNA 0.2`
 
 This debug profile is intentionally higher-bandwidth than
 `rover_high_precision` and is meant for short-lived capture or troubleshooting

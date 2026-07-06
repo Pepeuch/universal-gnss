@@ -476,9 +476,9 @@ Current coverage:
 Current policy:
 
 - output commands use a small per-message syntax table:
-  - documented explicit `MESSAGE COM1 <period>` syntax for periodic Unicore
+  - documented current-port `MESSAGE <period>` syntax for periodic Unicore
     outputs
-  - documented explicit `MESSAGE COM1 ONCHANGED` syntax for `RTCMSTATUSA`
+  - documented current-port `MESSAGE ONCHANGED` syntax for `RTCMSTATUSA`
   - only documented Unicore periods are emitted by the low-level builder
   - the user-facing Unicore `rate_hz` override currently retimes `BESTNAVA`
     only, preserving exact documented `5 Hz` / `10 Hz` requests and

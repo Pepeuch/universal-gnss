@@ -81,8 +81,6 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover profile should build successfully");
   ctx.Expect(profile.config_kind == ReceiverConfigProfileKind::kRover,
              "unicore rover helper should declare the rover config profile kind");
-  ctx.Expect(!profile.clear_current_port_outputs,
-             "unicore rover helper should leave existing port outputs untouched by default");
   ctx.Expect(
       result.commands.size() == 13u,
       "generic unicore rover helper should skip CONFIG SIGNALGROUP when the model is unknown");
@@ -103,26 +101,26 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "generic unicore rover helper should not guess a signal-group selection");
   ctx.Expect(!ContainsText(result.commands[5], "UNLOG"),
              "unicore rover helper should not emit UNLOG in the default runtime-safe profile");
-  ctx.Expect(ContainsText(result.commands[5], "GPGGA COM1 1"),
+  ctx.Expect(ContainsText(result.commands[5], "GPGGA 1"),
              "unicore rover helper should keep GPGGA available at a lighter 1 Hz rate using the "
-             "documented explicit COM1 syntax");
-  ctx.Expect(ContainsText(result.commands[6], "GPGSV COM1 1"),
+             "documented current-port syntax");
+  ctx.Expect(ContainsText(result.commands[6], "GPGSV 1"),
              "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback "
              "stay available");
   ctx.Expect(
-      ContainsText(result.commands[7], "GPGST COM1 1"),
+      ContainsText(result.commands[7], "GPGST 1"),
       "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
-  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA COM1 1"),
+  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA 1"),
              "unicore rover helper should reduce PVTSLNA to a lighter 1 Hz fallback rate using "
-             "the documented explicit COM1 syntax");
-  ctx.Expect(ContainsText(result.commands[9], "BESTNAVA COM1 0.2"),
+             "the documented current-port syntax");
+  ctx.Expect(ContainsText(result.commands[9], "BESTNAVA 0.2"),
              "unicore rover helper should emit BESTNAVA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[10], "RTKSTATUSA COM1 1"),
+  ctx.Expect(ContainsText(result.commands[10], "RTKSTATUSA 1"),
              "unicore rover helper should emit RTKSTATUSA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[11], "RTCMSTATUSA COM1 ONCHANGED"),
+  ctx.Expect(ContainsText(result.commands[11], "RTCMSTATUSA ONCHANGED"),
              "unicore rover helper should emit RTCMSTATUSA with ONCHANGED syntax");
   ctx.Expect(
-      ContainsText(result.commands[12], "SATSINFOA COM1 1"),
+      ContainsText(result.commands[12], "SATSINFOA 1"),
       "unicore rover helper should keep SATSINFOA at 1 Hz for stable satellite observability");
 }
 
@@ -254,10 +252,10 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
                             return ContainsText(command, "UNLOG");
                           }),
              "unicore diagnostics helper should not emit UNLOG by default");
-  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA COM1 0.2"),
+  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA 0.2"),
              "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging "
-             "using the documented explicit COM1 syntax");
-  ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA COM1 1"),
+             "using the documented current-port syntax");
+  ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA 1"),
              "unicore diagnostics helper should keep SATSINFOA at 1 Hz");
 }
 

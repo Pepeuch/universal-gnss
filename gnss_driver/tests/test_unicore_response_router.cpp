@@ -30,14 +30,14 @@ struct TestContext
 void TestOkResponseMapsToTextOk(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const bool generated = router.ProcessLine("$command,GPGGA COM1 1,response: OK*\r\n", 1111);
+  const bool generated = router.ProcessLine("$command,GPGGA 1,response: OK*\r\n", 1111);
 
   ReceiverCommandResponse response;
   ctx.Expect(generated && router.PopResponse(response),
              "documented $command accepted responses should generate a response");
   ctx.Expect(response.kind == ReceiverCommandResponseKind::kTextOk &&
                  response.timestamp_ns == std::optional<std::int64_t>(1111) &&
-                 response.message == "$command,GPGGA COM1 1,response: OK*",
+                 response.message == "$command,GPGGA 1,response: OK*",
              "accepted Unicore command responses should map to text_ok");
   ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ok_responses_seen == 1u &&
                  router.metrics().responses_generated == 1u,
@@ -127,7 +127,7 @@ void TestTelemetryLineIgnored(TestContext& ctx)
 void TestGarbageAndMalformedHandling(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const bool invalid_ack = router.ProcessLine("$command,BESTNAVA COM1 0.2,response: FAIL*\r\n");
+  const bool invalid_ack = router.ProcessLine("$command,BESTNAVA 0.2,response: FAIL*\r\n");
   const bool binary_garbage = router.ProcessLine(std::string("\x01\x02", 2));
 
   ReceiverCommandResponse response;

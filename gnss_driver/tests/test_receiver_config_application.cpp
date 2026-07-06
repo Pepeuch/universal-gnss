@@ -253,7 +253,7 @@ void TestOptionalCommandFailureContinuesByDefault(TestContext& ctx)
   MemoryByteSink sink;
   ReceiverConfigApplication application(sink);
 
-  application.Start({MakeTextCommand("GPGGA COM1 1\r\n",
+  application.Start({MakeTextCommand("GPGGA 1\r\n",
                                      ReceiverCommandFailurePolicy::kContinueOnFailure),
                      MakeBinaryCommand({0x55u, 0x66u})},
                     5400);
