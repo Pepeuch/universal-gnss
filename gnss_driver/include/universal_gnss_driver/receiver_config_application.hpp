@@ -33,6 +33,8 @@ struct ReceiverConfigApplicationMetrics
   std::size_t commands_started{0u};
   std::size_t commands_completed{0u};
   std::size_t commands_failed{0u};
+  std::size_t required_commands_failed{0u};
+  std::size_t optional_commands_failed{0u};
   std::size_t commands_retried{0u};
   std::size_t responses_applied{0u};
   std::size_t timeouts_seen{0u};
@@ -44,6 +46,10 @@ struct ReceiverConfigApplicationResult
   std::size_t command_index{0u};
   bool command_started{false};
   bool command_finished{false};
+  bool command_succeeded{false};
+  bool command_failed{false};
+  bool command_required{true};
+  bool failure_ignored{false};
   bool advanced_to_next_command{false};
   bool response_applied{false};
   bool retry_dispatched{false};
@@ -92,8 +98,16 @@ public:
 private:
   ReceiverConfigApplicationResult BuildResult() const;
 
-  ReceiverConfigApplicationResult FailApplication(const EngineStepResult& engine_result,
-                                                  const char* fallback_error_message);
+  ReceiverConfigApplicationResult CompleteCurrentCommand(const EngineStepResult& engine_result,
+                                                         bool command_succeeded,
+                                                         bool response_applied,
+                                                         const char* fallback_error_message,
+                                                         std::string error_message = {});
+
+  ReceiverConfigApplicationResult HandleCommandFailure(const EngineStepResult& engine_result,
+                                                       bool response_applied,
+                                                       const char* fallback_error_message,
+                                                       std::string error_message = {});
 
   ReceiverConfigApplicationResult HandleTimeoutResult(
       const EngineStepResult& timeout_result,

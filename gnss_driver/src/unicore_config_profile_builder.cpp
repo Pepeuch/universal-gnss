@@ -63,6 +63,7 @@ std::string BuildCom1Command(const std::uint32_t baud_rate)
 ReceiverCommand MakeTextCommand(const ReceiverCommandKind kind,
                                 const ReceiverTargetSelector& target,
                                 const ReceiverCommandSafetyLevel safety_level,
+                                const ReceiverCommandFailurePolicy failure_policy,
                                 const ReceiverResponseKind expected_response,
                                 const std::string& text_command)
 {
@@ -71,6 +72,7 @@ ReceiverCommand MakeTextCommand(const ReceiverCommandKind kind,
   command.target = target;
   command.expected_response = expected_response;
   command.safety_level = safety_level;
+  command.failure_policy = failure_policy;
   SetTextPayload(command, FormatTextCommand(text_command));
   return command;
 }
@@ -260,12 +262,14 @@ void AppendCommand(std::vector<ReceiverCommand>& commands,
                    const ReceiverCommandKind kind,
                    const ReceiverCommandSafetyLevel safety_level,
                    const ReceiverResponseKind expected_response,
-                   const std::string& text_command)
+                   const std::string& text_command,
+                   const ReceiverCommandFailurePolicy failure_policy =
+                       ReceiverCommandFailurePolicy::kAbortOnFailure)
 {
   if (!text_command.empty())
   {
-    commands.push_back(
-        MakeTextCommand(kind, target, safety_level, expected_response, text_command));
+    commands.push_back(MakeTextCommand(
+        kind, target, safety_level, failure_policy, expected_response, text_command));
   }
 }
 
@@ -400,7 +404,8 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
                   ReceiverCommandKind::kSetProtocolOutputs,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
-                  BuildOutputCommand(output));
+                  BuildOutputCommand(output),
+                  ReceiverCommandFailurePolicy::kContinueOnFailure);
   }
 
   if (profile.persistence == UnicorePersistenceTarget::kSaveConfig)

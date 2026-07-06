@@ -45,6 +45,12 @@ enum class ReceiverCommandSafetyLevel : std::uint8_t
   kFactoryReset = 2,
 };
 
+enum class ReceiverCommandFailurePolicy : std::uint8_t
+{
+  kAbortOnFailure = 0,
+  kContinueOnFailure = 1,
+};
+
 struct ReceiverTargetSelector
 {
   ReceiverVendor vendor{ReceiverVendor::kUnknown};
@@ -73,6 +79,7 @@ struct ReceiverCommand
   ReceiverResponseKind expected_response{ReceiverResponseKind::kAck};
   ReceiverCommandRetryPolicy retry_policy{};
   ReceiverCommandSafetyLevel safety_level{ReceiverCommandSafetyLevel::kRuntime};
+  ReceiverCommandFailurePolicy failure_policy{ReceiverCommandFailurePolicy::kAbortOnFailure};
   bool explicit_safety_confirmation{false};
   ReceiverCommandPayload payload{};
 };
@@ -87,6 +94,11 @@ constexpr bool HasSafeDispatchApproval(const ReceiverCommand& command)
 {
   return !RequiresExplicitSafetyConfirmation(command.safety_level) ||
          command.explicit_safety_confirmation;
+}
+
+constexpr bool IsRequiredCommand(const ReceiverCommand& command)
+{
+  return command.failure_policy == ReceiverCommandFailurePolicy::kAbortOnFailure;
 }
 
 inline void SetBinaryPayload(ReceiverCommand& command, std::vector<std::uint8_t> payload)

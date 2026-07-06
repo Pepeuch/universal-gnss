@@ -31,9 +31,11 @@ namespace
 {
 
 using universal_gnss_driver::HasSafeDispatchApproval;
+using universal_gnss_driver::IsRequiredCommand;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigRequest;
 using universal_gnss_driver::ReceiverCommand;
+using universal_gnss_driver::ReceiverCommandFailurePolicy;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandResponse;
 using universal_gnss_driver::ReceiverCommandResponseKind;
@@ -98,6 +100,8 @@ const char* ToString(const ConfigApplyStatus status)
   {
     case ConfigApplyStatus::kOk:
       return "ok";
+    case ConfigApplyStatus::kPartialSuccess:
+      return "partial_success";
     case ConfigApplyStatus::kInvalidArgument:
       return "invalid_argument";
     case ConfigApplyStatus::kUnsupportedReceiver:
@@ -237,6 +241,19 @@ const char* SafetyLevelToString(const ReceiverCommandSafetyLevel safety)
   }
 
   return "unknown";
+}
+
+const char* FailurePolicyToString(const ReceiverCommandFailurePolicy failure_policy)
+{
+  switch (failure_policy)
+  {
+    case ReceiverCommandFailurePolicy::kAbortOnFailure:
+      return "abort_on_failure";
+    case ReceiverCommandFailurePolicy::kContinueOnFailure:
+      return "continue_on_failure";
+  }
+
+  return "abort_on_failure";
 }
 
 const char* PayloadKindToString(const ReceiverCommandPayloadKind payload_kind)
@@ -503,6 +520,38 @@ std::vector<ReceiverCommand> BuildExecutableCommands(
   }
 
   return commands;
+}
+
+bool IsSuccessfulApplyStatus(const ConfigApplyStatus status)
+{
+  return status == ConfigApplyStatus::kOk || status == ConfigApplyStatus::kPartialSuccess;
+}
+
+ConfigApplyStatus SuccessfulCompletionStatus(
+    const universal_gnss_driver::ReceiverConfigApplicationMetrics& metrics)
+{
+  if (metrics.required_commands_failed > 0u)
+  {
+    return ConfigApplyStatus::kApplicationFailed;
+  }
+  if (metrics.optional_commands_failed > 0u)
+  {
+    return ConfigApplyStatus::kPartialSuccess;
+  }
+  return ConfigApplyStatus::kOk;
+}
+
+ConfigApplyStatus SuccessfulCompletionStatus(const ConfigApplyExecutionSummary& summary)
+{
+  if (summary.required_commands_failed > 0u)
+  {
+    return ConfigApplyStatus::kApplicationFailed;
+  }
+  if (summary.optional_commands_failed > 0u)
+  {
+    return ConfigApplyStatus::kPartialSuccess;
+  }
+  return ConfigApplyStatus::kOk;
 }
 
 std::uint32_t ResolveTransportReadTimeoutMs(const ConfigApplyOptions& options)
@@ -872,12 +921,17 @@ void NoteApplicationProgress(ConfigApplyResult& result,
       suffix = ": " + application_result.engine_result->error_message;
     }
 
-    const bool succeeded = application_result.state == ReceiverConfigApplicationState::kRunning ||
-                           application_result.state == ReceiverConfigApplicationState::kCompleted;
+    const char* action = "completed";
+    if (application_result.command_failed)
+    {
+      action = application_result.failure_ignored
+                   ? (application_result.command_required ? "failed (continuing)"
+                                                          : "failed (optional, continuing)")
+                   : "failed";
+    }
 
-    result.progress_log.push_back(
-        MakeCommandProgressPrefix(plan_index + 1u, total, succeeded ? "completed" : "failed") +
-        " - " + plan.commands[plan_index].description + suffix);
+    result.progress_log.push_back(MakeCommandProgressPrefix(plan_index + 1u, total, action) +
+                                  " - " + plan.commands[plan_index].description + suffix);
   }
 }
 
@@ -942,14 +996,19 @@ void NoteApplicationProgress(ConfigApplyResult& result,
       suffix = ": " + application_result.engine_result->error_message;
     }
 
-    const bool succeeded = application_result.state == ReceiverConfigApplicationState::kRunning ||
-                           application_result.state == ReceiverConfigApplicationState::kCompleted;
     const auto global_index = command_index_offset + phase_index + 1u;
+    const char* action = "completed";
+    if (application_result.command_failed)
+    {
+      action = application_result.failure_ignored
+                   ? (application_result.command_required ? "failed (continuing)"
+                                                          : "failed (optional, continuing)")
+                   : "failed";
+    }
 
-    result.progress_log.push_back(MakeCommandProgressPrefix(global_index,
-                                                            overall_command_total,
-                                                            succeeded ? "completed" : "failed") +
-                                  " - " + commands[phase_index].description + suffix);
+    result.progress_log.push_back(
+        MakeCommandProgressPrefix(global_index, overall_command_total, action) + " - " +
+        commands[phase_index].description + suffix);
   }
 }
 
@@ -981,9 +1040,11 @@ bool FinalizeIfApplicationStopped(ConfigApplyResult& result,
 {
   if (application.state() == ReceiverConfigApplicationState::kCompleted)
   {
-    result.status = ConfigApplyStatus::kOk;
-    result.execution_summary.final_status = "completed";
-    result.error_message.clear();
+    result.status = SuccessfulCompletionStatus(application.metrics());
+    result.execution_summary.final_status = ToString(result.status);
+    result.error_message = result.status == ConfigApplyStatus::kPartialSuccess
+                               ? "one or more optional commands failed during apply"
+                               : std::string{};
     return true;
   }
 
@@ -1008,6 +1069,10 @@ void UpdateExecutionSummary(ConfigApplyResult& result, const ReceiverConfigAppli
   result.execution_summary.commands_total = application.metrics().commands_total;
   result.execution_summary.commands_completed = application.metrics().commands_completed;
   result.execution_summary.commands_failed = application.metrics().commands_failed;
+  result.execution_summary.required_commands_failed =
+      application.metrics().required_commands_failed;
+  result.execution_summary.optional_commands_failed =
+      application.metrics().optional_commands_failed;
   result.execution_summary.commands_retried = application.metrics().commands_retried;
   result.execution_summary.responses_applied = application.metrics().responses_applied;
 }
@@ -1122,7 +1187,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
   outcome.summary.commands_total = commands.size();
   if (commands.empty())
   {
-    outcome.summary.final_status = "completed";
+    outcome.summary.final_status = ToString(ConfigApplyStatus::kOk);
     return outcome;
   }
 
@@ -1237,6 +1302,8 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
 
   outcome.summary.commands_completed = application.metrics().commands_completed;
   outcome.summary.commands_failed = application.metrics().commands_failed;
+  outcome.summary.required_commands_failed = application.metrics().required_commands_failed;
+  outcome.summary.optional_commands_failed = application.metrics().optional_commands_failed;
   outcome.summary.commands_retried = application.metrics().commands_retried;
   outcome.summary.responses_applied = application.metrics().responses_applied;
 
@@ -1248,7 +1315,8 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
 
   if (application.state() == ReceiverConfigApplicationState::kCompleted)
   {
-    outcome.summary.final_status = "completed";
+    outcome.status = SuccessfulCompletionStatus(application.metrics());
+    outcome.summary.final_status = ToString(outcome.status);
     return outcome;
   }
 
@@ -1315,9 +1383,11 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   auto phase = ExecuteUnicoreCommandPhase(result, transport, reset_phase, options, 0u);
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.required_commands_failed += phase.summary.required_commands_failed;
+  result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (phase.status != ConfigApplyStatus::kOk)
+  if (!IsSuccessfulApplyStatus(phase.status))
   {
     result.status = phase.status;
     result.error_message = phase.error_message;
@@ -1378,9 +1448,11 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   phase = ExecuteUnicoreCommandPhase(result, transport, baud_phase, options, reset_phase.size());
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.required_commands_failed += phase.summary.required_commands_failed;
+  result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (phase.status != ConfigApplyStatus::kOk)
+  if (!IsSuccessfulApplyStatus(phase.status))
   {
     result.status = phase.status;
     result.error_message = phase.error_message;
@@ -1447,9 +1519,11 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
       result, transport, profile_phase, options, reset_phase.size() + baud_phase.size());
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.required_commands_failed += phase.summary.required_commands_failed;
+  result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (phase.status != ConfigApplyStatus::kOk)
+  if (!IsSuccessfulApplyStatus(phase.status))
   {
     result.status = phase.status;
     result.error_message = phase.error_message;
@@ -1458,12 +1532,14 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   }
 
   result.transport_baud_rate = recovery_baud;
-  result.status = ConfigApplyStatus::kOk;
-  result.execution_summary.final_status = "completed";
+  result.status = SuccessfulCompletionStatus(result.execution_summary);
+  result.execution_summary.final_status = ToString(result.status);
   result.progress_log.push_back("Verified receiver is reachable again at " +
                                 std::to_string(recovery_baud) +
                                 " bps after post-reset profile apply");
-  result.error_message.clear();
+  result.error_message = result.status == ConfigApplyStatus::kPartialSuccess
+                             ? "one or more optional commands failed during apply"
+                             : std::string{};
   return result;
 }
 
@@ -1498,9 +1574,11 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   auto phase = ExecuteUnicoreCommandPhase(result, transport, baud_phase, options, 0u);
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.required_commands_failed += phase.summary.required_commands_failed;
+  result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (phase.status != ConfigApplyStatus::kOk)
+  if (!IsSuccessfulApplyStatus(phase.status))
   {
     result.status = phase.status;
     result.error_message = phase.error_message;
@@ -1637,9 +1715,11 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   phase = ExecuteUnicoreCommandPhase(result, transport, profile_phase, options, baud_phase.size());
   result.execution_summary.commands_completed += phase.summary.commands_completed;
   result.execution_summary.commands_failed += phase.summary.commands_failed;
+  result.execution_summary.required_commands_failed += phase.summary.required_commands_failed;
+  result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (phase.status != ConfigApplyStatus::kOk)
+  if (!IsSuccessfulApplyStatus(phase.status))
   {
     result.status = phase.status;
     result.error_message = phase.error_message;
@@ -1648,8 +1728,8 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   }
 
   result.transport_baud_rate = active_baud;
-  result.status = ConfigApplyStatus::kOk;
-  result.execution_summary.final_status = "completed";
+  result.status = SuccessfulCompletionStatus(result.execution_summary);
+  result.execution_summary.final_status = ToString(result.status);
   if (continue_at_target)
   {
     result.progress_log.push_back("Continuing runtime-only profile apply at target baud " +
@@ -1660,7 +1740,9 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
     result.progress_log.push_back("Continuing runtime-only profile apply at previous live baud " +
                                   std::to_string(active_baud) + " bps");
   }
-  result.error_message.clear();
+  result.error_message = result.status == ConfigApplyStatus::kPartialSuccess
+                             ? "one or more optional commands failed during apply"
+                             : std::string{};
   return result;
 }
 
@@ -1692,7 +1774,8 @@ void AppendCommandSequenceText(std::ostringstream& output, const ConfigApplyResu
     const auto& command = result.plan.commands[index];
     output << '\n'
            << (index + 1u) << ". " << CommandKindToString(command.command.kind) << " ["
-           << SafetyLevelToString(command.command.safety_level);
+           << SafetyLevelToString(command.command.safety_level) << ", "
+           << (command.required ? "required" : "optional");
     if (command.requires_explicit_safety_confirmation)
     {
       output << ", dispatcher_confirmation_required";
@@ -1700,6 +1783,8 @@ void AppendCommandSequenceText(std::ostringstream& output, const ConfigApplyResu
     output << "]\n";
     output << "   payload: " << PayloadKindToString(command.command.payload.kind) << ", "
            << command.payload_bytes << " bytes\n";
+    output << "   failure_policy: " << FailurePolicyToString(command.command.failure_policy)
+           << "\n";
     output << "   description: " << command.description << "\n";
 
     if (command.command.payload.kind == ReceiverCommandPayloadKind::kText)
@@ -1720,6 +1805,9 @@ void AppendCommandSequenceJson(std::ostringstream& output, const ConfigApplyResu
     output << "      \"kind\": \"" << CommandKindToString(command.command.kind) << "\",\n";
     output << "      \"safety\": \"" << SafetyLevelToString(command.command.safety_level)
            << "\",\n";
+    output << "      \"required\": " << (command.required ? "true" : "false") << ",\n";
+    output << "      \"failure_policy\": \""
+           << FailurePolicyToString(command.command.failure_policy) << "\",\n";
     output << "      \"payload_kind\": \"" << PayloadKindToString(command.command.payload.kind)
            << "\",\n";
     output << "      \"bytes\": " << command.payload_bytes << ",\n";
@@ -1789,7 +1877,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
   {
     result.dry_run = false;
     result.executed = true;
-    result.execution_summary.final_status = "completed";
+    result.execution_summary.final_status = ToString(ConfigApplyStatus::kOk);
     result.progress_log.push_back(
         "No receiver configuration commands were required for this profile");
     return result;
@@ -1937,9 +2025,14 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
   if (result.execution_summary.final_status.empty())
   {
     UpdateExecutionSummary(result, application);
-    result.execution_summary.final_status =
-        application.state() == ReceiverConfigApplicationState::kCompleted ? "completed"
-                                                                          : "application_failed";
+    result.status = application.state() == ReceiverConfigApplicationState::kCompleted
+                        ? SuccessfulCompletionStatus(application.metrics())
+                        : ConfigApplyStatus::kApplicationFailed;
+    result.execution_summary.final_status = ToString(result.status);
+    if (result.status == ConfigApplyStatus::kPartialSuccess && result.error_message.empty())
+    {
+      result.error_message = "one or more optional commands failed during apply";
+    }
   }
 
   return result;
@@ -2075,6 +2168,10 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   output << "  commands_total: " << result.execution_summary.commands_total << "\n";
   output << "  commands_completed: " << result.execution_summary.commands_completed << "\n";
   output << "  commands_failed: " << result.execution_summary.commands_failed << "\n";
+  output << "  required_commands_failed: " << result.execution_summary.required_commands_failed
+         << "\n";
+  output << "  optional_commands_failed: " << result.execution_summary.optional_commands_failed
+         << "\n";
   output << "  commands_retried: " << result.execution_summary.commands_retried << "\n";
   output << "  responses_applied: " << result.execution_summary.responses_applied << "\n";
   output << "  final_status: " << result.execution_summary.final_status << "\n";
@@ -2303,6 +2400,10 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"commands_total\": " << result.execution_summary.commands_total << ",\n";
   output << "    \"commands_completed\": " << result.execution_summary.commands_completed << ",\n";
   output << "    \"commands_failed\": " << result.execution_summary.commands_failed << ",\n";
+  output << "    \"required_commands_failed\": "
+         << result.execution_summary.required_commands_failed << ",\n";
+  output << "    \"optional_commands_failed\": "
+         << result.execution_summary.optional_commands_failed << ",\n";
   output << "    \"commands_retried\": " << result.execution_summary.commands_retried << ",\n";
   output << "    \"responses_applied\": " << result.execution_summary.responses_applied << ",\n";
   output << "    \"final_status\": \"" << EscapeJson(result.execution_summary.final_status)

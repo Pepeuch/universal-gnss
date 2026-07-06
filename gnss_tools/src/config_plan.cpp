@@ -16,11 +16,13 @@ namespace
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::HasSafeDispatchApproval;
+using universal_gnss_driver::IsRequiredCommand;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigPlan;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverCommand;
+using universal_gnss_driver::ReceiverCommandFailurePolicy;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
@@ -80,8 +82,8 @@ std::string EscapeJson(std::string_view text)
       default:
         if (c < 0x20u)
         {
-          stream << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-                 << static_cast<int>(c) << std::dec << std::setfill(' ');
+          stream << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(c)
+                 << std::dec << std::setfill(' ');
         }
         else
         {
@@ -147,6 +149,19 @@ const char* SafetyLevelToString(const ReceiverCommandSafetyLevel safety)
   return "unknown";
 }
 
+const char* FailurePolicyToString(const ReceiverCommandFailurePolicy failure_policy)
+{
+  switch (failure_policy)
+  {
+    case ReceiverCommandFailurePolicy::kAbortOnFailure:
+      return "abort_on_failure";
+    case ReceiverCommandFailurePolicy::kContinueOnFailure:
+      return "continue_on_failure";
+  }
+
+  return "abort_on_failure";
+}
+
 const char* PayloadKindToString(const ReceiverCommandPayloadKind payload_kind)
 {
   switch (payload_kind)
@@ -201,8 +216,7 @@ std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand
   try
   {
     std::size_t parsed = 0u;
-    const auto baud =
-        std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
+    const auto baud = std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
     if (parsed != separator)
     {
       return std::nullopt;
@@ -350,9 +364,9 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
     command.command = planned_command;
     command.payload_bytes = CommandPayloadSize(planned_command);
     command.description = DescribeProfilePreviewCommand(planned_command);
+    command.required = IsRequiredCommand(command.command);
     command.dispatch_safe_without_confirmation = HasSafeDispatchApproval(command.command);
-    command.requires_explicit_safety_confirmation =
-        !command.dispatch_safe_without_confirmation;
+    command.requires_explicit_safety_confirmation = !command.dispatch_safe_without_confirmation;
 
     if (command.requires_explicit_safety_confirmation)
     {
@@ -422,14 +436,12 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   return result;
 }
 
-ConfigPlanResult BuildConfigPlan(
-    const universal_gnss_driver::ReceiverAutoConfigRequest& request)
+ConfigPlanResult BuildConfigPlan(const universal_gnss_driver::ReceiverAutoConfigRequest& request)
 {
   return BuildConfigPlan(BuildReceiverAutoConfigPlan(request));
 }
 
-ConfigPlanResult BuildConfigPlan(
-    const universal_gnss_driver::ReceiverAutoConfigPlan& plan)
+ConfigPlanResult BuildConfigPlan(const universal_gnss_driver::ReceiverAutoConfigPlan& plan)
 {
   return BuildConfigPlanResultFromPlan(plan);
 }
@@ -479,16 +491,16 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   output << "Runtime commands: " << result.summary.runtime_commands << "\n";
   output << "Persistent commands: " << result.summary.persistent_commands << "\n";
   output << "Factory-reset commands: " << result.summary.factory_reset_commands << "\n";
-  output << "Commands requiring confirmation: "
-         << result.summary.commands_requiring_confirmation << "\n";
+  output << "Commands requiring confirmation: " << result.summary.commands_requiring_confirmation
+         << "\n";
   if (result.persistent)
   {
     output << "Persistence request: enabled\n";
   }
   if (result.signal_profile.has_value())
   {
-    output << "Signal profile override: "
-           << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
+    output << "Signal profile override: " << universal_gnss_driver::ToString(*result.signal_profile)
+           << "\n";
   }
   if (result.vendor == "ublox")
   {
@@ -535,22 +547,24 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   for (std::size_t index = 0; index < result.commands.size(); ++index)
   {
     const auto& command = result.commands[index];
-    output << '\n' << (index + 1u) << ". "
-           << CommandKindToString(command.command.kind)
-           << " [" << SafetyLevelToString(command.command.safety_level);
+    output << '\n'
+           << (index + 1u) << ". " << CommandKindToString(command.command.kind) << " ["
+           << SafetyLevelToString(command.command.safety_level);
+    output << ", " << (command.required ? "required" : "optional");
     if (command.requires_explicit_safety_confirmation)
     {
       output << ", confirmation_required";
     }
     output << "]\n";
-    output << "   payload: " << PayloadKindToString(command.command.payload.kind)
-           << ", " << command.payload_bytes << " bytes\n";
+    output << "   payload: " << PayloadKindToString(command.command.payload.kind) << ", "
+           << command.payload_bytes << " bytes\n";
+    output << "   failure_policy: " << FailurePolicyToString(command.command.failure_policy)
+           << "\n";
     output << "   description: " << command.description << "\n";
 
     if (command.command.payload.kind == ReceiverCommandPayloadKind::kText)
     {
-      output << "   command: "
-             << TrimTrailingCrLf(command.command.payload.text) << "\n";
+      output << "   command: " << TrimTrailingCrLf(command.command.payload.text) << "\n";
     }
   }
 
@@ -576,8 +590,8 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
 {
   std::ostringstream output;
   output << "{\n";
-  output << "  \"status\": \""
-         << (result.status == ConfigPlanStatus::kOk ? "ok" : "error") << "\",\n";
+  output << "  \"status\": \"" << (result.status == ConfigPlanStatus::kOk ? "ok" : "error")
+         << "\",\n";
   output << "  \"dry_run\": true,\n";
   output << "  \"profile\": {\n";
   output << "    \"vendor\": \"" << EscapeJson(result.vendor) << "\",\n";
@@ -598,8 +612,7 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "    \"signal_profile\": ";
   if (result.signal_profile.has_value())
   {
-    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
-           << "\"";
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile)) << "\"";
   }
   else
   {
@@ -609,8 +622,7 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "    \"output_port\": ";
   if (result.output_port.has_value())
   {
-    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.output_port))
-           << "\"";
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.output_port)) << "\"";
   }
   else if (result.vendor == "ublox")
   {
@@ -624,8 +636,7 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "    \"resolved_output_port\": ";
   if (result.resolved_output_port.has_value())
   {
-    output << "\""
-           << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
            << "\"";
   }
   else
@@ -728,18 +739,14 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   output << "\n";
   output << "  },\n";
   output << "  \"validation\": {\n";
-  output << "    \"receiver_recognized\": "
-         << (result.receiver_recognized ? "true" : "false") << ",\n";
-  output << "    \"config_supported\": "
-         << (result.config_supported ? "true" : "false") << ",\n";
-  output << "    \"profile_supported\": "
-         << (result.profile_supported ? "true" : "false") << ",\n";
-  output << "    \"apply_mode_supported\": "
-         << (result.apply_mode_supported ? "true" : "false") << ",\n";
-  output << "    \"production_ready\": "
-         << (result.production_ready ? "true" : "false") << ",\n";
-  output << "    \"ready_to_execute\": "
-         << (result.ready_to_execute ? "true" : "false") << "\n";
+  output << "    \"receiver_recognized\": " << (result.receiver_recognized ? "true" : "false")
+         << ",\n";
+  output << "    \"config_supported\": " << (result.config_supported ? "true" : "false") << ",\n";
+  output << "    \"profile_supported\": " << (result.profile_supported ? "true" : "false") << ",\n";
+  output << "    \"apply_mode_supported\": " << (result.apply_mode_supported ? "true" : "false")
+         << ",\n";
+  output << "    \"production_ready\": " << (result.production_ready ? "true" : "false") << ",\n";
+  output << "    \"ready_to_execute\": " << (result.ready_to_execute ? "true" : "false") << "\n";
   output << "  },\n";
   output << "  \"summary\": {\n";
   output << "    \"commands\": " << result.summary.commands_total << ",\n";
@@ -761,8 +768,11 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
     output << "      \"kind\": \"" << CommandKindToString(command.command.kind) << "\",\n";
     output << "      \"safety\": \"" << SafetyLevelToString(command.command.safety_level)
            << "\",\n";
-    output << "      \"payload_kind\": \""
-           << PayloadKindToString(command.command.payload.kind) << "\",\n";
+    output << "      \"required\": " << (command.required ? "true" : "false") << ",\n";
+    output << "      \"failure_policy\": \""
+           << FailurePolicyToString(command.command.failure_policy) << "\",\n";
+    output << "      \"payload_kind\": \"" << PayloadKindToString(command.command.payload.kind)
+           << "\",\n";
     output << "      \"bytes\": " << command.payload_bytes << ",\n";
     output << "      \"description\": \"" << EscapeJson(command.description) << "\",\n";
     output << "      \"requires_confirmation\": "
@@ -796,8 +806,7 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
     output << "\n";
   }
   output << "  ],\n";
-  output << "  \"rollback_expectation\": \""
-         << EscapeJson(result.rollback_expectation) << "\",\n";
+  output << "  \"rollback_expectation\": \"" << EscapeJson(result.rollback_expectation) << "\",\n";
   output << "  \"unsupported_reason\": \"" << EscapeJson(result.unsupported_reason) << "\",\n";
   output << "  \"error_message\": \"" << EscapeJson(result.error_message) << "\"\n";
   output << "}\n";

@@ -43,6 +43,21 @@ bool HasTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
   return false;
 }
 
+const universal_gnss_tools::ConfigPlanCommand* FindTextCommand(
+    const universal_gnss_tools::ConfigPlanResult& result, const std::string& command_text)
+{
+  for (const auto& command : result.commands)
+  {
+    if (command.command.payload.kind == universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+        command.command.payload.text.find(command_text) != std::string::npos)
+    {
+      return &command;
+    }
+  }
+
+  return nullptr;
+}
+
 bool ContainsWarning(const universal_gnss_tools::ConfigPlanResult& result,
                      const std::string& needle)
 {
@@ -104,6 +119,8 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   options.receiver_model = "UM982";
   const auto um982_result = BuildConfigPlan(options);
   const std::string um982_text = FormatConfigPlanText(um982_result);
+  const auto* um982_signalgroup = FindTextCommand(um982_result, "CONFIG SIGNALGROUP 3 6");
+  const auto* um982_gpgga = FindTextCommand(um982_result, "GPGGA COM1 1");
   ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
                  um982_result.summary.commands_total == 14u &&
@@ -111,6 +128,11 @@ void TestUnicoreDebugPlan(TestContext& ctx)
                  um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
                  ContainsWarning(um982_result, "Build7650+"),
              "UM982 config plans should expose the documented dual-antenna signal-group selection");
+  ctx.Expect(um982_signalgroup != nullptr && um982_signalgroup->required &&
+                 um982_gpgga != nullptr && !um982_gpgga->required &&
+                 um982_text.find("failure_policy: continue_on_failure") != std::string::npos,
+             "Unicore config plans should expose required core commands and optional telemetry "
+             "outputs");
 }
 
 void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)

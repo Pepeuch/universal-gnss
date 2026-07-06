@@ -25,12 +25,11 @@ class ConfigApplyTransportHooks
 public:
   virtual ~ConfigApplyTransportHooks() = default;
 
-  virtual bool ProbeReceiverPath(
-      const std::string& device_path,
-      const std::vector<std::uint32_t>& baud_candidates,
-      std::uint32_t read_timeout_ms,
-      universal_gnss_driver::ReceiverProbeResult& probe_result,
-      std::string& error_message) = 0;
+  virtual bool ProbeReceiverPath(const std::string& device_path,
+                                 const std::vector<std::uint32_t>& baud_candidates,
+                                 std::uint32_t read_timeout_ms,
+                                 universal_gnss_driver::ReceiverProbeResult& probe_result,
+                                 std::string& error_message) = 0;
 
   virtual bool ReopenTransport(universal_gnss_transport::ByteDuplex& transport,
                                const std::string& device_path,
@@ -42,18 +41,19 @@ public:
 enum class ConfigApplyStatus : std::uint8_t
 {
   kOk = 0,
-  kInvalidArgument = 1,
-  kUnsupportedReceiver = 2,
-  kUnsupportedVendor = 3,
-  kUnsupportedProfile = 4,
-  kBuildError = 5,
-  kSafetyRejected = 6,
-  kTransportUnavailable = 7,
-  kReadFailed = 8,
-  kDispatchFailed = 9,
-  kRejected = 10,
-  kTimedOut = 11,
-  kApplicationFailed = 12,
+  kPartialSuccess = 1,
+  kInvalidArgument = 2,
+  kUnsupportedReceiver = 3,
+  kUnsupportedVendor = 4,
+  kUnsupportedProfile = 5,
+  kBuildError = 6,
+  kSafetyRejected = 7,
+  kTransportUnavailable = 8,
+  kReadFailed = 9,
+  kDispatchFailed = 10,
+  kRejected = 11,
+  kTimedOut = 12,
+  kApplicationFailed = 13,
 };
 
 struct ConfigApplyOptions
@@ -82,6 +82,8 @@ struct ConfigApplyExecutionSummary
   std::size_t commands_total{0u};
   std::size_t commands_completed{0u};
   std::size_t commands_failed{0u};
+  std::size_t required_commands_failed{0u};
+  std::size_t optional_commands_failed{0u};
   std::size_t commands_retried{0u};
   std::size_t responses_applied{0u};
   std::string final_status{};

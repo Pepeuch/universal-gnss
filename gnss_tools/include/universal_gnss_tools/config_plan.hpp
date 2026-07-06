@@ -40,6 +40,7 @@ struct ConfigPlanCommand
   universal_gnss_driver::ReceiverCommand command{};
   std::size_t payload_bytes{0u};
   std::string description{};
+  bool required{true};
   bool requires_explicit_safety_confirmation{false};
   bool dispatch_safe_without_confirmation{true};
 };
@@ -89,10 +90,8 @@ struct ConfigPlanResult
 };
 
 ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options);
-ConfigPlanResult BuildConfigPlan(
-    const universal_gnss_driver::ReceiverAutoConfigRequest& request);
-ConfigPlanResult BuildConfigPlan(
-    const universal_gnss_driver::ReceiverAutoConfigPlan& plan);
+ConfigPlanResult BuildConfigPlan(const universal_gnss_driver::ReceiverAutoConfigRequest& request);
+ConfigPlanResult BuildConfigPlan(const universal_gnss_driver::ReceiverAutoConfigPlan& plan);
 
 std::string FormatConfigPlanText(const ConfigPlanResult& result);
 

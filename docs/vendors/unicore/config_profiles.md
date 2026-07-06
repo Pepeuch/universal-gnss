@@ -146,6 +146,15 @@ The builder uses the documented Unicore abbreviated ASCII output syntax with an
 explicit `COM1` target because the current portable runtime planner configures
 and applies Unicore profiles on `COM1`.
 
+The vendor manual documents the generic abbreviated ASCII form as:
+
+- `[Command name] [serial port (optional)] [output rate/ONCHANGED (optional)]`
+
+The same manual also states that NMEA requests must be sent with the `GP`
+prefix even when the receiver emits `GN`, `GL`, `GB`, or `GA` sentences on the
+wire. For example, the documented request is `GPGGA 1`, while the documented
+message output is `$GNGGA,...`.
+
 - `GPGGA` -> `GPGGA COM1 <period>`
 - `GPGSV` -> `GPGSV COM1 <period>`
 - `GPGST` -> `GPGST COM1 <period>`
@@ -154,6 +163,25 @@ and applies Unicore profiles on `COM1`.
 - `RTKSTATUSA` -> `RTKSTATUSA COM1 <period>`
 - `SATSINFOA` -> `SATSINFOA COM1 <period>`
 - `RTCMSTATUSA` -> `RTCMSTATUSA COM1 ONCHANGED`
+
+Live UM982 grammar probing at `460800` with `mowgli-gps` stopped confirmed the
+following on the current hardware path:
+
+| Message family | Vendor-documented examples | Live UM982 accepted forms | Builder policy |
+| --- | --- | --- | --- |
+| `GPGGA` | `GPGGA 1`, `GPGGA COM2 1` | `GPGGA 1`, `GPGGA COM1 1`, `GPGGA COM2 1`, `GNGGA 1`, `GNGGA COM1 1` | Keep `GPGGA COM1 <period>` because `GP` is documented and explicit `COM1` pins the active port. |
+| `GPGSV` | `GPGSV 1`, `GPGSV COM2 1` | `GPGSV 1`, `GPGSV COM1 1` | Keep `GPGSV COM1 <period>`. |
+| `GPGST` | `GPGST 1`, `GPGST COM2 1` | `GPGST 1`, `GPGST COM1 1` | Keep `GPGST COM1 <period>`. |
+| `PVTSLNA` | `PVTSLNA 1` under the generic optional-port syntax | `PVTSLNA 1`, `PVTSLNA COM1 1` | Keep `PVTSLNA COM1 <period>`. |
+| `BESTNAVA` | `BESTNAVA 1` under the generic optional-port syntax | `BESTNAVA 0.2`, `BESTNAVA COM1 0.2` | Keep `BESTNAVA COM1 <period>`. |
+| `RTKSTATUSA` | `RTKSTATUSA 1` under the generic optional-port syntax | `RTKSTATUSA 1`, `RTKSTATUSA COM1 1` | Keep `RTKSTATUSA COM1 <period>`. |
+| `SATSINFOA` | `SATSINFOA 1` under the generic optional-port syntax | `SATSINFOA 1`, `SATSINFOA COM1 1` | Keep `SATSINFOA COM1 <period>`. |
+| `RTCMSTATUSA` | `RTCMSTATUSA ONCHANGED` | `RTCMSTATUSA ONCHANGED`, `RTCMSTATUSA COM1 ONCHANGED` | Keep `RTCMSTATUSA COM1 ONCHANGED`. |
+
+The live probe therefore does not justify switching away from the current
+`GP... COM1 ...` generation policy. It does confirm that the UM982 parser is
+more permissive than the documented minimal examples, especially for optional
+port arguments and some undocumented `GN...` aliases.
 
 The low-level builder only accepts documented Unicore periodic values:
 

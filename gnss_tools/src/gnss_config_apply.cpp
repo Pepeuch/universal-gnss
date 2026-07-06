@@ -33,6 +33,12 @@ using universal_gnss_transport::PosixSerialTransport;
 using universal_gnss_transport::TransportError;
 #endif
 
+bool IsSuccessfulApplyStatus(const universal_gnss_tools::ConfigApplyStatus status)
+{
+  return status == universal_gnss_tools::ConfigApplyStatus::kOk ||
+         status == universal_gnss_tools::ConfigApplyStatus::kPartialSuccess;
+}
+
 struct CliOptions
 {
   bool json_output{false};
@@ -665,8 +671,7 @@ int main(int argc, char** argv)
       prepared.status != universal_gnss_tools::ConfigApplyStatus::kOk)
   {
     PrintResult(prepared, cli_options.json_output);
-    return prepared.status == universal_gnss_tools::ConfigApplyStatus::kOk ? EXIT_SUCCESS
-                                                                           : EXIT_FAILURE;
+    return IsSuccessfulApplyStatus(prepared.status) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
 #if defined(__linux__)
@@ -716,8 +721,7 @@ int main(int argc, char** argv)
   const auto result =
       universal_gnss_tools::ExecuteConfigApply(transport, cli_options.apply, &hooks);
   PrintResult(result, cli_options.json_output);
-  return result.status == universal_gnss_tools::ConfigApplyStatus::kOk ? EXIT_SUCCESS
-                                                                       : EXIT_FAILURE;
+  return IsSuccessfulApplyStatus(result.status) ? EXIT_SUCCESS : EXIT_FAILURE;
 #else
   auto unsupported = prepared;
   unsupported.status = universal_gnss_tools::ConfigApplyStatus::kTransportUnavailable;

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
@@ -125,6 +126,84 @@ std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
 std::string BuildUnicoreVersionResponse()
 {
   return "#VERSIONA,UM982*00\r\n";
+}
+
+std::string BuildUnicoreResponsesWithSingleError(const std::size_t count,
+                                                 const std::size_t error_index,
+                                                 const std::string& error_line)
+{
+  std::string text;
+  for (std::size_t index = 0u; index < count; ++index)
+  {
+    if (index == error_index)
+    {
+      text += error_line;
+      if (text.empty() || text.back() != '\n')
+      {
+        text += "\r\n";
+      }
+      continue;
+    }
+    text += "<OK\r\n";
+  }
+  return text;
+}
+
+std::optional<std::size_t> FindTextCommandIndex(
+    const universal_gnss_tools::ConfigApplyResult& prepared, const std::string& command_text)
+{
+  for (std::size_t index = 0u; index < prepared.plan.commands.size(); ++index)
+  {
+    const auto& command = prepared.plan.commands[index];
+    if (command.command.payload.kind == universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+        command.command.payload.text.find(command_text) != std::string::npos)
+    {
+      return index;
+    }
+  }
+
+  return std::nullopt;
+}
+
+bool ContainsProgressLine(const universal_gnss_tools::ConfigApplyResult& result,
+                          const std::string& needle)
+{
+  for (const auto& line : result.progress_log)
+  {
+    if (line.find(needle) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::string ToLowerCopy(std::string text)
+{
+  std::transform(text.begin(),
+                 text.end(),
+                 text.begin(),
+                 [](const unsigned char c)
+                 {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return text;
+}
+
+bool ContainsProgressLineCaseInsensitive(const universal_gnss_tools::ConfigApplyResult& result,
+                                         const std::string& needle)
+{
+  const auto lowered_needle = ToLowerCopy(needle);
+  for (const auto& line : result.progress_log)
+  {
+    if (ToLowerCopy(line).find(lowered_needle) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 constexpr std::array<std::uint32_t, 8u> kUnicoreFactoryResetScanBauds{
@@ -414,7 +493,7 @@ void TestRuntimeOnlyNoOpNeedsNoConfirmation(TestContext& ctx)
   closed_transport.Close();
   const auto executed = ExecuteConfigApply(closed_transport, options);
   ctx.Expect(executed.status == ConfigApplyStatus::kOk && !executed.dry_run && executed.executed &&
-                 executed.execution_summary.final_status == "completed",
+                 executed.execution_summary.final_status == "ok",
              "runtime_only no-op execution should complete without needing an open transport");
 }
 
@@ -608,7 +687,7 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
                  result.execution_summary.commands_completed == 14u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 14u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only Unicore apply should write command bytes to the transport");
@@ -616,6 +695,93 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(written.find("VERSIONA\r\n") == std::string::npos,
              "runtime-only Unicore apply should not probe VERSIONA when the current baud already "
              "matches the target baud");
+}
+
+void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const auto gpgga_index = FindTextCommandIndex(prepared, "GPGGA COM1 1\r\n");
+  const auto signalgroup_index = FindTextCommandIndex(prepared, "CONFIG SIGNALGROUP 3 6\r\n");
+  if (!gpgga_index.has_value() || !signalgroup_index.has_value())
+  {
+    std::cerr << "FAILED: test setup could not find required Unicore commands\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  ctx.Expect(!prepared.plan.commands[*gpgga_index].required &&
+                 prepared.plan.commands[*signalgroup_index].required,
+             "prepared Unicore plans should mark telemetry outputs optional and SIGNALGROUP "
+             "required");
+
+  const std::string responses =
+      BuildUnicoreResponsesWithSingleError(prepared.plan.summary.commands_total,
+                                           *gpgga_index,
+                                           "PARSING FAILED GRAMMAR ERROR,*73");
+  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+
+  const auto result = ExecuteConfigApply(transport, options);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kPartialSuccess && result.executed &&
+                 result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_completed ==
+                     prepared.plan.summary.commands_total - 1u &&
+                 result.execution_summary.commands_failed == 1u &&
+                 result.execution_summary.required_commands_failed == 0u &&
+                 result.execution_summary.optional_commands_failed == 1u &&
+                 result.execution_summary.final_status == "partial_success",
+             "optional Unicore output failures should return partial_success instead of aborting");
+  ctx.Expect(ContainsProgressLine(result, "failed (optional, continuing)") &&
+                 ContainsProgressLineCaseInsensitive(result, "grammar error"),
+             "progress log should record optional Unicore output failures while continuing");
+  ctx.Expect(written.find("FRESET\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos,
+             "runtime-only partial-success apply should still avoid FRESET and SAVECONFIG");
+}
+
+void TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const auto mode_index = FindTextCommandIndex(prepared, "MODE ROVER SURVEY MOW\r\n");
+  if (!mode_index.has_value())
+  {
+    std::cerr << "FAILED: test setup could not find MODE ROVER SURVEY MOW\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  const std::string responses =
+      BuildUnicoreResponsesWithSingleError(prepared.plan.summary.commands_total,
+                                           *mode_index,
+                                           "PARSING FAILED GRAMMAR ERROR,*73");
+  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+
+  const auto result = ExecuteConfigApply(transport, options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kRejected &&
+                 result.execution_summary.commands_failed == 1u &&
+                 result.execution_summary.required_commands_failed == 1u &&
+                 result.execution_summary.optional_commands_failed == 0u &&
+                 result.execution_summary.final_status == "rejected",
+             "critical Unicore command failures should still abort the apply sequence");
+  ctx.Expect(!ContainsProgressLine(result, "failed (optional, continuing)") &&
+                 ContainsProgressLine(result, "failed"),
+             "critical command failures should be reported as blocking failures");
 }
 
 void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestContext& ctx)
@@ -659,7 +825,7 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
                  result.execution_summary.commands_completed ==
                      prepared.plan.summary.commands_total &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "runtime-only Unicore apply should continue at the target baud when CONFIG COM1 "
              "becomes active live");
   ctx.Expect(
@@ -720,7 +886,7 @@ void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(Te
                  result.execution_summary.commands_completed ==
                      prepared.plan.summary.commands_total &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "runtime-only Unicore apply should continue at the old baud when CONFIG COM1 does not "
              "switch the live transport");
   ctx.Expect(
@@ -814,7 +980,7 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
                  result.execution_summary.commands_completed == 16u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 14u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
@@ -1006,7 +1172,7 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
           result.execution_summary.commands_completed == 17u &&
           result.execution_summary.commands_failed == 0u &&
           result.execution_summary.responses_applied == 15u &&
-          result.execution_summary.final_status == "completed",
+          result.execution_summary.final_status == "ok",
       "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("FRESET\r\n") != std::string::npos &&
@@ -1065,7 +1231,7 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
                  result.execution_summary.commands_completed == 17u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 15u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "persistent Unicore apply should finish at the overridden target config baud");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
@@ -1094,7 +1260,7 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
                  result.execution_summary.commands_completed == 13u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 13u &&
-                 result.execution_summary.final_status == "completed",
+                 result.execution_summary.final_status == "ok",
              "confirmed runtime-only u-blox apply should complete through the UBX router path");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only u-blox apply should write the planned UBX commands");
@@ -1120,6 +1286,8 @@ int main()
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(ctx);
+  TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
   TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);
