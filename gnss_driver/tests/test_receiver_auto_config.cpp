@@ -283,9 +283,10 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
 
   const auto generic_plan = BuildReceiverAutoConfigPlan(generic_request);
   ctx.Expect(generic_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 generic_plan.validation.generated_command_count == 14u &&
-                 generic_plan.validation.runtime_command_count == 14u &&
+                 generic_plan.validation.generated_command_count == 13u &&
+                 generic_plan.validation.runtime_command_count == 13u &&
                  !ContainsCommandText(generic_plan, "CONFIG SIGNALGROUP") &&
+                 !ContainsCommandText(generic_plan, "UNLOG") &&
                  ContainsWarning(generic_plan, "model identity is unknown"),
              "generic Unicore rover planning should skip CONFIG SIGNALGROUP and warn when the "
              "model is unknown");
@@ -298,21 +299,23 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   const auto debug_plan = BuildReceiverAutoConfigPlan(um982_request);
 
   ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 rover_plan.validation.generated_command_count == 15u &&
-                 rover_plan.validation.runtime_command_count == 15u &&
+                 rover_plan.validation.generated_command_count == 14u &&
+                 rover_plan.validation.runtime_command_count == 14u &&
                  rover_plan.receiver_model == std::optional<std::string>{"UM982"} &&
                  ContainsCommandText(rover_plan, "CONFIG SIGNALGROUP 3 6") &&
+                 !ContainsCommandText(rover_plan, "UNLOG") &&
                  HasReceiverFeature(rover_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
              "UM982 rover_high_precision planning should emit the documented baseline-capable "
              "signal-group selection");
   ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 debug_plan.validation.generated_command_count == 15u &&
-                 debug_plan.validation.runtime_command_count == 15u,
+                 debug_plan.validation.generated_command_count == 14u &&
+                 debug_plan.validation.runtime_command_count == 14u &&
+                 !ContainsCommandText(debug_plan, "UNLOG"),
              "UM982 rover_high_precision_debug planning should keep the same lean command count "
              "while retaining the documented signal-group selection");
-  ctx.Expect(rover_plan.commands[10].payload.text.find("LOG PVTSLNA ONTIME 1") !=
+  ctx.Expect(rover_plan.commands[9].payload.text.find("LOG PVTSLNA ONTIME 1") !=
                      std::string::npos &&
-                 debug_plan.commands[10].payload.text.find("LOG PVTSLNA ONTIME 0.2") !=
+                 debug_plan.commands[9].payload.text.find("LOG PVTSLNA ONTIME 0.2") !=
                      std::string::npos,
              "UM982 debug planning should keep PVTSLNA at 5 Hz while the normal rover profile "
              "stays at 1 Hz");
@@ -327,7 +330,7 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   um981_request.receiver_model = "UM981";
   const auto um981_plan = BuildReceiverAutoConfigPlan(um981_request);
   ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um980_plan.validation.generated_command_count == 14u &&
+                 um980_plan.validation.generated_command_count == 13u &&
                  um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
                  !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um980_plan, "model UM980") &&
@@ -336,7 +339,7 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
              "known single-antenna Unicore models should not emit a dual-antenna signal-group "
              "command and should keep baseline capability disabled");
   ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um960_plan.validation.generated_command_count == 14u &&
+                 um960_plan.validation.generated_command_count == 13u &&
                  um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
                  !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um960_plan, "model UM960") &&
@@ -346,7 +349,7 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
              "UM960 should be treated as a known non-baseline Unicore model without a documented "
              "automatic signal-group selection");
   ctx.Expect(um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um981_plan.validation.generated_command_count == 14u &&
+                 um981_plan.validation.generated_command_count == 13u &&
                  um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
                  !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um981_plan, "model UM981") &&
@@ -383,7 +386,7 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   unicore_request.rate_hz = 1.0;
   const auto unicore_minimal_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_minimal_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 unicore_minimal_plan.validation.generated_command_count == 12u &&
+                 unicore_minimal_plan.validation.generated_command_count == 11u &&
                  ContainsCommandText(unicore_minimal_plan, "BESTNAVA 1") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGSV") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGST") &&
@@ -470,8 +473,8 @@ void TestUnicoreFactoryResetPlan(TestContext& ctx)
       ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 16u &&
-                 plan.validation.runtime_command_count == 15u &&
+                 plan.validation.generated_command_count == 15u &&
+                 plan.validation.runtime_command_count == 14u &&
                  plan.validation.factory_reset_command_count == 1u,
              "generic Unicore factory_reset planning should expand into reset plus runtime "
              "recovery commands without guessing a signal-group selection");
@@ -506,8 +509,8 @@ void TestPersistentApplyWarnings(TestContext& ctx)
   const auto plan = BuildReceiverAutoConfigPlan(generic_request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 17u &&
-                 plan.validation.runtime_command_count == 15u &&
+                 plan.validation.generated_command_count == 16u &&
+                 plan.validation.runtime_command_count == 14u &&
                  plan.validation.persistent_command_count == 1u &&
                  plan.validation.factory_reset_command_count == 1u &&
                  !ContainsCommandText(plan, "CONFIG SIGNALGROUP"),
@@ -524,7 +527,7 @@ void TestPersistentApplyWarnings(TestContext& ctx)
   const auto um982_plan = BuildReceiverAutoConfigPlan(um982_request);
   ctx.Expect(
       um982_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-          um982_plan.validation.generated_command_count == 18u &&
+          um982_plan.validation.generated_command_count == 17u &&
           ContainsCommandText(um982_plan, "CONFIG SIGNALGROUP 3 6"),
       "UM982 persistent planning should retain the documented dual-antenna signal-group command");
 }

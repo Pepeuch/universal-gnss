@@ -77,20 +77,20 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string text = FormatProfilePreviewText(result);
 
   ctx.Expect(
-      result.status == ProfilePreviewStatus::kOk && result.commands.size() == 14u,
+      result.status == ProfilePreviewStatus::kOk && result.commands.size() == 13u,
       "generic Unicore rover_high_precision preview should build the expected safe command count");
-  ctx.Expect(result.summary.commands_total == 14u && result.summary.runtime_commands == 14u &&
+  ctx.Expect(result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
                  result.summary.persistent_commands == 0u,
              "generic Unicore rover_high_precision preview summary should count runtime commands");
   ctx.Expect(!result.commands.empty() &&
                  result.commands.front().description == "set receiver mode to rover",
              "Unicore rover_high_precision preview should decode the MODE ROVER description");
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
-                 text.find("UNLOG") != std::string::npos &&
+                 text.find("UNLOG") == std::string::npos &&
                  text.find("LOG PVTSLNA ONTIME 1") != std::string::npos &&
                  text.find("SATSINFOA 1") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
-                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
              "generic Unicore rover_high_precision preview text should expose the safe fallback "
              "and skip CONFIG SIGNALGROUP");
 
@@ -99,7 +99,7 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string um982_text = FormatProfilePreviewText(um982_result);
   ctx.Expect(um982_result.status == ProfilePreviewStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
-                 um982_result.commands.size() == 15u &&
+                 um982_result.commands.size() == 14u &&
                  um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos,
              "UM982 preview should expose the documented dual-antenna signal-group selection");
 }
@@ -141,8 +141,8 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
 
   const auto unicore_result = BuildProfilePreview(unicore_options);
   ctx.Expect(unicore_result.status == ProfilePreviewStatus::kOk &&
-                 unicore_result.summary.commands_total == 17u &&
-                 unicore_result.summary.runtime_commands == 15u &&
+                 unicore_result.summary.commands_total == 16u &&
+                 unicore_result.summary.runtime_commands == 14u &&
                  unicore_result.summary.persistent_commands == 1u &&
                  unicore_result.summary.factory_reset_commands == 1u,
              "generic persistent Unicore previews should expose the reset-first recovery workflow "
@@ -163,7 +163,7 @@ void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
                  result.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.summary.commands_total == 18u && result.summary.runtime_commands == 16u &&
+                 result.summary.commands_total == 17u && result.summary.runtime_commands == 15u &&
                  result.summary.persistent_commands == 1u &&
                  result.summary.factory_reset_commands == 1u,
              "persistent Unicore previews should preserve a distinct target config baud override");
@@ -191,7 +191,7 @@ void TestSignalProfilePreview(TestContext& ctx)
                  result.signal_profile ==
                      std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
                          universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
-                 result.summary.commands_total == 12u,
+                 result.summary.commands_total == 11u,
              "minimal signal-profile preview should expose the reduced Unicore command set");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
                  text.find("BESTNAVA 1") != std::string::npos &&
@@ -208,7 +208,7 @@ void TestSignalProfilePreview(TestContext& ctx)
   const std::string unknown_model_text = FormatProfilePreviewText(unknown_model_result);
   ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kOk &&
                  unknown_model_result.receiver_model == std::optional<std::string>{"UM952"} &&
-                 unknown_model_result.summary.commands_total == 14u &&
+                 unknown_model_result.summary.commands_total == 13u &&
                  unknown_model_text.find("Receiver model: UM952") != std::string::npos &&
                  unknown_model_text.find("safe generic non-baseline fallback") !=
                      std::string::npos &&
@@ -223,7 +223,7 @@ void TestSignalProfilePreview(TestContext& ctx)
   const std::string known_non_baseline_text = FormatProfilePreviewText(known_non_baseline_result);
   ctx.Expect(known_non_baseline_result.status == ProfilePreviewStatus::kOk &&
                  known_non_baseline_result.receiver_model == std::optional<std::string>{"UM960"} &&
-                 known_non_baseline_result.summary.commands_total == 14u &&
+                 known_non_baseline_result.summary.commands_total == 13u &&
                  known_non_baseline_text.find("Receiver model: UM960") != std::string::npos &&
                  known_non_baseline_text.find("safe generic non-baseline fallback") ==
                      std::string::npos &&
@@ -286,8 +286,8 @@ void TestFactoryResetPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kOk && result.commands.size() == 16u &&
-                 result.summary.runtime_commands == 15u &&
+  ctx.Expect(result.status == ProfilePreviewStatus::kOk && result.commands.size() == 15u &&
+                 result.summary.runtime_commands == 14u &&
                  result.summary.factory_reset_commands == 1u,
              "Unicore factory_reset preview should expose reset plus runtime recovery commands");
   ctx.Expect(
@@ -333,7 +333,7 @@ void TestUnicoreRuntimeTargetBaudPreview(TestContext& ctx)
 
   ctx.Expect(result.status == ProfilePreviewStatus::kOk &&
                  result.baud == std::optional<std::uint32_t>{921600u} &&
-                 result.summary.commands_total == 15u && result.summary.runtime_commands == 15u &&
+                 result.summary.commands_total == 14u && result.summary.runtime_commands == 14u &&
                  result.summary.persistent_commands == 0u &&
                  result.summary.factory_reset_commands == 0u,
              "runtime-only Unicore config baud overrides should preview successfully");

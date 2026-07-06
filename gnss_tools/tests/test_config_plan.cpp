@@ -33,8 +33,7 @@ bool HasTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
 {
   for (const auto& command : result.commands)
   {
-    if (command.command.payload.kind ==
-            universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
+    if (command.command.payload.kind == universal_gnss_driver::ReceiverCommandPayloadKind::kText &&
         command.command.payload.text.find(command_text) != std::string::npos)
     {
       return true;
@@ -53,16 +52,16 @@ void TestUbloxRoverHighPrecisionPlan(TestContext& ctx)
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
-  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
-                 result.receiver_family == "F9/F10",
+  ctx.Expect(result.status == ConfigPlanStatus::kOk && result.receiver_family == "F9/F10",
              "u-blox rover_high_precision plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 13u &&
-                 result.summary.runtime_commands == 13u &&
-                 !result.summary.requires_explicit_safety_confirmation,
-             "u-blox rover_high_precision plan should remain runtime-only without extra confirmation");
-  ctx.Expect(text.find("Dry run: yes") != std::string::npos &&
-                 text.find("Command sequence:") != std::string::npos,
-             "u-blox rover_high_precision plan text should show dry-run status and command ordering");
+  ctx.Expect(
+      result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
+          !result.summary.requires_explicit_safety_confirmation,
+      "u-blox rover_high_precision plan should remain runtime-only without extra confirmation");
+  ctx.Expect(
+      text.find("Dry run: yes") != std::string::npos &&
+          text.find("Command sequence:") != std::string::npos,
+      "u-blox rover_high_precision plan text should show dry-run status and command ordering");
 }
 
 void TestUnicoreDebugPlan(TestContext& ctx)
@@ -74,26 +73,26 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
-  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
-                 result.receiver_family == "UM98x",
+  ctx.Expect(result.status == ConfigPlanStatus::kOk && result.receiver_family == "UM98x",
              "Unicore rover_high_precision_debug plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 14u &&
-                 result.summary.runtime_commands == 14u &&
+  ctx.Expect(result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
                  result.summary.persistent_commands == 0u,
-             "generic Unicore rover_high_precision_debug plans should report the expected safe command counts");
+             "generic Unicore rover_high_precision_debug plans should report the expected safe "
+             "command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
-                 text.find("UNLOG") != std::string::npos &&
+                 text.find("UNLOG") == std::string::npos &&
                  text.find("LOG PVTSLNA ONTIME 0.2") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
-                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
-             "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe unknown-model fallback");
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
+             "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe "
+             "unknown-model fallback");
 
   options.receiver_model = "UM982";
   const auto um982_result = BuildConfigPlan(options);
   const std::string um982_text = FormatConfigPlanText(um982_result);
   ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
-                 um982_result.summary.commands_total == 15u &&
+                 um982_result.summary.commands_total == 14u &&
                  um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos,
              "UM982 config plans should expose the documented dual-antenna signal-group selection");
 }
@@ -112,8 +111,7 @@ void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.summary.commands_total == 18u &&
-                 result.summary.runtime_commands == 16u &&
+                 result.summary.commands_total == 17u && result.summary.runtime_commands == 15u &&
                  result.summary.persistent_commands == 1u &&
                  result.summary.factory_reset_commands == 1u,
              "persistent Unicore plans should preserve a distinct target config baud override");
@@ -121,7 +119,8 @@ void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
                  text.find("Factory reset baud: 115200") != std::string::npos &&
                  text.find("Target configured baud: 460800") != std::string::npos &&
                  text.find("CONFIG COM1 460800 8 n 1") != std::string::npos,
-             "persistent Unicore plan text should distinguish override, factory baud, and target COM1 baud");
+             "persistent Unicore plan text should distinguish override, factory baud, and target "
+             "COM1 baud");
 }
 
 void TestSignalProfilePlanning(TestContext& ctx)
@@ -130,8 +129,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
   unicore_options.vendor = "unicore";
   unicore_options.profile = "rover_high_precision";
   unicore_options.receiver_model = "UM982";
-  unicore_options.signal_profile =
-      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
+  unicore_options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal;
   unicore_options.rate_hz = 1.0;
 
   const auto unicore_result = BuildConfigPlan(unicore_options);
@@ -141,13 +139,14 @@ void TestSignalProfilePlanning(TestContext& ctx)
                  unicore_result.signal_profile ==
                      std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
                          universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
-                 unicore_result.summary.commands_total == 12u,
+                 unicore_result.summary.commands_total == 11u,
              "Unicore minimal signal-profile plans should expose the reduced output plan");
-  ctx.Expect(unicore_text.find("Signal profile override: minimal") != std::string::npos &&
-                 unicore_text.find("BESTNAVA 1") != std::string::npos &&
-                 unicore_text.find("GPGSV") == std::string::npos &&
-                 unicore_text.find("PVTSLNA") == std::string::npos,
-             "Unicore minimal signal-profile plan text should show the reduced runtime command set");
+  ctx.Expect(
+      unicore_text.find("Signal profile override: minimal") != std::string::npos &&
+          unicore_text.find("BESTNAVA 1") != std::string::npos &&
+          unicore_text.find("GPGSV") == std::string::npos &&
+          unicore_text.find("PVTSLNA") == std::string::npos,
+      "Unicore minimal signal-profile plan text should show the reduced runtime command set");
 
   ConfigPlanOptions unknown_unicore_options;
   unknown_unicore_options.vendor = "unicore";
@@ -158,14 +157,14 @@ void TestSignalProfilePlanning(TestContext& ctx)
   const auto unknown_unicore_result = BuildConfigPlan(unknown_unicore_options);
   const std::string unknown_unicore_text = FormatConfigPlanText(unknown_unicore_result);
   ctx.Expect(unknown_unicore_result.status == ConfigPlanStatus::kOk &&
-                 unknown_unicore_result.receiver_model ==
-                     std::optional<std::string>{"UM952"} &&
-                 unknown_unicore_result.summary.commands_total == 14u &&
+                 unknown_unicore_result.receiver_model == std::optional<std::string>{"UM952"} &&
+                 unknown_unicore_result.summary.commands_total == 13u &&
                  unknown_unicore_text.find("Receiver model: UM952") != std::string::npos &&
                  unknown_unicore_text.find("safe generic non-baseline fallback") !=
                      std::string::npos &&
                  !HasTextCommand(unknown_unicore_result, "CONFIG SIGNALGROUP"),
-             "unknown Unicore model plan text should report the safe fallback and skip CONFIG SIGNALGROUP");
+             "unknown Unicore model plan text should report the safe fallback and skip CONFIG "
+             "SIGNALGROUP");
 
   ConfigPlanOptions known_non_baseline_options;
   known_non_baseline_options.vendor = "unicore";
@@ -174,26 +173,23 @@ void TestSignalProfilePlanning(TestContext& ctx)
   const auto known_non_baseline_result = BuildConfigPlan(known_non_baseline_options);
   const std::string known_non_baseline_text = FormatConfigPlanText(known_non_baseline_result);
   ctx.Expect(known_non_baseline_result.status == ConfigPlanStatus::kOk &&
-                 known_non_baseline_result.receiver_model ==
-                     std::optional<std::string>{"UM981"} &&
-                 known_non_baseline_result.summary.commands_total == 14u &&
+                 known_non_baseline_result.receiver_model == std::optional<std::string>{"UM981"} &&
+                 known_non_baseline_result.summary.commands_total == 13u &&
                  known_non_baseline_text.find("Receiver model: UM981") != std::string::npos &&
                  known_non_baseline_text.find("safe generic non-baseline fallback") ==
                      std::string::npos &&
                  !HasTextCommand(known_non_baseline_result, "CONFIG SIGNALGROUP"),
-             "known non-baseline Unicore models such as UM981 should be accepted without falling back to the unknown-model path");
+             "known non-baseline Unicore models such as UM981 should be accepted without falling "
+             "back to the unknown-model path");
 
   ConfigPlanOptions nmea_options;
   nmea_options.vendor = "nmea";
   nmea_options.profile = "runtime_only";
-  nmea_options.signal_profile =
-      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kBalanced;
+  nmea_options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kBalanced;
 
   const auto nmea_result = BuildConfigPlan(nmea_options);
-  ctx.Expect(nmea_result.status == ConfigPlanStatus::kOk &&
-                 !nmea_result.warnings.empty() &&
-                 nmea_result.warnings.front().find("signal_profile=balanced") !=
-                     std::string::npos,
+  ctx.Expect(nmea_result.status == ConfigPlanStatus::kOk && !nmea_result.warnings.empty() &&
+                 nmea_result.warnings.front().find("signal_profile=balanced") != std::string::npos,
              "generic NMEA signal-profile planning should stay a warning-only no-op");
 }
 
@@ -202,8 +198,7 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   ConfigPlanOptions usb_options;
   usb_options.vendor = "ublox";
   usb_options.profile = "rover_high_precision";
-  usb_options.output_port =
-      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
+  usb_options.output_port = universal_gnss_driver::ReceiverAutoConfigOutputPort::kUsb;
   usb_options.baud = 460800u;
 
   const auto usb_result = BuildConfigPlan(usb_options);
@@ -222,13 +217,13 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
                  usb_text.find("set UART1 baud rate") == std::string::npos &&
                  usb_text.find("set UART2 baud rate") == std::string::npos &&
                  usb_text.find("does not apply to USB") != std::string::npos,
-             "USB-only config plan text should show the resolved USB port and warn that config-baud is ignored");
+             "USB-only config plan text should show the resolved USB port and warn that "
+             "config-baud is ignored");
 
   ConfigPlanOptions uart1_options;
   uart1_options.vendor = "ublox";
   uart1_options.profile = "rover_high_precision";
-  uart1_options.output_port =
-      universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart1;
+  uart1_options.output_port = universal_gnss_driver::ReceiverAutoConfigOutputPort::kUart1;
   uart1_options.baud = 460800u;
 
   const auto uart1_result = BuildConfigPlan(uart1_options);
@@ -245,8 +240,7 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   ConfigPlanOptions all_options;
   all_options.vendor = "ublox";
   all_options.profile = "rover_high_precision";
-  all_options.output_port =
-      universal_gnss_driver::ReceiverAutoConfigOutputPort::kAll;
+  all_options.output_port = universal_gnss_driver::ReceiverAutoConfigOutputPort::kAll;
 
   const auto all_result = BuildConfigPlan(all_options);
   const std::string all_text = FormatConfigPlanText(all_result);
@@ -273,10 +267,10 @@ void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
-  ctx.Expect(result.status == ConfigPlanStatus::kOk &&
-                 result.summary.commands_total == 0u &&
-                 result.receiver_family == "NMEA",
-             "runtime_only config plans should support generic NMEA as a zero-command read-only profile");
+  ctx.Expect(
+      result.status == ConfigPlanStatus::kOk && result.summary.commands_total == 0u &&
+          result.receiver_family == "NMEA",
+      "runtime_only config plans should support generic NMEA as a zero-command read-only profile");
   ctx.Expect(text.find("Command count: 0") != std::string::npos,
              "runtime_only plan text should report that no receiver commands are generated");
 }
@@ -320,14 +314,15 @@ void TestFactoryResetPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.summary.factory_reset_commands == 1u &&
-                 result.summary.runtime_commands == 15u &&
-                 result.production_ready &&
+                 result.summary.runtime_commands == 14u && result.production_ready &&
                  result.ready_to_execute,
-             "factory_reset plans should expose the production-ready recovery sequence so operators can review it before execution");
+             "factory_reset plans should expose the production-ready recovery sequence so "
+             "operators can review it before execution");
   ctx.Expect(text.find("115200") != std::string::npos &&
                  text.find("reconnect/probe") != std::string::npos &&
                  text.find("CONFIG COM1 921600") != std::string::npos,
-             "factory_reset plan text should document the baud reset, reprobe requirement, and COM1 recovery");
+             "factory_reset plan text should document the baud reset, reprobe requirement, and "
+             "COM1 recovery");
 }
 
 void TestJsonFormatting(TestContext& ctx)
@@ -335,8 +330,7 @@ void TestJsonFormatting(TestContext& ctx)
   ConfigPlanOptions options;
   options.vendor = "ublox";
   options.profile = "rover_high_precision";
-  options.signal_profile =
-      universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
+  options.signal_profile = universal_gnss_driver::ReceiverAutoConfigSignalProfile::kAllSignals;
   options.rate_hz = 1.0;
 
   const auto result = BuildConfigPlan(options);

@@ -165,19 +165,14 @@ bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
   return true;
 }
 
-bool ValidateProfile(UnicoreConfigProfileBuildResult& result,
-                     const UnicoreConfigProfile& profile)
+bool ValidateProfile(UnicoreConfigProfileBuildResult& result, const UnicoreConfigProfile& profile)
 {
   if (profile.factory_reset)
   {
-    if (profile.mode != UnicoreMode::kUnspecified ||
-        profile.com1_baud_rate.has_value() ||
-        profile.nmea_version.has_value() ||
-        profile.rtk_timeout_s.has_value() ||
-        profile.dgps_timeout_s.has_value() ||
-        profile.rtk_reliability.has_value() ||
-        profile.signal_config.has_value() ||
-        profile.clear_current_port_outputs ||
+    if (profile.mode != UnicoreMode::kUnspecified || profile.com1_baud_rate.has_value() ||
+        profile.nmea_version.has_value() || profile.rtk_timeout_s.has_value() ||
+        profile.dgps_timeout_s.has_value() || profile.rtk_reliability.has_value() ||
+        profile.signal_config.has_value() || profile.clear_current_port_outputs ||
         !profile.output_messages.empty() ||
         profile.persistence != UnicorePersistenceTarget::kRuntimeOnly)
     {
@@ -246,7 +241,8 @@ void AppendCommand(std::vector<ReceiverCommand>& commands,
 {
   if (!text_command.empty())
   {
-    commands.push_back(MakeTextCommand(kind, target, safety_level, expected_response, text_command));
+    commands.push_back(
+        MakeTextCommand(kind, target, safety_level, expected_response, text_command));
   }
 }
 
@@ -315,8 +311,7 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
-                  std::string("CONFIG NMEA0183 ") +
-                      ToNmeaVersionString(*profile.nmea_version));
+                  std::string("CONFIG NMEA0183 ") + ToNmeaVersionString(*profile.nmea_version));
   }
 
   if (profile.rtk_timeout_s.has_value())
@@ -331,14 +326,13 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
 
   if (profile.rtk_reliability.has_value())
   {
-    AppendCommand(
-        result.commands,
-        target,
-        ReceiverCommandKind::kApplyConfigProfile,
-        ReceiverCommandSafetyLevel::kRuntime,
-        ReceiverResponseKind::kTextPayload,
-        "CONFIG RTK RELIABILITY " + std::to_string(profile.rtk_reliability->primary) +
-            " " + std::to_string(profile.rtk_reliability->secondary));
+    AppendCommand(result.commands,
+                  target,
+                  ReceiverCommandKind::kApplyConfigProfile,
+                  ReceiverCommandSafetyLevel::kRuntime,
+                  ReceiverResponseKind::kTextPayload,
+                  "CONFIG RTK RELIABILITY " + std::to_string(profile.rtk_reliability->primary) +
+                      " " + std::to_string(profile.rtk_reliability->secondary));
   }
 
   if (profile.dgps_timeout_s.has_value())
@@ -406,8 +400,7 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
 }
 
 UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-    const UnicoreModelProfile& model_profile,
-    const UnicorePersistenceTarget persistence)
+    const UnicoreModelProfile& model_profile, const UnicorePersistenceTarget persistence)
 {
   UnicoreConfigProfile profile;
   profile.target = BuildUnicoreTargetSelector(model_profile);
@@ -422,7 +415,6 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   {
     profile.signal_config = UnicoreSignalConfig{signal_group->groups};
   }
-  profile.clear_current_port_outputs = true;
   profile.output_messages = {
       {UnicoreOutputMessageKind::kGpgga, 1.0},
       {UnicoreOutputMessageKind::kGpgsv, 1.0},
@@ -444,8 +436,7 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile
 }
 
 UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(
-    const UnicoreModelProfile& model_profile,
-    const UnicorePersistenceTarget persistence)
+    const UnicoreModelProfile& model_profile, const UnicorePersistenceTarget persistence)
 {
   UnicoreConfigProfile profile = BuildUnicoreRoverProfile(model_profile, persistence);
   profile.config_kind = ReceiverConfigProfileKind::kDiagnosticsOutput;

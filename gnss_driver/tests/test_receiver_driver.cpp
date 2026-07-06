@@ -9,20 +9,21 @@
 #include <vector>
 
 #include "universal_gnss/gnss_types.hpp"
+#include "universal_gnss_driver/nmea_driver.hpp"
 #include "universal_gnss_driver/receiver_capabilities.hpp"
 #include "universal_gnss_driver/receiver_driver.hpp"
-#include "universal_gnss_driver/nmea_driver.hpp"
 #include "universal_gnss_driver/ublox_driver.hpp"
 #include "universal_gnss_driver/unicore_driver.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
 namespace
 {
 
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
+using universal_gnss_driver::NmeaDriver;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverConfigProfileKind;
 using universal_gnss_driver::ReceiverDriver;
@@ -30,7 +31,6 @@ using universal_gnss_driver::ReceiverDriverProfileBuildStatus;
 using universal_gnss_driver::ReceiverFeature;
 using universal_gnss_driver::ReceiverProtocol;
 using universal_gnss_driver::ReceiverVendor;
-using universal_gnss_driver::NmeaDriver;
 using universal_gnss_driver::UbloxDriver;
 using universal_gnss_driver::UnicoreDriver;
 
@@ -50,29 +50,28 @@ struct TestContext
 
 std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
 {
-  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
-      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
-      frame_without_crc.size() - 1u);
+  const auto crc =
+      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(reinterpret_cast<const std::uint8_t*>(
+                                                              frame_without_crc.data() + 1u),
+                                                          frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
-  stream << frame_without_crc
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
-         << "\r\n";
+  stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
+         << std::setfill('0') << crc << "\r\n";
   return stream.str();
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -80,7 +79,9 @@ void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, con
   payload[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xFFu);
 }
 
-void WriteLeI4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::int32_t value)
+void WriteLeI4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::int32_t value)
 {
   WriteLeU4(payload, offset, static_cast<std::uint32_t>(value));
 }
@@ -172,72 +173,75 @@ void TestDriverFamilyAndCapabilities(TestContext& ctx)
   const ReceiverDriver& unicore_um980_driver = unicore_um980;
   const ReceiverDriver& nmea_driver = nmea;
 
-  ctx.Expect(ublox_driver.vendor() == ReceiverVendor::kUblox &&
-                 ublox_driver.family() == "F9/F10",
+  ctx.Expect(ublox_driver.vendor() == ReceiverVendor::kUblox && ublox_driver.family() == "F9/F10",
              "u-blox driver should expose the expected vendor and family");
   ctx.Expect(unicore_driver.vendor() == ReceiverVendor::kUnicore &&
                  unicore_driver.family() == "UM98x",
              "Unicore driver should expose the expected vendor and family");
-  ctx.Expect(nmea_driver.vendor() == ReceiverVendor::kGeneric &&
-                 nmea_driver.family() == "NMEA",
+  ctx.Expect(nmea_driver.vendor() == ReceiverVendor::kGeneric && nmea_driver.family() == "NMEA",
              "generic NMEA driver should expose the expected vendor and family");
 
-  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
-                 ublox_driver.capabilities(), ReceiverProtocol::kUbx) &&
-                 universal_gnss_driver::SupportsOutputProtocol(
-                     ublox_driver.capabilities(), ReceiverProtocol::kNmea) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     ublox_driver.capabilities(), ReceiverFeature::kRtk) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     ublox_driver.capabilities(), ReceiverFeature::kRfMonitoring) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     ublox_driver.capabilities(), ReceiverFeature::kConstellationConfig) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     ublox_driver.capabilities(), ReceiverFeature::kCfgValset),
-             "u-blox driver should advertise RTK, RF monitoring, constellation config, and CFG-VALSET support");
+  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(ublox_driver.capabilities(),
+                                                          ReceiverProtocol::kUbx) &&
+                 universal_gnss_driver::SupportsOutputProtocol(ublox_driver.capabilities(),
+                                                               ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::HasReceiverFeature(ublox_driver.capabilities(),
+                                                           ReceiverFeature::kRtk) &&
+                 universal_gnss_driver::HasReceiverFeature(ublox_driver.capabilities(),
+                                                           ReceiverFeature::kRfMonitoring) &&
+                 universal_gnss_driver::HasReceiverFeature(ublox_driver.capabilities(),
+                                                           ReceiverFeature::kConstellationConfig) &&
+                 universal_gnss_driver::HasReceiverFeature(ublox_driver.capabilities(),
+                                                           ReceiverFeature::kCfgValset),
+             "u-blox driver should advertise RTK, RF monitoring, constellation config, and "
+             "CFG-VALSET support");
 
-  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
-                 unicore_driver.capabilities(), ReceiverProtocol::kUnicoreAscii) &&
-                 universal_gnss_driver::SupportsOutputProtocol(
-                     unicore_driver.capabilities(), ReceiverProtocol::kUnicoreBinary) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_driver.capabilities(), ReceiverFeature::kRtk) &&
+  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(unicore_driver.capabilities(),
+                                                          ReceiverProtocol::kUnicoreAscii) &&
+                 universal_gnss_driver::SupportsOutputProtocol(unicore_driver.capabilities(),
+                                                               ReceiverProtocol::kUnicoreBinary) &&
+                 universal_gnss_driver::HasReceiverFeature(unicore_driver.capabilities(),
+                                                           ReceiverFeature::kRtk) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      unicore_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
-             "generic Unicore drivers should stay safe: RTK plus ASCII config support without assuming baseline or signal-group capabilities");
-  ctx.Expect(universal_gnss_driver::HasReceiverFeature(
-                 unicore_um982_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_um982_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um960_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um960_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um980_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_um980_driver.capabilities(), ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um981_driver.capabilities(), ReceiverFeature::kDualAntennaBaseline) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um981_driver.capabilities(), ReceiverFeature::kSignalGroups),
-             "model-aware Unicore drivers should advertise baseline only for confirmed dual-antenna models while keeping UM960/UM981 conservative until signal-group mappings are documented");
+                 !universal_gnss_driver::HasReceiverFeature(unicore_driver.capabilities(),
+                                                            ReceiverFeature::kSignalGroups) &&
+                 universal_gnss_driver::HasReceiverFeature(unicore_driver.capabilities(),
+                                                           ReceiverFeature::kAsciiCommandConfig),
+             "generic Unicore drivers should stay safe: RTK plus ASCII config support without "
+             "assuming baseline or signal-group capabilities");
+  ctx.Expect(
+      universal_gnss_driver::HasReceiverFeature(unicore_um982_driver.capabilities(),
+                                                ReceiverFeature::kDualAntennaBaseline) &&
+          universal_gnss_driver::HasReceiverFeature(unicore_um982_driver.capabilities(),
+                                                    ReceiverFeature::kSignalGroups) &&
+          !universal_gnss_driver::HasReceiverFeature(unicore_um960_driver.capabilities(),
+                                                     ReceiverFeature::kDualAntennaBaseline) &&
+          !universal_gnss_driver::HasReceiverFeature(unicore_um960_driver.capabilities(),
+                                                     ReceiverFeature::kSignalGroups) &&
+          !universal_gnss_driver::HasReceiverFeature(unicore_um980_driver.capabilities(),
+                                                     ReceiverFeature::kDualAntennaBaseline) &&
+          universal_gnss_driver::HasReceiverFeature(unicore_um980_driver.capabilities(),
+                                                    ReceiverFeature::kSignalGroups) &&
+          !universal_gnss_driver::HasReceiverFeature(unicore_um981_driver.capabilities(),
+                                                     ReceiverFeature::kDualAntennaBaseline) &&
+          !universal_gnss_driver::HasReceiverFeature(unicore_um981_driver.capabilities(),
+                                                     ReceiverFeature::kSignalGroups),
+      "model-aware Unicore drivers should advertise baseline only for confirmed dual-antenna "
+      "models while keeping UM960/UM981 conservative until signal-group mappings are documented");
 
-  ctx.Expect(!universal_gnss_driver::SupportsInputProtocol(
-                 nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
-                 universal_gnss_driver::SupportsOutputProtocol(
-                     nmea_driver.capabilities(), ReceiverProtocol::kNmea) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     nmea_driver.capabilities(), ReceiverFeature::kRtk) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     nmea_driver.capabilities(), ReceiverFeature::kRoverMode) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     nmea_driver.capabilities(), ReceiverFeature::kAsciiCommandConfig),
-             "generic NMEA driver should advertise a read-only NMEA output path with RTK read visibility but without config features");
+  ctx.Expect(!universal_gnss_driver::SupportsInputProtocol(nmea_driver.capabilities(),
+                                                           ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::SupportsOutputProtocol(nmea_driver.capabilities(),
+                                                               ReceiverProtocol::kNmea) &&
+                 universal_gnss_driver::HasReceiverFeature(nmea_driver.capabilities(),
+                                                           ReceiverFeature::kRtk) &&
+                 universal_gnss_driver::HasReceiverFeature(nmea_driver.capabilities(),
+                                                           ReceiverFeature::kRoverMode) &&
+                 !universal_gnss_driver::HasReceiverFeature(nmea_driver.capabilities(),
+                                                            ReceiverFeature::kAsciiCommandConfig),
+             "generic NMEA driver should advertise a read-only NMEA output path with RTK read "
+             "visibility but without config features");
 }
 
 void TestSupportedProfilesAndGeneration(TestContext& ctx)
@@ -276,13 +280,12 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
                  ublox_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
                  ublox_rover.commands.size() == 13u,
              "u-blox rover driver profile should delegate to the existing rover builder");
-  ctx.Expect(ublox_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
-                 ublox_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
-                 ublox_diag.commands.size() == 23u &&
-                 !ublox_diag.commands.empty() &&
-                 ublox_diag.commands.front().safety_level ==
-                     ReceiverCommandSafetyLevel::kPersistent,
-             "persistent u-blox diagnostics driver profiles should preserve persistent command safety");
+  ctx.Expect(
+      ublox_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
+          ublox_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
+          ublox_diag.commands.size() == 23u && !ublox_diag.commands.empty() &&
+          ublox_diag.commands.front().safety_level == ReceiverCommandSafetyLevel::kPersistent,
+      "persistent u-blox diagnostics driver profiles should preserve persistent command safety");
   ctx.Expect(ublox_base.status == ReceiverDriverProfileBuildStatus::kOk &&
                  ublox_base.profile_kind == ReceiverConfigProfileKind::kBase &&
                  ublox_base.commands.size() == 11u,
@@ -298,21 +301,26 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
   const auto nmea_diag = nmea_driver.BuildDiagnosticsProfile();
   ctx.Expect(unicore_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_rover.profile_kind == ReceiverConfigProfileKind::kRover &&
-                 unicore_rover.commands.size() == 14u,
-             "generic Unicore rover driver profiles should skip model-specific signal-group configuration");
+                 unicore_rover.commands.size() == 13u,
+             "generic Unicore rover driver profiles should skip model-specific signal-group "
+             "configuration");
   ctx.Expect(unicore_diag.status == ReceiverDriverProfileBuildStatus::kOk &&
                  unicore_diag.profile_kind == ReceiverConfigProfileKind::kDiagnosticsOutput &&
-                 unicore_diag.commands.size() == 14u,
-             "generic Unicore diagnostics driver profiles should stay model-safe and skip CONFIG SIGNALGROUP");
+                 unicore_diag.commands.size() == 13u,
+             "generic Unicore diagnostics driver profiles should stay model-safe and skip CONFIG "
+             "SIGNALGROUP");
   ctx.Expect(unicore_um960_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
-                 unicore_um960_rover.commands.size() == 14u,
-             "UM960 driver rover profiles should stay known non-baseline and skip undocumented signal-group commands");
+                 unicore_um960_rover.commands.size() == 13u,
+             "UM960 driver rover profiles should stay known non-baseline and skip undocumented "
+             "signal-group commands");
   ctx.Expect(unicore_um981_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
-                 unicore_um981_rover.commands.size() == 14u,
-             "UM981 driver rover profiles should stay known non-baseline and skip undocumented signal-group commands");
-  ctx.Expect(unicore_um982_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
-                 unicore_um982_rover.commands.size() == 15u,
-             "UM982 driver profiles should emit the documented dual-antenna rover signal-group command");
+                 unicore_um981_rover.commands.size() == 13u,
+             "UM981 driver rover profiles should stay known non-baseline and skip undocumented "
+             "signal-group commands");
+  ctx.Expect(
+      unicore_um982_rover.status == ReceiverDriverProfileBuildStatus::kOk &&
+          unicore_um982_rover.commands.size() == 14u,
+      "UM982 driver profiles should emit the documented dual-antenna rover signal-group command");
   ctx.Expect(unicore_base.status == ReceiverDriverProfileBuildStatus::kUnsupportedProfile &&
                  unicore_base.profile_kind == ReceiverConfigProfileKind::kBase,
              "Unicore drivers should report base profile generation as unsupported");
@@ -345,11 +353,10 @@ void TestRuntimeStateAccess(TestContext& ctx)
 
   ublox_driver.FeedBytes(BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()), 1000);
   unicore_driver.FeedString(kBestNavLine, 2000);
-  nmea_driver.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
-      3000);
-  nmea_driver.FeedBytes(
-      BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
+  nmea_driver.FeedBytes(BuildNmeaSentence(
+                            "GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
+                        3000);
+  nmea_driver.FeedBytes(BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
 
   ctx.Expect(ublox_driver.current_state().fix_valid &&
                  ublox_driver.current_state().fix_type == GnssFixType::kFix &&

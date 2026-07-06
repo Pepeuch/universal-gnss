@@ -476,7 +476,7 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation && result.execution_confirmed &&
-                 result.plan.summary.commands_total == 18u &&
+                 result.plan.summary.commands_total == 17u &&
                  result.plan.summary.factory_reset_commands == 1u &&
                  result.plan.summary.persistent_commands == 1u,
              "persistent Unicore apply should prepare a confirmed reset-first recovery workflow");
@@ -498,8 +498,8 @@ void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContex
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.plan.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.plan.summary.commands_total == 18u &&
-                 result.plan.summary.runtime_commands == 16u &&
+                 result.plan.summary.commands_total == 17u &&
+                 result.plan.summary.runtime_commands == 15u &&
                  result.plan.summary.persistent_commands == 1u &&
                  result.plan.summary.factory_reset_commands == 1u &&
                  result.plan.commands.size() > 1u &&
@@ -535,7 +535,7 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
                  result.plan.signal_profile ==
                      std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
                          universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
-                 result.plan.summary.commands_total == 12u,
+                 result.plan.summary.commands_total == 11u,
              "prepared apply plans should preserve the minimal signal-profile override");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
                  text.find("BESTNAVA 1") != std::string::npos &&
@@ -558,7 +558,7 @@ void TestKnownNonBaselineUnicoreModelPreparation(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.plan.receiver_model == std::optional<std::string>{"UM981"} &&
-                 result.plan.summary.commands_total == 14u &&
+                 result.plan.summary.commands_total == 13u &&
                  text.find("Receiver model: UM981") != std::string::npos &&
                  text.find("safe generic non-baseline fallback") == std::string::npos,
              "config apply should accept UM981 as a known non-baseline Unicore model without "
@@ -580,9 +580,9 @@ void TestFactoryResetRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
   ctx.Expect(
       result.status == ConfigApplyStatus::kOk && result.requires_runtime_confirmation &&
           result.requires_persistent_confirmation && result.execution_confirmed &&
-          result.plan.summary.commands_total == 17u &&
+          result.plan.summary.commands_total == 16u &&
           result.plan.summary.factory_reset_commands == 1u &&
-          result.plan.summary.runtime_commands == 16u,
+          result.plan.summary.runtime_commands == 15u,
       "factory_reset live apply should prepare the explicit reset/reprobe recovery sequence");
 }
 
@@ -604,10 +604,10 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   const auto result = ExecuteConfigApply(transport, options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && !result.dry_run && result.executed &&
-                 result.execution_summary.commands_total == 15u &&
-                 result.execution_summary.commands_completed == 15u &&
+                 result.execution_summary.commands_total == 14u &&
+                 result.execution_summary.commands_completed == 14u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 15u &&
+                 result.execution_summary.responses_applied == 14u &&
                  result.execution_summary.final_status == "completed",
              "confirmed runtime-only Unicore apply should complete against the in-memory duplex");
   ctx.Expect(!transport.written_bytes().empty(),
@@ -810,10 +810,10 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_total == 17u &&
-                 result.execution_summary.commands_completed == 17u &&
+                 result.execution_summary.commands_total == 16u &&
+                 result.execution_summary.commands_completed == 16u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 15u &&
+                 result.execution_summary.responses_applied == 14u &&
                  result.execution_summary.final_status == "completed",
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
@@ -869,7 +869,7 @@ void TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(TestConte
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_completed == 17u,
+                 result.execution_summary.commands_completed == 16u,
              "factory_reset preflight should support receivers that are live at 38400 bps");
   ctx.Expect(
       hooks.AllStepsConsumed() && hooks.failure().empty() &&
@@ -921,7 +921,7 @@ void TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(TestCont
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.execution_summary.commands_completed == 17u,
+                 result.execution_summary.commands_completed == 16u,
              "factory_reset preflight should support receivers that are live at 921600 bps");
   ctx.Expect(
       hooks.AllStepsConsumed() && hooks.failure().empty() &&
@@ -1002,10 +1002,10 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(
-      result.status == ConfigApplyStatus::kOk && result.execution_summary.commands_total == 18u &&
-          result.execution_summary.commands_completed == 18u &&
+      result.status == ConfigApplyStatus::kOk && result.execution_summary.commands_total == 17u &&
+          result.execution_summary.commands_completed == 17u &&
           result.execution_summary.commands_failed == 0u &&
-          result.execution_summary.responses_applied == 16u &&
+          result.execution_summary.responses_applied == 15u &&
           result.execution_summary.final_status == "completed",
       "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
@@ -1061,10 +1061,10 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 460800u &&
-                 result.execution_summary.commands_total == 18u &&
-                 result.execution_summary.commands_completed == 18u &&
+                 result.execution_summary.commands_total == 17u &&
+                 result.execution_summary.commands_completed == 17u &&
                  result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.responses_applied == 16u &&
+                 result.execution_summary.responses_applied == 15u &&
                  result.execution_summary.final_status == "completed",
              "persistent Unicore apply should finish at the overridden target config baud");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&

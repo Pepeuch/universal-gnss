@@ -113,7 +113,6 @@ Current runtime-safe command families:
 - `CONFIG RTK RELIABILITY <a> <b>`
 - `CONFIG DGPS TIMEOUT <seconds>`
 - model-validated `CONFIG SIGNALGROUP ...`
-- `UNLOG`
 - output enable commands for:
   - `GPGGA`
   - `GPGSV`
@@ -123,6 +122,10 @@ Current runtime-safe command families:
   - `RTKSTATUSA`
   - `RTCMSTATUSA`
   - `SATSINFOA`
+
+Default runtime-safe profiles do not emit `UNLOG`; they enable the required
+MowgliNext outputs without cutting any pre-existing receiver outputs on the
+active port.
 
 Current safety-gated commands:
 
@@ -163,7 +166,6 @@ commands:
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
-- `UNLOG`
 - `LOG GPGGA ONTIME 1`
 - `GPGSV 1`
 - `GPGST 1`
@@ -188,7 +190,8 @@ Model-specific signal-group behavior:
 This keeps the primary rover state on `BESTNAVA` at `5 Hz` while trimming the
 fallback/observability logs down to `1 Hz`. It also keeps dual-antenna
 signal-group choices gated by the confirmed receiver model instead of by RTK
-state or runtime baseline fields.
+state or runtime baseline fields. The profile is additive and does not disable
+existing outputs before enabling the required runtime messages.
 
 If persistent mode is requested, the builder appends only:
 

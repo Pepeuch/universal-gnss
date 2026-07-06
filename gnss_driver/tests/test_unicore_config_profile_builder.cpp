@@ -20,16 +20,16 @@ using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverConfigProfileKind;
 using universal_gnss_driver::ReceiverVendor;
+using universal_gnss_driver::ResolveUnicoreModelProfile;
 using universal_gnss_driver::UnicoreConfigProfile;
-using universal_gnss_driver::UnicoreConfigProfileBuildStatus;
 using universal_gnss_driver::UnicoreConfigProfileBuilder;
+using universal_gnss_driver::UnicoreConfigProfileBuildStatus;
 using universal_gnss_driver::UnicoreMode;
 using universal_gnss_driver::UnicoreNmeaVersion;
 using universal_gnss_driver::UnicoreOutputMessageKind;
 using universal_gnss_driver::UnicoreOutputMessageRate;
 using universal_gnss_driver::UnicorePersistenceTarget;
 using universal_gnss_driver::UnicoreSignalConfig;
-using universal_gnss_driver::ResolveUnicoreModelProfile;
 using universal_gnss_transport::MemoryByteSink;
 
 struct TestContext
@@ -59,8 +59,7 @@ void ExpectTextCommand(TestContext& ctx,
                        const std::string& text_prefix,
                        const std::string& expected_profile_id = "unicore_um98x_placeholder")
 {
-  ctx.Expect(command.kind == kind,
-             "unicore command should preserve the expected command kind");
+  ctx.Expect(command.kind == kind, "unicore command should preserve the expected command kind");
   ctx.Expect(command.safety_level == safety_level,
              "unicore command should preserve the expected safety level");
   ctx.Expect(command.target.vendor == ReceiverVendor::kUnicore &&
@@ -82,10 +81,11 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover profile should build successfully");
   ctx.Expect(profile.config_kind == ReceiverConfigProfileKind::kRover,
              "unicore rover helper should declare the rover config profile kind");
-  ctx.Expect(profile.clear_current_port_outputs,
-             "unicore rover helper should request a runtime output cleanup before re-enabling logs");
-  ctx.Expect(result.commands.size() == 14u,
-             "generic unicore rover helper should skip CONFIG SIGNALGROUP when the model is unknown");
+  ctx.Expect(!profile.clear_current_port_outputs,
+             "unicore rover helper should leave existing port outputs untouched by default");
+  ctx.Expect(
+      result.commands.size() == 13u,
+      "generic unicore rover helper should skip CONFIG SIGNALGROUP when the model is unknown");
 
   ExpectTextCommand(ctx,
                     result.commands[0],
@@ -101,40 +101,44 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "unicore rover helper should include the conservative DGPS timeout command");
   ctx.Expect(!ContainsText(result.commands[5], "CONFIG SIGNALGROUP"),
              "generic unicore rover helper should not guess a signal-group selection");
-  ctx.Expect(ContainsText(result.commands[5], "UNLOG"),
-             "unicore rover helper should clear the current port outputs before enabling the curated log set");
-  ctx.Expect(ContainsText(result.commands[6], "LOG GPGGA ONTIME 1"),
+  ctx.Expect(!ContainsText(result.commands[5], "UNLOG"),
+             "unicore rover helper should not emit UNLOG in the default runtime-safe profile");
+  ctx.Expect(ContainsText(result.commands[5], "LOG GPGGA ONTIME 1"),
              "unicore rover helper should keep GPGGA available at a lighter 1 Hz rate");
-  ctx.Expect(ContainsText(result.commands[7], "GPGSV 1"),
-             "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback stay available");
-  ctx.Expect(ContainsText(result.commands[8], "GPGST 1"),
-             "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
-  ctx.Expect(ContainsText(result.commands[9], "LOG PVTSLNA ONTIME 1"),
+  ctx.Expect(ContainsText(result.commands[6], "GPGSV 1"),
+             "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback "
+             "stay available");
+  ctx.Expect(
+      ContainsText(result.commands[7], "GPGST 1"),
+      "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
+  ctx.Expect(ContainsText(result.commands[8], "LOG PVTSLNA ONTIME 1"),
              "unicore rover helper should reduce PVTSLNA to a lighter 1 Hz fallback rate");
-  ctx.Expect(ContainsText(result.commands[10], "BESTNAVA 0.2"),
+  ctx.Expect(ContainsText(result.commands[9], "BESTNAVA 0.2"),
              "unicore rover helper should emit BESTNAVA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[11], "RTKSTATUSA 1"),
+  ctx.Expect(ContainsText(result.commands[10], "RTKSTATUSA 1"),
              "unicore rover helper should emit RTKSTATUSA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[12], "RTCMSTATUSA ONCHANGED"),
+  ctx.Expect(ContainsText(result.commands[11], "RTCMSTATUSA ONCHANGED"),
              "unicore rover helper should emit RTCMSTATUSA with ONCHANGED syntax");
-  ctx.Expect(ContainsText(result.commands[13], "SATSINFOA 1"),
-             "unicore rover helper should keep SATSINFOA at 1 Hz for stable satellite observability");
+  ctx.Expect(
+      ContainsText(result.commands[12], "SATSINFOA 1"),
+      "unicore rover helper should keep SATSINFOA at 1 Hz for stable satellite observability");
 }
 
 void TestModelAwareRoverProfileGeneration(TestContext& ctx)
 {
   {
     const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-        ResolveUnicoreModelProfile("UM960"),
-        UnicorePersistenceTarget::kRuntimeOnly);
+        ResolveUnicoreModelProfile("UM960"), UnicorePersistenceTarget::kRuntimeOnly);
     const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
     ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                   result.commands.size() == 14u,
-               "UM960 rover helper should stay known non-baseline and skip undocumented signal-group commands");
+                   result.commands.size() == 13u,
+               "UM960 rover helper should stay known non-baseline and skip undocumented "
+               "signal-group commands");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command) {
+                            [](const ReceiverCommand& command)
+                            {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM960 rover helper should not guess a signal-group selection");
@@ -142,28 +146,28 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
 
   {
     const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-        ResolveUnicoreModelProfile("UM981"),
-        UnicorePersistenceTarget::kRuntimeOnly);
+        ResolveUnicoreModelProfile("UM981"), UnicorePersistenceTarget::kRuntimeOnly);
     const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
     ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                   result.commands.size() == 14u,
-               "UM981 rover helper should stay known non-baseline and skip undocumented signal-group commands");
+                   result.commands.size() == 13u,
+               "UM981 rover helper should stay known non-baseline and skip undocumented "
+               "signal-group commands");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command) {
+                            [](const ReceiverCommand& command)
+                            {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM981 rover helper should not guess a signal-group selection");
   }
 
-  const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-      ResolveUnicoreModelProfile("UM982"),
-      UnicorePersistenceTarget::kRuntimeOnly);
+  const auto profile =
+      UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(ResolveUnicoreModelProfile("UM982"),
+                                                            UnicorePersistenceTarget::kRuntimeOnly);
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
-  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 15u,
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 14u,
              "UM982 rover helper should emit the documented dual-antenna signal-group command");
   ExpectTextCommand(ctx,
                     result.commands[5],
@@ -178,11 +182,19 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
   const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile();
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
-  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 14u,
-             "generic unicore diagnostics helper should preserve the lean rover command count without guessing a signal-group");
-  ctx.Expect(ContainsText(result.commands[9], "LOG PVTSLNA ONTIME 0.2"),
-             "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging");
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 13u,
+             "generic unicore diagnostics helper should preserve the lean rover command count "
+             "without guessing a signal-group");
+  ctx.Expect(!std::any_of(result.commands.begin(),
+                          result.commands.end(),
+                          [](const ReceiverCommand& command)
+                          {
+                            return ContainsText(command, "UNLOG");
+                          }),
+             "unicore diagnostics helper should not emit UNLOG by default");
+  ctx.Expect(
+      ContainsText(result.commands[8], "LOG PVTSLNA ONTIME 0.2"),
+      "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging");
   ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA 1"),
              "unicore diagnostics helper should keep SATSINFOA at 1 Hz");
 }
@@ -190,13 +202,11 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
 void TestPersistentAndSignalGroupSafety(TestContext& ctx)
 {
   {
-    const auto profile =
-        UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-            UnicorePersistenceTarget::kSaveConfig);
+    const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+        UnicorePersistenceTarget::kSaveConfig);
     const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
-    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                   !result.commands.empty(),
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && !result.commands.empty(),
                "persistent unicore rover profile should still generate commands");
     const auto& save_command = result.commands.back();
     ExpectTextCommand(ctx,
@@ -235,7 +245,8 @@ void TestPersistentAndSignalGroupSafety(TestContext& ctx)
     ReceiverCommandDispatcher dispatcher(sink);
     const auto accepted = dispatcher.Dispatch(result.commands.front());
     ctx.Expect(accepted.status == DispatchStatus::kSent,
-               "runtime signal-group commands should remain immediately dispatchable without a persistent confirmation gate");
+               "runtime signal-group commands should remain immediately dispatchable without a "
+               "persistent confirmation gate");
   }
 }
 
@@ -245,8 +256,7 @@ void TestCom1BaudCommandGeneration(TestContext& ctx)
   profile.com1_baud_rate = 921600u;
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
-  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 15u,
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 14u,
              "unicore COM1 baud injection should prepend one extra runtime command");
   ExpectTextCommand(ctx,
                     result.commands.front(),
@@ -260,8 +270,7 @@ void TestFactoryResetProfileGeneration(TestContext& ctx)
   const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreFactoryResetProfile();
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
-  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 1u,
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 1u,
              "unicore factory-reset helper should generate exactly one reset command");
   ExpectTextCommand(ctx,
                     result.commands.front(),
@@ -318,14 +327,13 @@ void TestInvalidDeferredInputs(TestContext& ctx)
 
 void TestRuntimeDispatcherBehavior(TestContext& ctx)
 {
-  const auto result = UnicoreConfigProfileBuilder::Build(
-      UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile());
+  const auto result =
+      UnicoreConfigProfileBuilder::Build(UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile());
   MemoryByteSink sink;
   ReceiverCommandDispatcher dispatcher(sink);
 
   const auto dispatch = dispatcher.Dispatch(result.commands.front());
-  ctx.Expect(dispatch.status == DispatchStatus::kSent &&
-                 dispatcher.metrics().commands_sent == 1u,
+  ctx.Expect(dispatch.status == DispatchStatus::kSent && dispatcher.metrics().commands_sent == 1u,
              "runtime unicore config commands should dispatch without extra confirmation");
 }
 
