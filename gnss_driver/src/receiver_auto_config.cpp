@@ -663,6 +663,13 @@ void ApplyUnicoreSignalGroupSelection(UnicoreConfigProfile& profile,
   profile.signal_config = UnicoreSignalConfig{selection.groups};
 }
 
+void AppendUnicoreAdvancedSignalGroupWarning(ReceiverAutoConfigPlan& plan)
+{
+  plan.warnings.push_back(
+      "Advanced SIGNALGROUP combination; verify receiver documentation and live GNSS "
+      "diagnostics.");
+}
+
 void AppendUnicoreSkippedSignalGroupWarning(ReceiverAutoConfigPlan& plan,
                                             const UnicoreModelProfile& model_profile,
                                             const std::string_view context_prefix)
@@ -821,9 +828,20 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
 
   if (!normalized_requested_model.empty() && model_profile.model_id == UnicoreModel::kUnknown)
   {
-    plan.warnings.push_back("Unicore model " + normalized_requested_model +
-                            " has no documented portable signal-group/capability profile yet; "
-                            "using the safe generic non-baseline fallback");
+    if (request.signal_group_override.has_value() &&
+        request.requested_profile != ReceiverAutoConfigProfile::kRuntimeOnly)
+    {
+      plan.warnings.push_back(
+          "Unicore model " + normalized_requested_model +
+          " has no documented portable signal-group/capability profile yet; applying the "
+          "requested SIGNALGROUP override without model-specific guidance");
+    }
+    else
+    {
+      plan.warnings.push_back("Unicore model " + normalized_requested_model +
+                              " has no documented portable signal-group/capability profile yet; "
+                              "using the safe generic non-baseline fallback");
+    }
   }
 
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
@@ -880,41 +898,15 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     AppendUnicoreSkippedSignalGroupWarning(plan, model_profile, "");
   }
 
-  // An explicit operator override wins over the profile/signal_profile default,
-  // but only when the selected Unicore model has a documented signal-group
-  // profile that confirms the requested combination.
+  // An explicit operator override wins over the profile/signal_profile default.
+  // Documented model profiles remain hints/warnings rather than a hard allowlist.
   if (request.signal_group_override.has_value())
   {
     if (request.requested_profile != ReceiverAutoConfigProfile::kRuntimeOnly)
     {
-      if (!HasReceiverFeature(model_profile.capabilities, ReceiverFeature::kSignalGroups))
-      {
-        plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
-        if (model_profile.model_id == UnicoreModel::kUnknown)
-        {
-          plan.error_message =
-              "cannot apply a Unicore signal-group override without a documented "
-              "model/signal-group profile; supply a confirmed model with documented signal-group "
-              "support such as UM980, UM982, or UB9A0";
-        }
-        else
-        {
-          plan.error_message = "model " + std::string(model_profile.model) +
-                               " has no documented portable signal-group profile yet; explicit "
-                               "overrides are currently confirmed only for UM980, UM982, and UB9A0";
-        }
-        return plan;
-      }
-
       if (FindUnicoreSignalGroupSelection(model_profile, *request.signal_group_override) == nullptr)
       {
-        plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
-        plan.error_message =
-            "unsupported Unicore signal-group override " +
-            FormatUnicoreSignalGroupSelection(*request.signal_group_override) + " for model " +
-            std::string(model_profile.model) +
-            "; supported selections: " + DescribeUnicoreSupportedSignalGroups(model_profile);
-        return plan;
+        AppendUnicoreAdvancedSignalGroupWarning(plan);
       }
 
       profile.signal_config = UnicoreSignalConfig{*request.signal_group_override};
@@ -1198,35 +1190,51 @@ std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProf
 std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
     const std::string_view signal_group)
 {
-  std::istringstream stream{std::string(signal_group)};
+  std::string normalized;
+  normalized.reserve(signal_group.size());
+  for (const unsigned char c : signal_group)
+  {
+    if (std::isspace(c) != 0 || c == ',' || c == '/')
+    {
+      if (!normalized.empty() && normalized.back() != ' ')
+      {
+        normalized.push_back(' ');
+      }
+      continue;
+    }
+
+    normalized.push_back(static_cast<char>(c));
+  }
+  if (!normalized.empty() && normalized.back() == ' ')
+  {
+    normalized.pop_back();
+  }
+
+  std::istringstream stream{normalized};
   std::vector<std::uint8_t> groups;
   std::string token;
   while (stream >> token)
   {
-    std::size_t consumed = 0u;
-    unsigned long value = 0ul;
-    try
-    {
-      value = std::stoul(token, &consumed, 10);
-    }
-    catch (const std::exception&)
-    {
-      return std::nullopt;
-    }
-    if (consumed != token.size() || value > 255ul)
+    if (!std::all_of(token.begin(),
+                     token.end(),
+                     [](const unsigned char c)
+                     {
+                       return std::isdigit(c) != 0;
+                     }))
     {
       return std::nullopt;
     }
+
+    const unsigned long value = std::stoul(token, nullptr, 10);
+    if (value > 9ul)
+    {
+      return std::nullopt;
+    }
+
     groups.push_back(static_cast<std::uint8_t>(value));
   }
 
-  // Documented N4 CONFIG SIGNALGROUP forms are either one field
-  // (single-antenna products with repo-local mappings such as UM980 / UB9A0)
-  // or two fields (dual-antenna products such as UM982). Known non-baseline
-  // models without repo-local SIGNALGROUP mappings, such as UM960 / UM981,
-  // intentionally stay on the no-documented-signal-group path. Anything else
-  // is malformed.
-  if (groups.empty() || groups.size() > 2u)
+  if (groups.size() != 2u)
   {
     return std::nullopt;
   }

@@ -62,14 +62,14 @@ struct ReceiverAutoConfigRequest
   ReceiverDetectedFamily receiver_family{ReceiverDetectedFamily::kUnknown};
   std::optional<ReceiverProbeResult> discovery_result{};
   std::optional<std::string> receiver_model{};
-  ReceiverAutoConfigProfile requested_profile{
-      ReceiverAutoConfigProfile::kRoverHighPrecision};
+  ReceiverAutoConfigProfile requested_profile{ReceiverAutoConfigProfile::kRoverHighPrecision};
   ReceiverAutoConfigApplyMode apply_mode{ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<ReceiverAutoConfigSignalProfile> signal_profile{};
-  // Explicit Unicore CONFIG SIGNALGROUP override (e.g. {2} for UM980 or
-  // {3, 6} for UM982). When set it replaces the profile/signal_profile default,
-  // but it is only accepted when the requested Unicore model has a documented
-  // portable signal-group profile. Ignored by non-Unicore plans.
+  // Explicit Unicore CONFIG SIGNALGROUP override (for example {3, 6}).
+  // When set it replaces the profile/signal_profile default. Unicore plans
+  // validate only syntax/range for this override; model-specific documented
+  // combinations remain hints/warnings rather than a hard allowlist. Ignored by
+  // non-Unicore plans.
   std::optional<std::vector<std::uint8_t>> signal_group_override{};
   std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
@@ -122,8 +122,7 @@ struct ReceiverAutoConfigPlan
   std::string error_message{};
 };
 
-ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
-    const ReceiverAutoConfigRequest& request);
+ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(const ReceiverAutoConfigRequest& request);
 
 ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
     const ReceiverProbeResult& discovery_result,
@@ -132,13 +131,13 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
     std::optional<std::uint32_t> config_baud = std::nullopt,
     std::optional<double> rate_hz = std::nullopt);
 
-std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(
-    std::string_view profile);
+std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(std::string_view profile);
 std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
     std::string_view signal_profile);
-// Parses a whitespace-separated Unicore signal-group override (e.g. "2" or
-// "3 6") into group bytes. Returns nullopt on empty input, non-numeric tokens,
-// out-of-range values, or more than two groups.
+// Parses a Unicore signal-group override such as "3 6", "3,6", or "3/6" into
+// two group bytes. Returns nullopt on empty input, ambiguous collapsed input
+// such as "36", non-numeric tokens, out-of-range values, or anything other
+// than exactly two groups.
 std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
     std::string_view signal_group);
 std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(

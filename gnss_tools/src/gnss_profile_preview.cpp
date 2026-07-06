@@ -10,26 +10,26 @@ namespace
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name
-      << " [--json] [--verbose] [--persistent]"
-      << " [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
-      << " [--signal-group <\"2\"|\"3 6\"|...>]"
-      << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
-      << " [--output-port <usb|uart1|uart2|all|auto>]"
-      << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
-      << "Examples:\n"
-      << "  " << program_name << " ublox rover_high_precision\n"
-      << "  " << program_name << " ublox rover_high_precision_debug --json\n"
-      << "  " << program_name << " ublox rover_high_precision --output-port all\n"
-      << "  " << program_name << " unicore factory_reset\n"
-      << "  " << program_name << " unicore rover_high_precision --model UM982 --persistent\n"
-      << "  " << program_name << " unicore rover_high_precision --model UM980 --signal-group 2\n"
-      << "  " << program_name << " unicore rover_high_precision --model UM960\n"
-      << "  " << program_name << " unicore rover_high_precision --model UM982 --signal-profile minimal\n"
-      << "  " << program_name << " nmea runtime_only\n"
-      << "Notes:\n"
-      << "  --baud remains accepted as a legacy alias for --config-baud\n";
+  std::cout << "Usage: " << program_name << " [--json] [--verbose] [--persistent]"
+            << " [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
+            << " [--signal-group <\"3 6\"|\"3,6\"|\"3/6\"|...>]"
+            << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
+            << " [--output-port <usb|uart1|uart2|all|auto>]"
+            << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
+            << "Examples:\n"
+            << "  " << program_name << " ublox rover_high_precision\n"
+            << "  " << program_name << " ublox rover_high_precision_debug --json\n"
+            << "  " << program_name << " ublox rover_high_precision --output-port all\n"
+            << "  " << program_name << " unicore factory_reset\n"
+            << "  " << program_name << " unicore rover_high_precision --model UM982 --persistent\n"
+            << "  " << program_name
+            << " unicore rover_high_precision --model UM982 --signal-group \"3 6\"\n"
+            << "  " << program_name << " unicore rover_high_precision --model UM960\n"
+            << "  " << program_name
+            << " unicore rover_high_precision --model UM982 --signal-profile minimal\n"
+            << "  " << program_name << " nmea runtime_only\n"
+            << "Notes:\n"
+            << "  --baud remains accepted as a legacy alias for --config-baud\n";
 }
 
 bool ParseUnsigned(const std::string& text, std::uint32_t& value)
@@ -148,12 +148,11 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
       }
 
-      const auto parsed =
-          universal_gnss_driver::ParseUnicoreSignalGroupOverride(argv[++index]);
+      const auto parsed = universal_gnss_driver::ParseUnicoreSignalGroupOverride(argv[++index]);
       if (!parsed.has_value())
       {
-        std::cerr << "error: invalid --signal-group value (expected one or two "
-                     "integers 0-255, e.g. \"2\" or \"3 6\")\n";
+        std::cerr << "error: invalid --signal-group value (expected two 0..9 "
+                     "groups such as \"3 6\")\n";
         PrintUsage(argv[0]);
         return EXIT_FAILURE;
       }
@@ -184,8 +183,7 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
       }
 
-      const auto parsed =
-          universal_gnss_driver::ParseReceiverAutoConfigOutputPort(argv[++index]);
+      const auto parsed = universal_gnss_driver::ParseReceiverAutoConfigOutputPort(argv[++index]);
       if (!parsed.has_value())
       {
         std::cerr << "error: invalid --output-port value\n";
@@ -261,5 +259,5 @@ int main(int argc, char** argv)
   }
 
   return result.status == universal_gnss_tools::ProfilePreviewStatus::kOk ? EXIT_SUCCESS
-                                                                           : EXIT_FAILURE;
+                                                                          : EXIT_FAILURE;
 }

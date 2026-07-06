@@ -81,7 +81,12 @@ const UnicoreModelProfile& Um980Profile()
       MakeUnicoreCapabilities(false, true),
       {
           {{1u}, "documented default single-antenna signal group", false, false, false, false},
-          {{2u}, "documented single-antenna all-frequency signal group", false, false, false, false},
+          {{2u},
+           "documented single-antenna all-frequency signal group",
+           false,
+           false,
+           false,
+           false},
           {{8u}, "documented single-antenna 50 Hz signal group", false, false, false, false},
       },
   };
@@ -208,8 +213,7 @@ const char* ToString(const UnicoreModel model)
   return "unknown";
 }
 
-const UnicoreModelProfile& ResolveUnicoreModelProfile(
-    const std::optional<std::string_view> model)
+const UnicoreModelProfile& ResolveUnicoreModelProfile(const std::optional<std::string_view> model)
 {
   if (!model.has_value())
   {
@@ -252,8 +256,7 @@ ReceiverTargetSelector BuildUnicoreTargetSelector(const UnicoreModelProfile& pro
 }
 
 const UnicoreSignalGroupSelection* FindUnicoreSignalGroupSelection(
-    const UnicoreModelProfile& profile,
-    const std::vector<std::uint8_t>& groups)
+    const UnicoreModelProfile& profile, const std::vector<std::uint8_t>& groups)
 {
   for (const auto& option : profile.signal_group_options)
   {
@@ -280,8 +283,7 @@ const UnicoreSignalGroupSelection* FindUnicorePortableRoverSignalGroupSelection(
   return nullptr;
 }
 
-std::string FormatUnicoreSignalGroupSelection(
-    const std::vector<std::uint8_t>& groups)
+std::string FormatUnicoreSignalGroupSelection(const std::vector<std::uint8_t>& groups)
 {
   if (groups.empty())
   {
@@ -300,8 +302,7 @@ std::string FormatUnicoreSignalGroupSelection(
   return stream.str();
 }
 
-std::string DescribeUnicoreSupportedSignalGroups(
-    const UnicoreModelProfile& profile)
+std::string DescribeUnicoreSupportedSignalGroups(const UnicoreModelProfile& profile)
 {
   if (profile.signal_group_options.empty())
   {

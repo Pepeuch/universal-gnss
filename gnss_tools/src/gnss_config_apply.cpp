@@ -53,7 +53,7 @@ void PrintUsage(const char* program_name)
                "<runtime_only|rover_high_precision|rover_high_precision_debug|factory_reset>\n"
             << "       [--apply-mode <dry-run|runtime-only|persistent|factory-reset>]\n"
             << "       [--signal-profile <balanced|high_precision|all_signals|minimal|custom>]"
-            << " [--signal-group <\"2\"|\"3 6\"|...>]"
+            << " [--signal-group <\"3 6\"|\"3,6\"|\"3/6\"|...>]"
             << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
             << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
             << "       [--timeout-ms <value>] [--confirm|--yes]\n"
@@ -86,8 +86,8 @@ void PrintUsage(const char* program_name)
                "rover_high_precision --signal-profile high_precision --apply-mode runtime-only "
                "--confirm\n"
             << "  " << program_name
-            << " --family unicore --model UM980 --device /dev/ttyAMA4 --baud 921600 --profile "
-               "rover_high_precision --signal-group 2 --apply-mode persistent --confirm\n"
+            << " --family unicore --model UM982 --device /dev/ttyAMA4 --baud 921600 --profile "
+               "rover_high_precision --signal-group \"3 6\" --apply-mode persistent --confirm\n"
             << "  " << program_name
             << " --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile "
                "rover_high_precision --apply-mode runtime-only --confirm\n"
@@ -554,8 +554,8 @@ int main(int argc, char** argv)
           universal_gnss_driver::ParseUnicoreSignalGroupOverride(require_value("--signal-group"));
       if (!parsed.has_value())
       {
-        std::cerr << "error: invalid --signal-group value (expected one or two "
-                     "integers 0-255, e.g. \"2\" or \"3 6\")\n";
+        std::cerr << "error: invalid --signal-group value (expected two 0..9 "
+                     "groups such as \"3 6\")\n";
         PrintUsage(argv[0]);
         return EXIT_FAILURE;
       }
