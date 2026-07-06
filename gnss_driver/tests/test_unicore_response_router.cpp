@@ -30,18 +30,16 @@ struct TestContext
 void TestOkResponseMapsToTextOk(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const bool generated =
-      router.ProcessLine("$command,LOG GPGGA,response: OK*\r\n", 1111);
+  const bool generated = router.ProcessLine("$command,GPGGA COM1 1,response: OK*\r\n", 1111);
 
   ReceiverCommandResponse response;
   ctx.Expect(generated && router.PopResponse(response),
              "documented $command accepted responses should generate a response");
   ctx.Expect(response.kind == ReceiverCommandResponseKind::kTextOk &&
                  response.timestamp_ns == std::optional<std::int64_t>(1111) &&
-                 response.message == "$command,LOG GPGGA,response: OK*",
+                 response.message == "$command,GPGGA COM1 1,response: OK*",
              "accepted Unicore command responses should map to text_ok");
-  ctx.Expect(router.metrics().lines_seen == 1u &&
-                 router.metrics().ok_responses_seen == 1u &&
+  ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ok_responses_seen == 1u &&
                  router.metrics().responses_generated == 1u,
              "accepted responses should update OK routing metrics");
 }
@@ -67,19 +65,19 @@ void TestErrorResponseMapsToTextError(TestContext& ctx)
 void TestCapturedPrefixedModeRoverAckMapsToTextOk(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const std::string captured =
-      std::string("[\x01", 2) + "$command,MODE ROVER,response: OK*21\r\n";
+  const std::string captured = std::string("[\x01", 2) + "$command,MODE ROVER,response: OK*21\r\n";
   const bool generated = router.ProcessLine(captured, 2525);
 
   ReceiverCommandResponse response;
-  ctx.Expect(generated && router.PopResponse(response),
-             "captured UM982 MODE ROVER acknowledgements should survive short mixed-stream prefixes");
-  ctx.Expect(response.kind == ReceiverCommandResponseKind::kTextOk &&
-                 response.timestamp_ns == std::optional<std::int64_t>(2525) &&
-                 response.message == "$command,MODE ROVER,response: OK*21",
-             "captured UM982 MODE ROVER acknowledgements should normalize to the clean response line");
-  ctx.Expect(router.metrics().lines_seen == 1u &&
-                 router.metrics().ok_responses_seen == 1u &&
+  ctx.Expect(
+      generated && router.PopResponse(response),
+      "captured UM982 MODE ROVER acknowledgements should survive short mixed-stream prefixes");
+  ctx.Expect(
+      response.kind == ReceiverCommandResponseKind::kTextOk &&
+          response.timestamp_ns == std::optional<std::int64_t>(2525) &&
+          response.message == "$command,MODE ROVER,response: OK*21",
+      "captured UM982 MODE ROVER acknowledgements should normalize to the clean response line");
+  ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ok_responses_seen == 1u &&
                  router.metrics().responses_generated == 1u &&
                  router.metrics().malformed_lines == 0u,
              "captured prefixed acknowledgements should count as valid OK responses");
@@ -88,21 +86,23 @@ void TestCapturedPrefixedModeRoverAckMapsToTextOk(TestContext& ctx)
 void TestCapturedLongPrefixedRtkTimeoutAckMapsToTextOk(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const std::string captured = std::string("\x00\x01\x02\x03\x04\x05\x06\x07"
-                                           "\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f",
-                                           16) +
+  const std::string captured = std::string(
+                                   "\x00\x01\x02\x03\x04\x05\x06\x07"
+                                   "\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f",
+                                   16) +
                                "$command,CONFIG RTK TIMEOUT 10,response: OK*63\r\n";
   const bool generated = router.ProcessLine(captured, 2626);
 
   ReceiverCommandResponse response;
   ctx.Expect(generated && router.PopResponse(response),
-             "captured UM982 CONFIG RTK TIMEOUT acknowledgements should survive long mixed-stream prefixes");
+             "captured UM982 CONFIG RTK TIMEOUT acknowledgements should survive long mixed-stream "
+             "prefixes");
   ctx.Expect(response.kind == ReceiverCommandResponseKind::kTextOk &&
                  response.timestamp_ns == std::optional<std::int64_t>(2626) &&
                  response.message == "$command,CONFIG RTK TIMEOUT 10,response: OK*63",
-             "captured UM982 CONFIG RTK TIMEOUT acknowledgements should normalize to the clean response line");
-  ctx.Expect(router.metrics().lines_seen == 1u &&
-                 router.metrics().ok_responses_seen == 1u &&
+             "captured UM982 CONFIG RTK TIMEOUT acknowledgements should normalize to the clean "
+             "response line");
+  ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ok_responses_seen == 1u &&
                  router.metrics().responses_generated == 1u &&
                  router.metrics().malformed_lines == 0u,
              "captured long-prefixed acknowledgements should count as valid OK responses");
@@ -111,14 +111,13 @@ void TestCapturedLongPrefixedRtkTimeoutAckMapsToTextOk(TestContext& ctx)
 void TestTelemetryLineIgnored(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const bool generated = router.ProcessLine(
-      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;SOL_COMPUTED,SINGLE\r\n");
+  const bool generated =
+      router.ProcessLine("#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;SOL_COMPUTED,SINGLE\r\n");
 
   ReceiverCommandResponse response;
   ctx.Expect(!generated && !router.TryGetResponse(response),
              "runtime telemetry such as BESTNAVA should be ignored");
-  ctx.Expect(router.metrics().lines_seen == 1u &&
-                 router.metrics().ignored_lines == 1u &&
+  ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ignored_lines == 1u &&
                  router.metrics().responses_generated == 0u,
              "ignored telemetry should only affect ignored-line metrics");
 }
@@ -126,14 +125,13 @@ void TestTelemetryLineIgnored(TestContext& ctx)
 void TestGarbageAndMalformedHandling(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const bool invalid_ack = router.ProcessLine("$command,BESTNAVA,response: FAIL*\r\n");
+  const bool invalid_ack = router.ProcessLine("$command,BESTNAVA COM1 0.2,response: FAIL*\r\n");
   const bool binary_garbage = router.ProcessLine(std::string("\x01\x02", 2));
 
   ReceiverCommandResponse response;
   ctx.Expect(!invalid_ack && !binary_garbage && !router.TryGetResponse(response),
              "invalid response-shaped lines and non-printable garbage should not route responses");
-  ctx.Expect(router.metrics().lines_seen == 2u &&
-                 router.metrics().malformed_lines == 2u &&
+  ctx.Expect(router.metrics().lines_seen == 2u && router.metrics().malformed_lines == 2u &&
                  router.metrics().ignored_lines == 0u,
              "malformed response lines should update malformed metrics");
 }
@@ -148,8 +146,7 @@ void TestResponseQueueFifoAndFeedBytes(TestContext& ctx)
   ReceiverCommandResponse second;
   ctx.Expect(router.pending_response_count() == 2u && router.TryGetResponse(first),
              "feeding byte chunks should queue completed responses");
-  ctx.Expect(first.kind == ReceiverCommandResponseKind::kTextOk &&
-                 first.message == "<OK",
+  ctx.Expect(first.kind == ReceiverCommandResponseKind::kTextOk && first.message == "<OK",
              "the first completed response should stay at the front of the queue");
 
   ctx.Expect(router.PopResponse(first) && router.PopResponse(second),
@@ -170,11 +167,9 @@ void TestResetClearsQueueAndMetrics(TestContext& ctx)
   ReceiverCommandResponse response;
   ctx.Expect(!router.TryGetResponse(response) && router.pending_response_count() == 0u,
              "reset should clear queued Unicore responses");
-  ctx.Expect(router.metrics().lines_seen == 0u &&
-                 router.metrics().ok_responses_seen == 0u &&
+  ctx.Expect(router.metrics().lines_seen == 0u && router.metrics().ok_responses_seen == 0u &&
                  router.metrics().responses_generated == 0u &&
-                 router.metrics().ignored_lines == 0u &&
-                 router.metrics().malformed_lines == 0u,
+                 router.metrics().ignored_lines == 0u && router.metrics().malformed_lines == 0u,
              "reset should clear Unicore router metrics");
 }
 

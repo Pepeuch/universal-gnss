@@ -43,6 +43,20 @@ bool HasTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
   return false;
 }
 
+bool ContainsWarning(const universal_gnss_tools::ConfigPlanResult& result,
+                     const std::string& needle)
+{
+  for (const auto& warning : result.warnings)
+  {
+    if (warning.find(needle) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void TestUbloxRoverHighPrecisionPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -81,7 +95,7 @@ void TestUnicoreDebugPlan(TestContext& ctx)
              "command counts");
   ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
                  text.find("UNLOG") == std::string::npos &&
-                 text.find("LOG PVTSLNA ONTIME 0.2") != std::string::npos &&
+                 text.find("PVTSLNA COM1 0.2") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
                  !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
              "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe "
@@ -143,10 +157,46 @@ void TestSignalProfilePlanning(TestContext& ctx)
              "Unicore minimal signal-profile plans should expose the reduced output plan");
   ctx.Expect(
       unicore_text.find("Signal profile override: minimal") != std::string::npos &&
-          unicore_text.find("BESTNAVA 1") != std::string::npos &&
+          unicore_text.find("BESTNAVA COM1 1") != std::string::npos &&
           unicore_text.find("GPGSV") == std::string::npos &&
           unicore_text.find("PVTSLNA") == std::string::npos,
       "Unicore minimal signal-profile plan text should show the reduced runtime command set");
+
+  ConfigPlanOptions exact_rate_options;
+  exact_rate_options.vendor = "unicore";
+  exact_rate_options.profile = "rover_high_precision";
+  exact_rate_options.receiver_model = "UM982";
+  exact_rate_options.rate_hz = 5.0;
+  const auto exact_five_hz_result = BuildConfigPlan(exact_rate_options);
+  const std::string exact_five_hz_text = FormatConfigPlanText(exact_five_hz_result);
+  ctx.Expect(exact_five_hz_result.status == ConfigPlanStatus::kOk &&
+                 exact_five_hz_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 !ContainsWarning(exact_five_hz_result, "using "),
+             "exact 5 Hz Unicore config plans should preserve the documented 0.2 s BESTNAVA "
+             "period without normalization warnings");
+
+  exact_rate_options.rate_hz = 10.0;
+  const auto exact_ten_hz_result = BuildConfigPlan(exact_rate_options);
+  const std::string exact_ten_hz_text = FormatConfigPlanText(exact_ten_hz_result);
+  ctx.Expect(exact_ten_hz_result.status == ConfigPlanStatus::kOk &&
+                 exact_ten_hz_text.find("BESTNAVA COM1 0.1") != std::string::npos &&
+                 !ContainsWarning(exact_ten_hz_result, "using "),
+             "exact 10 Hz Unicore config plans should preserve the documented 0.1 s BESTNAVA "
+             "period without normalization warnings");
+
+  ConfigPlanOptions rounded_rate_options;
+  rounded_rate_options.vendor = "unicore";
+  rounded_rate_options.profile = "rover_high_precision";
+  rounded_rate_options.receiver_model = "UM982";
+  rounded_rate_options.rate_hz = 7.0;
+  const auto rounded_rate_result = BuildConfigPlan(rounded_rate_options);
+  const std::string rounded_rate_text = FormatConfigPlanText(rounded_rate_result);
+  ctx.Expect(rounded_rate_result.status == ConfigPlanStatus::kOk &&
+                 rounded_rate_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 ContainsWarning(rounded_rate_result, "using 5 Hz instead") &&
+                 rounded_rate_text.find("0.143") == std::string::npos,
+             "Unicore config plans should normalize unsupported rate-hz overrides to the nearest "
+             "documented manual rate and report the change");
 
   ConfigPlanOptions unknown_unicore_options;
   unknown_unicore_options.vendor = "unicore";

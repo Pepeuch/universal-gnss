@@ -43,6 +43,20 @@ bool HasTextCommand(const universal_gnss_tools::ProfilePreviewResult& result,
   return false;
 }
 
+bool ContainsWarning(const universal_gnss_tools::ProfilePreviewResult& result,
+                     const std::string& needle)
+{
+  for (const auto& warning : result.warnings)
+  {
+    if (warning.find(needle) != std::string::npos)
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void TestUbloxRoverHighPrecisionPreview(TestContext& ctx)
 {
   ProfilePreviewOptions options;
@@ -87,8 +101,8 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
              "Unicore rover_high_precision preview should decode the MODE ROVER description");
   ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
                  text.find("UNLOG") == std::string::npos &&
-                 text.find("LOG PVTSLNA ONTIME 1") != std::string::npos &&
-                 text.find("SATSINFOA 1") != std::string::npos &&
+                 text.find("PVTSLNA COM1 1") != std::string::npos &&
+                 text.find("SATSINFOA COM1 1") != std::string::npos &&
                  text.find("model identity is unknown") != std::string::npos &&
                  !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
              "generic Unicore rover_high_precision preview text should expose the safe fallback "
@@ -194,9 +208,39 @@ void TestSignalProfilePreview(TestContext& ctx)
                  result.summary.commands_total == 11u,
              "minimal signal-profile preview should expose the reduced Unicore command set");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
-                 text.find("BESTNAVA 1") != std::string::npos &&
+                 text.find("BESTNAVA COM1 1") != std::string::npos &&
                  text.find("GPGSV") == std::string::npos,
              "minimal signal-profile preview text should show the reduced output plan");
+
+  ProfilePreviewOptions exact_rate_options = options;
+  exact_rate_options.signal_profile.reset();
+  exact_rate_options.rate_hz = 5.0;
+  const auto exact_five_hz_result = BuildProfilePreview(exact_rate_options);
+  const std::string exact_five_hz_text = FormatProfilePreviewText(exact_five_hz_result);
+  ctx.Expect(exact_five_hz_result.status == ProfilePreviewStatus::kOk &&
+                 exact_five_hz_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 !ContainsWarning(exact_five_hz_result, "using "),
+             "exact 5 Hz Unicore preview should preserve the documented 0.2 s BESTNAVA period "
+             "without normalization warnings");
+
+  exact_rate_options.rate_hz = 10.0;
+  const auto exact_ten_hz_result = BuildProfilePreview(exact_rate_options);
+  const std::string exact_ten_hz_text = FormatProfilePreviewText(exact_ten_hz_result);
+  ctx.Expect(exact_ten_hz_result.status == ProfilePreviewStatus::kOk &&
+                 exact_ten_hz_text.find("BESTNAVA COM1 0.1") != std::string::npos &&
+                 !ContainsWarning(exact_ten_hz_result, "using "),
+             "exact 10 Hz Unicore preview should preserve the documented 0.1 s BESTNAVA period "
+             "without normalization warnings");
+
+  exact_rate_options.rate_hz = 7.0;
+  const auto rounded_rate_result = BuildProfilePreview(exact_rate_options);
+  const std::string rounded_rate_text = FormatProfilePreviewText(rounded_rate_result);
+  ctx.Expect(rounded_rate_result.status == ProfilePreviewStatus::kOk &&
+                 rounded_rate_text.find("BESTNAVA COM1 0.2") != std::string::npos &&
+                 ContainsWarning(rounded_rate_result, "using 5 Hz instead") &&
+                 rounded_rate_text.find("0.143") == std::string::npos,
+             "unsupported 7 Hz Unicore preview should normalize to the documented 5 Hz period and "
+             "must not emit 0.143 s");
 
   ProfilePreviewOptions unknown_model_options;
   unknown_model_options.vendor = "unicore";

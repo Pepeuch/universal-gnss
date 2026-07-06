@@ -1,6 +1,7 @@
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <optional>
@@ -277,6 +278,78 @@ bool ProfileSupportsRateOverride(const ReceiverAutoConfigProfile profile)
   return profile == ReceiverAutoConfigProfile::kRoverHighPrecision ||
          profile == ReceiverAutoConfigProfile::kRoverHighPrecisionDebug ||
          profile == ReceiverAutoConfigProfile::kFactoryReset;
+}
+
+constexpr std::array<double, 6u> kSupportedUnicoreOutputRatesHz{
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    20.0,
+    50.0,
+};
+
+bool NearlyEqual(const double lhs, const double rhs)
+{
+  return std::fabs(lhs - rhs) <= 1e-6;
+}
+
+std::string FormatCompactDouble(const double value)
+{
+  std::ostringstream stream;
+  stream.setf(std::ios::fixed);
+  stream.precision(3);
+  stream << value;
+  std::string text = stream.str();
+  while (!text.empty() && text.back() == '0')
+  {
+    text.pop_back();
+  }
+  if (!text.empty() && text.back() == '.')
+  {
+    text.pop_back();
+  }
+  return text.empty() ? "0" : text;
+}
+
+double NormalizeUnicoreOutputRateHz(const double requested_rate_hz)
+{
+  double best_match = kSupportedUnicoreOutputRatesHz.front();
+  double best_distance = std::fabs(requested_rate_hz - best_match);
+
+  for (const double candidate_rate_hz : kSupportedUnicoreOutputRatesHz)
+  {
+    const double distance = std::fabs(requested_rate_hz - candidate_rate_hz);
+    if (distance < best_distance ||
+        (NearlyEqual(distance, best_distance) && candidate_rate_hz < best_match))
+    {
+      best_match = candidate_rate_hz;
+      best_distance = distance;
+    }
+  }
+
+  return best_match;
+}
+
+std::optional<double> ResolveUnicoreOutputRateHz(const ReceiverAutoConfigRequest& request,
+                                                 ReceiverAutoConfigPlan& plan)
+{
+  if (!request.rate_hz.has_value())
+  {
+    return std::nullopt;
+  }
+
+  const double requested_rate_hz = *request.rate_hz;
+  const double normalized_rate_hz = NormalizeUnicoreOutputRateHz(requested_rate_hz);
+  if (!NearlyEqual(requested_rate_hz, normalized_rate_hz))
+  {
+    plan.warnings.push_back("rate_hz=" + FormatCompactDouble(requested_rate_hz) +
+                            " is not a documented portable Unicore output rate; using " +
+                            FormatCompactDouble(normalized_rate_hz) +
+                            " Hz instead (supported: 1, 2, 5, 10, 20, 50)");
+  }
+
+  return normalized_rate_hz;
 }
 
 std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& request)
@@ -918,9 +991,10 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
     profile.com1_baud_rate = recovery_baud;
 
-    if (request.rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
+    const auto normalized_rate_hz = ResolveUnicoreOutputRateHz(request, plan);
+    if (normalized_rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
     {
-      const double period_s = 1.0 / *request.rate_hz;
+      const double period_s = 1.0 / *normalized_rate_hz;
       for (auto& output : profile.output_messages)
       {
         if (IsRateControlledUnicoreMessage(output.message))
@@ -957,9 +1031,10 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     return plan;
   }
 
-  if (request.rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
+  const auto normalized_rate_hz = ResolveUnicoreOutputRateHz(request, plan);
+  if (normalized_rate_hz.has_value() && ProfileSupportsRateOverride(request.requested_profile))
   {
-    const double period_s = 1.0 / *request.rate_hz;
+    const double period_s = 1.0 / *normalized_rate_hz;
     for (auto& output : profile.output_messages)
     {
       if (IsRateControlledUnicoreMessage(output.message))

@@ -1,5 +1,8 @@
 #include "universal_gnss_driver/unicore_config_profile_builder.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <iomanip>
 #include <sstream>
 #include <utility>
@@ -11,6 +14,20 @@ namespace
 {
 
 constexpr const char* kCrLf = "\r\n";
+constexpr const char* kUnicoreRuntimeOutputPort = "COM1";
+constexpr std::array<double, 6u> kSupportedUnicoreOutputPeriodsS{
+    1.0,
+    0.5,
+    0.2,
+    0.1,
+    0.05,
+    0.02,
+};
+
+bool NearlyEqual(const double lhs, const double rhs)
+{
+  return std::fabs(lhs - rhs) <= 1e-6;
+}
 
 std::string FormatPeriodSeconds(const double period_s)
 {
@@ -118,12 +135,6 @@ const char* ToOutputMessageName(const UnicoreOutputMessageKind message)
   return "";
 }
 
-bool UsesLogOntimeSyntax(const UnicoreOutputMessageKind message)
-{
-  return message == UnicoreOutputMessageKind::kGpgga ||
-         message == UnicoreOutputMessageKind::kPvtslna;
-}
-
 bool UsesOnChangedSyntax(const UnicoreOutputMessageKind message)
 {
   return message == UnicoreOutputMessageKind::kRtcmstatusa;
@@ -134,16 +145,11 @@ std::string BuildOutputCommand(const UnicoreOutputMessageRate& output)
   const std::string message = ToOutputMessageName(output.message);
   if (UsesOnChangedSyntax(output.message))
   {
-    return message + " ONCHANGED";
+    return message + " " + kUnicoreRuntimeOutputPort + " ONCHANGED";
   }
 
   const std::string period_text = FormatPeriodSeconds(*output.period_s);
-  if (UsesLogOntimeSyntax(output.message))
-  {
-    return "LOG " + message + " ONTIME " + period_text;
-  }
-
-  return message + " " + period_text;
+  return message + " " + kUnicoreRuntimeOutputPort + " " + period_text;
 }
 
 bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
@@ -159,6 +165,20 @@ bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
     result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
     result.error_message =
         "unicore output messages using periodic syntax require a positive period";
+    return false;
+  }
+
+  if (std::none_of(kSupportedUnicoreOutputPeriodsS.begin(),
+                   kSupportedUnicoreOutputPeriodsS.end(),
+                   [&](const double supported_period_s)
+                   {
+                     return NearlyEqual(*output.period_s, supported_period_s);
+                   }))
+  {
+    result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
+    result.error_message =
+        "unicore output messages must use a documented period of 1, 0.5, 0.2, 0.1, 0.05, or "
+        "0.02 seconds";
     return false;
   }
 

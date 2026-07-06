@@ -475,9 +475,14 @@ Current coverage:
 Current policy:
 
 - output commands use a small per-message syntax table:
-  - `LOG ... ONTIME` for `GPGGA` and `PVTSLNA`
-  - direct-period syntax for `BESTNAVA`, `RTKSTATUSA`, and `SATSINFOA`
-  - `ONCHANGED` for `RTCMSTATUSA`
+  - documented explicit `MESSAGE COM1 <period>` syntax for periodic Unicore
+    outputs
+  - documented explicit `MESSAGE COM1 ONCHANGED` syntax for `RTCMSTATUSA`
+  - only documented Unicore periods are emitted by the low-level builder
+  - the user-facing Unicore `rate_hz` override currently retimes `BESTNAVA`
+    only, preserving exact documented `5 Hz` / `10 Hz` requests and
+    normalizing unsupported values such as `7 Hz` to the nearest documented
+    rate with a warning
 - `SAVECONFIG` is generated only when persistent storage is explicitly requested
 - `CONFIG SIGNALGROUP` remains a runtime command, but it is only generated
   when the selected `UnicoreModelProfile` confirms that exact documented

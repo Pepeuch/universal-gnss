@@ -103,24 +103,26 @@ void TestRoverProfileGeneration(TestContext& ctx)
              "generic unicore rover helper should not guess a signal-group selection");
   ctx.Expect(!ContainsText(result.commands[5], "UNLOG"),
              "unicore rover helper should not emit UNLOG in the default runtime-safe profile");
-  ctx.Expect(ContainsText(result.commands[5], "LOG GPGGA ONTIME 1"),
-             "unicore rover helper should keep GPGGA available at a lighter 1 Hz rate");
-  ctx.Expect(ContainsText(result.commands[6], "GPGSV 1"),
+  ctx.Expect(ContainsText(result.commands[5], "GPGGA COM1 1"),
+             "unicore rover helper should keep GPGGA available at a lighter 1 Hz rate using the "
+             "documented explicit COM1 syntax");
+  ctx.Expect(ContainsText(result.commands[6], "GPGSV COM1 1"),
              "unicore rover helper should enable GPGSV so portable visibility and CN0 fallback "
              "stay available");
   ctx.Expect(
-      ContainsText(result.commands[7], "GPGST 1"),
+      ContainsText(result.commands[7], "GPGST COM1 1"),
       "unicore rover helper should enable GPGST so portable accuracy fallback stays available");
-  ctx.Expect(ContainsText(result.commands[8], "LOG PVTSLNA ONTIME 1"),
-             "unicore rover helper should reduce PVTSLNA to a lighter 1 Hz fallback rate");
-  ctx.Expect(ContainsText(result.commands[9], "BESTNAVA 0.2"),
+  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA COM1 1"),
+             "unicore rover helper should reduce PVTSLNA to a lighter 1 Hz fallback rate using "
+             "the documented explicit COM1 syntax");
+  ctx.Expect(ContainsText(result.commands[9], "BESTNAVA COM1 0.2"),
              "unicore rover helper should emit BESTNAVA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[10], "RTKSTATUSA 1"),
+  ctx.Expect(ContainsText(result.commands[10], "RTKSTATUSA COM1 1"),
              "unicore rover helper should emit RTKSTATUSA with direct-period syntax");
-  ctx.Expect(ContainsText(result.commands[11], "RTCMSTATUSA ONCHANGED"),
+  ctx.Expect(ContainsText(result.commands[11], "RTCMSTATUSA COM1 ONCHANGED"),
              "unicore rover helper should emit RTCMSTATUSA with ONCHANGED syntax");
   ctx.Expect(
-      ContainsText(result.commands[12], "SATSINFOA 1"),
+      ContainsText(result.commands[12], "SATSINFOA COM1 1"),
       "unicore rover helper should keep SATSINFOA at 1 Hz for stable satellite observability");
 }
 
@@ -192,11 +194,29 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
                             return ContainsText(command, "UNLOG");
                           }),
              "unicore diagnostics helper should not emit UNLOG by default");
-  ctx.Expect(
-      ContainsText(result.commands[8], "LOG PVTSLNA ONTIME 0.2"),
-      "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging");
-  ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA 1"),
+  ctx.Expect(ContainsText(result.commands[8], "PVTSLNA COM1 0.2"),
+             "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging "
+             "using the documented explicit COM1 syntax");
+  ctx.Expect(ContainsText(result.commands.back(), "SATSINFOA COM1 1"),
              "unicore diagnostics helper should keep SATSINFOA at 1 Hz");
+}
+
+void TestUndocumentedPeriodicRateIsRejected(TestContext& ctx)
+{
+  auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile();
+  for (auto& output : profile.output_messages)
+  {
+    if (output.message == UnicoreOutputMessageKind::kBestnava)
+    {
+      output.period_s = 1.0 / 7.0;
+    }
+  }
+
+  const auto result = UnicoreConfigProfileBuilder::Build(profile);
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument &&
+                 result.error_message.find("documented period") != std::string::npos,
+             "the Unicore builder should reject undocumented periodic output rates instead of "
+             "emitting manual-incompatible commands");
 }
 
 void TestPersistentAndSignalGroupSafety(TestContext& ctx)
@@ -346,6 +366,7 @@ int main()
   TestRoverProfileGeneration(ctx);
   TestModelAwareRoverProfileGeneration(ctx);
   TestDiagnosticsProfileGeneration(ctx);
+  TestUndocumentedPeriodicRateIsRejected(ctx);
   TestPersistentAndSignalGroupSafety(ctx);
   TestCom1BaudCommandGeneration(ctx);
   TestFactoryResetProfileGeneration(ctx);

@@ -538,7 +538,7 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
                  result.plan.summary.commands_total == 11u,
              "prepared apply plans should preserve the minimal signal-profile override");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
-                 text.find("BESTNAVA 1") != std::string::npos &&
+                 text.find("BESTNAVA COM1 1") != std::string::npos &&
                  text.find("GPGSV") == std::string::npos,
              "prepared apply text should surface the reduced minimal signal-profile command set");
 }

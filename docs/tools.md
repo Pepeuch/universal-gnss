@@ -723,7 +723,8 @@ Hardware notes from the `v0.6-4` operator validation pass:
 - a Unicore UM982 at `921600` completed the same runtime-only
   `rover_high_precision` apply after the mixed-stream response-router fix
   above, using `--timeout-ms 5000`
-- the UM982 `rover_high_precision` profile enables `RTCMSTATUSA ONCHANGED`;
+- the UM982 `rover_high_precision` profile enables
+  `RTCMSTATUSA COM1 ONCHANGED`;
   short read-only
   captures may therefore show the accepted apply response but still not show an
   emitted `RTCMSTATUSA` record until receiver-side correction state changes

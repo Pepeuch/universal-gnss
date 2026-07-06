@@ -313,10 +313,8 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
                  !ContainsCommandText(debug_plan, "UNLOG"),
              "UM982 rover_high_precision_debug planning should keep the same lean command count "
              "while retaining the documented signal-group selection");
-  ctx.Expect(rover_plan.commands[9].payload.text.find("LOG PVTSLNA ONTIME 1") !=
-                     std::string::npos &&
-                 debug_plan.commands[9].payload.text.find("LOG PVTSLNA ONTIME 0.2") !=
-                     std::string::npos,
+  ctx.Expect(rover_plan.commands[9].payload.text.find("PVTSLNA COM1 1") != std::string::npos &&
+                 debug_plan.commands[9].payload.text.find("PVTSLNA COM1 0.2") != std::string::npos,
              "UM982 debug planning should keep PVTSLNA at 5 Hz while the normal rover profile "
              "stays at 1 Hz");
 
@@ -375,10 +373,10 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   const auto unicore_high_precision_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_high_precision_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(unicore_high_precision_plan, "CONFIG SIGNALGROUP 3 6") &&
-                 ContainsCommandText(unicore_high_precision_plan, "BESTNAVA 0.2") &&
-                 ContainsCommandText(unicore_high_precision_plan, "LOG GPGGA ONTIME 1") &&
-                 ContainsCommandText(unicore_high_precision_plan, "LOG PVTSLNA ONTIME 1") &&
-                 ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA 1"),
+                 ContainsCommandText(unicore_high_precision_plan, "BESTNAVA COM1 0.2") &&
+                 ContainsCommandText(unicore_high_precision_plan, "GPGGA COM1 1") &&
+                 ContainsCommandText(unicore_high_precision_plan, "PVTSLNA COM1 1") &&
+                 ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA COM1 1"),
              "Unicore high_precision signal-profile planning should map to CONFIG SIGNALGROUP 3 6 "
              "while keeping auxiliary logs at their safe default rates");
 
@@ -387,7 +385,7 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   const auto unicore_minimal_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_minimal_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  unicore_minimal_plan.validation.generated_command_count == 11u &&
-                 ContainsCommandText(unicore_minimal_plan, "BESTNAVA 1") &&
+                 ContainsCommandText(unicore_minimal_plan, "BESTNAVA COM1 1") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGSV") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGST") &&
                  !ContainsCommandText(unicore_minimal_plan, "PVTSLNA") &&
@@ -399,8 +397,17 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   unicore_request.rate_hz = 10.0;
   const auto unicore_fast_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_fast_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 ContainsCommandText(unicore_fast_plan, "BESTNAVA 0.1"),
+                 ContainsCommandText(unicore_fast_plan, "BESTNAVA COM1 0.1") &&
+                 !ContainsWarning(unicore_fast_plan, "using "),
              "Unicore rate-hz planning should map 10 Hz requests to a 0.1 s BESTNAVA period");
+
+  unicore_request.rate_hz = 7.0;
+  const auto unicore_rounded_plan = BuildReceiverAutoConfigPlan(unicore_request);
+  ctx.Expect(unicore_rounded_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(unicore_rounded_plan, "BESTNAVA COM1 0.2") &&
+                 ContainsWarning(unicore_rounded_plan, "using 5 Hz instead"),
+             "Unicore rate-hz planning should normalize unsupported rates to the nearest "
+             "documented output rate with an explicit warning");
 
   ReceiverAutoConfigRequest um980_request = unicore_request;
   um980_request.receiver_model = "UM980";

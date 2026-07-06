@@ -44,7 +44,8 @@ The current `UnicoreModelProfile` layer answers four backend-only questions:
 
 - what model is this
 - does it support `dual_antenna_baseline`
-- which `CONFIG SIGNALGROUP` selections are documented and allowed
+- which documented `CONFIG SIGNALGROUP` presets are known for automatic defaults
+  and UI hints
 - what should be skipped for unknown or non-baseline models
 
 Current documented model profiles are intentionally narrow:
@@ -89,10 +90,9 @@ The current builder was shaped by:
 What was reused conceptually:
 
 - a small set of practical rover/runtime commands
-- the per-message output syntax split:
-  - `LOG ... ONTIME`
-  - direct-period syntax
-  - `ONCHANGED`
+- the documented Unicore output-command form:
+  - `MESSAGE COM1 <period>`
+  - `MESSAGE COM1 ONCHANGED`
 
 What was intentionally not copied:
 
@@ -134,16 +134,35 @@ Current safety-gated commands:
 
 ## Output Syntax Policy
 
-The builder uses a fixed per-message syntax table.
+The builder uses the documented Unicore abbreviated ASCII output syntax with an
+explicit `COM1` target because the current portable runtime planner configures
+and applies Unicore profiles on `COM1`.
 
-- `GPGGA` -> `LOG GPGGA ONTIME <period>`
-- `GPGSV` -> `GPGSV <period>`
-- `GPGST` -> `GPGST <period>`
-- `PVTSLNA` -> `LOG PVTSLNA ONTIME <period>`
-- `BESTNAVA` -> `BESTNAVA <period>`
-- `RTKSTATUSA` -> `RTKSTATUSA <period>`
-- `SATSINFOA` -> `SATSINFOA <period>`
-- `RTCMSTATUSA` -> `RTCMSTATUSA ONCHANGED`
+- `GPGGA` -> `GPGGA COM1 <period>`
+- `GPGSV` -> `GPGSV COM1 <period>`
+- `GPGST` -> `GPGST COM1 <period>`
+- `PVTSLNA` -> `PVTSLNA COM1 <period>`
+- `BESTNAVA` -> `BESTNAVA COM1 <period>`
+- `RTKSTATUSA` -> `RTKSTATUSA COM1 <period>`
+- `SATSINFOA` -> `SATSINFOA COM1 <period>`
+- `RTCMSTATUSA` -> `RTCMSTATUSA COM1 ONCHANGED`
+
+The low-level builder only accepts documented Unicore periodic values:
+
+- `1`
+- `0.5`
+- `0.2`
+- `0.1`
+- `0.05`
+- `0.02`
+
+These correspond to the documented `1`, `2`, `5`, `10`, `20`, and `50 Hz`
+rates.
+
+The user-facing planner only applies `rate_hz` overrides to `BESTNAVA`. Exact
+documented requests such as `5 Hz` and `10 Hz` are preserved. Unsupported
+values such as `7 Hz` are normalized to the nearest documented rate with a
+warning, for example `7 Hz -> 5 Hz -> 0.2 s`.
 
 This keeps generation deterministic and aligned with the message classes
 already consumed elsewhere in `universal-gnss`.
@@ -166,14 +185,14 @@ commands:
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
 - `CONFIG DGPS TIMEOUT 600`
-- `LOG GPGGA ONTIME 1`
-- `GPGSV 1`
-- `GPGST 1`
-- `LOG PVTSLNA ONTIME 1`
-- `BESTNAVA 0.2`
-- `RTKSTATUSA 1`
-- `RTCMSTATUSA ONCHANGED`
-- `SATSINFOA 1`
+- `GPGGA COM1 1`
+- `GPGSV COM1 1`
+- `GPGST COM1 1`
+- `PVTSLNA COM1 1`
+- `BESTNAVA COM1 0.2`
+- `RTKSTATUSA COM1 1`
+- `RTCMSTATUSA COM1 ONCHANGED`
+- `SATSINFOA COM1 1`
 
 Model-specific signal-group behavior:
 
@@ -206,7 +225,7 @@ Legacy CLI alias:
 Current `rover_high_precision_debug` helper extends
 `rover_high_precision` by restoring the heavier baseline/status log:
 
-- `LOG PVTSLNA ONTIME 0.2`
+- `PVTSLNA COM1 0.2`
 
 This debug profile is intentionally higher-bandwidth than
 `rover_high_precision` and is meant for short-lived capture or troubleshooting

@@ -22,13 +22,13 @@ namespace universal_gnss_tools
 namespace
 {
 
+using universal_gnss_driver::ReceiverAutoConfigApplyMode;
+using universal_gnss_driver::ReceiverAutoConfigPlan;
+using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
-using universal_gnss_driver::ReceiverAutoConfigApplyMode;
-using universal_gnss_driver::ReceiverAutoConfigPlan;
-using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart1;
 using universal_gnss_protocols::ubx_cfg_keys::kMsgoutNmeaGgaUart2;
@@ -79,8 +79,13 @@ std::string ToLowerCopy(std::string value)
 
 bool StartsWith(const std::string_view text, const std::string_view prefix)
 {
-  return text.size() >= prefix.size() &&
-         text.compare(0u, prefix.size(), prefix) == 0;
+  return text.size() >= prefix.size() && text.compare(0u, prefix.size(), prefix) == 0;
+}
+
+bool LooksLikeUnicorePortToken(const std::string_view token)
+{
+  return token.size() == 4u && token.substr(0u, 3u) == "COM" &&
+         std::isdigit(static_cast<unsigned char>(token[3])) != 0;
 }
 
 std::string TrimTrailingCrLf(std::string text)
@@ -139,8 +144,8 @@ std::string EscapeJson(std::string_view text)
       default:
         if (c < 0x20u)
         {
-          stream << "\\u" << std::hex << std::setw(4) << std::setfill('0')
-                 << static_cast<int>(c) << std::dec << std::setfill(' ');
+          stream << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(c)
+                 << std::dec << std::setfill(' ');
         }
         else
         {
@@ -244,8 +249,7 @@ std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand
   try
   {
     std::size_t parsed = 0u;
-    const auto baud =
-        std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
+    const auto baud = std::stoul(std::string(remainder.substr(0u, separator)), &parsed, 10);
     if (parsed != separator)
     {
       return std::nullopt;
@@ -437,11 +441,8 @@ std::size_t UbxCfgValueSizeFromKey(const std::uint32_t key)
 
 std::string DescribeUbxValset(const std::vector<std::uint8_t>& frame)
 {
-  if (frame.size() < 6u + 4u + 5u + 2u ||
-      frame[0] != 0xB5u ||
-      frame[1] != 0x62u ||
-      frame[2] != kUbxCfgClass ||
-      frame[3] != kUbxCfgValsetId)
+  if (frame.size() < 6u + 4u + 5u + 2u || frame[0] != 0xB5u || frame[1] != 0x62u ||
+      frame[2] != kUbxCfgClass || frame[3] != kUbxCfgValsetId)
   {
     return "preview UBX binary configuration command";
   }
@@ -462,9 +463,7 @@ std::string DescribeUbxValset(const std::vector<std::uint8_t>& frame)
 
   if ((key == kUart1Baudrate || key == kUart2Baudrate) && value_size == 4u)
   {
-    return std::string("set ") +
-           (key == kUart1Baudrate ? "UART1" : "UART2") +
-           " baud rate to " +
+    return std::string("set ") + (key == kUart1Baudrate ? "UART1" : "UART2") + " baud rate to " +
            std::to_string(ReadLeU4(frame, payload_offset + 8u));
   }
 
@@ -479,52 +478,32 @@ std::string DescribeUbxValset(const std::vector<std::uint8_t>& frame)
            FormatCompactDouble(1000.0 / static_cast<double>(period_ms), 3) + " Hz";
   }
 
-  if ((key == kMsgoutUbxNavPvtUart1 ||
-       key == kMsgoutUbxNavPvtUart2 ||
-       key == kMsgoutUbxNavPvtUsb ||
-       key == kMsgoutUbxNavSatUart1 ||
-       key == kMsgoutUbxNavSatUart2 ||
-       key == kMsgoutUbxNavSatUsb ||
-       key == kMsgoutUbxNavStatusUart1 ||
-       key == kMsgoutUbxNavStatusUart2 ||
-       key == kMsgoutUbxNavStatusUsb ||
-       key == kMsgoutUbxNavDopUart1 ||
-       key == kMsgoutUbxNavDopUart2 ||
-       key == kMsgoutUbxNavDopUsb ||
-       key == kMsgoutUbxMonHwUart1 ||
-       key == kMsgoutUbxMonHwUart2 ||
-       key == kMsgoutUbxMonHwUsb ||
-       key == kMsgoutUbxMonHw2Uart1 ||
-       key == kMsgoutUbxMonHw2Uart2 ||
-       key == kMsgoutUbxMonHw2Usb ||
-       key == kMsgoutUbxMonRfUart1 ||
-       key == kMsgoutUbxMonRfUart2 ||
-       key == kMsgoutUbxMonRfUsb ||
-       key == kMsgoutUbxRxmRtcmUart1 ||
-       key == kMsgoutUbxRxmRtcmUart2 ||
-       key == kMsgoutUbxRxmRtcmUsb ||
-       key == kMsgoutNmeaGgaUart1 ||
-       key == kMsgoutNmeaGgaUart2 ||
-       key == kMsgoutNmeaGgaUsb) &&
+  if ((key == kMsgoutUbxNavPvtUart1 || key == kMsgoutUbxNavPvtUart2 || key == kMsgoutUbxNavPvtUsb ||
+       key == kMsgoutUbxNavSatUart1 || key == kMsgoutUbxNavSatUart2 || key == kMsgoutUbxNavSatUsb ||
+       key == kMsgoutUbxNavStatusUart1 || key == kMsgoutUbxNavStatusUart2 ||
+       key == kMsgoutUbxNavStatusUsb || key == kMsgoutUbxNavDopUart1 ||
+       key == kMsgoutUbxNavDopUart2 || key == kMsgoutUbxNavDopUsb || key == kMsgoutUbxMonHwUart1 ||
+       key == kMsgoutUbxMonHwUart2 || key == kMsgoutUbxMonHwUsb || key == kMsgoutUbxMonHw2Uart1 ||
+       key == kMsgoutUbxMonHw2Uart2 || key == kMsgoutUbxMonHw2Usb || key == kMsgoutUbxMonRfUart1 ||
+       key == kMsgoutUbxMonRfUart2 || key == kMsgoutUbxMonRfUsb || key == kMsgoutUbxRxmRtcmUart1 ||
+       key == kMsgoutUbxRxmRtcmUart2 || key == kMsgoutUbxRxmRtcmUsb || key == kMsgoutNmeaGgaUart1 ||
+       key == kMsgoutNmeaGgaUart2 || key == kMsgoutNmeaGgaUsb) &&
       value_size == 1u)
   {
     const std::uint8_t rate = frame[payload_offset + 8u];
-    return std::string(rate == 0u ? "disable " : "enable ") +
-           DescribeMessageRateKey(key) +
+    return std::string(rate == 0u ? "disable " : "enable ") + DescribeMessageRateKey(key) +
            (rate == 0u ? " output on " + DescribeMessageRatePort(key)
-                       : " output on " + DescribeMessageRatePort(key) +
-                             " at rate " + std::to_string(rate));
+                       : " output on " + DescribeMessageRatePort(key) + " at rate " +
+                             std::to_string(rate));
   }
 
-  if ((key == kSignalGpsEnable ||
-       key == kSignalGalEnable ||
-       key == kSignalBdsEnable ||
+  if ((key == kSignalGpsEnable || key == kSignalGalEnable || key == kSignalBdsEnable ||
        key == kSignalGloEnable) &&
       value_size == 1u)
   {
     const bool enabled = frame[payload_offset + 8u] != 0u;
-    return std::string(enabled ? "enable " : "disable ") +
-           DescribeConstellationKey(key) + " constellation";
+    return std::string(enabled ? "enable " : "disable ") + DescribeConstellationKey(key) +
+           " constellation";
   }
 
   std::ostringstream stream;
@@ -548,8 +527,7 @@ std::string DescribeUnicoreTextCommand(std::string text)
 
   if (StartsWith(text, "CONFIG COM1 "))
   {
-    return "set COM1 serial parameters to " +
-           text.substr(std::string("CONFIG COM1 ").size());
+    return "set COM1 serial parameters to " + text.substr(std::string("CONFIG COM1 ").size());
   }
 
   if (StartsWith(text, "CONFIG RTK TIMEOUT "))
@@ -559,20 +537,17 @@ std::string DescribeUnicoreTextCommand(std::string text)
 
   if (StartsWith(text, "CONFIG RTK RELIABILITY "))
   {
-    return "set RTK reliability to " +
-           text.substr(std::string("CONFIG RTK RELIABILITY ").size());
+    return "set RTK reliability to " + text.substr(std::string("CONFIG RTK RELIABILITY ").size());
   }
 
   if (StartsWith(text, "CONFIG DGPS TIMEOUT "))
   {
-    return "set DGPS timeout to " +
-           text.substr(std::string("CONFIG DGPS TIMEOUT ").size()) + " s";
+    return "set DGPS timeout to " + text.substr(std::string("CONFIG DGPS TIMEOUT ").size()) + " s";
   }
 
   if (StartsWith(text, "CONFIG SIGNALGROUP "))
   {
-    return "configure signal groups " +
-           text.substr(std::string("CONFIG SIGNALGROUP ").size());
+    return "configure signal groups " + text.substr(std::string("CONFIG SIGNALGROUP ").size());
   }
 
   if (text == "SAVECONFIG")
@@ -583,6 +558,46 @@ std::string DescribeUnicoreTextCommand(std::string text)
   if (text == "FRESET")
   {
     return "factory reset receiver state and restart at 115200 bps";
+  }
+
+  const auto onchanged_position = text.find(" ONCHANGED");
+  if (onchanged_position != std::string::npos)
+  {
+    const std::string_view prefix(text.c_str(), onchanged_position);
+    const auto port_separator = prefix.find_last_of(' ');
+    if (port_separator != std::string::npos)
+    {
+      const std::string_view message = prefix.substr(0u, port_separator);
+      const std::string_view port = prefix.substr(port_separator + 1u);
+      if (LooksLikeUnicorePortToken(port))
+      {
+        return "enable " + std::string(message) + " output on " + std::string(port) +
+               " when it changes";
+      }
+    }
+
+    return "enable " + text.substr(0u, onchanged_position) + " output on change";
+  }
+
+  const auto last_space = text.find_last_of(' ');
+  if (last_space != std::string::npos && last_space + 1u < text.size() &&
+      std::isdigit(static_cast<unsigned char>(text[last_space + 1u])) != 0)
+  {
+    const std::string_view prefix(text.c_str(), last_space);
+    const std::string_view period(text.c_str() + last_space + 1u, text.size() - last_space - 1u);
+    const auto port_separator = prefix.find_last_of(' ');
+    if (port_separator != std::string::npos)
+    {
+      const std::string_view message = prefix.substr(0u, port_separator);
+      const std::string_view port = prefix.substr(port_separator + 1u);
+      if (LooksLikeUnicorePortToken(port))
+      {
+        return "enable " + std::string(message) + " output on " + std::string(port) + " every " +
+               std::string(period) + " s";
+      }
+    }
+
+    return "enable " + std::string(prefix) + " output every " + std::string(period) + " s";
   }
 
   if (StartsWith(text, "LOG "))
@@ -596,21 +611,6 @@ std::string DescribeUnicoreTextCommand(std::string text)
           remainder.substr(ontime_position + std::string_view(" ONTIME ").size()));
       return "enable " + message + " output every " + period + " s";
     }
-  }
-
-  const auto onchanged_position = text.find(" ONCHANGED");
-  if (onchanged_position != std::string::npos)
-  {
-    return "enable " + text.substr(0u, onchanged_position) + " output on change";
-  }
-
-  const auto last_space = text.find_last_of(' ');
-  if (last_space != std::string::npos &&
-      last_space + 1u < text.size() &&
-      std::isdigit(static_cast<unsigned char>(text[last_space + 1u])) != 0)
-  {
-    return "enable " + text.substr(0u, last_space) + " output every " +
-           text.substr(last_space + 1u) + " s";
   }
 
   return "preview text configuration command";
@@ -734,25 +734,23 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
 {
   if (options.vendor.empty() || options.profile.empty())
   {
-    return MakeErrorResult(
-        options,
-        ProfilePreviewStatus::kInvalidArgument,
-        "both vendor and profile are required");
+    return MakeErrorResult(options,
+                           ProfilePreviewStatus::kInvalidArgument,
+                           "both vendor and profile are required");
   }
 
   const auto family = ParseReceiverFamily(options.vendor);
   if (!family.has_value())
   {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kUnsupportedVendor, "unsupported vendor");
+    return MakeErrorResult(options, ProfilePreviewStatus::kUnsupportedVendor, "unsupported vendor");
   }
 
-  const auto profile =
-      universal_gnss_driver::ParseReceiverAutoConfigProfile(options.profile);
+  const auto profile = universal_gnss_driver::ParseReceiverAutoConfigProfile(options.profile);
   if (!profile.has_value())
   {
-    return MakeErrorResult(
-        options, ProfilePreviewStatus::kUnsupportedProfile, "unsupported configuration profile");
+    return MakeErrorResult(options,
+                           ProfilePreviewStatus::kUnsupportedProfile,
+                           "unsupported configuration profile");
   }
 
   universal_gnss_driver::ReceiverAutoConfigRequest request;
@@ -774,10 +772,9 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   result.vendor = ToLowerCopy(options.vendor);
   result.receiver_family = plan.receiver_family_name;
   result.receiver_model = plan.receiver_model;
-  result.profile =
-      plan.status == ReceiverAutoConfigPlanStatus::kOk
-          ? universal_gnss_driver::ToString(plan.request.requested_profile)
-          : ToLowerCopy(options.profile);
+  result.profile = plan.status == ReceiverAutoConfigPlanStatus::kOk
+                       ? universal_gnss_driver::ToString(plan.request.requested_profile)
+                       : ToLowerCopy(options.profile);
   result.persistent = options.persistent;
   result.signal_profile = plan.request.signal_profile;
   result.signal_group_override = plan.request.signal_group_override;
@@ -786,8 +783,9 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
   result.warnings = plan.warnings;
-  result.error_message =
-      plan.status == ReceiverAutoConfigPlanStatus::kOk ? std::string{} : SelectPlanErrorMessage(plan);
+  result.error_message = plan.status == ReceiverAutoConfigPlanStatus::kOk
+                             ? std::string{}
+                             : SelectPlanErrorMessage(plan);
 
   if (plan.status != ReceiverAutoConfigPlanStatus::kOk)
   {
@@ -832,8 +830,8 @@ std::string FormatProfilePreviewText(const ProfilePreviewResult& result, const b
   }
   if (result.signal_profile.has_value())
   {
-    output << "Signal profile override: "
-           << universal_gnss_driver::ToString(*result.signal_profile) << "\n";
+    output << "Signal profile override: " << universal_gnss_driver::ToString(*result.signal_profile)
+           << "\n";
   }
   if (result.signal_group_override.has_value())
   {
@@ -928,8 +926,8 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
 {
   std::ostringstream output;
   output << "{\n";
-  output << "  \"status\": \""
-         << (result.status == ProfilePreviewStatus::kOk ? "ok" : "error") << "\",\n";
+  output << "  \"status\": \"" << (result.status == ProfilePreviewStatus::kOk ? "ok" : "error")
+         << "\",\n";
   output << "  \"preview_only\": true,\n";
   output << "  \"vendor\": \"" << EscapeJson(result.vendor) << "\",\n";
   output << "  \"receiver_family\": \"" << EscapeJson(result.receiver_family) << "\",\n";
@@ -948,9 +946,7 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   output << "  \"signal_profile\": ";
   if (result.signal_profile.has_value())
   {
-    output << "\""
-           << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile))
-           << "\"";
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile)) << "\"";
   }
   else
   {
@@ -973,9 +969,7 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   output << "  \"output_port\": ";
   if (result.output_port.has_value())
   {
-    output << "\""
-           << EscapeJson(universal_gnss_driver::ToString(*result.output_port))
-           << "\"";
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.output_port)) << "\"";
   }
   else if (result.vendor == "ublox")
   {
@@ -989,8 +983,7 @@ std::string FormatProfilePreviewJson(const ProfilePreviewResult& result, const b
   output << "  \"resolved_output_port\": ";
   if (result.resolved_output_port.has_value())
   {
-    output << "\""
-           << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
+    output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.resolved_output_port))
            << "\"";
   }
   else
