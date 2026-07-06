@@ -40,12 +40,13 @@ Current implementation lives in:
 Unicore configuration planning no longer relies on a family-wide
 `CONFIG SIGNALGROUP 3 6` default.
 
-The current `UnicoreModelProfile` layer answers four backend-only questions:
+The current `UnicoreModelProfile` layer answers five backend-only questions:
 
 - what model is this
 - does it support `dual_antenna_baseline`
 - which documented `CONFIG SIGNALGROUP` presets are known for automatic defaults
   and UI hints
+- whether the documented mower-oriented rover dynamic mode is supported
 - what should be skipped for unknown or non-baseline models
 
 Current documented model profiles are intentionally narrow:
@@ -53,26 +54,32 @@ Current documented model profiles are intentionally narrow:
 - unknown/generic
   - safe non-baseline fallback
   - no documented signal-group selections
+  - no verified mower-oriented rover dynamic mode
   - no automatic `CONFIG SIGNALGROUP`
 - `UM960`
   - known non-baseline
   - no documented `CONFIG SIGNALGROUP` selections in the current repo sources
+  - documented support for `MODE ROVER SURVEY MOW`
   - no automatic rover signal-group selection
 - `UM980`
   - non-baseline
   - documented explicit selections: `1`, `2`, `8`
+  - documented support for `MODE ROVER SURVEY MOW` with `Build7923+`
   - no automatic rover signal-group selection
 - `UM981`
   - known non-baseline
   - no documented `CONFIG SIGNALGROUP` selections in the current repo sources
+  - no documented mower-oriented rover dynamic mode in the current repo sources
   - no automatic rover signal-group selection
 - `UM982`
   - documented dual-antenna baseline capable
   - documented explicit selections: `4 5`, `3 6`, `5 0`, `7 0`
+  - documented support for `MODE ROVER SURVEY MOW` with `Build7650+`
   - documented portable rover default: `3 6`
 - `UB9A0`
   - non-baseline
   - documented explicit selections: `2`, `9`
+  - documented support for `MODE ROVER SURVEY MOW`
   - no automatic rover signal-group selection
 
 Undocumented or unconfirmed models stay on the generic fallback. The planner
@@ -108,6 +115,7 @@ Current runtime-safe command families:
 
 - `CONFIG COM1 <baud> 8 n 1`
 - `MODE ROVER`
+- `MODE ROVER SURVEY MOW`
 - `CONFIG NMEA0183 V410|V411`
 - `CONFIG RTK TIMEOUT <seconds>`
 - `CONFIG RTK RELIABILITY <a> <b>`
@@ -180,7 +188,8 @@ sequence for it.
 Current `rover_high_precision` helper always generates the core rover/runtime
 commands:
 
-- `MODE ROVER`
+- `MODE ROVER` for unknown or unsupported models
+- `MODE ROVER SURVEY MOW` for documented mower-oriented models
 - `CONFIG NMEA0183 V411`
 - `CONFIG RTK TIMEOUT 10`
 - `CONFIG RTK RELIABILITY 3 1`
@@ -196,6 +205,13 @@ commands:
 
 Model-specific signal-group behavior:
 
+- `UM960`, `UM980`, `UM982`, and `UB9A0` use the documented mower-oriented
+  rover dynamic mode `MODE ROVER SURVEY MOW`
+- `UM980` requires `Build7923+` and `UM982` requires `Build7650+`; the current
+  portable planner cannot verify firmware build metadata, so it emits a
+  warning when those models are selected
+- unknown models and models without documented support keep the safe fallback
+  `MODE ROVER`
 - `UM982` adds the documented portable rover selection
   `CONFIG SIGNALGROUP 3 6`
 - `UM960` and `UM981` stay known non-baseline, but the current repo sources do

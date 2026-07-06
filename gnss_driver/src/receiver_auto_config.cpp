@@ -776,6 +776,29 @@ void AppendUnicoreSkippedSignalGroupWarning(ReceiverAutoConfigPlan& plan,
   plan.warnings.push_back(std::move(warning));
 }
 
+void AppendUnicorePortableRoverModeWarning(ReceiverAutoConfigPlan& plan,
+                                           const UnicoreModelProfile& model_profile,
+                                           const UnicoreConfigProfile& profile)
+{
+  if (profile.mode != UnicoreMode::kRoverSurveyMow)
+  {
+    return;
+  }
+
+  if (model_profile.rover_survey_mow_min_build == nullptr ||
+      model_profile.rover_survey_mow_min_build[0] == '\0')
+  {
+    return;
+  }
+
+  plan.warnings.push_back("model " + std::string(model_profile.model) +
+                          " uses MODE ROVER SURVEY MOW for the mower-oriented rover profile, "
+                          "but the portable planner cannot verify the documented firmware "
+                          "requirement (" +
+                          std::string(model_profile.rover_survey_mow_min_build) +
+                          "); if the receiver rejects that mode, fall back to MODE ROVER");
+}
+
 void ApplyUnicoreSignalProfile(const ReceiverAutoConfigRequest& request,
                                ReceiverAutoConfigPlan& plan,
                                const UnicoreModelProfile& model_profile,
@@ -965,6 +988,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   }
 
   ApplyUnicoreSignalProfile(request, plan, model_profile, profile);
+  AppendUnicorePortableRoverModeWarning(plan, model_profile, profile);
 
   if (!request.signal_profile.has_value() && !profile.signal_config.has_value())
   {

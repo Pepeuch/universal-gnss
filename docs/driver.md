@@ -458,6 +458,7 @@ Current role:
 Current coverage:
 
 - `MODE ROVER`
+- `MODE ROVER SURVEY MOW`
 - `CONFIG NMEA0183`
 - `CONFIG RTK TIMEOUT`
 - `CONFIG RTK RELIABILITY`
@@ -487,6 +488,11 @@ Current policy:
 - `CONFIG SIGNALGROUP` remains a runtime command, but it is only generated
   when the selected `UnicoreModelProfile` confirms that exact documented
   selection
+- the mower-oriented rover helper may promote `MODE ROVER` to
+  `MODE ROVER SURVEY MOW` when the selected `UnicoreModelProfile` documents
+  support for that dynamic mode; unknown models keep the safe `MODE ROVER`
+  fallback, and models with documented build prerequisites surface a warning
+  because the portable planner cannot currently verify firmware build metadata
 - unknown or undocumented Unicore models keep the receiver's current
   signal-group configuration unchanged and surface a warning instead of
   guessing

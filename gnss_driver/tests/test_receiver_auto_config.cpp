@@ -302,15 +302,19 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
                  rover_plan.validation.generated_command_count == 14u &&
                  rover_plan.validation.runtime_command_count == 14u &&
                  rover_plan.receiver_model == std::optional<std::string>{"UM982"} &&
+                 ContainsCommandText(rover_plan, "MODE ROVER SURVEY MOW") &&
                  ContainsCommandText(rover_plan, "CONFIG SIGNALGROUP 3 6") &&
                  !ContainsCommandText(rover_plan, "UNLOG") &&
+                 ContainsWarning(rover_plan, "Build7650+") &&
                  HasReceiverFeature(rover_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
              "UM982 rover_high_precision planning should emit the documented baseline-capable "
              "signal-group selection");
   ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  debug_plan.validation.generated_command_count == 14u &&
                  debug_plan.validation.runtime_command_count == 14u &&
-                 !ContainsCommandText(debug_plan, "UNLOG"),
+                 ContainsCommandText(debug_plan, "MODE ROVER SURVEY MOW") &&
+                 !ContainsCommandText(debug_plan, "UNLOG") &&
+                 ContainsWarning(debug_plan, "Build7650+"),
              "UM982 rover_high_precision_debug planning should keep the same lean command count "
              "while retaining the documented signal-group selection");
   ctx.Expect(rover_plan.commands[9].payload.text.find("PVTSLNA COM1 1") != std::string::npos &&
@@ -330,7 +334,9 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um980_plan.validation.generated_command_count == 13u &&
                  um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
+                 ContainsCommandText(um980_plan, "MODE ROVER SURVEY MOW") &&
                  !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
+                 ContainsWarning(um980_plan, "Build7923+") &&
                  ContainsWarning(um980_plan, "model UM980") &&
                  !HasReceiverFeature(um980_plan.capabilities,
                                      ReceiverFeature::kDualAntennaBaseline),
@@ -339,6 +345,7 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um960_plan.validation.generated_command_count == 13u &&
                  um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
+                 ContainsCommandText(um960_plan, "MODE ROVER SURVEY MOW") &&
                  !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um960_plan, "model UM960") &&
                  !ContainsWarning(um960_plan, "safe generic non-baseline fallback") &&
@@ -372,11 +379,13 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
 
   const auto unicore_high_precision_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_high_precision_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(unicore_high_precision_plan, "MODE ROVER SURVEY MOW") &&
                  ContainsCommandText(unicore_high_precision_plan, "CONFIG SIGNALGROUP 3 6") &&
                  ContainsCommandText(unicore_high_precision_plan, "BESTNAVA COM1 0.2") &&
                  ContainsCommandText(unicore_high_precision_plan, "GPGGA COM1 1") &&
                  ContainsCommandText(unicore_high_precision_plan, "PVTSLNA COM1 1") &&
-                 ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA COM1 1"),
+                 ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA COM1 1") &&
+                 ContainsWarning(unicore_high_precision_plan, "Build7650+"),
              "Unicore high_precision signal-profile planning should map to CONFIG SIGNALGROUP 3 6 "
              "while keeping auxiliary logs at their safe default rates");
 
@@ -450,6 +459,8 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   const auto unknown_model_plan = BuildReceiverAutoConfigPlan(unknown_model_request);
   ctx.Expect(unknown_model_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  unknown_model_plan.receiver_model == std::optional<std::string>{"UM952"} &&
+                 ContainsCommandText(unknown_model_plan, "MODE ROVER") &&
+                 !ContainsCommandText(unknown_model_plan, "MODE ROVER SURVEY MOW") &&
                  !ContainsCommandText(unknown_model_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(unknown_model_plan, "UM952") &&
                  ContainsWarning(unknown_model_plan, "safe generic non-baseline fallback"),

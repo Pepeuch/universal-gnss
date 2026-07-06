@@ -48,6 +48,8 @@ const UnicoreModelProfile& GenericUnicoreProfile()
       "unicore_um98x_placeholder",
       true,
       MakeUnicoreCapabilities(false, false),
+      false,
+      "",
       {},
   };
   return profile;
@@ -65,6 +67,8 @@ const UnicoreModelProfile& Um960Profile()
       "unicore_um960",
       false,
       MakeUnicoreCapabilities(false, false),
+      true,
+      "",
       {},
   };
   return profile;
@@ -79,6 +83,8 @@ const UnicoreModelProfile& Um980Profile()
       "unicore_um980",
       false,
       MakeUnicoreCapabilities(false, true),
+      true,
+      "Build7923+",
       {
           {{1u}, "documented default single-antenna signal group", false, false, false, false},
           {{2u},
@@ -105,6 +111,8 @@ const UnicoreModelProfile& Um981Profile()
       "unicore_um981",
       false,
       MakeUnicoreCapabilities(false, false),
+      false,
+      "",
       {},
   };
   return profile;
@@ -119,6 +127,8 @@ const UnicoreModelProfile& Um982Profile()
       "unicore_um982",
       false,
       MakeUnicoreCapabilities(true, true),
+      true,
+      "Build7650+",
       {
           {{4u, 5u}, "documented default dual-antenna signal group", true, false, false, false},
           {{3u, 6u}, "documented dual-antenna rover signal group", true, false, false, true},
@@ -138,6 +148,8 @@ const UnicoreModelProfile& Ub9a0Profile()
       "unicore_ub9a0",
       false,
       MakeUnicoreCapabilities(false, true),
+      true,
+      "",
       {
           {{2u}, "documented default single-antenna signal group", false, false, false, false},
           {{9u}, "documented single-antenna signal group", false, false, false, false},
@@ -281,6 +293,27 @@ const UnicoreSignalGroupSelection* FindUnicorePortableRoverSignalGroupSelection(
   }
 
   return nullptr;
+}
+
+bool SupportsUnicorePortableRoverSurveyMow(const UnicoreModelProfile& profile)
+{
+  return profile.supports_rover_survey_mow;
+}
+
+std::string DescribeUnicorePortableRoverSurveyMowSupport(const UnicoreModelProfile& profile)
+{
+  if (!profile.supports_rover_survey_mow)
+  {
+    return "unsupported";
+  }
+
+  if (profile.rover_survey_mow_min_build == nullptr ||
+      profile.rover_survey_mow_min_build[0] == '\0')
+  {
+    return "documented supported";
+  }
+
+  return std::string("documented supported, ") + profile.rover_survey_mow_min_build;
 }
 
 std::string FormatUnicoreSignalGroupSelection(const std::vector<std::uint8_t>& groups)

@@ -24,6 +24,7 @@ enum class UnicoreMode : std::uint8_t
   kRover = 1,
   kBase = 2,
   kSurvey = 3,
+  kRoverSurveyMow = 4,
 };
 
 enum class UnicoreNmeaVersion : std::uint8_t

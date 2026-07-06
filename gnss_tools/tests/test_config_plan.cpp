@@ -107,7 +107,9 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
                  um982_result.summary.commands_total == 14u &&
-                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos,
+                 um982_text.find("MODE ROVER SURVEY MOW") != std::string::npos &&
+                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
+                 ContainsWarning(um982_result, "Build7650+"),
              "UM982 config plans should expose the documented dual-antenna signal-group selection");
 }
 

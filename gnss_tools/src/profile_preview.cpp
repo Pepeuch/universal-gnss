@@ -520,6 +520,16 @@ std::string DescribeUnicoreTextCommand(std::string text)
     return "set receiver mode to rover";
   }
 
+  if (text == "MODE ROVER SURVEY MOW")
+  {
+    return "set receiver mode to rover survey lawn mower";
+  }
+
+  if (text == "MODE ROVER SURVEY")
+  {
+    return "set receiver mode to rover survey";
+  }
+
   if (StartsWith(text, "CONFIG NMEA0183 "))
   {
     return "set NMEA0183 version to " + text.substr(std::string("CONFIG NMEA0183 ").size());

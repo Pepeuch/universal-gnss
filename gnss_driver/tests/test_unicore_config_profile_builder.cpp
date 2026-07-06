@@ -137,6 +137,12 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                    result.commands.size() == 13u,
                "UM960 rover helper should stay known non-baseline and skip undocumented "
                "signal-group commands");
+    ExpectTextCommand(ctx,
+                      result.commands.front(),
+                      ReceiverCommandKind::kApplyConfigProfile,
+                      ReceiverCommandSafetyLevel::kRuntime,
+                      "MODE ROVER SURVEY MOW",
+                      "unicore_um960");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
                             [](const ReceiverCommand& command)
@@ -144,6 +150,54 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM960 rover helper should not guess a signal-group selection");
+  }
+
+  {
+    const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+        ResolveUnicoreModelProfile("UM980"), UnicorePersistenceTarget::kRuntimeOnly);
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                   result.commands.size() == 13u,
+               "UM980 rover helper should keep the lean command count while selecting the "
+               "documented mower-oriented rover mode");
+    ExpectTextCommand(ctx,
+                      result.commands.front(),
+                      ReceiverCommandKind::kApplyConfigProfile,
+                      ReceiverCommandSafetyLevel::kRuntime,
+                      "MODE ROVER SURVEY MOW",
+                      "unicore_um980");
+    ctx.Expect(std::none_of(result.commands.begin(),
+                            result.commands.end(),
+                            [](const ReceiverCommand& command)
+                            {
+                              return ContainsText(command, "CONFIG SIGNALGROUP");
+                            }),
+               "UM980 rover helper should not guess a signal-group selection");
+  }
+
+  {
+    const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+        ResolveUnicoreModelProfile("UB9A0"), UnicorePersistenceTarget::kRuntimeOnly);
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                   result.commands.size() == 13u,
+               "UB9A0 rover helper should keep the lean command count while selecting the "
+               "documented mower-oriented rover mode");
+    ExpectTextCommand(ctx,
+                      result.commands.front(),
+                      ReceiverCommandKind::kApplyConfigProfile,
+                      ReceiverCommandSafetyLevel::kRuntime,
+                      "MODE ROVER SURVEY MOW",
+                      "unicore_ub9a0");
+    ctx.Expect(std::none_of(result.commands.begin(),
+                            result.commands.end(),
+                            [](const ReceiverCommand& command)
+                            {
+                              return ContainsText(command, "CONFIG SIGNALGROUP");
+                            }),
+               "UB9A0 rover helper should not guess a signal-group selection");
   }
 
   {
@@ -171,6 +225,12 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
 
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 14u,
              "UM982 rover helper should emit the documented dual-antenna signal-group command");
+  ExpectTextCommand(ctx,
+                    result.commands.front(),
+                    ReceiverCommandKind::kApplyConfigProfile,
+                    ReceiverCommandSafetyLevel::kRuntime,
+                    "MODE ROVER SURVEY MOW",
+                    "unicore_um982");
   ExpectTextCommand(ctx,
                     result.commands[5],
                     ReceiverCommandKind::kApplyConfigProfile,

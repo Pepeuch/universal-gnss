@@ -90,7 +90,8 @@ const char* ToNmeaVersionString(const UnicoreNmeaVersion version)
 
 bool SupportsRuntimeMode(const UnicoreMode mode)
 {
-  return mode == UnicoreMode::kUnspecified || mode == UnicoreMode::kRover;
+  return mode == UnicoreMode::kUnspecified || mode == UnicoreMode::kRover ||
+         mode == UnicoreMode::kRoverSurveyMow;
 }
 
 std::string BuildModeCommand(const UnicoreMode mode)
@@ -105,6 +106,8 @@ std::string BuildModeCommand(const UnicoreMode mode)
       return "MODE BASE";
     case UnicoreMode::kSurvey:
       return "MODE ROVER SURVEY";
+    case UnicoreMode::kRoverSurveyMow:
+      return "MODE ROVER SURVEY MOW";
   }
 
   return {};
@@ -425,7 +428,8 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   UnicoreConfigProfile profile;
   profile.target = BuildUnicoreTargetSelector(model_profile);
   profile.config_kind = ReceiverConfigProfileKind::kRover;
-  profile.mode = UnicoreMode::kRover;
+  profile.mode = SupportsUnicorePortableRoverSurveyMow(model_profile) ? UnicoreMode::kRoverSurveyMow
+                                                                      : UnicoreMode::kRover;
   profile.nmea_version = UnicoreNmeaVersion::kV411;
   profile.rtk_timeout_s = 10u;
   profile.rtk_reliability = UnicoreRtkReliability{3, 1};

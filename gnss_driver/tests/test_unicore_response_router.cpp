@@ -65,18 +65,20 @@ void TestErrorResponseMapsToTextError(TestContext& ctx)
 void TestCapturedPrefixedModeRoverAckMapsToTextOk(TestContext& ctx)
 {
   UnicoreResponseRouter router;
-  const std::string captured = std::string("[\x01", 2) + "$command,MODE ROVER,response: OK*21\r\n";
+  const std::string captured =
+      std::string("[\x01", 2) + "$command,MODE ROVER SURVEY MOW,response: OK*21\r\n";
   const bool generated = router.ProcessLine(captured, 2525);
 
   ReceiverCommandResponse response;
   ctx.Expect(
       generated && router.PopResponse(response),
-      "captured UM982 MODE ROVER acknowledgements should survive short mixed-stream prefixes");
-  ctx.Expect(
-      response.kind == ReceiverCommandResponseKind::kTextOk &&
-          response.timestamp_ns == std::optional<std::int64_t>(2525) &&
-          response.message == "$command,MODE ROVER,response: OK*21",
-      "captured UM982 MODE ROVER acknowledgements should normalize to the clean response line");
+      "captured UM982 MODE ROVER SURVEY MOW acknowledgements should survive short mixed-stream "
+      "prefixes");
+  ctx.Expect(response.kind == ReceiverCommandResponseKind::kTextOk &&
+                 response.timestamp_ns == std::optional<std::int64_t>(2525) &&
+                 response.message == "$command,MODE ROVER SURVEY MOW,response: OK*21",
+             "captured UM982 MODE ROVER SURVEY MOW acknowledgements should normalize to the clean "
+             "response line");
   ctx.Expect(router.metrics().lines_seen == 1u && router.metrics().ok_responses_seen == 1u &&
                  router.metrics().responses_generated == 1u &&
                  router.metrics().malformed_lines == 0u,

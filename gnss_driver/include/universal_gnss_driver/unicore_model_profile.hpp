@@ -40,6 +40,8 @@ struct UnicoreModelProfile
   const char* profile_id{"unicore_um98x_placeholder"};
   bool placeholder{true};
   ReceiverCapabilities capabilities{};
+  bool supports_rover_survey_mow{false};
+  const char* rover_survey_mow_min_build{""};
   std::vector<UnicoreSignalGroupSelection> signal_group_options{};
 };
 
@@ -52,20 +54,20 @@ const char* ToString(UnicoreModel model);
 const UnicoreModelProfile& ResolveUnicoreModelProfile(
     std::optional<std::string_view> model = std::nullopt);
 
-ReceiverTargetSelector BuildUnicoreTargetSelector(
-    const UnicoreModelProfile& profile);
+ReceiverTargetSelector BuildUnicoreTargetSelector(const UnicoreModelProfile& profile);
 
 const UnicoreSignalGroupSelection* FindUnicoreSignalGroupSelection(
-    const UnicoreModelProfile& profile,
-    const std::vector<std::uint8_t>& groups);
+    const UnicoreModelProfile& profile, const std::vector<std::uint8_t>& groups);
 
 const UnicoreSignalGroupSelection* FindUnicorePortableRoverSignalGroupSelection(
     const UnicoreModelProfile& profile);
 
-std::string FormatUnicoreSignalGroupSelection(
-    const std::vector<std::uint8_t>& groups);
+bool SupportsUnicorePortableRoverSurveyMow(const UnicoreModelProfile& profile);
 
-std::string DescribeUnicoreSupportedSignalGroups(
-    const UnicoreModelProfile& profile);
+std::string DescribeUnicorePortableRoverSurveyMowSupport(const UnicoreModelProfile& profile);
+
+std::string FormatUnicoreSignalGroupSelection(const std::vector<std::uint8_t>& groups);
+
+std::string DescribeUnicoreSupportedSignalGroups(const UnicoreModelProfile& profile);
 
 }  // namespace universal_gnss_driver
