@@ -368,6 +368,26 @@ std::uint32_t ResolveUnicoreRecoveryBaud(const ReceiverAutoConfigRequest& reques
   return 921600u;
 }
 
+bool ShouldEmitUnicoreRuntimeCom1BaudCommand(const ReceiverAutoConfigRequest& request)
+{
+  if (!request.config_baud.has_value())
+  {
+    return false;
+  }
+
+  if (request.discovery_result.has_value() && request.discovery_result->selected_baud.has_value())
+  {
+    return *request.discovery_result->selected_baud != *request.config_baud;
+  }
+
+  if (request.current_transport_baud.has_value())
+  {
+    return *request.current_transport_baud != *request.config_baud;
+  }
+
+  return true;
+}
+
 ReceiverAutoConfigPlan MakeUnsupportedProfilePlan(const ReceiverAutoConfigRequest& request,
                                                   const ReceiverVendor vendor,
                                                   std::string family_name,
@@ -1030,7 +1050,8 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
       request, plan, model_profile, profile, allow_automatic_signal_group_selection);
   AppendUnicorePortableRoverModeWarning(plan, model_profile, profile);
 
-  if (!request.signal_profile.has_value() && !profile.signal_config.has_value())
+  if (!request.signal_profile.has_value() && !request.signal_group_override.has_value() &&
+      !profile.signal_config.has_value())
   {
     AppendUnicoreSkippedSignalGroupWarning(plan, model_profile, "");
   }
@@ -1121,7 +1142,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     }
   }
 
-  if (request.config_baud.has_value())
+  if (ShouldEmitUnicoreRuntimeCom1BaudCommand(request))
   {
     profile.com1_baud_rate = *request.config_baud;
   }

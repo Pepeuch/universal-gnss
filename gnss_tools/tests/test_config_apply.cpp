@@ -680,6 +680,106 @@ void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
              "prepared apply text should surface the reduced minimal signal-profile command set");
 }
 
+void TestRuntimeOnlyUnicoreSameBaudOverrideSkipsConfigCom1(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.signal_group_override = std::vector<std::uint8_t>{3u, 6u};
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+  const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.plan.summary.commands_total == 14u &&
+                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") == std::nullopt &&
+                 FindTextCommandIndex(result, "CONFIG SIGNALGROUP 3 6\r\n") != std::nullopt,
+             "runtime-only Unicore apply preparation should skip CONFIG COM1 when the requested "
+             "config baud already matches the live transport baud");
+  ctx.Expect(text.find("Target configured baud:") == std::string::npos,
+             "prepared runtime-only apply text should not advertise a target configured baud when "
+             "no COM1 baud switch command is planned");
+}
+
+void TestRuntimeOnlyUnicoreDifferentBaudOverrideKeepsConfigCom1(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") != std::nullopt,
+             "runtime-only Unicore apply preparation should still emit CONFIG COM1 when the "
+             "requested config baud differs from the live transport baud");
+}
+
+void TestRuntimeOnlyUnicoreExplicitCurrentBaudSkipsConfigCom1WithoutDiscovery(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.receiver_family = ReceiverDetectedFamily::kUnicore;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.transport_baud_rate = 460800u;
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") == std::nullopt,
+             "runtime-only Unicore apply preparation should skip CONFIG COM1 when explicit "
+             "--baud matches --config-baud even without discovery");
+}
+
+void TestRuntimeOnlyUnicoreExplicitCurrentBaudEmitsConfigCom1WhenDifferent(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.receiver_family = ReceiverDetectedFamily::kUnicore;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.transport_baud_rate = 921600u;
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") != std::nullopt,
+             "runtime-only Unicore apply preparation should emit CONFIG COM1 when explicit "
+             "--baud differs from --config-baud without discovery");
+}
+
+void TestRuntimeOnlyUnicoreUnknownCurrentBaudKeepsConservativeConfigCom1(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.receiver_family = ReceiverDetectedFamily::kUnicore;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") != std::nullopt,
+             "runtime-only Unicore apply preparation should keep CONFIG COM1 when no current "
+             "baud source is known");
+}
+
 void TestKnownNonBaselineUnicoreModelPreparation(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -1366,6 +1466,11 @@ int main()
   TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
   TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(ctx);
   TestSignalProfilePreparationFlowsIntoApplyPlan(ctx);
+  TestRuntimeOnlyUnicoreSameBaudOverrideSkipsConfigCom1(ctx);
+  TestRuntimeOnlyUnicoreDifferentBaudOverrideKeepsConfigCom1(ctx);
+  TestRuntimeOnlyUnicoreExplicitCurrentBaudSkipsConfigCom1WithoutDiscovery(ctx);
+  TestRuntimeOnlyUnicoreExplicitCurrentBaudEmitsConfigCom1WhenDifferent(ctx);
+  TestRuntimeOnlyUnicoreUnknownCurrentBaudKeepsConservativeConfigCom1(ctx);
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);

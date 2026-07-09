@@ -2337,6 +2337,10 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.output_port = options.output_port;
   request.config_baud = options.config_baud;
   request.rate_hz = options.rate_hz;
+  if (options.transport_baud_rate != 0u)
+  {
+    request.current_transport_baud = options.transport_baud_rate;
+  }
   if (!options.device_path.empty())
   {
     request.transport_device_path = options.device_path;

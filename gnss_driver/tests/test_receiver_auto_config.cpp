@@ -673,6 +673,8 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
   ctx.Expect(override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 3 6") &&
                  !ContainsWarning(override_plan, "not validated for UM982") &&
+                 !ContainsWarning(override_plan,
+                                  "kept the current receiver signal-group configuration") &&
                  !ContainsCommandText(override_plan, "FRESET") &&
                  !ContainsCommandText(override_plan, "SAVECONFIG"),
              "A documented UM982 signal-group override should emit CONFIG SIGNALGROUP 3 6 without "
@@ -758,6 +760,67 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
              "should report why it was skipped");
 }
 
+void TestUnicoreRuntimeBaudOverrideOnlyWhenDifferent(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest same_baud_request;
+  same_baud_request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  same_baud_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore);
+  same_baud_request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  same_baud_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  same_baud_request.receiver_model = "UM982";
+  same_baud_request.config_baud = 460800u;
+
+  const auto same_baud_plan = BuildReceiverAutoConfigPlan(same_baud_request);
+  ctx.Expect(same_baud_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 !ContainsCommandText(same_baud_plan, "CONFIG COM1 460800 8 n 1"),
+             "runtime-only Unicore planning should skip CONFIG COM1 when the detected transport "
+             "baud already matches the requested config baud");
+
+  ReceiverAutoConfigRequest different_baud_request = same_baud_request;
+  different_baud_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+
+  const auto different_baud_plan = BuildReceiverAutoConfigPlan(different_baud_request);
+  ctx.Expect(different_baud_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(different_baud_plan, "CONFIG COM1 460800 8 n 1"),
+             "runtime-only Unicore planning should still emit CONFIG COM1 when a real baud "
+             "change is required");
+
+  ReceiverAutoConfigRequest explicit_same_baud_request;
+  explicit_same_baud_request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  explicit_same_baud_request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  explicit_same_baud_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  explicit_same_baud_request.receiver_model = "UM982";
+  explicit_same_baud_request.current_transport_baud = 460800u;
+  explicit_same_baud_request.config_baud = 460800u;
+
+  const auto explicit_same_baud_plan = BuildReceiverAutoConfigPlan(explicit_same_baud_request);
+  ctx.Expect(explicit_same_baud_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 !ContainsCommandText(explicit_same_baud_plan, "CONFIG COM1 460800 8 n 1"),
+             "runtime-only Unicore planning should skip CONFIG COM1 when an explicit current "
+             "transport baud matches the requested config baud");
+
+  ReceiverAutoConfigRequest explicit_different_baud_request = explicit_same_baud_request;
+  explicit_different_baud_request.current_transport_baud = 921600u;
+
+  const auto explicit_different_baud_plan =
+      BuildReceiverAutoConfigPlan(explicit_different_baud_request);
+  ctx.Expect(explicit_different_baud_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(explicit_different_baud_plan, "CONFIG COM1 460800 8 n 1"),
+             "runtime-only Unicore planning should emit CONFIG COM1 when an explicit current "
+             "transport baud differs from the requested config baud");
+
+  ReceiverAutoConfigRequest unknown_current_baud_request = explicit_same_baud_request;
+  unknown_current_baud_request.current_transport_baud.reset();
+
+  const auto unknown_current_baud_plan = BuildReceiverAutoConfigPlan(unknown_current_baud_request);
+  ctx.Expect(unknown_current_baud_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(unknown_current_baud_plan, "CONFIG COM1 460800 8 n 1"),
+             "runtime-only Unicore planning should stay conservative and emit CONFIG COM1 when "
+             "neither discovery nor an explicit current baud is known");
+}
+
 int main()
 {
   TestContext ctx;
@@ -770,6 +833,7 @@ int main()
   TestUnicoreRoverHighPrecisionPlans(ctx);
   TestSignalProfileCapabilityMapping(ctx);
   TestUnicoreSignalGroupOverride(ctx);
+  TestUnicoreRuntimeBaudOverrideOnlyWhenDifferent(ctx);
   TestUnicoreFactoryResetPlan(ctx);
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);

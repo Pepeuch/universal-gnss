@@ -74,6 +74,11 @@ struct ReceiverAutoConfigRequest
   std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
+  // Known current transport baud sourced from an explicit runtime apply input
+  // such as --baud when discovery_result is unavailable. This is used only to
+  // avoid redundant runtime CONFIG COM1 writes; when absent, planning remains
+  // conservative.
+  std::optional<std::uint32_t> current_transport_baud{};
   std::optional<std::string> transport_device_path{};
 };
 
