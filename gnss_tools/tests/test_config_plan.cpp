@@ -119,20 +119,19 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   options.receiver_model = "UM982";
   const auto um982_result = BuildConfigPlan(options);
   const std::string um982_text = FormatConfigPlanText(um982_result);
-  const auto* um982_signalgroup = FindTextCommand(um982_result, "CONFIG SIGNALGROUP 3 6");
   const auto* um982_gpgga = FindTextCommand(um982_result, "GPGGA 1");
   ctx.Expect(um982_result.status == ConfigPlanStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
-                 um982_result.summary.commands_total == 14u &&
+                 um982_result.summary.commands_total == 13u &&
                  um982_text.find("MODE ROVER SURVEY MOW") != std::string::npos &&
-                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
+                 !HasTextCommand(um982_result, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um982_result, "Build7650+"),
-             "UM982 config plans should expose the documented dual-antenna signal-group selection");
-  ctx.Expect(um982_signalgroup != nullptr && um982_signalgroup->required &&
-                 um982_gpgga != nullptr && !um982_gpgga->required &&
+             "UM982 config plans should keep the documented rover mode without forcing a "
+             "SIGNALGROUP command");
+  ctx.Expect(um982_gpgga != nullptr && !um982_gpgga->required &&
                  um982_text.find("failure_policy: continue_on_failure") != std::string::npos,
-             "Unicore config plans should expose required core commands and optional telemetry "
-             "outputs");
+             "Unicore config plans should still expose required core commands and optional "
+             "telemetry outputs");
 }
 
 void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
@@ -177,7 +176,7 @@ void TestSignalProfilePlanning(TestContext& ctx)
                  unicore_result.signal_profile ==
                      std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
                          universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
-                 unicore_result.summary.commands_total == 11u,
+                 unicore_result.summary.commands_total == 10u,
              "Unicore minimal signal-profile plans should expose the reduced output plan");
   ctx.Expect(
       unicore_text.find("Signal profile override: minimal") != std::string::npos &&

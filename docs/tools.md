@@ -734,6 +734,12 @@ Hardware notes from the `v0.6-4` operator validation pass:
 - the documented UM982 model-aware rover profile now includes
   `CONFIG SIGNALGROUP 3 6`; unknown or non-baseline Unicore models now skip
   that command instead of inheriting a family-wide default
+- live Unicore apply now treats `CONFIG SIGNALGROUP` as a dedicated step:
+  it queries the current value first, skips the command when it is already
+  active, and verifies the reported `CONFIG SIGNALGROUP` again before
+  continuing the rest of the runtime profile
+- the `factory_reset` Unicore workflow remains destructive and expert-only; it
+  should not be treated as the normal GUI recovery path
 - after a full Unicore reset/recovery apply, the receiver may need a couple of
   minutes to reacquire satellites and corrections even though the GNSS runtime
   is already healthy and publishing at `5 Hz`

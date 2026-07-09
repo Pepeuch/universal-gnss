@@ -321,15 +321,20 @@ This means:
   `VERSIONA` response, recover `COM1` with the explicit
   `CONFIG COM1 <baud> 8 n 1` form, and then verify reachability again at the
   restored baud before continuing
+- `factory_reset` is destructive and expert-only; it is not intended to be a
+  routine GUI recovery workflow
 
 `CONFIG SIGNALGROUP` remains a runtime command. Safety comes from
-model-profile validation rather than from upgrading it to persistent/factory
-severity:
+syntactic validation plus bounded live verification rather than from upgrading
+it to persistent/factory severity:
 
-- only documented selections are accepted
-- unknown models skip the command and warn
-- explicit overrides are rejected when the selected model does not document the
-  requested combination
+- the input layer only validates syntax and the numeric `0..9` range
+- model profiles remain UI/plan guidance rather than a hard allowlist
+- live apply queries the current `CONFIG SIGNALGROUP` value first
+- if the receiver already reports the requested value, the runtime command is
+  skipped
+- if the command must be sent, live apply verifies the value again before
+  continuing the rest of the rover profile
 
 Current documented explicit override selections are:
 

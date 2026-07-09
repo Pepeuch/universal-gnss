@@ -60,6 +60,7 @@ struct UnicoreRtkReliability
 struct UnicoreSignalConfig
 {
   std::vector<std::uint8_t> groups{};
+  ReceiverCommandFailurePolicy failure_policy{ReceiverCommandFailurePolicy::kAbortOnFailure};
 };
 
 struct UnicoreOutputMessageRate

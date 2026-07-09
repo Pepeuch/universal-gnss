@@ -113,13 +113,14 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const std::string um982_text = FormatProfilePreviewText(um982_result);
   ctx.Expect(um982_result.status == ProfilePreviewStatus::kOk &&
                  um982_result.receiver_model == std::optional<std::string>{"UM982"} &&
-                 um982_result.commands.size() == 14u &&
+                 um982_result.commands.size() == 13u &&
                  um982_result.commands.front().description ==
                      "set receiver mode to rover survey lawn mower" &&
                  um982_text.find("MODE ROVER SURVEY MOW") != std::string::npos &&
-                 um982_text.find("CONFIG SIGNALGROUP 3 6") != std::string::npos &&
+                 !HasTextCommand(um982_result, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(um982_result, "Build7650+"),
-             "UM982 preview should expose the documented dual-antenna signal-group selection");
+             "UM982 preview should expose the documented rover mode without forcing "
+             "CONFIG SIGNALGROUP");
 }
 
 void TestRuntimeOnlyPreview(TestContext& ctx)
@@ -209,7 +210,7 @@ void TestSignalProfilePreview(TestContext& ctx)
                  result.signal_profile ==
                      std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile>{
                          universal_gnss_driver::ReceiverAutoConfigSignalProfile::kMinimal} &&
-                 result.summary.commands_total == 11u,
+                 result.summary.commands_total == 10u,
              "minimal signal-profile preview should expose the reduced Unicore command set");
   ctx.Expect(text.find("Signal profile override: minimal") != std::string::npos &&
                  text.find("BESTNAVA 1") != std::string::npos &&

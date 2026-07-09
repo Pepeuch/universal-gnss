@@ -299,26 +299,27 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   const auto debug_plan = BuildReceiverAutoConfigPlan(um982_request);
 
   ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 rover_plan.validation.generated_command_count == 14u &&
-                 rover_plan.validation.runtime_command_count == 14u &&
+                 rover_plan.validation.generated_command_count == 13u &&
+                 rover_plan.validation.runtime_command_count == 13u &&
                  rover_plan.receiver_model == std::optional<std::string>{"UM982"} &&
                  ContainsCommandText(rover_plan, "MODE ROVER SURVEY MOW") &&
-                 ContainsCommandText(rover_plan, "CONFIG SIGNALGROUP 3 6") &&
+                 !ContainsCommandText(rover_plan, "CONFIG SIGNALGROUP") &&
                  !ContainsCommandText(rover_plan, "UNLOG") &&
                  ContainsWarning(rover_plan, "Build7650+") &&
                  HasReceiverFeature(rover_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
-             "UM982 rover_high_precision planning should emit the documented baseline-capable "
-             "signal-group selection");
+             "UM982 rover_high_precision planning should keep the validated mower mode while "
+             "leaving SIGNALGROUP unchanged unless an explicit override is configured");
   ctx.Expect(debug_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 debug_plan.validation.generated_command_count == 14u &&
-                 debug_plan.validation.runtime_command_count == 14u &&
+                 debug_plan.validation.generated_command_count == 13u &&
+                 debug_plan.validation.runtime_command_count == 13u &&
                  ContainsCommandText(debug_plan, "MODE ROVER SURVEY MOW") &&
+                 !ContainsCommandText(debug_plan, "CONFIG SIGNALGROUP") &&
                  !ContainsCommandText(debug_plan, "UNLOG") &&
                  ContainsWarning(debug_plan, "Build7650+"),
-             "UM982 rover_high_precision_debug planning should keep the same lean command count "
-             "while retaining the documented signal-group selection");
-  ctx.Expect(rover_plan.commands[9].payload.text.find("PVTSLNA 1") != std::string::npos &&
-                 debug_plan.commands[9].payload.text.find("PVTSLNA 0.2") != std::string::npos,
+             "UM982 rover_high_precision_debug planning should keep the lean runtime command count "
+             "without forcing a SIGNALGROUP change");
+  ctx.Expect(ContainsCommandText(rover_plan, "PVTSLNA 1") &&
+                 ContainsCommandText(debug_plan, "PVTSLNA 0.2"),
              "UM982 debug planning should keep PVTSLNA at 5 Hz while the normal rover profile "
              "stays at 1 Hz");
 
@@ -380,20 +381,20 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   const auto unicore_high_precision_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_high_precision_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(unicore_high_precision_plan, "MODE ROVER SURVEY MOW") &&
-                 ContainsCommandText(unicore_high_precision_plan, "CONFIG SIGNALGROUP 3 6") &&
+                 !ContainsCommandText(unicore_high_precision_plan, "CONFIG SIGNALGROUP") &&
                  ContainsCommandText(unicore_high_precision_plan, "BESTNAVA 0.2") &&
                  ContainsCommandText(unicore_high_precision_plan, "GPGGA 1") &&
                  ContainsCommandText(unicore_high_precision_plan, "PVTSLNA 1") &&
                  ContainsCommandText(unicore_high_precision_plan, "RTKSTATUSA 1") &&
                  ContainsWarning(unicore_high_precision_plan, "Build7650+"),
-             "Unicore high_precision signal-profile planning should map to CONFIG SIGNALGROUP 3 6 "
-             "while keeping auxiliary logs at their safe default rates");
+             "Unicore high_precision signal-profile planning should keep the documented output "
+             "rates without forcing CONFIG SIGNALGROUP");
 
   unicore_request.signal_profile = ReceiverAutoConfigSignalProfile::kMinimal;
   unicore_request.rate_hz = 1.0;
   const auto unicore_minimal_plan = BuildReceiverAutoConfigPlan(unicore_request);
   ctx.Expect(unicore_minimal_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 unicore_minimal_plan.validation.generated_command_count == 11u &&
+                 unicore_minimal_plan.validation.generated_command_count == 10u &&
                  ContainsCommandText(unicore_minimal_plan, "BESTNAVA 1") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGSV") &&
                  !ContainsCommandText(unicore_minimal_plan, "GPGST") &&
@@ -436,7 +437,6 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
                  !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um960_plan, "model UM960") &&
                  !ContainsWarning(um960_plan, "safe generic non-baseline fallback"),
              "UM960 signal-profile planning should stay known non-baseline and skip undocumented "
              "signal-group changes");
@@ -448,7 +448,6 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   ctx.Expect(um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
                  !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um981_plan, "model UM981") &&
                  !ContainsWarning(um981_plan, "safe generic non-baseline fallback"),
              "UM981 signal-profile planning should stay known non-baseline and skip undocumented "
              "signal-group changes");
@@ -673,7 +672,7 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
   const auto override_plan = BuildReceiverAutoConfigPlan(request);
   ctx.Expect(override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 3 6") &&
-                 !ContainsWarning(override_plan, "Advanced SIGNALGROUP combination") &&
+                 !ContainsWarning(override_plan, "not validated for UM982") &&
                  !ContainsCommandText(override_plan, "FRESET") &&
                  !ContainsCommandText(override_plan, "SAVECONFIG"),
              "A documented UM982 signal-group override should emit CONFIG SIGNALGROUP 3 6 without "
@@ -696,8 +695,11 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
                  ContainsCommandText(single_antenna_um982_override_plan, "GPGGA 1") &&
                  !ContainsCommandText(single_antenna_um982_override_plan, "GPGGA COM1") &&
                  !ContainsCommandText(single_antenna_um982_override_plan, "GPGGAH") &&
+                 ContainsWarning(single_antenna_um982_override_plan, "not validated for UM982") &&
                  ContainsWarning(single_antenna_um982_override_plan,
-                                 "Advanced SIGNALGROUP combination"),
+                                 "known validated pairs are 4 5 and 3 6") &&
+                 ContainsWarning(single_antenna_um982_override_plan,
+                                 "may reject the command or keep its previous signal group"),
              "A syntactically valid UM982 single-antenna override should be accepted with an "
              "advanced-combination warning while keeping current-port single-antenna GPGGA only");
 
@@ -705,8 +707,7 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
   const auto master_only_um982_override_plan = BuildReceiverAutoConfigPlan(request);
   ctx.Expect(master_only_um982_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(master_only_um982_override_plan, "CONFIG SIGNALGROUP 4 0") &&
-                 ContainsWarning(master_only_um982_override_plan,
-                                 "Advanced SIGNALGROUP combination"),
+                 ContainsWarning(master_only_um982_override_plan, "not validated for UM982"),
              "A master-only UM982 override should be accepted with an advanced-combination "
              "warning");
 
@@ -715,10 +716,9 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
   ctx.Expect(documented_base_mode_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  ContainsCommandText(documented_base_mode_override_plan,
                                      "CONFIG SIGNALGROUP 7 0") &&
-                 !ContainsWarning(documented_base_mode_override_plan,
-                                  "Advanced SIGNALGROUP combination"),
-             "Documented UM982 overrides such as 7 0 should remain accepted without the advanced "
-             "warning");
+                 ContainsWarning(documented_base_mode_override_plan, "not validated for UM982"),
+             "UM982 overrides outside the validated 4 5 and 3 6 pairs should now warn even when "
+             "they are syntactically valid");
 
   request.receiver_model = "UM981";
   request.signal_group_override = std::vector<std::uint8_t>{9u, 0u};

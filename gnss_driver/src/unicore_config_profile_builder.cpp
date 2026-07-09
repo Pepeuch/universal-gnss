@@ -382,7 +382,8 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
                   ReceiverCommandKind::kApplyConfigProfile,
                   ReceiverCommandSafetyLevel::kRuntime,
                   ReceiverResponseKind::kTextPayload,
-                  command);
+                  command,
+                  profile.signal_config->failure_policy);
   }
 
   for (const auto& output : profile.output_messages)
