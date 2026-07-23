@@ -233,7 +233,16 @@ void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& opt
   options.required_msm_constellations.clear();
   options.require_any_msm = true;
   options.require_base_position = true;
-  options.require_glonass_bias = true;
+  // RTCM 1230 (GLONASS L1/L2 code-phase bias) is NOT required for RTK. It only
+  // reconciles GLONASS inter-frequency code biases between mixed-vendor base and
+  // rover hardware; modern receivers reach RTK Fixed without it. Many public
+  // casters (e.g. the Centipede/crtk.net network) either omit 1230 entirely or
+  // transmit it with the code-phase-bias validity indicator cleared. Requiring a
+  // valid 1230 therefore produced a persistent, spurious ERROR-level
+  // `rtcm.required_messages_missing` even while MSM observations and the base
+  // position were streaming and RTK was working. Treat 1230 as optional so
+  // correction availability tracks the messages that actually drive RTK.
+  options.require_glonass_bias = false;
 }
 
 void RtcmCorrectionMonitor::Reset()
@@ -819,7 +828,11 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
 
   if (monitor.HasDecodedGlonassBias1230() && !monitor.LastGlonassBias1230Valid())
   {
-    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kWarning,
+    // Informational only: GLONASS code-phase bias is optional for RTK (see
+    // ConfigurePortableRtkCorrectionRequirements). A caster that transmits 1230
+    // with the validity indicator cleared is signalling "no GLONASS bias
+    // available", which is a normal, expected condition — not a correction fault.
+    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kInfo,
                       universal_gnss::GnssDiagnosticCategory::kCorrection,
                       "rtcm.1230_not_valid",
                       "The latest RTCM 1230 GLONASS code-phase bias message is not marked valid",

@@ -804,6 +804,86 @@ void TestPortableRtkRequirementsRespectStartupGrace(TestContext& ctx)
              "startup grace should avoid emitting a hard required-message error");
 }
 
+void TestPortableRtkRequirementsDoNotRequireGlonassBias(TestContext& ctx)
+{
+  // Base position + a recent MSM constellation, but NO RTCM 1230 at all — the
+  // common case for public casters that never transmit GLONASS code-phase bias.
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 1100);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 10000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  ctx.Expect(!options.require_glonass_bias,
+             "portable RTK requirements must treat RTCM 1230 GLONASS bias as optional");
+
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+  ctx.Expect(monitor.HasRequiredCorrectionMessages(options),
+             "base position plus a recent MSM should satisfy portable RTK requirements without 1230");
+  ctx.Expect(health.correction_available,
+             "correction availability must not depend on GLONASS 1230");
+  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
+             "a stream without RTCM 1230 must not raise required_messages_missing");
+}
+
+void TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(TestContext& ctx)
+{
+  // Base + MSM present, plus a 1230 that decodes cleanly but advertises itself as
+  // not valid (code-phase-bias indicator cleared). This must stay informational
+  // and must not suppress correction availability.
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 1100);
+
+  RtcmFrame invalid_1230 = MakeValidRtcmFrame(1230u, 1200);
+  invalid_1230.payload = BuildRtcm1230Payload(42u,
+                                              /*code_phase_bias_indicator=*/false,
+                                              /*has_l1_ca_bias=*/true,
+                                              /*has_l1_p_bias=*/false,
+                                              /*has_l2_ca_bias=*/false,
+                                              /*has_l2_p_bias=*/false,
+                                              /*l1_ca_bias_raw=*/10,
+                                              std::nullopt,
+                                              std::nullopt,
+                                              std::nullopt);
+  monitor.ObserveFrame(invalid_1230);
+
+  ctx.Expect(monitor.HasDecodedGlonassBias1230() && !monitor.LastGlonassBias1230Valid(),
+             "a 1230 with the code-phase-bias indicator cleared should decode as not valid");
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 10000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
+      monitor,
+      options);
+  ctx.Expect(health.correction_available,
+             "a not-valid GLONASS 1230 must not suppress correction availability");
+  ctx.Expect(!health.HasErrors(),
+             "a not-valid GLONASS 1230 must not raise an error-level diagnostic");
+
+  bool saw_info_1230 = false;
+  for (const auto& event : health.events)
+  {
+    if (event.code == "rtcm.1230_not_valid")
+    {
+      saw_info_1230 = true;
+      ctx.Expect(event.severity == GnssDiagnosticSeverity::kInfo,
+                 "rtcm.1230_not_valid should be informational, not a warning");
+    }
+  }
+  ctx.Expect(saw_info_1230, "a decoded-but-not-valid 1230 should still surface an informational note");
+}
+
 }  // namespace
 
 int main()
@@ -822,6 +902,8 @@ int main()
   TestMsmMalformedHealthEvent(ctx);
   TestHealthStates(ctx);
   TestPortableRtkRequirementsAccept1006(ctx);
+  TestPortableRtkRequirementsDoNotRequireGlonassBias(ctx);
+  TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(ctx);
   TestPortableRtkRequirementsUseRecentObservationWindow(ctx);
   TestPortableRtkRequirementsRespectStartupGrace(ctx);
 

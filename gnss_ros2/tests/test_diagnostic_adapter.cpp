@@ -6,7 +6,9 @@
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
+#include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
+#include "rtcm_diagnostic_projection.hpp"
 
 namespace
 {
@@ -128,6 +130,42 @@ TEST(DiagnosticAdapterTest, BuildsDiagnosticArrayWithSummaryAndLatestTimestamp)
   EXPECT_EQ(array.status[1].name, "universal_gnss/rtcm_not_used");
   EXPECT_EQ(array.status[2].name, "universal_gnss/jamming_critical");
   EXPECT_EQ(array.status[2].level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+}
+
+TEST(DiagnosticAdapterTest, DecodedButNotValidSemanticObservationIsNotAWarning)
+{
+  // A cleanly decoded observation that advertises itself as "not valid" (the
+  // GLONASS code-phase bias case) is normal caster content, not a fault.
+  universal_gnss_protocols::RtcmSemanticObservation observation;
+  observation.name = "glonass_code_phase_bias";
+  observation.message_type = 1230u;
+  observation.seen = true;
+  observation.decoded = true;
+  observation.valid = false;
+  observation.decode_success_count = 1u;
+
+  const auto status =
+      universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(observation, "universal_gnss", "gnss");
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(status.name, "universal_gnss/rtcm_semantic/glonass_code_phase_bias");
+}
+
+TEST(DiagnosticAdapterTest, MalformedSemanticObservationRemainsAWarning)
+{
+  // Genuine decode faults must still warn.
+  universal_gnss_protocols::RtcmSemanticObservation observation;
+  observation.name = "glonass_code_phase_bias";
+  observation.message_type = 1230u;
+  observation.seen = true;
+  observation.decoded = true;
+  observation.valid = true;
+  observation.malformed_count = 1u;
+
+  const auto status =
+      universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(observation, "universal_gnss", "gnss");
+
+  EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
 }
 
 }  // namespace
