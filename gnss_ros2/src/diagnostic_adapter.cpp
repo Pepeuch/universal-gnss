@@ -91,8 +91,13 @@ KeyValue MakeKeyValue(std::string key, std::string value)
 std::uint8_t RtcmSemanticDiagnosticLevel(
     const universal_gnss_protocols::RtcmSemanticObservation& observation)
 {
-  if (observation.malformed_count > 0u || observation.decode_failure_count > 0u ||
-      (observation.decoded && !observation.valid))
+  // Only actual decode faults (malformed payloads or failed decodes) are
+  // warnings. A cleanly decoded observation whose payload advertises itself as
+  // "not valid" is normal, caster-driven content — most notably the GLONASS
+  // code-phase bias (RTCM 1230), which casters routinely transmit with the
+  // validity indicator cleared and which is not required for RTK. Reporting that
+  // as WARN produced persistent, misleading diagnostics; keep it at OK.
+  if (observation.malformed_count > 0u || observation.decode_failure_count > 0u)
   {
     return DiagnosticStatus::WARN;
   }

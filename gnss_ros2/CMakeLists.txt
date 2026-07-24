@@ -305,6 +305,7 @@ if(BUILD_TESTING)
       test_diagnostic_adapter
       PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}
         ${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}
     )
