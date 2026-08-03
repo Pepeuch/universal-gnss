@@ -76,7 +76,12 @@ void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& opt
 class RtcmCorrectionMonitor
 {
 public:
+  // Clears stream observations and static base-station metadata.
   void Reset();
+
+  // Clears per-stream observations while preserving static base-station
+  // metadata for a reconnect to the same correction endpoint.
+  void ResetStreamState();
 
   void ObserveFrame(const RtcmFrame& frame);
   void ObserveMessage(const RtcmMessageInfo& info,

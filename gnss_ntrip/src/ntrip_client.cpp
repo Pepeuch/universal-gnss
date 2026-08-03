@@ -279,9 +279,13 @@ NtripClientError NtripClient::Connect(
   universal_gnss_transport::TcpClientConfig transport_config = tcp_config_;
   transport_config.host = config_.host;
   transport_config.port = config_.port;
+  const std::string endpoint = SessionEndpointKey();
+  const bool preserve_static_metadata =
+      !last_session_endpoint_.empty() && endpoint == last_session_endpoint_;
   transport_.Close();
-  ResetSessionState();
+  ResetSessionState(preserve_static_metadata);
   ResetSessionMetrics();
+  last_session_endpoint_ = endpoint;
 
   if (transport_config.host.empty() || transport_config.port == 0u)
   {
@@ -304,9 +308,13 @@ NtripClientError NtripClient::Connect(
 
 NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
 {
+  const std::string endpoint = SessionEndpointKey();
+  const bool preserve_static_metadata =
+      !last_session_endpoint_.empty() && endpoint == last_session_endpoint_;
   transport_.Close();
-  ResetSessionState();
+  ResetSessionState(preserve_static_metadata);
   ResetSessionMetrics();
+  last_session_endpoint_ = endpoint;
 
   state_ = NtripClientState::kConnecting;
   const auto adopt_error = transport_.AdoptConnectedSocket(fd, tcp_config_);
@@ -723,13 +731,25 @@ NtripClientError NtripClient::FailWith(
   return error;
 }
 
-void NtripClient::ResetSessionState()
+void NtripClient::ResetSessionState(const bool preserve_static_metadata)
 {
   request_ = NtripRequest{};
   response_buffer_.clear();
   response_header_.clear();
   rtcm_framer_.Reset();
-  correction_monitor_.Reset();
+  if (preserve_static_metadata)
+  {
+    correction_monitor_.ResetStreamState();
+  }
+  else
+  {
+    correction_monitor_.Reset();
+  }
+}
+
+std::string NtripClient::SessionEndpointKey() const
+{
+  return config_.host + ":" + std::to_string(config_.port) + "/" + config_.mountpoint;
 }
 
 void NtripClient::ResetSessionMetrics()

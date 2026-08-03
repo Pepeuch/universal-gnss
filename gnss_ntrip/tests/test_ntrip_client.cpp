@@ -1014,6 +1014,65 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
   }
 }
 
+void TestStickyBaseStationMetadataAcrossReconnect(TestContext& ctx)
+{
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.read_timeout_ms = 100u;
+
+  NtripClient client(MakeConfig());
+  client.set_tcp_config(tcp_config);
+
+  // First connection on endpoint A: stream a base-position (1005) frame so the
+  // correction monitor records the sticky static base-station metadata.
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for the first connection");
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "first connection should adopt the socket");
+    ctx.Expect(client.SendRequest() == NtripClientError::kNone,
+               "first connection should send the request");
+    sockets.ReadPeerExact(client.request().request_text.size());
+
+    std::vector<std::uint8_t> response;
+    const std::string header = "ICY 200 OK\r\n\r\n";
+    response.insert(response.end(), header.begin(), header.end());
+    Append(response, BuildRtcmFrame(1005u));
+    ctx.Expect(sockets.WritePeer(response), "peer should send a base-position frame");
+
+    std::vector<std::uint8_t> buffer(128u, 0u);
+    client.Read(buffer.data(), buffer.size(), 1000000000LL);
+    ctx.Expect(client.correction_monitor().HasSeenBasePosition1005(),
+               "base position should be recorded on the first connection");
+  }
+
+  // Reconnect to the SAME endpoint (same host/port/mountpoint). No base-position
+  // frame is streamed this time — the sticky flag must SURVIVE so a slow caster
+  // rebroadcast does not produce a spurious required_messages_missing window.
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for the same-endpoint reconnect");
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "same-endpoint reconnect should adopt the socket");
+    ctx.Expect(client.correction_monitor().HasSeenBasePosition1005(),
+               "sticky base position should survive a reconnect to the same endpoint");
+  }
+
+  // Reconnect to a DIFFERENT mountpoint: the sticky metadata must be dropped so a
+  // genuinely different base station requires a fresh base-position message.
+  {
+    NtripConfig other = MakeConfig();
+    other.mountpoint = "OTHER_MOUNT";
+    client.set_config(other);
+
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for the endpoint-change reconnect");
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+               "endpoint-change reconnect should adopt the socket");
+    ctx.Expect(!client.correction_monitor().HasSeenBasePosition1005(),
+               "sticky base position should be dropped when the mountpoint changes");
+  }
+}
+
 }  // namespace
 
 int main()
@@ -1028,6 +1087,7 @@ int main()
   TestInvalidResponsesAndConnectFailure(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
   TestExplicitStreamingOnlyGgaInjection(ctx);
+  TestStickyBaseStationMetadataAcrossReconnect(ctx);
 
   if (ctx.failures != 0)
   {

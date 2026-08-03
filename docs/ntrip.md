@@ -34,6 +34,8 @@ Current responsibilities:
 - model reconnect/backoff decisions without owning a reconnect loop
 - track correction-stream metrics independently from ROS 2 or any network stack
 - feed incoming correction bytes into the existing RTCM framer and correction monitor
+- preserve static base-station metadata across reconnects to the same
+  host/port/mountpoint while resetting all per-stream counters and MSM state
 - accept both full HTTP-style NTRIP responses and legacy `ICY 200 OK` caster
   responses seen in real deployments
 

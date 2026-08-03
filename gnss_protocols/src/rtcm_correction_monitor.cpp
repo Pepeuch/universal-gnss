@@ -245,7 +245,7 @@ void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& opt
   options.require_glonass_bias = false;
 }
 
-void RtcmCorrectionMonitor::Reset()
+void RtcmCorrectionMonitor::ResetStreamState()
 {
   total_frames_ = 0;
   valid_frames_ = 0;
@@ -259,6 +259,18 @@ void RtcmCorrectionMonitor::Reset()
   msm_constellation_timestamps_.clear();
   total_frame_timestamps_.clear();
   valid_frame_timestamps_.clear();
+  last_msm_summary_.reset();
+  last_msm_timestamp_ns_.reset();
+  last_decoded_msm_timestamp_ns_.reset();
+  msm_decode_success_count_ = 0;
+  msm_decode_failure_count_ = 0;
+  msm_malformed_count_ = 0;
+}
+
+void RtcmCorrectionMonitor::Reset()
+{
+  ResetStreamState();
+  // A full reset also drops static metadata that belongs to the prior source.
   seen_base_position_1005_ = false;
   seen_base_position_1006_ = false;
   seen_glonass_bias_1230_ = false;
@@ -273,12 +285,6 @@ void RtcmCorrectionMonitor::Reset()
   glonass_bias_1230_decode_success_count_ = 0;
   glonass_bias_1230_decode_failure_count_ = 0;
   glonass_bias_1230_malformed_count_ = 0;
-  last_msm_summary_.reset();
-  last_msm_timestamp_ns_.reset();
-  last_decoded_msm_timestamp_ns_.reset();
-  msm_decode_success_count_ = 0;
-  msm_decode_failure_count_ = 0;
-  msm_malformed_count_ = 0;
 }
 
 void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
@@ -657,31 +663,21 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     }
   }
 
+  // Base-station position is static metadata and may be broadcast much less
+  // frequently than MSM observations. Keep it satisfied for this monitor
+  // session once a valid 1005 or 1006 has been seen.
   if (options.require_base_position)
   {
-    if (!window_start_timestamp_ns.has_value())
-    {
-      if (!HasSeenBasePositionMessage())
-      {
-        return false;
-      }
-    }
-    else if (!has_message_type(1005u) && !has_message_type(1006u))
+    if (!HasSeenBasePositionMessage())
     {
       return false;
     }
   }
 
+  // RTCM 1230 is also base-station metadata rather than a per-epoch observation.
   if (options.require_glonass_bias)
   {
-    if (!window_start_timestamp_ns.has_value())
-    {
-      if (!HasSeenGlonassBias1230())
-      {
-        return false;
-      }
-    }
-    else if (!has_message_type(1230u))
+    if (!HasSeenGlonassBias1230())
     {
       return false;
     }

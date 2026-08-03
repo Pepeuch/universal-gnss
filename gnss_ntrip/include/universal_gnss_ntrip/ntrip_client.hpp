@@ -120,8 +120,10 @@ private:
   NtripClientError FailWith(
       NtripClientError error,
       std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
-  void ResetSessionState();
+  void ResetSessionState(bool preserve_static_metadata = false);
   void ResetSessionMetrics();
+  // Identifies whether consecutive sessions use the same correction source.
+  std::string SessionEndpointKey() const;
   NtripGgaSendResult MakeGgaSendErrorResult(
       NtripGgaSendError error,
       NtripClientError client_error = NtripClientError::kNone,
@@ -144,6 +146,7 @@ private:
   universal_gnss_transport::TcpClientConfig tcp_config_{};
   universal_gnss_transport::TcpClientTransport transport_{};
   NtripClientState state_{NtripClientState::kDisconnected};
+  std::string last_session_endpoint_{};
 
   NtripRequest request_{};
   std::string response_buffer_{};

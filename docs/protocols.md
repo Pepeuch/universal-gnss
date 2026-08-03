@@ -252,6 +252,11 @@ Current RTCM monitor support:
 - per-message-type counts, last-seen timestamps, and simple windowed rates
 - MSM constellation counts, last-seen timestamps, and simple windowed rates
 - presence tracking for base-position messages `1005` / `1006`
+- correction-health requirements retain static `1005` / `1006` base position
+  and `1230` GLONASS bias once observed in a monitor session, while MSM
+  observations remain subject to the recent-observation window
+- `ResetStreamState()` clears frame/MSM observations but retains static station
+  metadata; `Reset()` clears both
 - latest decoded base-station ARP ECEF position from `1005` / `1006`
 - semantic observations for decoded RTCM content, currently base-station ARP
   position, GLONASS code-phase bias, and MSM correction-stream summary

@@ -757,15 +757,18 @@ void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
              "portable RTCM content with one recent MSM constellation should clear the missing-message diagnostic");
 }
 
-void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
+void TestPortableRtkRequirementsExpireStaleMsmObservations(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
+  // Base position + GLONASS bias seen once (sticky), but the per-epoch MSM
+  // observations are all older than the recent window: a genuinely stalled
+  // observation feed must still raise the missing-message error.
   monitor.ObserveMessage(MakeMessageInfo(1005u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 1100);
   monitor.ObserveMessage(MakeMessageInfo(1077u), 9000);
   monitor.ObserveMessage(MakeMessageInfo(1087u), 9100);
   monitor.ObserveMessage(MakeMessageInfo(1097u), 9200);
   monitor.ObserveMessage(MakeMessageInfo(1127u), 9300);
-  monitor.ObserveMessage(MakeMessageInfo(1230u), 9400);
 
   RtcmCorrectionHealthOptions options;
   options.now_timestamp_ns = 12000;
@@ -776,10 +779,41 @@ void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
   const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
       monitor,
       options);
-  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options),
-             "portable RTK requirements should expire base-position messages outside the recent window");
+  ctx.Expect(
+      !monitor.HasRequiredCorrectionMessages(options),
+      "portable RTK requirements should expire stale MSM observations outside the recent window");
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kError,
-             "missing recent required RTCM content should remain an error after startup grace");
+             "missing recent MSM observations should remain an error after startup grace");
+}
+
+void TestPortableRtkRequirementsKeepStaleBasePosition(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  // Base position (1005) and GLONASS bias (1230) are static reference-station
+  // metadata broadcast on a long cadence: they were last seen well outside the
+  // recent observation window, yet the MSM observations are fresh. The sticky
+  // base-position/bias rule must keep the requirements satisfied so a healthy
+  // caster does not flap into a spurious required_messages_missing error.
+  monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 1100);
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 11000);
+  monitor.ObserveMessage(MakeMessageInfo(1087u), 11100);
+  monitor.ObserveMessage(MakeMessageInfo(1097u), 11200);
+  monitor.ObserveMessage(MakeMessageInfo(1127u), 11300);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 12000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 2000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
+  ctx.Expect(
+      monitor.HasRequiredCorrectionMessages(options),
+      "stationary base position seen once should remain satisfied despite the recent window");
+  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
+             "fresh MSM observations with a once-seen base position should clear the diagnostic");
 }
 
 void TestPortableRtkRequirementsRespectStartupGrace(TestContext& ctx)
@@ -884,6 +918,44 @@ void TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(TestContex
   ctx.Expect(saw_info_1230, "a decoded-but-not-valid 1230 should still surface an informational note");
 }
 
+void TestResetStreamStatePreservesStickyAcrossReconnect(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  // Simulate a healthy connection: base position, GLONASS bias and MSM seen.
+  monitor.ObserveMessage(MakeMessageInfo(1006u), 1000);
+  monitor.ObserveMessage(MakeMessageInfo(1230u), 1100);
+  RtcmFrame msm_frame = MakeValidRtcmFrame(1077u, 1200);
+  msm_frame.payload = BuildRtcmMsmPayload(1077u, 7u, {1u, 3u}, {2u}, {true, false});
+  monitor.ObserveFrame(msm_frame);
+
+  ctx.Expect(monitor.HasSeenBasePositionMessage(), "base position should be seen before reconnect");
+  ctx.Expect(monitor.HasSeenGlonassBias1230(), "GLONASS bias should be seen before reconnect");
+  ctx.Expect(monitor.MessageCount(1077u) == 1u,
+             "MSM observation should be counted before reconnect");
+  ctx.Expect(monitor.last_msm_summary().has_value(),
+             "MSM semantic state should exist before reconnect");
+
+  // Same-endpoint reconnect: clear per-stream observations while retaining the
+  // static base-station metadata.
+  monitor.ResetStreamState();
+  ctx.Expect(monitor.MessageCount(1077u) == 0u,
+             "ResetStreamState should clear per-stream observation counters");
+  ctx.Expect(monitor.total_frames() == 0u, "ResetStreamState should clear the frame counters");
+  ctx.Expect(!monitor.last_msm_summary().has_value(),
+             "ResetStreamState should clear per-stream MSM semantic state");
+  ctx.Expect(monitor.HasSeenBasePositionMessage(),
+             "ResetStreamState should preserve the sticky base-position flag");
+  ctx.Expect(monitor.HasSeenGlonassBias1230(),
+             "ResetStreamState should preserve the sticky GLONASS-bias flag");
+
+  // Endpoint change / full reset drops the sticky metadata.
+  monitor.Reset();
+  ctx.Expect(!monitor.HasSeenBasePositionMessage(),
+             "Reset should clear the sticky base-position flag on an endpoint change");
+  ctx.Expect(!monitor.HasSeenGlonassBias1230(),
+             "Reset should clear the sticky GLONASS-bias flag on an endpoint change");
+}
+
 }  // namespace
 
 int main()
@@ -904,8 +976,10 @@ int main()
   TestPortableRtkRequirementsAccept1006(ctx);
   TestPortableRtkRequirementsDoNotRequireGlonassBias(ctx);
   TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(ctx);
-  TestPortableRtkRequirementsUseRecentObservationWindow(ctx);
+  TestPortableRtkRequirementsExpireStaleMsmObservations(ctx);
+  TestPortableRtkRequirementsKeepStaleBasePosition(ctx);
   TestPortableRtkRequirementsRespectStartupGrace(ctx);
+  TestResetStreamStatePreservesStickyAcrossReconnect(ctx);
 
   if (ctx.failures != 0)
   {

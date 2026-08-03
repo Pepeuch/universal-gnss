@@ -49,6 +49,9 @@ Current project state includes:
 - portable RTCM MSM correction-stream summary observability through the shared
   semantic monitor/tools surface
 - ROS2 RTCM semantic diagnostics for base-station ARP, `1230`, and MSM summary
+- correction-health tracking that treats static base-station metadata as
+  session-sticky, preserves it across same-endpoint reconnects, and keeps MSM
+  observations freshness-windowed
 - additive portable dual-antenna baseline runtime/ROS2 surface:
   - capabilities:
     `dual_antenna_baseline`, `baseline_azimuth`, `baseline_pitch`,
