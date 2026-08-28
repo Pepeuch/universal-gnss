@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -76,6 +78,9 @@ void ConfigurePortableRtkCorrectionRequirements(RtcmCorrectionHealthOptions& opt
 class RtcmCorrectionMonitor
 {
 public:
+  // Rate queries retain the current diagnostic horizon plus a one-window margin.
+  static constexpr ProtocolTimestampNs kTimestampHistoryRetentionNs = 60000000000LL;
+
   void Reset();
 
   void ObserveFrame(const RtcmFrame& frame);
@@ -86,6 +91,7 @@ public:
   std::uint64_t total_frames() const;
   std::uint64_t valid_frames() const;
   std::uint64_t invalid_frames() const;
+  std::size_t RetainedTimestampCount() const;
   std::optional<ProtocolTimestampNs> last_frame_timestamp_ns() const;
   std::optional<ProtocolTimestampNs> first_valid_frame_timestamp_ns() const;
 
@@ -164,10 +170,10 @@ private:
   RtcmMsmConstellationActivityMap msm_constellation_activity_{};
   RtcmMsmSummaryActivityMap msm_summary_activity_{};
 
-  std::map<std::uint16_t, std::vector<ProtocolTimestampNs>> message_type_timestamps_{};
-  std::map<RtcmConstellation, std::vector<ProtocolTimestampNs>> msm_constellation_timestamps_{};
-  std::vector<ProtocolTimestampNs> total_frame_timestamps_{};
-  std::vector<ProtocolTimestampNs> valid_frame_timestamps_{};
+  std::map<std::uint16_t, std::multiset<ProtocolTimestampNs>> message_type_timestamps_{};
+  std::map<RtcmConstellation, std::multiset<ProtocolTimestampNs>> msm_constellation_timestamps_{};
+  std::multiset<ProtocolTimestampNs> total_frame_timestamps_{};
+  std::multiset<ProtocolTimestampNs> valid_frame_timestamps_{};
 
   bool seen_base_position_1005_{false};
   bool seen_base_position_1006_{false};

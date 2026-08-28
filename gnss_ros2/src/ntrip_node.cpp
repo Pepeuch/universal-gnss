@@ -42,6 +42,7 @@ struct NtripNodeConfig
   universal_gnss_ntrip::NtripConfig ntrip{};
   universal_gnss_transport::TcpClientConfig tcp{};
   bool tls_enabled{false};
+  double rtcm_forwarding_activity_timeout_s{5.0};
 };
 
 [[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node,
@@ -201,6 +202,8 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   config.ntrip.send_gga = node.declare_parameter<bool>("gga_enabled", false);
   const auto gga_interval_s = node.declare_parameter<std::int64_t>("gga_interval_s", 10);
   config.tls_enabled = node.declare_parameter<bool>("tls_enabled", false);
+  config.rtcm_forwarding_activity_timeout_s =
+      node.declare_parameter<double>("rtcm_forwarding_activity_timeout_s", 5.0);
 
   if (config.ntrip.host.empty())
   {
@@ -228,6 +231,14 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   {
     ThrowInvalidParameter(
         node, "tls_enabled", "TLS is not supported by the current low-level NTRIP transport");
+  }
+
+  if (!std::isfinite(config.rtcm_forwarding_activity_timeout_s) ||
+      !(config.rtcm_forwarding_activity_timeout_s > 0.0))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_forwarding_activity_timeout_s",
+                          "must be finite and strictly positive");
   }
 
   config.tcp.host = config.ntrip.host;
@@ -571,6 +582,18 @@ struct NtripNode::Impl
     return options;
   }
 
+  bool HasRecentRtcmPublication(const SteadyClock::time_point now) const
+  {
+    if (!last_rtcm_published_time_.has_value())
+    {
+      return false;
+    }
+
+    const auto timeout = std::chrono::duration_cast<SteadyClock::duration>(
+        std::chrono::duration<double>(config_.rtcm_forwarding_activity_timeout_s));
+    return now - *last_rtcm_published_time_ < timeout;
+  }
+
   universal_gnss::GnssHealthSummary BuildHealthSummary() const
   {
     universal_gnss::GnssHealthSummary summary;
@@ -627,7 +650,7 @@ struct NtripNode::Impl
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
                                    universal_gnss::GnssDiagnosticCategory::kTransport,
                                    "ntrip_streaming",
-                                   "NTRIP correction stream is active"));
+                                   "NTRIP response stream is open"));
         break;
 
       case universal_gnss_ntrip::NtripClientState::kFailed:
@@ -704,12 +727,19 @@ struct NtripNode::Impl
       }
     }
 
-    if (rtcm_published_frames_ > 0u)
+    if (HasRecentRtcmPublication(now))
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
                                  universal_gnss::GnssDiagnosticCategory::kCorrection,
                                  "rtcm_forwarding_active",
                                  "RTCM frames are being published for live receiver forwarding"));
+    }
+    else if (last_rtcm_published_time_.has_value())
+    {
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "rtcm_forwarding_stale",
+                                 "RTCM forwarding has not published a frame recently"));
     }
 
     if (config_.ntrip.send_gga)
@@ -774,10 +804,16 @@ struct NtripNode::Impl
     status.name = "universal_gnss_ntrip/rtcm_forwarding";
     status.hardware_id = hardware_id_;
 
-    if (rtcm_published_frames_ > 0u)
+    const auto now = SteadyClock::now();
+    if (HasRecentRtcmPublication(now))
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
       status.message = "RTCM forwarding active";
+    }
+    else if (last_rtcm_published_time_.has_value())
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM forwarding stale";
     }
     else if (client_.has_value() &&
              client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)

@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <iomanip>
+#include <iterator>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -30,38 +32,45 @@ void UpdateLatestTimestamp(const std::optional<ProtocolTimestampNs>& candidate,
 }
 
 void AppendTimestamp(const std::optional<ProtocolTimestampNs>& timestamp_ns,
-                     std::vector<ProtocolTimestampNs>& timestamps)
+                     std::multiset<ProtocolTimestampNs>& timestamps)
 {
-  if (timestamp_ns.has_value())
+  if (!timestamp_ns.has_value())
   {
-    timestamps.push_back(*timestamp_ns);
+    return;
   }
+
+  timestamps.insert(*timestamp_ns);
+  const ProtocolTimestampNs latest_timestamp_ns = *timestamps.rbegin();
+  if (latest_timestamp_ns <=
+      std::numeric_limits<ProtocolTimestampNs>::min() +
+          RtcmCorrectionMonitor::kTimestampHistoryRetentionNs)
+  {
+    return;
+  }
+
+  const ProtocolTimestampNs retention_start_timestamp_ns =
+      latest_timestamp_ns - RtcmCorrectionMonitor::kTimestampHistoryRetentionNs;
+  timestamps.erase(timestamps.begin(), timestamps.lower_bound(retention_start_timestamp_ns));
 }
 
-std::size_t CountTimestampsInWindow(const std::vector<ProtocolTimestampNs>& timestamps,
+std::size_t CountTimestampsInWindow(const std::multiset<ProtocolTimestampNs>& timestamps,
                                     const ProtocolTimestampNs window_end_timestamp_ns,
                                     const ProtocolTimestampNs window_duration_ns)
 {
   const ProtocolTimestampNs window_start_timestamp_ns =
       window_end_timestamp_ns - window_duration_ns;
 
-  std::size_t count = 0;
-  for (const ProtocolTimestampNs timestamp_ns : timestamps)
-  {
-    if (timestamp_ns >= window_start_timestamp_ns && timestamp_ns <= window_end_timestamp_ns)
-    {
-      ++count;
-    }
-  }
-
-  return count;
+  const auto begin = timestamps.lower_bound(window_start_timestamp_ns);
+  const auto end = timestamps.upper_bound(window_end_timestamp_ns);
+  return static_cast<std::size_t>(std::distance(begin, end));
 }
 
-std::optional<double> ComputeRateHz(const std::vector<ProtocolTimestampNs>& timestamps,
+std::optional<double> ComputeRateHz(const std::multiset<ProtocolTimestampNs>& timestamps,
                                     const ProtocolTimestampNs window_end_timestamp_ns,
                                     const ProtocolTimestampNs window_duration_ns)
 {
-  if (window_duration_ns <= 0)
+  if (window_duration_ns <= 0 ||
+      window_duration_ns > RtcmCorrectionMonitor::kTimestampHistoryRetentionNs)
   {
     return std::nullopt;
   }
@@ -387,6 +396,20 @@ std::uint64_t RtcmCorrectionMonitor::valid_frames() const
 std::uint64_t RtcmCorrectionMonitor::invalid_frames() const
 {
   return invalid_frames_;
+}
+
+std::size_t RtcmCorrectionMonitor::RetainedTimestampCount() const
+{
+  std::size_t count = total_frame_timestamps_.size() + valid_frame_timestamps_.size();
+  for (const auto& entry : message_type_timestamps_)
+  {
+    count += entry.second.size();
+  }
+  for (const auto& entry : msm_constellation_timestamps_)
+  {
+    count += entry.second.size();
+  }
+  return count;
 }
 
 std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::last_frame_timestamp_ns() const

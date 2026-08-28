@@ -594,6 +594,83 @@ TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
             nullptr);
 }
 
+TEST_F(NtripNodeTest, ReportsRtcmForwardingStaleAfterSilenceAndRecovers)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", false),
+      rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  EXPECT_TRUE(node.StepOnce());
+  EXPECT_NE(sockets.ReadPeerText(1024u).find("GET /RTCM3 HTTP/1.1"), std::string::npos);
+
+  const auto first_frame = BuildRtcmFrame(1077u);
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\n"));
+  ASSERT_TRUE(sockets.WritePeer(first_frame));
+  for (std::size_t attempt = 0u; attempt < 8u && !node.last_rtcm_message().has_value(); ++attempt)
+  {
+    node.StepOnce();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(node.last_rtcm_message().has_value());
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* active = FindDiagnosticStatusByName(
+      *node.last_diagnostics_message(), "universal_gnss_ntrip/rtcm_forwarding");
+  ASSERT_NE(active, nullptr);
+  EXPECT_EQ(active->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(active->message, "RTCM forwarding active");
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& silent_diagnostics = *node.last_diagnostics_message();
+  const auto* stale =
+      FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss_ntrip/rtcm_forwarding");
+  ASSERT_NE(stale, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(stale->message, "RTCM forwarding stale");
+  EXPECT_EQ(FindDiagnosticValue(*stale, "published_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_NE(FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss_ntrip/ntrip_streaming"),
+            nullptr);
+
+  const auto second_frame = BuildRtcmFrame(1087u);
+  ASSERT_TRUE(sockets.WritePeer(second_frame));
+  for (std::size_t attempt = 0u; attempt < 8u; ++attempt)
+  {
+    node.StepOnce();
+    if (node.last_rtcm_message().has_value() && node.last_rtcm_message()->message_type == 1087u)
+    {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_TRUE(node.last_rtcm_message().has_value());
+  EXPECT_EQ(node.last_rtcm_message()->message_type, 1087u);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* recovered = FindDiagnosticStatusByName(
+      *node.last_diagnostics_message(), "universal_gnss_ntrip/rtcm_forwarding");
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(recovered->message, "RTCM forwarding active");
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "published_frame_count"),
+            std::optional<std::string>{"2"});
+}
+
 TEST_F(NtripNodeTest, ProjectsRtcmSemanticObservationsIntoDiagnostics)
 {
   SocketPair sockets;

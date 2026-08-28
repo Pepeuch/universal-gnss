@@ -51,6 +51,9 @@ enum class ReceiverTransportKind : std::uint8_t
 };
 
 constexpr std::int64_t kMaximumReadChunkSizeBytes = 1024 * 1024;
+constexpr double kDefaultRtcmForwardingActivityTimeoutSeconds = 5.0;
+constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
+constexpr double kRuntimeObservationJitterPeriods = 3.0;
 
 struct ReceiverNodeConfig
 {
@@ -70,6 +73,12 @@ struct ReceiverNodeConfig
   std::string tcp_host{};
   std::uint16_t tcp_port{0u};
   double publish_rate_hz{10.0};
+  // This declares input-observation cadence, not the node's ROS publication
+  // cadence. Zero selects the conservative fallback until a deployment
+  // supplies its receiver/profile-specific expectation.
+  double expected_runtime_observation_rate_hz{0.0};
+  double runtime_observation_fallback_timeout_s{
+      kDefaultRuntimeObservationFallbackTimeoutSeconds};
   // Bytes pulled from the transport per receiver tick. The node reads ONE chunk
   // per publish cycle, so effective read throughput is read_chunk_size *
   // publish_rate_hz. The previous fixed 512 B (= 2.56 KB/s at 5 Hz) sits below a
@@ -77,6 +86,10 @@ struct ReceiverNodeConfig
   // backlogs and published fixes lag by seconds. 64 KB drains the buffer in one
   // read per tick; a single ::read() returns all bytes available up to capacity.
   std::size_t read_chunk_size{65536u};
+  // This is correction-stream receipt liveness, not GNSS observation freshness.
+  // It is measured from local successful writes so public ROS timestamps never
+  // cross clock domains here.
+  double rtcm_forwarding_activity_timeout_s{kDefaultRtcmForwardingActivityTimeoutSeconds};
   std::string frame_id{"gnss"};
 };
 
@@ -303,6 +316,20 @@ std::chrono::nanoseconds ComputePublishPeriod(double publish_rate_hz)
   return period.count() > 0 ? period : std::chrono::nanoseconds(1);
 }
 
+bool IsPositiveSteadyDurationSeconds(const double seconds)
+{
+  if (!std::isfinite(seconds) || !(seconds > 0.0))
+  {
+    return false;
+  }
+
+  const auto minimum =
+      std::chrono::duration<double>(SteadyClock::duration(1)).count();
+  const auto maximum =
+      std::chrono::duration<double>(SteadyClock::duration::max()).count();
+  return seconds >= minimum && seconds <= maximum;
+}
+
 bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
 {
   if (state.fix_type == universal_gnss::GnssFixType::kRtkFloat ||
@@ -496,7 +523,13 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.tcp_host = node.declare_parameter<std::string>("tcp_host", "");
   const auto tcp_port = node.declare_parameter<std::int64_t>("tcp_port", 0);
   config.publish_rate_hz = node.declare_parameter<double>("publish_rate_hz", 10.0);
+  config.expected_runtime_observation_rate_hz =
+      node.declare_parameter<double>("expected_runtime_observation_rate_hz", 0.0);
+  config.runtime_observation_fallback_timeout_s = node.declare_parameter<double>(
+      "runtime_observation_fallback_timeout_s", kDefaultRuntimeObservationFallbackTimeoutSeconds);
   const auto read_chunk_size = node.declare_parameter<std::int64_t>("read_chunk_size", 65536);
+  config.rtcm_forwarding_activity_timeout_s = node.declare_parameter<double>(
+      "rtcm_forwarding_activity_timeout_s", kDefaultRtcmForwardingActivityTimeoutSeconds);
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.discovery_include_platform_uarts =
       node.declare_parameter<bool>("discovery_include_platform_uarts", false);
@@ -574,6 +607,38 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   if (!std::isfinite(config.publish_rate_hz) || !(config.publish_rate_hz > 0.0))
   {
     ThrowInvalidParameter(node, "publish_rate_hz", "must be finite and strictly positive");
+  }
+
+  if (!std::isfinite(config.expected_runtime_observation_rate_hz) ||
+      config.expected_runtime_observation_rate_hz < 0.0)
+  {
+    ThrowInvalidParameter(node,
+                          "expected_runtime_observation_rate_hz",
+                          "must be finite and non-negative; zero selects the fallback timeout");
+  }
+
+  if (!IsPositiveSteadyDurationSeconds(config.runtime_observation_fallback_timeout_s))
+  {
+    ThrowInvalidParameter(node,
+                          "runtime_observation_fallback_timeout_s",
+                          "must be a positive finite duration representable by steady_clock");
+  }
+
+  if (config.expected_runtime_observation_rate_hz > 0.0 &&
+      !IsPositiveSteadyDurationSeconds(kRuntimeObservationJitterPeriods /
+                                       config.expected_runtime_observation_rate_hz))
+  {
+    ThrowInvalidParameter(node,
+                          "expected_runtime_observation_rate_hz",
+                          "produces a freshness timeout not representable by steady_clock");
+  }
+
+  if (!std::isfinite(config.rtcm_forwarding_activity_timeout_s) ||
+      !(config.rtcm_forwarding_activity_timeout_s > 0.0))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_forwarding_activity_timeout_s",
+                          "must be finite and strictly positive");
   }
 
   if (read_chunk_size <= 0 || read_chunk_size > kMaximumReadChunkSizeBytes)
@@ -714,7 +779,6 @@ std::unique_ptr<universal_gnss_transport::ByteSource> CreateTransportSource(
 
 struct ReceiverNode::Impl
 {
-  static constexpr std::chrono::seconds kStaleTimeout{3};
   static constexpr std::chrono::seconds kParserHealthWindow{3};
   static constexpr double kParserUnhealthyRateHz{1.0};
 
@@ -931,6 +995,8 @@ struct ReceiverNode::Impl
       last_runtime_observation_time_ = now;
     }
 
+    UpdateReceiverReportedRtcmActivity(now);
+
     RecordParserCounterDelta(
         session_->metrics().malformed_records, last_malformed_record_count_, recent_malformed_times_, now);
     RecordParserCounterDelta(
@@ -965,12 +1031,13 @@ struct ReceiverNode::Impl
     const auto& state = session_->current_state();
     const auto& session_metrics = session_->metrics();
     const auto now = SteadyClock::now();
+    const auto freshness_timeout = RuntimeObservationFreshnessTimeout();
     const std::size_t recent_parser_anomalies = RecentParserEventCount(recent_parser_anomaly_times_, now);
     const double recent_parser_anomaly_rate_hz =
         RecentParserEventRateHz(recent_parser_anomaly_times_, now);
     const bool parser_issue_recent = recent_parser_anomaly_rate_hz >= kParserUnhealthyRateHz;
 
-    const bool receiver_rtcm_active = HasReceiverReportedRtcmCorrections();
+    const bool receiver_rtcm_active = HasRecentReceiverReportedRtcmCorrections(now);
 
     summary.fix_valid = state.fix_valid;
     summary.rtk_available = HasRtkAvailability(state);
@@ -1029,7 +1096,7 @@ struct ReceiverNode::Impl
     {
       if (!last_transport_activity_time_.has_value())
       {
-        if (now - startup_time_ >= kStaleTimeout)
+        if (now - startup_time_ >= freshness_timeout)
         {
           summary.transport_healthy = false;
           summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
@@ -1038,7 +1105,7 @@ struct ReceiverNode::Impl
                                      "No GNSS data has been received yet"));
         }
       }
-      else if (now - *last_transport_activity_time_ >= kStaleTimeout)
+      else if (now - *last_transport_activity_time_ >= freshness_timeout)
       {
         summary.transport_healthy = false;
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
@@ -1049,7 +1116,7 @@ struct ReceiverNode::Impl
     }
 
     if (last_runtime_observation_time_.has_value() &&
-        now - *last_runtime_observation_time_ >= kStaleTimeout)
+        now - *last_runtime_observation_time_ >= freshness_timeout)
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
                                  universal_gnss::GnssDiagnosticCategory::kRuntime,
@@ -1098,13 +1165,20 @@ struct ReceiverNode::Impl
                     "rtcm_forwarding_unavailable",
                     "Receiver transport is read-only; RTCM forwarding is unavailable"));
     }
-    else if (rtcm_forwarded_frames_ > 0u)
+    else if (HasRecentRtcmForwarding(now))
     {
       summary.AddEvent(
           MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
                     universal_gnss::GnssDiagnosticCategory::kCorrection,
                     "rtcm_forwarding_active",
                     "RTCM corrections are being forwarded to the live receiver transport"));
+    }
+    else if (last_rtcm_forward_time_.has_value())
+    {
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "rtcm_forwarding_stale",
+                                 "RTCM forwarding has not written a frame recently"));
     }
 
     if (rtcm_forward_write_errors_ > 0u)
@@ -1118,12 +1192,19 @@ struct ReceiverNode::Impl
 
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
     {
-      if (ublox_metrics->receiver_rtcm_messages_used > 0u)
+      if (HasRecentReceiverReportedRtcmCorrections(now))
       {
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
                                    universal_gnss::GnssDiagnosticCategory::kCorrection,
                                    "receiver_rtcm_active",
                                    "Receiver reported accepted RTCM corrections"));
+      }
+      else if (ublox_metrics->receiver_rtcm_messages_used > 0u)
+      {
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                   "receiver_rtcm_stale",
+                                   "Receiver-reported accepted RTCM corrections are stale"));
       }
 
       if (ublox_metrics->receiver_rtcm_messages_not_used > 0u)
@@ -1145,13 +1226,22 @@ struct ReceiverNode::Impl
       }
     }
 
-    if (const auto* unicore_metrics = ActiveUnicoreMetrics();
-        unicore_metrics != nullptr && unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
     {
-      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
-                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
-                                 "receiver_rtcm_active",
-                                 "Receiver reported RTCM correction status"));
+      if (HasRecentReceiverReportedRtcmCorrections(now))
+      {
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                   "receiver_rtcm_active",
+                                   "Receiver reported RTCM correction status"));
+      }
+      else if (unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+      {
+        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
+                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                   "receiver_rtcm_stale",
+                                   "Receiver-reported RTCM correction status is stale"));
+      }
     }
 
     return summary;
@@ -1174,10 +1264,15 @@ struct ReceiverNode::Impl
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
       status.message = "RTCM forwarding write errors observed";
     }
-    else if (rtcm_forwarded_frames_ > 0u)
+    else if (HasRecentRtcmForwarding(SteadyClock::now()))
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
       status.message = "RTCM forwarding active";
+    }
+    else if (last_rtcm_forward_time_.has_value())
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM forwarding stale";
     }
     else
     {
@@ -1194,7 +1289,8 @@ struct ReceiverNode::Impl
         MakeKeyValue("write_error_count", std::to_string(rtcm_forward_write_errors_)));
     status.values.push_back(
         MakeKeyValue("receiver_correction_available",
-                     (HasCorrectionAvailability(state) || HasReceiverReportedRtcmCorrections())
+                     (HasCorrectionAvailability(state) ||
+                      HasRecentReceiverReportedRtcmCorrections(SteadyClock::now()))
                          ? "true"
                          : "false"));
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
@@ -1505,7 +1601,64 @@ struct ReceiverNode::Impl
   bool HasFreshRuntimeState() const
   {
     return last_runtime_observation_time_.has_value() &&
-           (SteadyClock::now() - *last_runtime_observation_time_ < kStaleTimeout);
+           (SteadyClock::now() - *last_runtime_observation_time_ <
+            RuntimeObservationFreshnessTimeout());
+  }
+
+  SteadyClock::duration RuntimeObservationFreshnessTimeout() const
+  {
+    double timeout_seconds = config_.runtime_observation_fallback_timeout_s;
+    if (config_.expected_runtime_observation_rate_hz > 0.0)
+    {
+      timeout_seconds =
+          kRuntimeObservationJitterPeriods / config_.expected_runtime_observation_rate_hz;
+    }
+
+    return std::chrono::duration_cast<SteadyClock::duration>(
+        std::chrono::duration<double>(timeout_seconds));
+  }
+
+  SteadyClock::duration RtcmForwardingActivityTimeout() const
+  {
+    return std::chrono::duration_cast<SteadyClock::duration>(
+        std::chrono::duration<double>(config_.rtcm_forwarding_activity_timeout_s));
+  }
+
+  bool HasRecentRtcmForwarding(const SteadyClock::time_point now) const
+  {
+    return last_rtcm_forward_time_.has_value() &&
+           now - *last_rtcm_forward_time_ < RtcmForwardingActivityTimeout();
+  }
+
+  void UpdateReceiverReportedRtcmActivity(const SteadyClock::time_point now)
+  {
+    if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
+    {
+      const auto current_count = ublox_metrics->receiver_rtcm_messages_used;
+      if (current_count < last_ublox_receiver_rtcm_used_count_)
+      {
+        last_ublox_receiver_rtcm_used_time_.reset();
+      }
+      if (current_count > last_ublox_receiver_rtcm_used_count_)
+      {
+        last_ublox_receiver_rtcm_used_time_ = now;
+      }
+      last_ublox_receiver_rtcm_used_count_ = current_count;
+    }
+
+    if (const auto* unicore_metrics = ActiveUnicoreMetrics(); unicore_metrics != nullptr)
+    {
+      const auto current_count = unicore_metrics->receiver_rtcm_status_messages_seen;
+      if (current_count < last_unicore_receiver_rtcm_status_count_)
+      {
+        last_unicore_receiver_rtcm_status_time_.reset();
+      }
+      if (current_count > last_unicore_receiver_rtcm_status_count_)
+      {
+        last_unicore_receiver_rtcm_status_time_ = now;
+      }
+      last_unicore_receiver_rtcm_status_count_ = current_count;
+    }
   }
 
   void RecordParserCounterDelta(const std::size_t current_count,
@@ -1594,16 +1747,20 @@ struct ReceiverNode::Impl
     return &session_->unicore_metrics();
   }
 
-  bool HasReceiverReportedRtcmCorrections() const
+  bool HasRecentReceiverReportedRtcmCorrections(const SteadyClock::time_point now) const
   {
     if (const auto* ublox_metrics = ActiveUbloxMetrics();
-        ublox_metrics != nullptr && ublox_metrics->receiver_rtcm_messages_used > 0u)
+        ublox_metrics != nullptr && ublox_metrics->receiver_rtcm_messages_used > 0u &&
+        last_ublox_receiver_rtcm_used_time_.has_value() &&
+        now - *last_ublox_receiver_rtcm_used_time_ < RtcmForwardingActivityTimeout())
     {
       return true;
     }
 
     if (const auto* unicore_metrics = ActiveUnicoreMetrics();
-        unicore_metrics != nullptr && unicore_metrics->receiver_rtcm_status_messages_seen > 0u)
+        unicore_metrics != nullptr && unicore_metrics->receiver_rtcm_status_messages_seen > 0u &&
+        last_unicore_receiver_rtcm_status_time_.has_value() &&
+        now - *last_unicore_receiver_rtcm_status_time_ < RtcmForwardingActivityTimeout())
     {
       return true;
     }
@@ -1672,6 +1829,8 @@ struct ReceiverNode::Impl
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
   std::optional<SteadyClock::time_point> last_runtime_observation_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
+  std::optional<SteadyClock::time_point> last_ublox_receiver_rtcm_used_time_{};
+  std::optional<SteadyClock::time_point> last_unicore_receiver_rtcm_status_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
   std::optional<universal_gnss_transport::TransportStatus> last_logged_terminal_status_{};
   std::optional<std::string> last_rtcm_forward_failure_message_{};
@@ -1683,6 +1842,8 @@ struct ReceiverNode::Impl
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};
   std::size_t rtcm_forward_write_errors_{0u};
+  std::size_t last_ublox_receiver_rtcm_used_count_{0u};
+  std::size_t last_unicore_receiver_rtcm_status_count_{0u};
   std::size_t last_malformed_record_count_{0u};
   std::size_t last_rejected_record_count_{0u};
   std::size_t last_parser_anomaly_count_{0u};

@@ -362,6 +362,47 @@ void TestRateHelpers(TestContext& ctx)
   }
 }
 
+void TestTimestampHistoryRetention(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  constexpr std::size_t kObservationCount = 100000u;
+  constexpr std::int64_t kTimestampStepNs = 1000000LL;
+  for (std::size_t index = 0u; index < kObservationCount; ++index)
+  {
+    const std::int64_t timestamp_ns = static_cast<std::int64_t>(index) * kTimestampStepNs;
+    if ((index % 3u) == 0u)
+    {
+      monitor.ObserveMessage(MakeMessageInfo(1077u), timestamp_ns);
+    }
+    else if ((index % 3u) == 1u)
+    {
+      monitor.ObserveMessage(MakeMessageInfo(1087u), timestamp_ns);
+    }
+    else
+    {
+      monitor.ObserveInvalidFrame(timestamp_ns);
+    }
+  }
+
+  const std::int64_t now_timestamp_ns =
+      static_cast<std::int64_t>(kObservationCount - 1u) * kTimestampStepNs;
+  const auto total_rate_hz = monitor.TotalFrameRateHz(now_timestamp_ns, 1000000000LL);
+  const auto gps_rate_hz =
+      monitor.MsmConstellationRateHz(RtcmConstellation::kGps, now_timestamp_ns, 1000000000LL);
+  const auto expired_rate_hz = monitor.MessageRateHz(1077u, 1000000000LL, 1000000000LL);
+  ctx.Expect(total_rate_hz.has_value() && *total_rate_hz > 999.0,
+             "recent total-frame rate should remain correct after sustained RTCM input");
+  ctx.Expect(gps_rate_hz.has_value() && *gps_rate_hz > 330.0,
+             "recent constellation rate should remain correct after sustained mixed MSM input");
+  ctx.Expect(expired_rate_hz.has_value() && *expired_rate_hz == 0.0,
+             "timestamped observations outside the retained diagnostic horizon must expire");
+  ctx.Expect(monitor.total_frames() == kObservationCount &&
+                 monitor.valid_frames() + monitor.invalid_frames() == kObservationCount,
+             "lifetime frame counters must remain correct after history retention");
+  ctx.Expect(monitor.RetainedTimestampCount() < 250000u,
+             "timestamp histories must remain bounded during sustained mixed RTCM input");
+}
+
 void TestMsmConstellationTracking(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
@@ -892,6 +933,7 @@ int main()
 
   TestMessageCountsAndLastSeen(ctx);
   TestRateHelpers(ctx);
+  TestTimestampHistoryRetention(ctx);
   TestMsmConstellationTracking(ctx);
   TestBasePositionAndGlonassBiasTracking(ctx);
   TestInvalidFrameHandling(ctx);

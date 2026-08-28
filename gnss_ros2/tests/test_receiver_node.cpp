@@ -1185,7 +1185,11 @@ TEST_F(ReceiverNodeTest, ValidatesReadChunkSizeBeforeConversionToSizeT)
 TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
 {
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{{}});
-  universal_gnss_ros2::ReceiverNode node(std::move(source));
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0),
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
   EXPECT_FALSE(node.StepOnce());
   std::this_thread::sleep_for(std::chrono::milliseconds(3100));
@@ -1341,7 +1345,8 @@ TEST_F(ReceiverNodeTest, PublishesRuntimeStaleRecoveryStatusWhenFreshObservation
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
+                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -1376,6 +1381,166 @@ TEST_F(ReceiverNodeTest, PublishesRuntimeStaleRecoveryStatusWhenFreshObservation
             std::optional<std::string>{"false"});
 }
 
+TEST_F(ReceiverNodeTest, KeepsQuarterHertzRuntimeFreshAcrossFourSecondCadence)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 20.0),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 0.25),
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_fix_message().has_value());
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(3100));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& before_next_observation = *node.last_diagnostics_message();
+  EXPECT_EQ(FindDiagnosticStatusByName(before_next_observation,
+                                       "universal_gnss/runtime_state_stale"),
+            nullptr);
+  EXPECT_EQ(FindDiagnosticStatusByName(before_next_observation,
+                                       "universal_gnss/transport_data_stale"),
+            nullptr);
+  EXPECT_TRUE(node.last_fix_message().has_value());
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  EXPECT_TRUE(node.last_fix_message().has_value());
+}
+
+TEST_F(ReceiverNodeTest, UsesExpectedOneHertzCadenceWithJitter)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0),
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_EQ(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss/runtime_state_stale"),
+            nullptr);
+  EXPECT_TRUE(node.last_fix_message().has_value());
+}
+
+TEST_F(ReceiverNodeTest, DetectsHighRateSilenceAndRecoversAtDerivedTimeout)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 10.0),
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  // The derived timeout is three 10 Hz periods (300 ms). Check immediately
+  // before and after that boundary rather than relying on ROS publish cadence.
+  std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_EQ(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss/runtime_state_stale"),
+            nullptr);
+  EXPECT_TRUE(node.last_fix_message().has_value());
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* stale = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                 "universal_gnss/runtime_state_stale");
+  ASSERT_NE(stale, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::STALE);
+  EXPECT_FALSE(node.last_fix_message().has_value());
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* recovered = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                     "universal_gnss/runtime_state_stale");
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(recovered->message, "Diagnostic condition cleared");
+  EXPECT_TRUE(node.last_fix_message().has_value());
+}
+
+TEST_F(ReceiverNodeTest, UsesConservativeFallbackWithoutExpectedCadence)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("runtime_observation_fallback_timeout_s", 0.05),
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* stale = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                 "universal_gnss/runtime_state_stale");
+  ASSERT_NE(stale, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::STALE);
+}
+
 TEST_F(ReceiverNodeTest, RefreshesRuntimeFreshnessOnRuntimeObservationsWithoutStateMutation)
 {
   const std::string best_nav = BuildUnicoreAsciiFrame(
@@ -1404,7 +1569,8 @@ TEST_F(ReceiverNodeTest, RefreshesRuntimeFreshnessOnRuntimeObservationsWithoutSt
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
+                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -1458,7 +1624,8 @@ TEST_F(ReceiverNodeTest, KeepsRuntimeStaleWhenOnlySemanticTrafficContinues)
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
+                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -1504,7 +1671,8 @@ TEST_F(ReceiverNodeTest, ForwardedRtcmSemanticTrafficDoesNotRefreshRuntimeFreshn
 
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
+                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -1659,6 +1827,68 @@ TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmAcceptanceFromUbloxStream)
   EXPECT_EQ(receiver_rtcm->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
 }
 
+TEST_F(ReceiverNodeTest, ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
+                                     rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
+
+  const auto accepted_rtcm =
+      BuildUbxFrame(0x02u, 0x32u, MakeUbxRxmRtcmPayload(1077u, 42u, 0x04u));
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       accepted_rtcm,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       accepted_rtcm,
+       true},
+  });
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* active = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                   "universal_gnss/receiver_rtcm_active");
+  ASSERT_NE(active, nullptr);
+  EXPECT_EQ(active->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(active->message, "Receiver reported accepted RTCM corrections");
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& silent_diagnostics = *node.last_diagnostics_message();
+  const auto* stale = FindDiagnosticStatusByName(silent_diagnostics,
+                                                 "universal_gnss/receiver_rtcm_stale");
+  const auto* forwarding =
+      FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(stale, nullptr);
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::STALE);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_correction_available"),
+            std::optional<std::string>{"false"});
+
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto& recovered_diagnostics = *node.last_diagnostics_message();
+  const auto* recovered = FindDiagnosticStatusByName(recovered_diagnostics,
+                                                      "universal_gnss/receiver_rtcm_active");
+  const auto* recovered_forwarding =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(recovered, nullptr);
+  ASSERT_NE(recovered_forwarding, nullptr);
+  EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(recovered->message, "Receiver reported accepted RTCM corrections");
+  EXPECT_EQ(FindDiagnosticValue(*recovered_forwarding, "receiver_correction_available"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*recovered_forwarding, "receiver_rtcm_messages_used"),
+            std::optional<std::string>{"2"});
+}
+
 TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmStatusFromUnicoreStream)
 {
   rclcpp::NodeOptions options;
@@ -1703,7 +1933,8 @@ TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
 {
   rclcpp::NodeOptions options;
   options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
+                                     rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
 
   auto duplex = std::make_unique<universal_gnss_transport::MemoryByteDuplex>();
   auto* duplex_ptr = duplex.get();
@@ -1737,6 +1968,37 @@ TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
             std::optional<std::string>{"1"});
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "last_message_type"),
             std::optional<std::string>{"1077"});
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* stale = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                  "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(stale, nullptr);
+  EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(stale->message, "RTCM forwarding stale");
+  EXPECT_EQ(FindDiagnosticValue(*stale, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+
+  publisher->publish(message);
+  for (std::size_t attempt = 0u;
+       attempt < 8u && duplex_ptr->written_bytes().size() < bytes.size() * 2u;
+       ++attempt)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_EQ(duplex_ptr->written_bytes().size(), bytes.size() * 2u);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* recovered = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                      "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(recovered->message, "RTCM forwarding active");
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "forwarded_frame_count"),
+            std::optional<std::string>{"2"});
 }
 
 TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostics)

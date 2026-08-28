@@ -312,10 +312,10 @@ Recommended next action: In a separate implementation task, define the public `R
 | UGA-014 | STILL PRESENT | Confirmed |
 | UGA-015 | ALREADY FIXED | Confirmed |
 | UGA-016 | STILL PRESENT | Confirmed |
-| UGA-017 | STILL PRESENT | Confirmed |
+| UGA-017 | FIXED | Confirmed |
 | UGA-018 | STILL PRESENT | Confirmed |
-| UGA-019 | STILL PRESENT | Confirmed |
-| UGA-020 | STILL PRESENT | Confirmed |
+| UGA-019 | FIXED | Confirmed |
+| UGA-020 | FIXED | Confirmed |
 | UGA-021 | STILL PRESENT | Confirmed |
 | UGA-022 | FIXED | Confirmed |
 | UGA-023 | FIXED | Confirmed |
@@ -360,19 +360,29 @@ Recommended next action: In a separate implementation task, retain decoded 1005/
 
 ### UGA-017 — RTCM rate history grows without bound and queries are linear
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_protocols/include/universal_gnss_protocols/rtcm_correction_monitor.hpp` current lines 163-170 still owns lifetime `std::vector<ProtocolTimestampNs>` histories for each message type, each MSM constellation, all frames, and all valid frames. `AppendTimestamp` at `gnss_protocols/src/rtcm_correction_monitor.cpp` lines 32-38 only calls `push_back`; the only clearing occurs on an explicit whole-monitor `Reset` at lines 248-261. `ObserveMessage` lines 360-366 appends every timestamp to total and valid histories through `RecordValidMessage`, whose lines 781-807 also append the same MSM observation to its type and constellation histories. No insertion path prunes by age or count. `CountTimestampsInWindow` lines 41-57 iterates from beginning to end for every query, and `TotalFrameRateHz`, `ValidFrameRateHz`, `MessageRateHz`, and `MsmConstellationRateHz` lines 731-770 all delegate to that lifetime scan even for a narrow recent window.
+Current evidence: `RtcmCorrectionMonitor` now stores all four timestamp-history categories in ordered multisets rather than lifetime vectors. Each timestamp insertion removes records older than the 60-second `kTimestampHistoryRetentionNs` horizon; eviction is ordered and amortized, while window queries use `lower_bound`/`upper_bound` over only retained history. Lifetime frame/message/constellation counters and latest-record metadata remain separate and are not pruned. Rate queries wider than the documented retention horizon return no rate rather than a silently incomplete lifetime result.
 
-Relevant changes since old audit: The only focused commit between `804bed8d7f753f6834212cfbc9dc329f88360299` and `aaacc6be92463ad493d6f4260426cf645188078f` is `3495ffb9ba8eea8be8401c9736ff081e046063a7`, which changes portable RTCM 1230 requirements and related diagnostics/tests. It does not change the history members, append paths, reset behavior, rate computation, or query complexity. No bounding or storage-semantic change affects UGA-017.
+Relevant changes since old audit: The sole production-base RTCM-monitor change (`3495ffb`) made RTCM 1230 optional; it did not affect timestamp storage. This fix changes only the monitor's rate-history representation and its focused regression coverage.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga017-repro` instrumented the current class layout without changing repository code and inserted one timestamped GPS MSM7/1077 at a time up to 400,000 observations. At 50,000, 100,000, 200,000, and 400,000 observations, each of `total_frame_timestamps_`, `valid_frame_timestamps_`, the 1077 history, and the GPS constellation history exactly equalled the lifetime observation count; the 1077 vector capacity grew from 65,536 to 524,288. Process RSS rose from a 3,748 KiB baseline to 5,616, 7,340, 10,460, and 16,716 KiB. Fifty repeated 1077 rate queries over a deliberately tiny 1,000 ns window averaged 131.24, 247.7, 560.46, and 1,114 microseconds respectively as lifetime history increased eightfold. The invariant and RSS checks passed and the reproducer exited 0.
+Files changed: `gnss_protocols/include/universal_gnss_protocols/rtcm_correction_monitor.hpp`, `gnss_protocols/src/rtcm_correction_monitor.cpp`, `gnss_protocols/tests/test_rtcm_correction_monitor.cpp`, and this delta report.
 
-Remaining defect, if any: Memory still grows monotonically with timestamped RTCM input, with a typical MSM timestamp duplicated across four unbounded vectors. Rate-query work remains O(lifetime observations), not O(observations in the requested window), so diagnostic CPU cost also grows for the lifetime of a continuously running NTRIP/receiver process.
+Regression test added: `TestTimestampHistoryRetention` drives 100,000 mixed GPS-MSM, GLONASS-MSM, and invalid-frame observations over 100 seconds. It verifies recent total and constellation rates, lifetime totals, expiration of an old rate window, and a bounded aggregate retained-history count across total, valid, type, and constellation storage.
 
-Recommended next action: In a separate implementation task, keep lifetime scalar counts but replace lifetime timestamp vectors with bounded time buckets, ring buffers, or insertion-time eviction sized to the largest supported rate window; add bounded-container and near-constant-query-cost soak regressions.
+Pre-fix failure evidence: Before eviction, the focused monitor test failed the retained-history assertion after 100,000 observations: all timestamp copies remained stored and exceeded the 250,000-entry bound. The rate/count assertions otherwise showed why the leak was masked by normal short runs.
+
+Production fix: Retain timestamped rate diagnostics for a time horizon rather than for process lifetime. Ordered insertion supports safe out-of-order timestamps; pruning erases each old entry once, avoiding an O(n) scan on every observation. Window queries restrict their search to the retained ordered range, so their cost no longer increases with total process lifetime.
+
+Post-fix validation: Focused `gnss_protocols_test_rtcm_correction_monitor` passed 1/1 in 0.15 s. The complete `gnss_protocols` suite passed 18/18. Complete non-ROS CTest passed 61/61 outside the restricted sandbox.
+
+Compatibility/public-behavior impact: Current diagnostic windows (up to the existing 30-second correction requirement window) retain exact timestamp semantics with an additional 30-second margin. Rate callers requesting more than 60 seconds now receive no rate instead of an unbounded/lifetime statistic or a silently partial result.
+
+Remaining defect, if any: None for unbounded history and lifetime-scaling rate scans. Within the chosen horizon, a very high rate still makes a very large requested window proportionally expensive to count, but work is bounded by the requested/current diagnostic window rather than process lifetime.
+
+Recommended next action: If a future consumer requires rate windows over 60 seconds, make that requirement explicit and raise the monitor retention horizon together with a bounded-memory budget and soak test.
 
 ### UGA-018 — correction metadata has no endpoint/station ownership model
 
@@ -392,35 +402,51 @@ Recommended next action: In a separate implementation task, introduce a normaliz
 
 ### UGA-019 — “forwarding active” means “ever forwarded”
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: In `gnss_ros2/src/ntrip_node.cpp`, `BuildHealthSummary` current lines 707-713 emits the OK `rtcm_forwarding_active` event whenever lifetime `rtcm_published_frames_ > 0`; `AppendRtcmForwardingStatus` lines 771-810 uses the same predicate for `OK: RTCM forwarding active`. Although `last_rtcm_published_time_` is maintained and exposed as `last_frame_age_s` at lines 801-807, it is not used by either active predicate. ReceiverNode has the same split: successful writes update both lifetime counters and `last_rtcm_forward_time_` at `gnss_ros2/src/receiver_node.cpp` lines 848-852, but `BuildHealthSummary` lines 1094-1100 and the dedicated status lines 1170-1174 test only `rtcm_forwarded_frames_ > 0`; the age is merely reported at lines 1246-1252. Receiver-reported u-blox and Unicore active events at lines 1112-1147 likewise use lifetime accepted/status counters without a recent-use timestamp.
+Current evidence: `NtripNode` now decides forwarding activity from `last_rtcm_published_time_` measured on the local steady clock; it keeps `published_frame_count` and last-message fields as historical values. `ReceiverNode` applies the same local-clock rule to successful transport writes and tracks separate local receipt times for u-blox accepted-RTCM counter advances and Unicore `RTCMSTATUS` counter advances. Therefore a stale correction-use report can no longer make `correction_available` or `receiver_rtcm_active` true merely because it occurred once. The TCP/NTRIP `Streaming` state remains independently visible as an open response stream, distinct from fresh RTCM delivery.
 
-Relevant changes since old audit: The focused diff from `804bed8d7f753f6834212cfbc9dc329f88360299` to `aaacc6be92463ad493d6f4260426cf645188078f` is empty for NtripNode, ReceiverNode, and their tests. No recent commit changes forwarding counters, timestamp use, or active/idle semantics. The RTCM 1230 commit affects correction requirements and semantic severity only, not forwarding liveness.
+Relevant changes since old audit: The old-to-current production-base diff was empty for NtripNode and ReceiverNode forwarding liveness; RTCM 1230 changes do not affect it. This fix adds the explicitly configured `rtcm_forwarding_activity_timeout_s` (positive, finite; default 5 s) to both ROS nodes and uses it only for local forwarding/use liveness. It deliberately does not consume public `RtcmFrame.stamp`, so it does not couple this correction to UGA-014 clock-domain work.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga019-repro` streamed one fully decodable CRC-valid MSM7/1077 through current NtripNode, forwarded the published frame through current ReceiverNode into a memory duplex, then allowed 5.2 seconds of silence—beyond the Ntrip correction stale threshold—before publishing diagnostics. Ntrip output was `ntrip_count=1 ntrip_age_s=5.21 ntrip_status_active=1 ntrip_active_event=1 ntrip_stale_event=1`: its dedicated status remained OK/active and its OK active event coexisted with the stale correction event. Receiver output was `receiver_count=1 receiver_age_s=5.205 receiver_status_active=1 receiver_active_event=1`. All assertions passed and the reproducer exited 0.
+Files changed: `gnss_ros2/src/ntrip_node.cpp`, `gnss_ros2/src/receiver_node.cpp`, `gnss_ros2/tests/test_ntrip_node.cpp`, `gnss_ros2/tests/test_receiver_node.cpp`, and this delta report.
 
-Remaining defect, if any: Every forwarding surface still conflates “has ever succeeded” with current activity. Silence after one success leaves contradictory or independently misleading OK/active diagnostics indefinitely; receiver-reported correction-use/status counters have the same lifetime-only problem.
+Regression tests added: `NtripNodeTest.ReportsRtcmForwardingStaleAfterSilenceAndRecovers` and extended `ReceiverNodeTest.ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport` cover never received, recent success, silence past a 50 ms test threshold, historical counter retention, and recovery after a following frame. `ReceiverNodeTest.ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers` covers receiver-reported u-blox acceptance through the same transition and verifies `receiver_correction_available` clears then recovers.
 
-Recommended next action: In a separate implementation task, define a forwarding/use freshness threshold, derive active state from the existing steady-clock last-success timestamps, retain lifetime totals under explicitly historical keys, and test timeout boundaries, silence, recovery, and success-followed-by-failure for both nodes and receiver-reported use.
+Pre-fix failure evidence: With the new focused tests but before production changes, both NtripNode and ReceiverNode remained `OK: RTCM forwarding active` after 80 ms of complete silence despite the requested 50 ms activity threshold; CTest reported one failing regression in each binary. That is the direct lifetime-counter failure, reproduced without any ROS/steady/public timestamp comparison.
+
+Production fix: Successful RTCM publish/write/use is timestamped on receipt with `steady_clock`; `*_active` predicates now require an age strictly below the configured forwarding activity timeout. A prior success beyond that threshold emits a stale forwarding/use event and a WARN dedicated forwarding status, while frame/byte/message totals remain unchanged. A subsequent successful frame or receiver report refreshes only its local activity time and returns the status to active. The existing Ntrip `Streaming` state message now says the response stream is open rather than claiming fresh correction activity.
+
+Post-fix validation: `ctest --test-dir /tmp/universal-gnss-current-delta-ros2-build/universal_gnss_ros2 -R '^(test_ntrip_node|test_receiver_node)$' --output-on-failure` passed 2/2 (31 ReceiverNode tests, 9 NtripNode tests). The complete non-ROS `ctest --test-dir /tmp/universal-gnss-current-delta-build --output-on-failure -j2` passed 61/61. The focused tests prove active -> stale -> active recovery while retaining the count of 1/2 frames.
+
+Remaining defect, if any: None for the audited active-versus-ever diagnostics. The default activity timeout is deliberately configurable because correction cadence is source-dependent; separate NTRIP silent-stream reconnection (UGA-005) and public RTCM timestamp provenance (UGA-014) remain outside this fix.
+
+Recommended next action: Configure `rtcm_forwarding_activity_timeout_s` to the expected caster/receiver correction cadence during deployment, and address reconnect policy and public timestamp-domain policy in their respective findings.
 
 ### UGA-020 — fixed three-second receiver staleness rejects valid slow cadences
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/receiver_node.cpp` current line 710 still declares one hard-coded `kStaleTimeout{3}`. Transport and runtime receipt times are updated from actual `StepOnce` byte/observation progress at lines 904-925, independently of publication, but `BuildHealthSummary` lines 1021-1050 applies the same three-second threshold to every transport and runtime stream. `HasFreshRuntimeState` lines 1498-1502 uses that constant again, and `CanPublishFixMessage` lines 1607-1615 suppresses fix publication whenever it expires. The only cadence parameter loaded at lines 480-507 is `publish_rate_hz`; it controls the wall timer at lines 783-793 but is neither an input observation-rate contract nor part of stale-timeout calculation. No stale-timeout or expected-observation-rate parameter is declared or derived from the active receiver/profile.
+Current evidence: `ReceiverNode` no longer has `kStaleTimeout`. Its runtime and transport receipt checks, `HasFreshRuntimeState`, and fix-publication gate share `RuntimeObservationFreshnessTimeout()`, derived only from expected receiver observation cadence or its explicit fallback. `publish_rate_hz` still controls the node timer and is never part of the freshness calculation. All liveness times remain local `steady_clock` receipt times.
 
-Relevant changes since old audit: The focused old-to-current diff and log are empty for ReceiverNode and its tests. No commit through `aaacc6be92463ad493d6f4260426cf645188078f` changes `kStaleTimeout`, adds a freshness parameter, or derives timeout from receiver configuration or observed input cadence. RTCM 1230 changes are unrelated.
+Relevant changes since old audit: The old-to-current diff had no ReceiverNode cadence policy change. This fix introduces `expected_runtime_observation_rate_hz` and `runtime_observation_fallback_timeout_s` on ReceiverNode; neither is derived from ROS publication rate or public message timestamps. RTCM 1230 work is unrelated.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga020-repro` supplied two valid GPGGA runtime observations exactly four seconds apart through a healthy open source while configuring ROS publication at 20 Hz. The first observation produced a fix. At 3.1 seconds the source correctly had no new record; current diagnostics reported both `runtime_state_stale` and `transport_data_stale`, and `last_fix_message` was cleared: `first_observation=1 initial_fix=1 gap_read=0 gap_fix=0 runtime_stale_at_3_1s=1 transport_stale_at_3_1s=1`. At 4.1 seconds the next valid GGA was accepted and the fix recovered, with the stale condition emitted as cleared. The node reported neither `stale_timeout_s` nor `expected_observation_rate_hz` as parameters. All assertions passed and the reproducer exited 0.
+Files changed: `gnss_ros2/src/receiver_node.cpp`, `gnss_ros2/tests/test_receiver_node.cpp`, and this delta report.
 
-Remaining defect, if any: Any otherwise healthy receiver whose relevant observation cadence exceeds three seconds is periodically diagnosed stale and has its fix suppressed. ROS publication rate remains independently configurable but cannot express or correct the input-cadence contract, so increasing it only evaluates the false-stale condition more often.
+Regression tests added: `KeepsQuarterHertzRuntimeFreshAcrossFourSecondCadence` verifies a 0.25 Hz GGA stream stays fresh through 3.1 s and accepts its next observation at about 4.1 s even with `publish_rate_hz=20`. `UsesExpectedOneHertzCadenceWithJitter` covers a 1.2 s arrival interval. `DetectsHighRateSilenceAndRecoversAtDerivedTimeout` checks a 10 Hz stream at 250 ms (fresh, before the 300 ms timeout), 350 ms (stale, after it), then a fresh subsequent observation (recovered). `UsesConservativeFallbackWithoutExpectedCadence` verifies the explicitly configured fallback when no expected rate is available. Existing stale-recovery tests now declare their intended 1 Hz source cadence instead of accidentally relying on the former global constant.
 
-Recommended next action: In a separate implementation task, add/document an expected receiver-observation cadence or explicit stale timeout with a conservative jitter margin, keep it independent of `publish_rate_hz`, and test slow legal inputs across protocols at exact timeout boundaries and recovery.
+Pre-fix failure evidence: Before the production change, the new ReceiverNode suite failed 3 regressions. At 3.1 s a valid configured 0.25 Hz stream emitted both `runtime_state_stale` and `transport_data_stale` and lost its fix; 10 Hz silence was not stale at its requested derived boundary because the expected-rate parameter did not exist; and the configured unknown-cadence fallback was ignored. The 1 Hz jitter scenario happened to pass the old three-second constant, as expected, but did not prove cadence configuration.
+
+Production fix: When `expected_runtime_observation_rate_hz > 0`, freshness is exactly `3.0 / expected_runtime_observation_rate_hz` seconds: three expected observation periods provide the jitter/missed-sample margin. A zero expected rate selects the positive, finite, `steady_clock`-representable `runtime_observation_fallback_timeout_s` (default 10 s). Invalid/non-finite/unrepresentable settings are rejected. The same local timing governs runtime freshness, transport-data stale reporting, startup no-data grace, and whether a cached fix may be published; it is intentionally independent of forwarding activity (UGA-019) and of ROS/public timestamp domains.
+
+Post-fix validation: `ctest --test-dir /tmp/universal-gnss-current-delta-ros2-build/universal_gnss_ros2 -R '^test_receiver_node$' --output-on-failure` passed 35/35, including the four new cadence/fallback regressions and exact 10 Hz boundary checks. `test_ntrip_node` passed 9/9, preserving UGA-019. `gnss_protocols_test_rtcm_correction_monitor` passed 1/1, preserving UGA-017. Complete non-ROS CTest passed 61/61. `git diff --check` passed.
+
+Remaining defect, if any: None for the fixed universal three-second staleness behavior. The node cannot infer a distinct expected rate for each heterogeneous runtime sentence; deployments with such a profile must set the configured aggregate rate conservatively. Timestamp provenance (UGA-002/007/014) and transport/backlog policy remain deliberately outside this change.
+
+Recommended next action: Configure `expected_runtime_observation_rate_hz` per receiver output profile whenever known; otherwise choose `runtime_observation_fallback_timeout_s` for the deployment’s safe maximum observation gap.
 
 ### UGA-021 — runtime aggregation cannot propagate explicit value invalidation
 
