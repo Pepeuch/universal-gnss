@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -77,6 +78,22 @@ std::vector<std::uint8_t> BuildBinaryFrame(
   return frame;
 }
 
+std::vector<std::uint8_t> BuildCorruptLengthCandidate(
+    const std::vector<std::uint8_t>& truncated_payload_prefix,
+    const std::vector<std::uint8_t>& following_frame)
+{
+  const std::size_t declared_payload_size =
+      truncated_payload_prefix.size() + following_frame.size();
+  std::vector<std::uint8_t> frame = BuildBinaryFrame(9999u, {0x42u});
+  frame[6] = static_cast<std::uint8_t>(declared_payload_size & 0xFFu);
+  frame[7] = static_cast<std::uint8_t>((declared_payload_size >> 8u) & 0xFFu);
+  frame.resize(kUnicoreBinaryHeaderSize);
+  frame.insert(frame.end(), truncated_payload_prefix.begin(), truncated_payload_prefix.end());
+  frame.insert(frame.end(), following_frame.begin(), following_frame.end());
+  AppendLittleEndian32(frame, ComputeUnicoreBinaryCrc32(frame.data(), frame.size()) ^ 0x01u);
+  return frame;
+}
+
 ParserStatus FeedBytes(
     UnicoreBinaryFrameFramer& framer,
     const std::vector<std::uint8_t>& bytes,
@@ -95,6 +112,22 @@ ParserStatus FeedBytes(
     }
   }
   return last_status;
+}
+
+std::vector<UnicoreBinaryFrame> CollectRecords(
+    UnicoreBinaryFrameFramer& framer,
+    const std::vector<std::uint8_t>& bytes)
+{
+  std::vector<UnicoreBinaryFrame> records;
+  for (const std::uint8_t byte : bytes)
+  {
+    const auto result = framer.PushByte(byte);
+    if (result.record.has_value())
+    {
+      records.push_back(*result.record);
+    }
+  }
+  return records;
 }
 
 void TestValidFrame(TestContext& ctx)
@@ -180,6 +213,69 @@ void TestInvalidChecksumRejectedAndUnknownIdAccepted(TestContext& ctx)
              "unknown message ids should be preserved");
 }
 
+void TestCorruptLengthRecoversFollowingValidFrame(TestContext& ctx)
+{
+  const auto following = BuildBinaryFrame(
+      520u,
+      {0x01u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x02u});
+  const auto corrupt = BuildCorruptLengthCandidate({}, following);
+
+  UnicoreBinaryFrameFramer framer;
+  const auto records = CollectRecords(framer, corrupt);
+  ctx.Expect(records.size() == 1u,
+             "corrupt N4 declared length must not swallow the following valid frame");
+  if (records.size() == 1u)
+  {
+    ctx.Expect(records.front().message_id == 520u &&
+                   records.front().checksum_status == ChecksumStatus::kValid,
+               "N4 recovery must emit the embedded valid frame exactly once");
+  }
+
+  const auto truncated_corrupt = BuildCorruptLengthCandidate({0x42u}, following);
+  UnicoreBinaryFrameFramer truncated_framer;
+  const auto after_truncated = CollectRecords(truncated_framer, truncated_corrupt);
+  ctx.Expect(after_truncated.size() == 1u && after_truncated.front().message_id == 520u &&
+                 after_truncated.front().checksum_status == ChecksumStatus::kValid,
+             "truncated corrupt N4 candidate must recover its following valid frame");
+
+  UnicoreBinaryFrameFramer fragmented_framer;
+  std::vector<UnicoreBinaryFrame> fragmented_records;
+  for (std::size_t index = 0u; index < corrupt.size(); ++index)
+  {
+    const auto result = fragmented_framer.PushByte(corrupt[index]);
+    if (result.record.has_value())
+    {
+      fragmented_records.push_back(*result.record);
+    }
+  }
+  ctx.Expect(fragmented_records.size() == 1u &&
+                 fragmented_records.front().checksum_status == ChecksumStatus::kValid,
+             "N4 recovery must survive arbitrary one-byte fragmentation");
+
+  auto bad_crc = BuildBinaryFrame(9999u, {0x10u, 0x20u});
+  bad_crc.back() ^= 0x01u;
+  bad_crc.insert(bad_crc.end(), following.begin(), following.end());
+  UnicoreBinaryFrameFramer bad_crc_framer;
+  const auto after_bad_crc = CollectRecords(bad_crc_framer, bad_crc);
+  const auto valid_count = std::count_if(
+      after_bad_crc.begin(), after_bad_crc.end(), [](const auto& frame)
+      {
+        return frame.checksum_status == ChecksumStatus::kValid;
+      });
+  ctx.Expect(valid_count == 1u,
+             "N4 bad CRC followed by valid frame must preserve exactly one valid frame");
+
+  UnicoreBinaryFrameFramer valid_payload_framer;
+  const auto valid_payload = BuildBinaryFrame(
+      520u,
+      {0x10u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x20u});
+  const auto valid_payload_records = CollectRecords(valid_payload_framer, valid_payload);
+  ctx.Expect(valid_payload_records.size() == 1u &&
+                 valid_payload_records.front().message_id == 520u &&
+                 valid_payload_records.front().checksum_status == ChecksumStatus::kValid,
+             "N4 sync bytes inside a valid payload must not cause resynchronization");
+}
+
 void TestTruncatedFinalize(TestContext& ctx)
 {
   UnicoreBinaryFrameFramer framer;
@@ -205,6 +301,7 @@ int main()
   TestPartialStreamHandling(ctx);
   TestSyncRecoveryAfterNoise(ctx);
   TestInvalidChecksumRejectedAndUnknownIdAccepted(ctx);
+  TestCorruptLengthRecoversFollowingValidFrame(ctx);
   TestTruncatedFinalize(ctx);
 
   if (ctx.failures != 0)

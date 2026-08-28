@@ -319,7 +319,7 @@ Recommended next action: In a separate implementation task, define the public `R
 | UGA-021 | STILL PRESENT | Confirmed |
 | UGA-022 | FIXED | Confirmed |
 | UGA-023 | FIXED | Confirmed |
-| UGA-024 | STILL PRESENT | Confirmed |
+| UGA-024 | FIXED | Confirmed |
 | UGA-025 | FIXED | Confirmed |
 | UGA-026 | FIXED | Confirmed |
 | UGA-027 | FIXED | Confirmed |
@@ -522,19 +522,29 @@ Recommended next action: Keep the mixed-leader/timestamp resynchronization regre
 
 ### UGA-024 — corrupt binary lengths swallow a complete following frame
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: UBX and RTCM still calculate an announced total size from the header (`gnss_protocols/src/ubx_framer.cpp` lines 51-79; `gnss_protocols/src/rtcm_framer.cpp` lines 46-75), accumulate unconditionally until that size, build one frame, and reset. A checksum/CRC failure merely appears in the returned record; neither framer searches the failed candidate for a sync suffix. Unicore N4 does the equivalent at `gnss_protocols/src/unicore_binary_framer.cpp` lines 106-143: after the length-based accumulation, a bad CRC resets the entire buffer and returns `InvalidData`. None has a suffix replay or rescan path. The focused old-to-current diff is empty for all three framers.
+Current evidence: Each binary framer now reaches its normal declared boundary and validates the enclosing frame before it considers a later boundary. Only after an invalid UBX checksum, RTCM CRC24Q, or N4 CRC32 does `FindEmbeddedValidFrame` scan the already bounded candidate buffer for the earliest fully present, integrity-valid frame (`gnss_protocols/src/ubx_framer.cpp` lines 78-164; `gnss_protocols/src/rtcm_framer.cpp` lines 74-161; `gnss_protocols/src/unicore_binary_framer.cpp` lines 134-230). UBX requires its two-byte sync, in-range declared length, and checksum; RTCM additionally preserves its reserved-bit check and CRC24Q; N4 requires its full three-byte sync, in-range declared length, and CRC32. Buffered per-byte receipt timestamps preserve the recovered frame's own leader timestamp. The scan is bounded by each existing `max_frame_length_`, and it never runs for a checksum/CRC-valid enclosing frame, so legal sync-like payload bytes remain payload.
 
-Relevant changes since old audit: No commit from `804bed8d7f753f6834212cfbc9dc329f88360299` to `aaacc6be92463ad493d6f4260426cf645188078f` touches UBX, RTCM3, or Unicore N4 framing/recovery. RTCM's recent 1230 semantic-health change occurs after framing and does not change corrupt-length handling.
+Relevant changes since old audit: No commit from `804bed8d7f753f6834212cfbc9dc329f88360299` to `aaacc6be92463ad493d6f4260426cf645188078f` touched UBX, RTCM3, or Unicore N4 framing/recovery; the RTCM 1230 semantic-health work occurs after framing. This fix changes only the three framers, their private framing state, their focused tests, and this report.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga024-repro` embedded an exact complete, integrity-valid frame in each corrupt but in-range announced body, then supplied enough padding to reach the corrupt candidate boundary. Current output was `ubx_record_ready=1 ubx_valid=0 ubx_embedded_valid_lost=1`, `rtcm_record_ready=1 rtcm_valid=0 rtcm_embedded_valid_lost=1`, and `n4_record_ready=0 n4_valid=0 n4_invalid=1 n4_embedded_valid_lost=1`. The UBX/RTCM framers emitted only their invalid enclosing candidate; N4 returned one invalid-data event. No embedded valid frame was recovered. The reproducer exited 0.
+Files changed: `gnss_protocols/include/universal_gnss_protocols/ubx_framer.hpp`, `gnss_protocols/include/universal_gnss_protocols/rtcm_framer.hpp`, `gnss_protocols/include/universal_gnss_protocols/unicore_binary_framer.hpp`, their three matching `src/*_framer.cpp` implementations, `gnss_protocols/tests/test_protocol_foundation.cpp`, `gnss_protocols/tests/test_unicore_binary_framer.cpp`, and this delta report.
 
-Remaining defect, if any: All three binary protocols still lose a complete following valid frame after a plausible corrupt length. The exact reporting differs (invalid `RecordReady` for UBX/RTCM versus `InvalidData` for N4), but no protocol preserves a suffix for recovery.
+Regression tests added: `TestUbxFramerRecoversFollowingValidFrameAfterCorruptLength`, `TestRtcmFramerRecoversFollowingValidFrameAfterCorruptLength`, and `TestCorruptLengthRecoversFollowingValidFrame`. Each mutates an originally short candidate's declared length to cover a following valid frame, then corrupts the enclosing integrity trailer. They cover immediate and partially truncated prefixes, one-byte fragmentation, normal bad-integrity-followed-by-valid behavior, valid payloads containing the native sync sequence, and exactly-once delivery.
 
-Recommended next action: In a separate implementation task, retain the failed candidate long enough to replay the earliest viable sync suffix after integrity failure, with bounded work and explicit tests for every sync offset in UBX, RTCM3, and N4.
+Pre-fix failure evidence: Before the production change, `ctest --test-dir /tmp/universal-gnss-current-delta-build -R '^(gnss_protocols_test_foundation|gnss_protocols_test_unicore_binary_framer)$' --output-on-failure` failed both tests. Foundation reported six failed UBX/RTCM recovery assertions (immediate, truncated-prefix, and one-byte-fragmented input); N4 reported three equivalent failures. The old UBX/RTCM results contained only an invalid enclosing record, while N4 returned `InvalidData` and emitted no following frame.
+
+Production fix: On an integrity failure, inspect each possible later sync offset in the retained bounded buffer and return the first candidate whose complete, protocol-specific header, length limits, and checksum/CRC validate. Reset only after that decision; if no credible candidate exists, retain the old invalid-result behavior. Normal valid frames are emitted unchanged without scanning, and recovered frames are built from their own subrange and leader timestamp.
+
+Post-fix validation: The targeted two-test CTest selection passes 2/2; all `gnss_protocols` tests pass 18/18; the existing combined ASan+UBSan build (`/tmp/universal-gnss-fix-asan`, with leak detection disabled) passes the two affected tests 2/2 with no sanitizer diagnostic; and the complete non-ROS CTest passes 61/61. The complete suite needed to run outside the sandbox for its local socketpair/loopback tests; the sandbox-only failure was limited to those unrelated transport tests.
+
+Reproduction/test result: The three regressions now emit exactly one valid following UBX, CRC-valid RTCM 1005, or CRC-valid N4 message 520 after their corrupt declared-length candidate. The tests also prove a legal valid frame containing `0xB5 0x62`, `0xD3`, or the N4 three-byte sync remains one valid original frame rather than an early resynchronization.
+
+Remaining defect, if any: None for a following complete frame within a candidate that reaches integrity validation. A candidate that has not reached its declared boundary remains indistinguishable from a valid long frame containing a byte-identical nested frame; deliberately switching before integrity validation would violate binary payload transparency and is not performed.
+
+Recommended next action: Keep the three protocol-specific recovery regressions and their valid-payload sync cases in the framing suites; add property/fuzz coverage for many sync offsets separately if broader malformed-stream hardening is desired.
 
 ### UGA-025 — checksum-free text gets high-confidence Unicore discovery
 

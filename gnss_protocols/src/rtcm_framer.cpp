@@ -34,6 +34,7 @@ ParserResult<RtcmFrame> RtcmFrameFramer::PushByte(
     if (byte == kRtcmPreamble)
     {
       buffer_.assign(1u, byte);
+      byte_timestamps_.assign(1u, timestamp_ns);
       frame_timestamp_ns_ = timestamp_ns;
       expected_frame_size_ = 0u;
       return ParserResult<RtcmFrame>::NeedMoreData();
@@ -43,7 +44,7 @@ ParserResult<RtcmFrame> RtcmFrameFramer::PushByte(
     return ParserResult<RtcmFrame>::InvalidData();
   }
 
-  buffer_.push_back(byte);
+  AppendByte(byte, timestamp_ns);
 
   if (buffer_.size() == kRtcmHeaderSize)
   {
@@ -71,6 +72,17 @@ ParserResult<RtcmFrame> RtcmFrameFramer::PushByte(
   }
 
   RtcmFrame frame = BuildFrame();
+  if (frame.checksum_status != ChecksumStatus::kValid)
+  {
+    const auto recovered = FindEmbeddedValidFrame();
+    Reset();
+    if (recovered.has_value())
+    {
+      return ParserResult<RtcmFrame>::RecordReady(*recovered);
+    }
+    return ParserResult<RtcmFrame>::RecordReady(std::move(frame));
+  }
+
   Reset();
   return ParserResult<RtcmFrame>::RecordReady(std::move(frame));
 }
@@ -89,6 +101,7 @@ ParserResult<RtcmFrame> RtcmFrameFramer::Finalize()
 void RtcmFrameFramer::Reset()
 {
   buffer_.clear();
+  byte_timestamps_.clear();
   frame_timestamp_ns_.reset();
   expected_frame_size_ = 0u;
 }
@@ -102,21 +115,73 @@ ParserResult<RtcmFrame> RtcmFrameFramer::StartFrame(
     return ParserResult<RtcmFrame>::Skipped();
   }
 
-  buffer_.push_back(byte);
+  AppendByte(byte, timestamp_ns);
   frame_timestamp_ns_ = timestamp_ns;
   expected_frame_size_ = 0u;
   return ParserResult<RtcmFrame>::NeedMoreData();
 }
 
+void RtcmFrameFramer::AppendByte(
+    std::uint8_t byte,
+    std::optional<ProtocolTimestampNs> timestamp_ns)
+{
+  buffer_.push_back(byte);
+  byte_timestamps_.push_back(timestamp_ns);
+}
+
+std::optional<RtcmFrame> RtcmFrameFramer::FindEmbeddedValidFrame() const
+{
+  for (std::size_t frame_offset = 1u;
+       frame_offset + kRtcmHeaderSize + kRtcmCrcSize <= buffer_.size();
+       ++frame_offset)
+  {
+    if (buffer_[frame_offset] != kRtcmPreamble ||
+        (buffer_[frame_offset + 1u] & 0xFCu) != 0u)
+    {
+      continue;
+    }
+
+    const std::size_t payload_size =
+        (static_cast<std::size_t>(buffer_[frame_offset + 1u] & 0x03u) << 8) |
+        static_cast<std::size_t>(buffer_[frame_offset + 2u]);
+    const std::size_t frame_size = kRtcmHeaderSize + payload_size + kRtcmCrcSize;
+    if (frame_size > max_frame_length_ || frame_size > buffer_.size() - frame_offset)
+    {
+      continue;
+    }
+
+    RtcmFrame candidate = BuildFrame(
+        frame_offset, frame_size, byte_timestamps_[frame_offset]);
+    if (candidate.checksum_status == ChecksumStatus::kValid)
+    {
+      return candidate;
+    }
+  }
+
+  return std::nullopt;
+}
+
 RtcmFrame RtcmFrameFramer::BuildFrame() const
 {
-  RtcmFrame frame;
-  frame.timestamp_ns = frame_timestamp_ns_;
-  frame.raw_bytes = buffer_;
+  return BuildFrame(0u, buffer_.size(), frame_timestamp_ns_);
+}
 
-  const std::size_t payload_size = buffer_.size() - kRtcmHeaderSize - kRtcmCrcSize;
-  frame.payload.assign(buffer_.begin() + static_cast<std::ptrdiff_t>(kRtcmHeaderSize),
-                       buffer_.begin() + static_cast<std::ptrdiff_t>(kRtcmHeaderSize + payload_size));
+RtcmFrame RtcmFrameFramer::BuildFrame(
+    std::size_t frame_offset,
+    std::size_t frame_size,
+    std::optional<ProtocolTimestampNs> timestamp_ns) const
+{
+  RtcmFrame frame;
+  frame.timestamp_ns = timestamp_ns;
+  frame.raw_bytes.assign(
+      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset),
+      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + frame_size));
+
+  const std::size_t payload_size = frame_size - kRtcmHeaderSize - kRtcmCrcSize;
+  frame.payload.assign(
+      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + kRtcmHeaderSize),
+      buffer_.begin() +
+          static_cast<std::ptrdiff_t>(frame_offset + kRtcmHeaderSize + payload_size));
 
   if (const auto message_type = ExtractRtcmMessageType(frame.payload); message_type.has_value())
   {
@@ -124,10 +189,11 @@ RtcmFrame RtcmFrameFramer::BuildFrame() const
   }
 
   frame.reported_crc24q =
-      (static_cast<std::uint32_t>(buffer_[buffer_.size() - 3]) << 16) |
-      (static_cast<std::uint32_t>(buffer_[buffer_.size() - 2]) << 8) |
-      static_cast<std::uint32_t>(buffer_[buffer_.size() - 1]);
-  frame.computed_crc24q = ComputeRtcmCrc24Q(buffer_.data(), buffer_.size() - kRtcmCrcSize);
+      (static_cast<std::uint32_t>(buffer_[frame_offset + frame_size - 3u]) << 16) |
+      (static_cast<std::uint32_t>(buffer_[frame_offset + frame_size - 2u]) << 8) |
+      static_cast<std::uint32_t>(buffer_[frame_offset + frame_size - 1u]);
+  frame.computed_crc24q = ComputeRtcmCrc24Q(
+      buffer_.data() + frame_offset, frame_size - kRtcmCrcSize);
   frame.checksum_status = (frame.reported_crc24q == frame.computed_crc24q)
                               ? ChecksumStatus::kValid
                               : ChecksumStatus::kInvalid;

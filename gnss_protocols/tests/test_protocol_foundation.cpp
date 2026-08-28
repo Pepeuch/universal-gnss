@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <iomanip>
@@ -55,6 +56,100 @@ universal_gnss_protocols::ParserResult<RecordT> FeedBytes(
     result = framer.PushByte(byte, timestamp_ns);
   }
   return result;
+}
+
+template <typename FramerT, typename RecordT>
+std::vector<RecordT> CollectRecords(FramerT& framer,
+                                    const std::vector<std::uint8_t>& bytes,
+                                    std::vector<ParserStatus>* statuses = nullptr)
+{
+  std::vector<RecordT> records;
+  for (const auto byte : bytes)
+  {
+    const auto result = framer.PushByte(byte);
+    if (statuses != nullptr)
+    {
+      statuses->push_back(result.status);
+    }
+    if (result.record.has_value())
+    {
+      records.push_back(*result.record);
+    }
+  }
+  return records;
+}
+
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
+                                        const std::uint8_t message_id,
+                                        const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {
+      0xB5u,
+      0x62u,
+      class_id,
+      message_id,
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0xFFu),
+  };
+  frame.insert(frame.end(), payload.begin(), payload.end());
+  const auto checksum = universal_gnss_protocols::ComputeUbxChecksum(
+      frame.data() + 2u, frame.size() - 2u);
+  frame.push_back(checksum.ck_a);
+  frame.push_back(checksum.ck_b);
+  return frame;
+}
+
+std::vector<std::uint8_t> BuildRtcmFrame(const std::vector<std::uint8_t>& payload)
+{
+  std::vector<std::uint8_t> frame = {
+      0xD3u,
+      static_cast<std::uint8_t>((payload.size() >> 8u) & 0x03u),
+      static_cast<std::uint8_t>(payload.size() & 0xFFu),
+  };
+  frame.insert(frame.end(), payload.begin(), payload.end());
+  const auto crc = universal_gnss_protocols::ComputeRtcmCrc24Q(frame.data(), frame.size());
+  frame.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  frame.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  frame.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return frame;
+}
+
+std::vector<std::uint8_t> BuildUbxCorruptLengthCandidate(
+    const std::vector<std::uint8_t>& truncated_payload_prefix,
+    const std::vector<std::uint8_t>& following_frame)
+{
+  const std::size_t declared_payload_size =
+      truncated_payload_prefix.size() + following_frame.size();
+  std::vector<std::uint8_t> frame = BuildUbxFrame(0x06u, 0x01u, {0x42u});
+  frame[4] = static_cast<std::uint8_t>(declared_payload_size & 0xFFu);
+  frame[5] = static_cast<std::uint8_t>((declared_payload_size >> 8u) & 0xFFu);
+  frame.resize(6u);
+  frame.insert(frame.end(), truncated_payload_prefix.begin(), truncated_payload_prefix.end());
+  frame.insert(frame.end(), following_frame.begin(), following_frame.end());
+  const auto checksum = universal_gnss_protocols::ComputeUbxChecksum(
+      frame.data() + 2u, frame.size() - 2u);
+  frame.push_back(static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
+  frame.push_back(checksum.ck_b);
+  return frame;
+}
+
+std::vector<std::uint8_t> BuildRtcmCorruptLengthCandidate(
+    const std::vector<std::uint8_t>& truncated_payload_prefix,
+    const std::vector<std::uint8_t>& following_frame)
+{
+  const std::size_t declared_payload_size =
+      truncated_payload_prefix.size() + following_frame.size();
+  std::vector<std::uint8_t> frame = BuildRtcmFrame({0x42u});
+  frame[1] = static_cast<std::uint8_t>((declared_payload_size >> 8u) & 0x03u);
+  frame[2] = static_cast<std::uint8_t>(declared_payload_size & 0xFFu);
+  frame.resize(3u);
+  frame.insert(frame.end(), truncated_payload_prefix.begin(), truncated_payload_prefix.end());
+  frame.insert(frame.end(), following_frame.begin(), following_frame.end());
+  const auto crc = universal_gnss_protocols::ComputeRtcmCrc24Q(frame.data(), frame.size());
+  frame.push_back(static_cast<std::uint8_t>(((crc >> 16u) & 0xFFu) ^ 0x01u));
+  frame.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  frame.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return frame;
 }
 
 std::vector<std::uint8_t> ToBytes(const std::string& text)
@@ -308,6 +403,141 @@ void TestUbxFramerPartialHandlingAndChecksum(TestContext& ctx)
              "UBX framer should report truncated data on finalize");
 }
 
+void TestUbxFramerRecoversFollowingValidFrameAfterCorruptLength(TestContext& ctx)
+{
+  const auto following = BuildUbxFrame(0x01u, 0x07u, {0x10u, 0xB5u, 0x62u, 0x20u});
+  const auto corrupt = BuildUbxCorruptLengthCandidate({}, following);
+
+  UbxFrameFramer framer;
+  const auto records = CollectRecords<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(
+      framer, corrupt);
+  ctx.Expect(records.size() == 1u,
+             "UBX corrupt declared length must not swallow the following valid frame");
+  if (records.size() == 1u)
+  {
+    ctx.Expect(records.front().class_id == 0x01u && records.front().message_id == 0x07u &&
+                   records.front().checksum_status == ChecksumStatus::kValid,
+               "UBX recovery must emit the embedded valid frame exactly once");
+  }
+
+  const auto truncated_corrupt = BuildUbxCorruptLengthCandidate({0x42u}, following);
+  UbxFrameFramer truncated_framer;
+  const auto after_truncated =
+      CollectRecords<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(
+          truncated_framer, truncated_corrupt);
+  ctx.Expect(after_truncated.size() == 1u &&
+                 after_truncated.front().class_id == 0x01u &&
+                 after_truncated.front().message_id == 0x07u &&
+                 after_truncated.front().checksum_status == ChecksumStatus::kValid,
+             "UBX truncated corrupt candidate must recover its following valid frame");
+
+  UbxFrameFramer fragmented_framer;
+  std::vector<universal_gnss_protocols::UbxFrame> fragmented_records;
+  for (std::size_t index = 0u; index < corrupt.size(); ++index)
+  {
+    const auto result = fragmented_framer.PushByte(corrupt[index]);
+    if (result.record.has_value())
+    {
+      fragmented_records.push_back(*result.record);
+    }
+  }
+  ctx.Expect(fragmented_records.size() == 1u &&
+                 fragmented_records.front().checksum_status == ChecksumStatus::kValid,
+             "UBX recovery must survive arbitrary one-byte fragmentation");
+
+  auto bad_checksum = BuildUbxFrame(0x01u, 0x02u, {0x33u});
+  bad_checksum.back() ^= 0x01u;
+  bad_checksum.insert(bad_checksum.end(), following.begin(), following.end());
+  UbxFrameFramer bad_checksum_framer;
+  const auto after_bad_checksum =
+      CollectRecords<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(
+          bad_checksum_framer, bad_checksum);
+  const auto valid_count = std::count_if(
+      after_bad_checksum.begin(), after_bad_checksum.end(), [](const auto& frame)
+      {
+        return frame.checksum_status == ChecksumStatus::kValid;
+      });
+  ctx.Expect(valid_count == 1u,
+             "UBX bad checksum followed by valid frame must preserve exactly one valid frame");
+
+  UbxFrameFramer valid_payload_framer;
+  const auto valid_payload = BuildUbxFrame(0x01u, 0x30u, {0x11u, 0xB5u, 0x62u, 0x22u});
+  const auto valid_payload_records =
+      CollectRecords<UbxFrameFramer, universal_gnss_protocols::UbxFrame>(
+          valid_payload_framer, valid_payload);
+  ctx.Expect(valid_payload_records.size() == 1u &&
+                 valid_payload_records.front().class_id == 0x01u &&
+                 valid_payload_records.front().message_id == 0x30u &&
+                 valid_payload_records.front().checksum_status == ChecksumStatus::kValid,
+             "UBX sync bytes inside a valid payload must not cause resynchronization");
+}
+
+void TestRtcmFramerRecoversFollowingValidFrameAfterCorruptLength(TestContext& ctx)
+{
+  const auto following = BuildRtcmFrame({0x3Eu, 0xD0u, 0xD3u, 0x55u});
+  const auto corrupt = BuildRtcmCorruptLengthCandidate({}, following);
+
+  RtcmFrameFramer framer;
+  const auto records = CollectRecords<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+      framer, corrupt);
+  ctx.Expect(records.size() == 1u,
+             "RTCM corrupt declared length must not swallow the following valid frame");
+  if (records.size() == 1u)
+  {
+    ctx.Expect(records.front().message_type == 1005u &&
+                   records.front().checksum_status == ChecksumStatus::kValid,
+               "RTCM recovery must emit the embedded valid frame exactly once");
+  }
+
+  const auto truncated_corrupt = BuildRtcmCorruptLengthCandidate({0x42u}, following);
+  RtcmFrameFramer truncated_framer;
+  const auto after_truncated =
+      CollectRecords<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+          truncated_framer, truncated_corrupt);
+  ctx.Expect(after_truncated.size() == 1u &&
+                 after_truncated.front().message_type == 1005u &&
+                 after_truncated.front().checksum_status == ChecksumStatus::kValid,
+             "RTCM truncated corrupt candidate must recover its following valid frame");
+
+  RtcmFrameFramer fragmented_framer;
+  std::vector<universal_gnss_protocols::RtcmFrame> fragmented_records;
+  for (std::size_t index = 0u; index < corrupt.size(); ++index)
+  {
+    const auto result = fragmented_framer.PushByte(corrupt[index]);
+    if (result.record.has_value())
+    {
+      fragmented_records.push_back(*result.record);
+    }
+  }
+  ctx.Expect(fragmented_records.size() == 1u &&
+                 fragmented_records.front().checksum_status == ChecksumStatus::kValid,
+             "RTCM recovery must survive arbitrary one-byte fragmentation");
+
+  auto bad_crc = BuildRtcmFrame({0x3Eu, 0xD0u});
+  bad_crc.back() ^= 0x01u;
+  bad_crc.insert(bad_crc.end(), following.begin(), following.end());
+  RtcmFrameFramer bad_crc_framer;
+  const auto after_bad_crc = CollectRecords<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+      bad_crc_framer, bad_crc);
+  const auto valid_count = std::count_if(
+      after_bad_crc.begin(), after_bad_crc.end(), [](const auto& frame)
+      {
+        return frame.checksum_status == ChecksumStatus::kValid;
+      });
+  ctx.Expect(valid_count == 1u,
+             "RTCM bad CRC followed by valid frame must preserve exactly one valid frame");
+
+  RtcmFrameFramer valid_payload_framer;
+  const auto valid_payload = BuildRtcmFrame({0x3Eu, 0xD0u, 0xD3u, 0x55u});
+  const auto valid_payload_records =
+      CollectRecords<RtcmFrameFramer, universal_gnss_protocols::RtcmFrame>(
+          valid_payload_framer, valid_payload);
+  ctx.Expect(valid_payload_records.size() == 1u &&
+                 valid_payload_records.front().message_type == 1005u &&
+                 valid_payload_records.front().checksum_status == ChecksumStatus::kValid,
+             "RTCM preamble bytes inside a valid payload must not cause resynchronization");
+}
+
 void TestUnicoreFramerSyncRecovery(TestContext& ctx)
 {
   UnicoreFrameFramer framer;
@@ -340,6 +570,8 @@ int main()
   TestNmeaFramerResynchronizesOnNestedLeader(ctx);
   TestRtcmFramerBoundaryAndSyncRecovery(ctx);
   TestUbxFramerPartialHandlingAndChecksum(ctx);
+  TestUbxFramerRecoversFollowingValidFrameAfterCorruptLength(ctx);
+  TestRtcmFramerRecoversFollowingValidFrameAfterCorruptLength(ctx);
   TestUnicoreFramerSyncRecovery(ctx);
 
   if (ctx.failures != 0)
