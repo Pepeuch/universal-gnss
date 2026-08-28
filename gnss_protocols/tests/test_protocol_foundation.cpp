@@ -5,6 +5,8 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "universal_gnss_protocols/nmea_checksum.hpp"
@@ -58,6 +60,15 @@ universal_gnss_protocols::ParserResult<RecordT> FeedBytes(
 std::vector<std::uint8_t> ToBytes(const std::string& text)
 {
   return std::vector<std::uint8_t>(text.begin(), text.end());
+}
+
+std::string WithNmeaChecksum(const char leader, const std::string& payload)
+{
+  const std::uint8_t checksum = universal_gnss_protocols::ComputeNmeaChecksum(payload);
+  std::ostringstream stream;
+  stream << leader << payload << '*' << std::uppercase << std::hex << std::setw(2)
+         << std::setfill('0') << static_cast<unsigned int>(checksum) << "\r\n";
+  return stream.str();
 }
 
 std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
@@ -159,6 +170,93 @@ void TestNmeaFramerPartialAndTruncatedHandling(TestContext& ctx)
              "NMEA framer should report truncated data on finalize");
 }
 
+void TestNmeaFramerHeaderExtractionOwnsViewedStorage(TestContext& ctx)
+{
+  const std::string long_header = "GPLONGPROPRIETARYHEADER_" + std::string(80u, 'X');
+  const std::vector<std::pair<std::string, std::string>> cases = {
+      {"GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,10.0,M,46.9,M,,", "GGA"},
+      {long_header + ",payload", long_header.substr(2u)},
+  };
+
+  for (const auto& [payload, expected_sentence_type] : cases)
+  {
+    NmeaSentenceFramer framer;
+    const auto result = FeedBytes<NmeaSentenceFramer, universal_gnss_protocols::NmeaSentence>(
+        framer, ToBytes(WithNmeaChecksum('$', payload)), 4321);
+    ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
+               "NMEA framer should emit each header-lifetime regression vector");
+    if (!result.record.has_value())
+    {
+      continue;
+    }
+
+    ctx.Expect(result.record->talker == "GP",
+               "NMEA framer should preserve talker extraction for short and long headers");
+    ctx.Expect(result.record->sentence_type == expected_sentence_type,
+               "NMEA framer should preserve sentence extraction for short and long headers");
+    ctx.Expect(result.record->checksum_status == ChecksumStatus::kValid,
+               "NMEA framer should preserve checksum handling for header-lifetime vectors");
+  }
+}
+
+void TestNmeaFramerResynchronizesOnNestedLeader(TestContext& ctx)
+{
+  struct ResynchronizationCase
+  {
+    std::string truncated_candidate;
+    std::string intervening_garbage;
+    char following_leader;
+  };
+
+  const std::vector<ResynchronizationCase> cases = {
+      {"$GPGGA,123519,4807.038,N", "", '$'},
+      {"$GPGGA,123519,4807.038,N", "", '!'},
+      {"!GPGGA,123519,4807.038,N", "", '$'},
+      {"$GPGGA,123519,4807.038,N", "garbage", '$'},
+  };
+  constexpr std::int64_t kTruncatedTimestampNs = 1000;
+  constexpr std::int64_t kFollowingLeaderTimestampNs = 2000;
+  constexpr std::int64_t kFollowingPayloadTimestampNs = 3000;
+
+  for (const auto& test_case : cases)
+  {
+    NmeaSentenceFramer framer;
+    FeedBytes<NmeaSentenceFramer, universal_gnss_protocols::NmeaSentence>(
+        framer, ToBytes(test_case.truncated_candidate), kTruncatedTimestampNs);
+    FeedBytes<NmeaSentenceFramer, universal_gnss_protocols::NmeaSentence>(
+        framer, ToBytes(test_case.intervening_garbage), kTruncatedTimestampNs);
+
+    const std::string following_sentence = WithNmeaChecksum(
+        test_case.following_leader, "GPGLL,4916.45,N,12311.12,W,225444,A,");
+    std::vector<universal_gnss_protocols::NmeaSentence> records;
+    for (std::size_t index = 0u; index < following_sentence.size(); ++index)
+    {
+      const auto result = framer.PushByte(
+          static_cast<std::uint8_t>(following_sentence[index]),
+          index == 0u ? std::optional<std::int64_t>(kFollowingLeaderTimestampNs)
+                      : std::optional<std::int64_t>(kFollowingPayloadTimestampNs));
+      if (result.status == ParserStatus::kRecordReady && result.record.has_value())
+      {
+        records.push_back(*result.record);
+      }
+    }
+
+    ctx.Expect(records.size() == 1u,
+               "NMEA framer should emit exactly the following valid sentence after a nested leader");
+    if (records.size() != 1u)
+    {
+      continue;
+    }
+
+    const auto& record = records.front();
+    ctx.Expect(record.leader == test_case.following_leader && record.talker == "GP" &&
+                   record.sentence_type == "GLL" &&
+                   record.checksum_status == ChecksumStatus::kValid &&
+                   record.timestamp_ns == std::optional<std::int64_t>(kFollowingLeaderTimestampNs),
+               "NMEA framer should resynchronize at a nested leader without losing the new frame or its timestamp");
+  }
+}
+
 void TestRtcmFramerBoundaryAndSyncRecovery(TestContext& ctx)
 {
   RtcmFrameFramer framer;
@@ -238,6 +336,8 @@ int main()
   TestRtcmCrc24QHelpers(ctx);
   TestUbxChecksumHelpers(ctx);
   TestNmeaFramerPartialAndTruncatedHandling(ctx);
+  TestNmeaFramerHeaderExtractionOwnsViewedStorage(ctx);
+  TestNmeaFramerResynchronizesOnNestedLeader(ctx);
   TestRtcmFramerBoundaryAndSyncRecovery(ctx);
   TestUbxFramerPartialHandlingAndChecksum(ctx);
   TestUnicoreFramerSyncRecovery(ctx);

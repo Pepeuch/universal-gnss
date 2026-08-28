@@ -631,6 +631,78 @@ void TestLegacyIcyResponseWithMidFrameBinary(TestContext& ctx)
              "binary payload after a legacy ICY line should still mark the response as received");
 }
 
+void TestNtripStatusCodeTokenValidation(TestContext& ctx)
+{
+  const std::vector<std::string> accepted_headers = {
+      "HTTP/1.0 200 OK\r\n\r\n",
+      "HTTP/1.1 200\r\n\r\n",
+      "ICY 200 OK\r\n\r\n",
+  };
+
+  for (const std::string& header : accepted_headers)
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for accepted-status test");
+
+    NtripClient client(MakeConfig());
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
+                   client.SendRequest() == NtripClientError::kNone,
+               "setup should succeed before testing an accepted NTRIP status line");
+    sockets.ReadPeerExact(client.request().request_text.size());
+
+    const auto payload = BuildRtcmFrame(1005u);
+    std::vector<std::uint8_t> response(header.begin(), header.end());
+    Append(response, payload);
+    ctx.Expect(sockets.WritePeer(response),
+               "the fake peer should send an accepted status line with same-read RTCM payload");
+
+    std::vector<std::uint8_t> buffer(64u, 0u);
+    const auto read_result = client.Read(buffer.data(), buffer.size(), 5000000000LL);
+    buffer.resize(read_result.bytes_read);
+    ctx.Expect(read_result.client_error == NtripClientError::kNone &&
+                   client.state() == NtripClientState::kStreaming &&
+                   client.metrics().response_received && buffer == payload &&
+                   client.metrics().rtcm_frames_received == 1u,
+               "an exact successful NTRIP status token should enter streaming and preserve same-read RTCM payload");
+  }
+
+  const std::vector<std::string> rejected_headers = {
+      "HTTP/1.1 2000 Not OK\r\n\r\n",
+      "HTTP/1.1 200X Not OK\r\n\r\n",
+      "HTTP/1.1 20\r\n\r\n",
+      "HTTP/1.1 401 Unauthorized\r\n\r\n",
+      "ICY 200anything\r\n\r\n",
+      "ICY 200anything\r\n",
+  };
+
+  for (const std::string& header : rejected_headers)
+  {
+    SocketPair sockets;
+    ctx.Expect(sockets.Open(), "socketpair fixture should open for rejected-status test");
+
+    NtripClient client(MakeConfig());
+    ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
+                   client.SendRequest() == NtripClientError::kNone,
+               "setup should succeed before testing a rejected NTRIP status line");
+    sockets.ReadPeerExact(client.request().request_text.size());
+
+    const auto payload = BuildRtcmFrame(1005u);
+    std::vector<std::uint8_t> response(header.begin(), header.end());
+    Append(response, payload);
+    ctx.Expect(sockets.WritePeer(response),
+               "the fake peer should send a rejected status line with RTCM-looking suffix bytes");
+
+    std::vector<std::uint8_t> buffer(64u, 0u);
+    const auto read_result = client.Read(buffer.data(), buffer.size(), 6000000000LL);
+    ctx.Expect(read_result.client_error == NtripClientError::kHttp &&
+                   read_result.bytes_read == 0u && client.state() == NtripClientState::kFailed &&
+                   !client.metrics().response_received &&
+                   client.metrics().rtcm_frames_seen == 0u &&
+                   client.correction_monitor().MessageCount(1005u) == 0u,
+               "malformed/non-200 NTRIP status tokens must fail without consuming RTCM suffix bytes");
+  }
+}
+
 void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
 {
   {
@@ -1025,6 +1097,7 @@ int main()
   TestLegacyIcyResponseWithoutBlankLine(ctx);
   TestSplitLegacyIcyResponseWithoutBlankLine(ctx);
   TestLegacyIcyResponseWithMidFrameBinary(ctx);
+  TestNtripStatusCodeTokenValidation(ctx);
   TestInvalidResponsesAndConnectFailure(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
   TestExplicitStreamingOnlyGgaInjection(ctx);

@@ -30,6 +30,8 @@ Recently completed:
 - UM982 / Unicore runtime hardening and downstream field validation through
   MowgliNext
 - generic NMEA `GGA fix_quality` runtime mapping into normalized `rtk_mode`
+- NMEA framer lifetime/resynchronization hardening and finite-value rejection
+  for NMEA and Unicore ASCII numeric fields
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
 - additive public dual-antenna baseline capability/runtime/ROS2 surface with
   `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`

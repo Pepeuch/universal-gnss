@@ -1,8 +1,10 @@
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "universal_gnss/gnss_capabilities.hpp"
@@ -190,6 +192,32 @@ void TestMalformedAndResetBehavior(TestContext& ctx)
              "reset should clear NMEA session metrics and runtime state");
 }
 
+void TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
+{
+  constexpr std::string_view kNonFiniteValues[] = {"nan", "+nan", "-nan", "inf", "+inf", "-inf"};
+
+  for (const std::string_view value : kNonFiniteValues)
+  {
+    NmeaSession session;
+    session.FeedBytes(
+        BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+        5000);
+    session.FeedBytes(
+        BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,1,08,0.9," +
+                          std::string(value) + ",M,46.9,M,,"),
+        5001);
+
+    const auto& state = session.current_state();
+    const auto& metrics = session.metrics();
+    ctx.Expect(metrics.records_parsed == 1u && metrics.records_rejected == 1u &&
+                   metrics.runtime_updates == 1u &&
+                   state.altitude_m == std::optional<double>(545.4) &&
+                   state.altitude_m.has_value() && std::isfinite(*state.altitude_m),
+               "non-finite NMEA GGA altitude must be rejected before it can update runtime state: " +
+                   std::string(value));
+  }
+}
+
 }  // namespace
 
 int main()
@@ -201,6 +229,7 @@ int main()
   TestDopSatelliteCn0AndAccuracyUpdates(ctx);
   TestVtgAndZdaRemainSemanticOnly(ctx);
   TestMalformedAndResetBehavior(ctx);
+  TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(ctx);
 
   if (ctx.failures != 0)
   {

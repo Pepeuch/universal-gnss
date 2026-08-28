@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "universal_gnss_transport/posix_serial_transport.hpp"
@@ -186,6 +188,132 @@ void TestNonblockingReadWithoutData(TestContext& ctx)
              "nonblocking read without data should return zero bytes without error");
 }
 
+void TestOpenClearsInheritedRawModeFlags(TestContext& ctx)
+{
+  PseudoTerminal pty;
+  ctx.Expect(pty.Open(), "pseudo-terminal fixture should open for raw-mode inheritance test");
+
+  const int inherited_fd = ::open(pty.slave_path().c_str(), O_RDWR | O_NOCTTY);
+  ctx.Expect(inherited_fd >= 0, "pseudo-terminal slave should open for termios setup");
+  if (inherited_fd < 0)
+  {
+    return;
+  }
+
+  termios inherited{};
+  const bool got_attributes = ::tcgetattr(inherited_fd, &inherited) == 0;
+  ctx.Expect(got_attributes, "pseudo-terminal slave should provide termios attributes");
+  if (!got_attributes)
+  {
+    ::close(inherited_fd);
+    return;
+  }
+
+  inherited.c_cflag |= CSTOPB;
+#ifdef CRTSCTS
+  inherited.c_cflag |= CRTSCTS;
+#endif
+  inherited.c_iflag |= static_cast<tcflag_t>(IXON | IXOFF | IXANY);
+  const bool seeded_attributes = ::tcsetattr(inherited_fd, TCSANOW, &inherited) == 0;
+  ctx.Expect(seeded_attributes, "pseudo-terminal slave should retain seeded incompatible flags");
+  if (!seeded_attributes)
+  {
+    ::close(inherited_fd);
+    return;
+  }
+
+  PosixSerialTransport serial;
+  const auto open_error = serial.Open(PosixSerialConfig{pty.slave_path(), 115200u, false, 0u});
+  ctx.Expect(open_error == TransportError::kNone,
+             "serial transport should open a pseudo-terminal with inherited incompatible flags");
+
+  termios configured{};
+  const bool got_configured_attributes = ::tcgetattr(inherited_fd, &configured) == 0;
+  ctx.Expect(got_configured_attributes,
+             "serial transport raw-mode configuration should be observable on the pseudo-terminal");
+  if (got_configured_attributes)
+  {
+    const bool software_flow_control_disabled =
+        (configured.c_iflag & static_cast<tcflag_t>(IXON | IXOFF | IXANY)) == 0;
+    const bool framing_is_8n1 = (configured.c_cflag & CSIZE) == CS8 &&
+                                (configured.c_cflag & PARENB) == 0 &&
+                                (configured.c_cflag & CSTOPB) == 0;
+#ifdef CRTSCTS
+    const bool hardware_flow_control_disabled = (configured.c_cflag & CRTSCTS) == 0;
+#else
+    const bool hardware_flow_control_disabled = true;
+#endif
+    ctx.Expect(software_flow_control_disabled && framing_is_8n1 &&
+                   hardware_flow_control_disabled,
+               "serial raw mode should clear inherited stop-bit and flow-control flags");
+  }
+
+  ::close(inherited_fd);
+}
+
+void TestReadTimeoutConversionRejectsUnrepresentableValues(TestContext& ctx)
+{
+  struct TimeoutCase
+  {
+    std::uint32_t timeout_ms;
+    bool expect_open;
+    cc_t expected_vmin;
+    cc_t expected_vtime;
+  };
+
+  const std::vector<TimeoutCase> cases = {
+      {0u, true, 1u, 0u},
+      {1u, true, 0u, 1u},
+      {99u, true, 0u, 1u},
+      {100u, true, 0u, 1u},
+      {25500u, true, 0u, 255u},
+      {25600u, false, 0u, 0u},
+      {std::numeric_limits<std::uint32_t>::max(), false, 0u, 0u},
+  };
+
+  for (const auto& test_case : cases)
+  {
+    PseudoTerminal pty;
+    ctx.Expect(pty.Open(), "pseudo-terminal fixture should open for timeout conversion test");
+    if (pty.slave_path().empty())
+    {
+      continue;
+    }
+
+    PosixSerialTransport serial;
+    const auto open_error = serial.Open(
+        PosixSerialConfig{pty.slave_path(), 115200u, false, test_case.timeout_ms});
+    if (!test_case.expect_open)
+    {
+      ctx.Expect(open_error == TransportError::kInvalidArgument && !serial.IsOpen() &&
+                     serial.metrics().last_error == TransportError::kInvalidArgument,
+                 "unrepresentable serial timeout must be rejected instead of narrowing: " +
+                     std::to_string(test_case.timeout_ms));
+      continue;
+    }
+
+    ctx.Expect(open_error == TransportError::kNone && serial.IsOpen(),
+               "representable serial timeout should open: " + std::to_string(test_case.timeout_ms));
+    if (open_error != TransportError::kNone)
+    {
+      continue;
+    }
+
+    termios options{};
+    const bool got_attributes = ::tcgetattr(serial.native_fd(), &options) == 0;
+    ctx.Expect(got_attributes,
+               "opened serial timeout case should expose termios attributes: " +
+                   std::to_string(test_case.timeout_ms));
+    if (got_attributes)
+    {
+      ctx.Expect(options.c_cc[VMIN] == test_case.expected_vmin &&
+                     options.c_cc[VTIME] == test_case.expected_vtime,
+                 "serial timeout should convert without overflow or wrap: " +
+                     std::to_string(test_case.timeout_ms));
+    }
+  }
+}
+
 void TestInvalidConfigurationRejected(TestContext& ctx)
 {
   PosixSerialTransport serial;
@@ -205,6 +333,8 @@ int main()
 
   TestOpenReadWriteClose(ctx);
   TestNonblockingReadWithoutData(ctx);
+  TestOpenClearsInheritedRawModeFlags(ctx);
+  TestReadTimeoutConversionRejectsUnrepresentableValues(ctx);
   TestInvalidConfigurationRejected(ctx);
 
   if (ctx.failures != 0)

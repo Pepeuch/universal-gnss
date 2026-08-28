@@ -97,6 +97,16 @@ const std::string kBestNavLine = WithUnicoreAsciiCrc(
     "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
     "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
 
+std::string MakeBestNavLineWithLatitude(const std::string_view latitude)
+{
+  return WithUnicoreAsciiCrc(
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,NARROW_FLOAT," + std::string(latitude) +
+      ",116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
+      "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+      "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
+}
+
 const std::string kPvtslnLine = WithUnicoreAsciiCrc(
     "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
     "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
@@ -294,6 +304,27 @@ void TestBestNavUpdatesRuntimeState(TestContext& ctx)
                  state.longitude_deg == std::optional<double>(116.2365102982) &&
                  state.altitude_m == std::optional<double>(65.8312),
              "BESTNAVA should update coordinates and altitude");
+}
+
+void TestNonFiniteBestNavValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
+{
+  constexpr std::string_view kNonFiniteValues[] = {"nan", "+nan", "-nan", "inf", "+inf", "-inf"};
+
+  for (const std::string_view value : kNonFiniteValues)
+  {
+    UnicoreSession session;
+    session.FeedString(kBestNavLine, 2300);
+    session.FeedString(MakeBestNavLineWithLatitude(value), 2301);
+
+    const auto& state = session.current_state();
+    const auto& metrics = session.metrics();
+    ctx.Expect(metrics.records_parsed == 1u && metrics.records_rejected == 1u &&
+                   metrics.runtime_updates == 1u &&
+                   state.latitude_deg == std::optional<double>(40.0789588272) &&
+                   state.latitude_deg.has_value() && std::isfinite(*state.latitude_deg),
+               "non-finite Unicore BESTNAVA latitude must be rejected before it can update runtime state: " +
+                   std::string(value));
+  }
 }
 
 void TestPvtslnUpdatesHeading(TestContext& ctx)
@@ -777,6 +808,7 @@ int main()
   TestContext ctx;
 
   TestBestNavUpdatesRuntimeState(ctx);
+  TestNonFiniteBestNavValuesAreRejectedBeforeRuntimeMerge(ctx);
   TestPvtslnUpdatesHeading(ctx);
   TestRtkStatusUpdatesDualAntenna(ctx);
   TestSatsInfoUpdatesTrackedAndCn0(ctx);

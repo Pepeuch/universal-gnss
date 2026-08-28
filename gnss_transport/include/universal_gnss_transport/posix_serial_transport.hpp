@@ -17,6 +17,7 @@ struct PosixSerialConfig
   std::string device_path{};
   std::uint32_t baud_rate{115200u};
   bool nonblocking{false};
+  // In blocking mode, values beyond the platform VTIME range are rejected by Open().
   std::uint32_t read_timeout_ms{0u};
 };
 

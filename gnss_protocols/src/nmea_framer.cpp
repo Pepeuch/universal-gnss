@@ -43,6 +43,13 @@ ParserResult<NmeaSentence> NmeaSentenceFramer::PushByte(
     return ParserResult<NmeaSentence>::NeedMoreData();
   }
 
+  if (byte == '$' || byte == '!')
+  {
+    buffer_.assign(1u, byte);
+    frame_timestamp_ns_ = timestamp_ns;
+    return ParserResult<NmeaSentence>::NeedMoreData();
+  }
+
   buffer_.push_back(byte);
   if (buffer_.size() > max_frame_length_)
   {
@@ -95,10 +102,10 @@ NmeaSentence NmeaSentenceFramer::BuildSentence() const
 
   if (!sentence.payload_text.empty())
   {
-    const std::size_t comma = sentence.payload_text.find(',');
+    const std::string_view payload_text(sentence.payload_text);
+    const std::size_t comma = payload_text.find(',');
     const std::string_view header =
-        sentence.payload_text.substr(0, comma == std::string::npos ? sentence.payload_text.size()
-                                                                   : comma);
+        payload_text.substr(0, comma == std::string_view::npos ? payload_text.size() : comma);
     if (header.size() >= 5)
     {
       sentence.talker.assign(header.substr(0, 2));

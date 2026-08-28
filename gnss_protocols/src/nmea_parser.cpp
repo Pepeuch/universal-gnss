@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <string>
@@ -72,7 +73,7 @@ bool TryParseDouble(std::string_view text, double& value)
   char* end = nullptr;
   errno = 0;
   const double parsed = std::strtod(buffer.c_str(), &end);
-  if (errno != 0 || end == nullptr || *end != '\0')
+  if (errno != 0 || end == nullptr || *end != '\0' || !std::isfinite(parsed))
   {
     return false;
   }

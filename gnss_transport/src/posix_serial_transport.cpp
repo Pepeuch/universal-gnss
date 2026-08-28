@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 
 #include <fcntl.h>
@@ -53,16 +54,34 @@ std::optional<speed_t> MapBaudRate(const std::uint32_t baud_rate)
 void ConfigureRawMode(termios& options)
 {
   options.c_iflag &= static_cast<tcflag_t>(
-      ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON));
+      ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXOFF | IXANY));
   options.c_oflag &= static_cast<tcflag_t>(~OPOST);
   options.c_lflag &= static_cast<tcflag_t>(~(ECHO | ECHONL | ICANON | ISIG | IEXTEN));
-  options.c_cflag &= static_cast<tcflag_t>(~(CSIZE | PARENB));
+  options.c_cflag &= static_cast<tcflag_t>(~(CSIZE | PARENB | CSTOPB));
+#ifdef CRTSCTS
+  options.c_cflag &= static_cast<tcflag_t>(~CRTSCTS);
+#endif
   options.c_cflag |= CS8;
   options.c_cflag |= static_cast<tcflag_t>(CLOCAL | CREAD);
 }
 
+constexpr std::uint64_t kMillisecondsPerDecisecond = 100u;
+constexpr std::uint64_t kMaximumVtimeTimeoutMs =
+    static_cast<std::uint64_t>(std::numeric_limits<cc_t>::max()) * kMillisecondsPerDecisecond;
+
+bool HasRepresentableReadTimeout(const PosixSerialConfig& config)
+{
+  return config.nonblocking ||
+         static_cast<std::uint64_t>(config.read_timeout_ms) <= kMaximumVtimeTimeoutMs;
+}
+
 TransportError ConfigureSerialPort(const int fd, const PosixSerialConfig& config)
 {
+  if (!HasRepresentableReadTimeout(config))
+  {
+    return TransportError::kInvalidArgument;
+  }
+
   termios options{};
   if (::tcgetattr(fd, &options) != 0)
   {
@@ -89,9 +108,10 @@ TransportError ConfigureSerialPort(const int fd, const PosixSerialConfig& config
   }
   else if (config.read_timeout_ms > 0u)
   {
-    const auto deciseconds = static_cast<cc_t>((config.read_timeout_ms + 99u) / 100u);
+    const auto deciseconds =
+        ((config.read_timeout_ms - 1u) / kMillisecondsPerDecisecond) + 1u;
     options.c_cc[VMIN] = 0;
-    options.c_cc[VTIME] = deciseconds > 0u ? deciseconds : 1u;
+    options.c_cc[VTIME] = static_cast<cc_t>(deciseconds);
   }
   else
   {
@@ -157,6 +177,12 @@ TransportError PosixSerialTransport::Open(const PosixSerialConfig& config)
   {
     metrics_.last_error = TransportError::kUnsupported;
     return TransportError::kUnsupported;
+  }
+
+  if (!HasRepresentableReadTimeout(config))
+  {
+    metrics_.last_error = TransportError::kInvalidArgument;
+    return TransportError::kInvalidArgument;
   }
 
   config_ = config;

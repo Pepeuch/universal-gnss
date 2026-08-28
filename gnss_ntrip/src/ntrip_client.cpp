@@ -23,6 +23,29 @@ bool StartsWith(const std::string_view text, const std::string_view prefix)
   return text.size() >= prefix.size() && text.substr(0u, prefix.size()) == prefix;
 }
 
+bool HasExactNtripStatusCode(const std::string_view status_line,
+                             const std::string_view protocol_prefix)
+{
+  constexpr std::string_view kSuccessCode = "200";
+  if (!StartsWith(status_line, protocol_prefix))
+  {
+    return false;
+  }
+
+  const std::size_t code_start = protocol_prefix.size();
+  const std::size_t code_end = code_start + kSuccessCode.size();
+  return status_line.size() >= code_end &&
+         status_line.substr(code_start, kSuccessCode.size()) == kSuccessCode &&
+         (status_line.size() == code_end || status_line[code_end] == ' ');
+}
+
+bool IsAcceptedNtripStatusLine(const std::string_view status_line)
+{
+  return HasExactNtripStatusCode(status_line, "ICY ") ||
+         HasExactNtripStatusCode(status_line, "HTTP/1.0 ") ||
+         HasExactNtripStatusCode(status_line, "HTTP/1.1 ");
+}
+
 std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
     const std::string_view response_bytes)
 {
@@ -44,7 +67,7 @@ std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
 std::optional<std::pair<std::size_t, std::size_t>> FindLegacyIcyPayloadStart(
     const std::string_view response_bytes)
 {
-  if (!StartsWith(response_bytes, "ICY 200"))
+  if (!StartsWith(response_bytes, "ICY "))
   {
     return std::nullopt;
   }
@@ -60,6 +83,11 @@ std::optional<std::pair<std::size_t, std::size_t>> FindLegacyIcyPayloadStart(
   if (line_end == std::string_view::npos)
   {
     return std::nullopt;
+  }
+
+  if (!IsAcceptedNtripStatusLine(response_bytes.substr(0u, line_end)))
+  {
+    return std::make_pair(line_end, terminator_size);
   }
 
   const std::size_t payload_offset = line_end + terminator_size;
@@ -96,13 +124,6 @@ std::string_view ExtractStatusLine(const std::string_view header)
   }
 
   return header;
-}
-
-bool IsAcceptedNtripStatusLine(const std::string_view status_line)
-{
-  return StartsWith(status_line, "ICY 200") ||
-         StartsWith(status_line, "HTTP/1.0 200") ||
-         StartsWith(status_line, "HTTP/1.1 200");
 }
 
 bool IsRecognizedNtripStatusLine(const std::string_view status_line)
