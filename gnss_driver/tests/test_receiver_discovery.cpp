@@ -2,11 +2,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
 #include "universal_gnss_driver/receiver_discovery.hpp"
+#include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
@@ -26,6 +29,8 @@ using universal_gnss_driver::ReceiverProbeConfidence;
 using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
 using universal_gnss_driver::SortReceiverProbeResults;
+using universal_gnss_driver::DetectedStreamProtocol;
+using universal_gnss_driver::StreamDetector;
 
 struct TestContext
 {
@@ -147,6 +152,17 @@ std::vector<std::uint8_t> BuildUnicoreBinaryFrame(const std::uint16_t message_id
       universal_gnss_protocols::ComputeUnicoreBinaryCrc32(frame.data(), frame.size());
   AppendLittleEndian32(frame, crc);
   return frame;
+}
+
+std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
+{
+  const std::uint32_t crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
+  std::ostringstream stream;
+  stream << frame_without_crc << '*' << std::hex << std::setfill('0') << std::setw(8) << crc
+         << "\r\n";
+  return stream.str();
 }
 
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
@@ -292,12 +308,12 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
 
-  const std::string line =
+  const std::string line = BuildUnicoreAsciiFrame(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
       "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
       "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
-      "0.0194,0.0123*c1b4f7fe\r\n";
+      "0.0194,0.0123");
   const auto result = Analyze(
       candidate, std::vector<std::uint8_t>(line.begin(), line.end()));
 
@@ -308,19 +324,76 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
              "clear Unicore ASCII runtime messages should detect Unicore with high confidence and score");
 }
 
+void TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB0";
+  const StreamDetector detector;
+
+  const std::string valid_bestnav = BuildUnicoreAsciiFrame(
+      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
+      "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,");
+  const std::string crc_valid_malformed = BuildUnicoreAsciiFrame("#BESTNAVA,garbage");
+  const std::string crc_invalid = valid_bestnav.substr(0u, valid_bestnav.size() - 10u) +
+                                  "00000000\r\n";
+
+  const std::vector<std::string> unverified_or_malformed = {
+      "#BESTNAVA,garbage\r\n",
+      crc_invalid,
+      crc_valid_malformed,
+      "#BESTNAVA,97,GPS,FINE,2294",
+      "unrelated log #BESTNAVA,garbage\r\n",
+  };
+
+  for (const auto& input : unverified_or_malformed)
+  {
+    const auto bytes = std::vector<std::uint8_t>(input.begin(), input.end());
+    const auto detected = detector.Detect(bytes);
+    const auto result = Analyze(candidate, bytes);
+    ctx.Expect(detected.protocol == DetectedStreamProtocol::kUnknown,
+               "unverified or malformed Unicore-looking text must not select the Unicore stream detector");
+    ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                   result.confidence == ReceiverProbeConfidence::kNone &&
+                   result.evidence.unicore_ascii_seen == 0u,
+               "unverified or malformed Unicore-looking text must not produce high-confidence discovery");
+  }
+
+  const auto valid_bytes = std::vector<std::uint8_t>(valid_bestnav.begin(), valid_bestnav.end());
+  const auto valid_detected = detector.Detect(valid_bytes);
+  const auto valid_result = Analyze(candidate, valid_bytes);
+  ctx.Expect(valid_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
+                 valid_result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 valid_result.confidence == ReceiverProbeConfidence::kHigh &&
+                 valid_result.evidence.unicore_ascii_seen == 1u,
+             "CRC-valid, semantically plausible BESTNAVA must retain high-confidence Unicore discovery");
+
+  std::string mixed = "noise #BESTNAVA,garbage\r\n";
+  mixed += valid_bestnav;
+  const auto mixed_bytes = std::vector<std::uint8_t>(mixed.begin(), mixed.end());
+  const auto mixed_detected = detector.Detect(mixed_bytes);
+  const auto mixed_result = Analyze(candidate, mixed_bytes);
+  ctx.Expect(mixed_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
+                 mixed_result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 mixed_result.confidence == ReceiverProbeConfidence::kHigh &&
+                 mixed_result.evidence.unicore_ascii_seen == 1u,
+             "verified Unicore evidence must still win after an earlier noisy supported-name token");
+}
+
 void TestUnicorePvtslnAndRtkStatusScoring(TestContext& ctx)
 {
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
 
-  const std::string lines =
+  const std::string lines = BuildUnicoreAsciiFrame(
       "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0*f06a8a06\r\n"
+      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0") +
+      BuildUnicoreAsciiFrame(
       "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
       "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
       "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
       "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
-      "28,25,26*1e33c8cb\r\n";
+      "28,25,26");
   const auto result = Analyze(
       candidate, std::vector<std::uint8_t>(lines.begin(), lines.end()));
 
@@ -490,6 +563,7 @@ int main()
   TestExplicitPathCandidate(ctx);
   TestUbxDetection(ctx);
   TestUnicoreAsciiDetection(ctx);
+  TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence(ctx);
   TestUnicorePvtslnAndRtkStatusScoring(ctx);
   TestUnicoreBinaryDetection(ctx);
   TestNmeaFallbackPolicy(ctx);

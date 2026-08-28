@@ -1,4 +1,5 @@
 #include <cerrno>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -8,7 +9,10 @@
 
 #if defined(__linux__)
 
+#include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "universal_gnss_transport/tcp_client_transport.hpp"
@@ -150,6 +154,204 @@ private:
   int peer_fd_{-1};
 };
 
+bool IsClosedPeerWriteFailure(const universal_gnss_transport::WriteResult& result,
+                              const TcpClientTransport& client)
+{
+  return result.bytes_written == 0u && result.status == TransportStatus::kError &&
+         result.error == TransportError::kWriteFailure && client.metrics().write_errors == 1u &&
+         client.metrics().last_error == TransportError::kWriteFailure;
+}
+
+int RunAdoptedClosedPeerWriteChild()
+{
+  std::signal(SIGPIPE, SIG_DFL);
+
+  int fds[2] = {-1, -1};
+  if (::socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0)
+  {
+    return 10;
+  }
+
+  TcpClientTransport client;
+  TcpClientConfig config;
+  config.nonblocking = true;
+  if (client.AdoptConnectedSocket(fds[0], config) != TransportError::kNone)
+  {
+    ::close(fds[0]);
+    ::close(fds[1]);
+    return 11;
+  }
+
+  ::shutdown(fds[1], SHUT_RDWR);
+  ::close(fds[1]);
+  const std::uint8_t byte = 0xA5u;
+  return IsClosedPeerWriteFailure(client.Write(&byte, 1u), client) ? 0 : 12;
+}
+
+int CreateLoopbackListener(std::uint16_t& port)
+{
+  const int listener = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (listener < 0)
+  {
+    return -1;
+  }
+
+  sockaddr_in address{};
+  address.sin_family = AF_INET;
+  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  address.sin_port = 0;
+  if (::bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) != 0 ||
+      ::listen(listener, 1) != 0)
+  {
+    ::close(listener);
+    return -1;
+  }
+
+  socklen_t address_size = sizeof(address);
+  if (::getsockname(listener, reinterpret_cast<sockaddr*>(&address), &address_size) != 0)
+  {
+    ::close(listener);
+    return -1;
+  }
+
+  port = ntohs(address.sin_port);
+  return listener;
+}
+
+int RunNormallyOpenedClosedPeerWriteChild(const std::uint16_t port,
+                                          const int opened_pipe,
+                                          const int close_pipe)
+{
+  std::signal(SIGPIPE, SIG_DFL);
+
+  TcpClientTransport client;
+  TcpClientConfig config;
+  config.host = "127.0.0.1";
+  config.port = port;
+  config.nonblocking = true;
+  if (client.Open(config) != TransportError::kNone)
+  {
+    return 20;
+  }
+
+  const std::uint8_t ready = 1u;
+  if (::write(opened_pipe, &ready, 1u) != 1)
+  {
+    return 21;
+  }
+  std::uint8_t peer_closed = 0u;
+  if (::read(close_pipe, &peer_closed, 1u) != 1)
+  {
+    return 22;
+  }
+
+  pollfd descriptor{};
+  descriptor.fd = client.native_fd();
+  descriptor.events = POLLIN;
+  if (::poll(&descriptor, 1, 1000) <= 0 ||
+      (descriptor.revents & (POLLIN | POLLERR | POLLHUP)) == 0)
+  {
+    return 23;
+  }
+  std::uint8_t received = 0u;
+  const auto closed_read = client.Read(&received, 1u);
+  if (closed_read.status != TransportStatus::kEndOfStream &&
+      closed_read.status != TransportStatus::kError)
+  {
+    return 24;
+  }
+
+  const std::uint8_t byte = 0x5Au;
+  return IsClosedPeerWriteFailure(client.Write(&byte, 1u), client) ? 0 : 25;
+}
+
+bool ChildExitedSuccessfully(const pid_t child, int& child_status)
+{
+  if (::waitpid(child, &child_status, 0) != child)
+  {
+    return false;
+  }
+  return WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0;
+}
+
+void TestClosedPeerWritesDoNotRaiseSigpipe(TestContext& ctx)
+{
+  const pid_t adopted_child = ::fork();
+  if (adopted_child == 0)
+  {
+    _exit(RunAdoptedClosedPeerWriteChild());
+  }
+  int adopted_status = 0;
+  const bool adopted_succeeded =
+      adopted_child > 0 && ChildExitedSuccessfully(adopted_child, adopted_status);
+  ctx.Expect(adopted_succeeded,
+             "adopted closed-peer write must survive default SIGPIPE and return kWriteFailure "
+             "(wait status=" + std::to_string(adopted_status) + ")");
+
+  std::uint16_t port = 0u;
+  const int listener = CreateLoopbackListener(port);
+  if (listener < 0)
+  {
+    std::cout << "Normal TCP closed-peer SIGPIPE regression skipped: loopback socket unavailable\n";
+    return;
+  }
+
+  int opened_pipe[2] = {-1, -1};
+  int close_pipe[2] = {-1, -1};
+  if (::pipe(opened_pipe) != 0 || ::pipe(close_pipe) != 0)
+  {
+    if (opened_pipe[0] >= 0)
+    {
+      ::close(opened_pipe[0]);
+      ::close(opened_pipe[1]);
+    }
+    if (close_pipe[0] >= 0)
+    {
+      ::close(close_pipe[0]);
+      ::close(close_pipe[1]);
+    }
+    ::close(listener);
+    ctx.Expect(false, "SIGPIPE test synchronization pipes should open");
+    return;
+  }
+
+  const pid_t normal_child = ::fork();
+  if (normal_child == 0)
+  {
+    ::close(opened_pipe[0]);
+    ::close(close_pipe[1]);
+    ::close(listener);
+    _exit(RunNormallyOpenedClosedPeerWriteChild(port, opened_pipe[1], close_pipe[0]));
+  }
+
+  ::close(opened_pipe[1]);
+  ::close(close_pipe[0]);
+  std::uint8_t opened = 0u;
+  const bool child_opened = normal_child > 0 && ::read(opened_pipe[0], &opened, 1u) == 1;
+  const int accepted = child_opened ? ::accept(listener, nullptr, nullptr) : -1;
+  if (accepted >= 0)
+  {
+    linger abortive_close{};
+    abortive_close.l_onoff = 1;
+    abortive_close.l_linger = 0;
+    ::setsockopt(accepted, SOL_SOCKET, SO_LINGER, &abortive_close, sizeof(abortive_close));
+    ::close(accepted);
+  }
+  const std::uint8_t peer_closed = 1u;
+  const bool notified_child = child_opened &&
+                              ::write(close_pipe[1], &peer_closed, 1u) == 1;
+  ::close(opened_pipe[0]);
+  ::close(close_pipe[1]);
+  ::close(listener);
+
+  int normal_status = 0;
+  const bool normal_succeeded = normal_child > 0 &&
+                                ChildExitedSuccessfully(normal_child, normal_status);
+  ctx.Expect(child_opened && accepted >= 0 && notified_child && normal_succeeded,
+             "normally opened closed-peer write must survive default SIGPIPE and return kWriteFailure "
+             "(wait status=" + std::to_string(normal_status) + ")");
+}
+
 void TestOpenReadWriteCloseAndMetrics(TestContext& ctx)
 {
   const std::vector<std::uint8_t> inbound = {0x10u, 0x20u, 0x30u};
@@ -180,8 +382,10 @@ void TestOpenReadWriteCloseAndMetrics(TestContext& ctx)
           ", bytes=" + std::to_string(read_result.bytes_read) + ")");
 
   const auto write_result = client.Write(outbound.data(), outbound.size());
+  const bool write_succeeded =
+      write_result.status == TransportStatus::kOk && write_result.bytes_written == outbound.size();
   ctx.Expect(
-      write_result.status == TransportStatus::kOk && write_result.bytes_written == outbound.size(),
+      write_succeeded,
       "TCP client should write bytes to the socketpair peer (status=" +
           ToString(write_result.status) + ", error=" + ToString(write_result.error) +
           ", bytes=" + std::to_string(write_result.bytes_written) + ")");
@@ -191,10 +395,11 @@ void TestOpenReadWriteCloseAndMetrics(TestContext& ctx)
                  client.metrics().write_errors == 0u,
              "TCP client should update metrics for successful I/O");
 
-  const std::vector<std::uint8_t> outbound_received = sockets.ReadPeerExact(outbound.size());
+  const std::vector<std::uint8_t> outbound_received =
+      write_succeeded ? sockets.ReadPeerExact(outbound.size()) : std::vector<std::uint8_t>{};
   client.Close();
   ctx.Expect(!client.IsOpen(), "TCP client close should release the socket");
-  ctx.Expect(outbound_received == outbound,
+  ctx.Expect(write_succeeded && outbound_received == outbound,
              "socketpair peer should receive bytes written by the client");
 }
 
@@ -302,6 +507,7 @@ int main()
   TestReadTimeoutAndNonblockingBehavior(ctx);
   TestConnectFailureAndInvalidConfiguration(ctx);
   TestClosedReadWriteBehavior(ctx);
+  TestClosedPeerWritesDoNotRaiseSigpipe(ctx);
 
   if (ctx.failures != 0)
   {

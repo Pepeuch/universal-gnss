@@ -337,7 +337,7 @@ TransportError TcpClientTransport::AdoptConnectedSocket(const int fd, const TcpC
   }
 
   fd_ = fd;
-  use_generic_fd_io_ = true;
+  use_generic_fd_io_ = false;
   config_ = config;
   metrics_.last_error = TransportError::kNone;
   return TransportError::kNone;

@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "unicore_ascii_validation.hpp"
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
@@ -130,7 +131,7 @@ StreamDetectionResult StreamDetector::Detect(const std::uint8_t* data, const std
       size,
       DetectedStreamProtocol::kUnicoreAscii,
       [](const UnicoreFrame& frame) {
-        return frame.sync_char != '$' && !frame.message_name.empty();
+        return detail::IsVerifiedUnicoreAsciiRecord(frame);
       });
   MaybeSelectEarlierCandidate(unicore_candidate, best_result);
 

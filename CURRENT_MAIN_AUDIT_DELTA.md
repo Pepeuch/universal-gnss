@@ -72,19 +72,29 @@ Recommended next action: In a separate implementation task, decouple bounded rea
 
 ### UGA-004 — negative ROS `read_chunk_size` becomes a huge allocation
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/receiver_node.cpp`, `LoadReceiverNodeConfig`, current lines 496-498 still casts the declared `int64_t` directly to `size_t`. Validation at lines 560-576 still covers discovery values and publish rate but not `read_chunk_size`. `gnss_driver/src/receiver_session_runner.cpp` current lines 12-29 still preserves every nonzero wrapped value and constructs a vector of that size on `StepOnce()`.
+Current evidence: `LoadReceiverNodeConfig` now retains the declared signed `read_chunk_size` until it has checked the explicit `1..1048576` range (`gnss_ros2/src/receiver_node.cpp`), then converts the validated value to `size_t`. `ReceiverSessionRunner` receives only this bounded node configuration, so its buffer cannot be reached with a signed-wrap value from the public ROS parameter.
 
-Relevant changes since old audit: The focused old-to-current diff for ReceiverNode, runner, and their tests contains no `read_chunk_size` validation or allocation change. No commit in the interval affects the finding.
+Relevant changes since old audit: The production-base interval had no `read_chunk_size` validation or allocation change. This fix changes only the ReceiverNode parameter loader and its ROS2 test.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga004-repro`, linked against freshly built current libraries, reproduced the exact cast and runner allocation. It printed `wrapped=18446744073709551615 max=18446744073709551615`, then `exception=cannot create std::vector larger than max_size()` and exited 2. The reproducer caught the exception only to record it; the ROS timer callback has no corresponding catch.
+Files changed: `gnss_ros2/src/receiver_node.cpp`, `gnss_ros2/tests/test_receiver_node.cpp`, and this delta report.
 
-Remaining defect, if any: The public negative parameter remains accepted and deterministically reaches an exceptional huge allocation on the first read. Excessively large positive values also have no practical upper bound.
+Regression test added: `ReceiverNodeTest.ValidatesReadChunkSizeBeforeConversionToSizeT`.
 
-Recommended next action: In a separate implementation task, validate the signed parameter before conversion, enforce a documented upper bound, and add ROS parameter tests for negative, zero, boundary, and over-limit values.
+Pre-fix failure evidence: The ReceiverNode test expected construction to reject `-1`, `INT64_MIN`, `0`, 1 MiB + 1, and `INT64_MAX`, but the current loader accepted them all and cast them to `size_t`; the full ReceiverNode CTest therefore failed its new regression.
+
+Production fix: Validate the signed ROS parameter before conversion, requiring `1..1048576` bytes (the existing 65536-byte default remains valid).
+
+Post-fix validation: 1, 65536, and exactly 1 MiB construct successfully. All negative/zero/over-limit values throw the existing `std::invalid_argument` path before runner allocation. ROS2 `test_receiver_node` passed 1/1 (30 gtests) and complete non-ROS CTest passed 61/61.
+
+Sanitizer result: Not separately run; the regression proves parameter-time rejection without allocating a read buffer, and the requested ROS2/non-ROS suites passed.
+
+Remaining defect, if any: None for public ROS `read_chunk_size` conversion/allocation. Direct construction of `ReceiverSessionRunner` remains a lower-level API and is intentionally unchanged by this ROS parameter-validation fix.
+
+Recommended next action: Keep the signed boundary coverage with the ReceiverNode parameter tests if the default or upper bound changes.
 
 ### UGA-005 — NTRIP `Streaming` has no correction-flow liveness transition
 
@@ -253,7 +263,7 @@ Recommended next action: In a separate implementation task, define the public `R
 | UGA-001 | FIXED | Confirmed |
 | UGA-002 | STILL PRESENT | Confirmed |
 | UGA-003 | STILL PRESENT | Confirmed |
-| UGA-004 | STILL PRESENT | Confirmed |
+| UGA-004 | FIXED | Confirmed |
 | UGA-005 | STILL PRESENT | Confirmed |
 | UGA-006 | STILL PRESENT | Confirmed |
 | UGA-007 | STILL PRESENT | Confirmed |
@@ -274,10 +284,10 @@ Recommended next action: In a separate implementation task, define the public `R
 | UGA-022 | FIXED | Confirmed |
 | UGA-023 | FIXED | Confirmed |
 | UGA-024 | STILL PRESENT | Confirmed |
-| UGA-025 | STILL PRESENT | Confirmed |
+| UGA-025 | FIXED | Confirmed |
 | UGA-026 | FIXED | Confirmed |
 | UGA-027 | FIXED | Confirmed |
-| UGA-028 | STILL PRESENT | Confirmed |
+| UGA-028 | FIXED | Confirmed |
 | UGA-029 | FIXED | Confirmed |
 
 ### UGA-015 — portable correction health unconditionally requires RTCM 1230
@@ -466,19 +476,27 @@ Recommended next action: In a separate implementation task, retain the failed ca
 
 ### UGA-025 — checksum-free text gets high-confidence Unicore discovery
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `StreamDetector` still accepts a Unicore ASCII frame solely when its leader is not `$` and `message_name` is nonempty (`gnss_driver/src/stream_detector.cpp` lines 126-135); it does not require `ChecksumStatus::kValid` or semantic parsing. `CountUnicoreAsciiRecords` likewise counts any supported name at `receiver_discovery.cpp` lines 235-270 without inspecting checksum status or attempting the record parser. That evidence contributes +100 at lines 781-789, selects the Unicore family at lines 862-867, and reaches high confidence at score >=100 (lines 339-354). The random-ASCII predicate explicitly excludes inputs with GNSS leaders (`$`/`!`) but a `#` record is instead consumed as positive Unicore evidence, so no balancing penalty is applied.
+Current evidence: Both `StreamDetector::Detect` and `CountUnicoreAsciiRecords` now call the shared private `detail::IsVerifiedUnicoreAsciiRecord` predicate (`gnss_driver/src/unicore_ascii_validation.hpp`). It requires a `#` leader, a valid CRC32, a supported record name, and a successful corresponding Unicore ASCII parser result before producing Unicore evidence. The existing score and confidence logic can therefore award +100 only after integrity and semantic validation; generic NMEA and binary predicates are unchanged.
 
-Relevant changes since old audit: The focused old-to-current diff is empty for StreamDetector, receiver discovery, and discovery tests. The commits through `aaacc6be92463ad493d6f4260426cf645188078f` do not tighten text integrity, semantic validation, score calculation, or confidence classification.
+Relevant changes since old audit: No production-base commit tightened ASCII Unicore detection. This fix changes `gnss_driver/src/stream_detector.cpp`, `gnss_driver/src/receiver_discovery.cpp`, adds their shared private validation helper, and adds/updates focused discovery coverage.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga025-repro` passed exactly `#BESTNAVA,garbage\r\n` (no CRC and no parseable BESTNAVA payload) to the public detector and discovery APIs. Current output was `stream_protocol=unicore_ascii stream_bytes=19 family=unicore confidence=high score=100 unicore_ascii_seen=1 random_ascii_seen=0 reason=unicore_ascii:+100`; all assertions passed and the reproducer exited 0.
+Regression test added: `TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence` in `gnss_driver/tests/test_receiver_discovery.cpp` exercises both public APIs with a supported name plus missing CRC/garbage payload, bad CRC, CRC-valid malformed payload, truncation, and unrelated text containing `#`; it also verifies a CRC-valid parseable BESTNAVA record and a noisy-prefix-plus-valid-record stream.
 
-Remaining defect, if any: A name alone still supplies decisive Unicore detection and high-confidence discovery. Random/noisy or foreign text with a supported `#` token can select a receiver family before any integrity or semantic evidence is available.
+Pre-fix failure evidence: Before the production change, the targeted `gnss_driver_test_receiver_discovery` CTest failed nine assertions: each complete unverified/malformed input selected `unicore_ascii` and high-confidence Unicore discovery, and a leading garbage record made `StreamDetector` select it before the following valid record.
 
-Recommended next action: In a separate implementation task, require CRC-valid structurally plausible supported records (or a verified command response) for positive Unicore discovery evidence, and keep checksum-free text unknown/low-confidence unless independently corroborated; add absent/bad-CRC and malformed-supported-name regressions.
+Production fix: `IsVerifiedUnicoreAsciiRecord` first rejects non-`#` and non-CRC-valid frames, then dispatches each supported output type to its existing parser and accepts only `kRecordReady` with a record. Unsupported or malformed CRC-valid text is not evidence.
+
+Post-fix validation: The focused discovery and foundation tests pass. All five unverified/malformed vectors remain `kUnknown` with no Unicore evidence; a structurally valid CRC-verified BESTNAVA, including after the noisy prefix, is `unicore_ascii`/high-confidence Unicore with exactly one ASCII record. The complete `gnss_driver` CTest suite passed 19/19 and complete non-ROS CTest passed 61/61.
+
+Sanitizer result: Not separately run; this is a bounded framed-text validation change and the targeted, component, and complete non-ROS suites passed.
+
+Remaining defect, if any: None for high-confidence discovery from the supported ASCII runtime record set. Documented CRC-omitting Unicore outputs are deliberately not sufficient by themselves to select the vendor family at high confidence; they require separate corroborating evidence.
+
+Recommended next action: Keep the missing/bad-CRC and CRC-valid-malformed cases beside the valid-stream cases whenever new supported Unicore ASCII records are added.
 
 ### UGA-026 — serial “raw mode” inherits stop-bit and flow-control flags
 
@@ -534,19 +552,27 @@ Recommended next action: If a future API requires timeouts beyond the terminal d
 
 ### UGA-028 — adopted socket writes can terminate the process with SIGPIPE
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: Normal `Open` explicitly sets `use_generic_fd_io_ = false` after a connected socket is configured (`gnss_transport/src/tcp_client_transport.cpp` lines 301-313), and its write branch uses `send` with `MSG_NOSIGNAL` where available (lines 442-457). In contrast, `AdoptConnectedSocket` sets the same flag to true at lines 321-343; its write branch then calls plain `::write` at lines 445-448. `ConfigureConnectedSocket` configures nonblocking/CLOEXEC but no per-socket SIGPIPE suppression (lines 57-79), and the library makes no process-global SIGPIPE policy guarantee. The focused old-to-current diff is empty for this transport.
+Current evidence: `AdoptConnectedSocket` now sets `use_generic_fd_io_ = false`, matching `Open`. Both public socket-construction paths therefore use `recv`/`send`; the existing Linux `send` branch supplies `MSG_NOSIGNAL`, so a broken socket reports the normal write error without requiring a process-global SIGPIPE policy.
 
-Relevant changes since old audit: No commit through `aaacc6be92463ad493d6f4260426cf645188078f` changes normal or adopted socket I/O, `MSG_NOSIGNAL` use, or signal policy. The two construction paths still have different fatality behavior.
+Relevant changes since old audit: No production-base commit changes normal or adopted socket I/O, `MSG_NOSIGNAL`, or signal policy. This fix changes only the adopted-socket I/O selection and focused TCP transport coverage.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga028-repro` forked a child, restored the default SIGPIPE disposition, adopted one end of a socket pair, closed the peer, and called the current public `Write`. The parent observed `child_signaled=1 signal=13 adopted_sigpipe=1`; the reproducer exited 0. Source inspection separately confirms normal opened TCP sockets take the `send(MSG_NOSIGNAL)` branch rather than this generic-fd branch.
+Regression test added: `TestClosedPeerWritesDoNotRaiseSigpipe` in `gnss_transport/tests/test_tcp_client_transport.cpp`. A forked child restores `SIGPIPE` to `SIG_DFL`, adopts one end of a closed `SOCK_STREAM` pair, writes, and succeeds only if `Write` returns `kWriteFailure` with the corresponding metric. The same test creates a synchronized loopback TCP listener, opens it through `TcpClientTransport::Open`, abortively closes the accepted peer, then verifies the same survival/error contract for the normal path.
 
-Remaining defect, if any: A routine closed peer can still terminate a process that uses the documented adopted-socket API before `Write` returns `kWriteFailure`. Normal-connected and adopted sockets remain observably inconsistent, and safety currently depends on an external process-wide signal setting.
+Pre-fix failure evidence: With the newly added adopted-socket child test and default SIGPIPE disposition, the targeted CTest failed with `wait status=13`; the child was terminated by SIGPIPE before `Write` could return. This reproduced the audit defect. The normal-path source branch was independently `send(MSG_NOSIGNAL)` before the fix.
 
-Recommended next action: In a separate implementation task, suppress SIGPIPE locally for all socket ownership paths (for example `send(MSG_NOSIGNAL)` after verifying socket type, or supported per-socket configuration), preserve a genuinely generic fd API separately if needed, and add subprocess regressions for normal and adopted closed-peer writes.
+Production fix: Stop routing the documented adopted *socket* API through the generic `::read`/`::write` branch; route it through the existing socket-safe `recv`/`send(MSG_NOSIGNAL)` branch instead. No partial-write, nonblocking, or error-mapping logic changed.
+
+Post-fix validation: The focused subprocess test passed for both adopted and normally opened closed-peer sockets, proving child-process survival and `kWriteFailure`. Complete `gnss_transport` CTest passed 3/3; complete `gnss_ntrip` CTest passed 7/7; complete non-ROS CTest passed 61/61; relevant ROS2 `test_ntrip_node` passed 1/1.
+
+Sanitizer result: Not separately run; this is a process-signal/socket-system-call regression. The subprocess test used the default SIGPIPE disposition and passed under the normal system socket environment.
+
+Remaining defect, if any: None for the Linux `TcpClientTransport` normal and adopted socket APIs. The direct loopback portion of the regression is skipped only in the restricted file-system sandbox because AF_INET socket creation is denied (`EPERM`); it passed when run outside that sandbox. A future public generic-file-descriptor API must remain separate rather than reusing `AdoptConnectedSocket`.
+
+Recommended next action: Retain the default-disposition subprocess regression whenever transport I/O ownership paths change.
 
 ### UGA-029 — malformed HTTP status codes with a `200` prefix are accepted
 

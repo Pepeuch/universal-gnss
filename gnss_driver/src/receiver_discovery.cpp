@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "unicore_ascii_validation.hpp"
 #include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
@@ -170,14 +171,6 @@ void MaybeInsertPreferredCandidate(std::map<std::string, ReceiverPortCandidate>&
   }
 }
 
-bool IsSupportedUnicoreAsciiName(const std::string_view name)
-{
-  return name == "PVTSLNA" || name == "BESTNAVA" || name == "RTKSTATUSA" ||
-         name == "RTCMSTATUSA" || name == "SATSINFOA" || name == "BESTSATA" ||
-         name == "JAMSTATUSA" || name == "FREQJAMSTATUSA" || name == "HWSTATUSA" ||
-         name == "AGCA";
-}
-
 bool IsKnownGnssNmeaTalker(const std::string_view talker)
 {
   return talker == "GP" || talker == "GL" || talker == "GA" || talker == "GB" ||
@@ -246,7 +239,7 @@ UnicoreAsciiDetectionCounts CountUnicoreAsciiRecords(
     }
 
     const auto& frame = *result.record;
-    if (frame.sync_char == '$' || !IsSupportedUnicoreAsciiName(frame.message_name))
+    if (!detail::IsVerifiedUnicoreAsciiRecord(frame))
     {
       continue;
     }

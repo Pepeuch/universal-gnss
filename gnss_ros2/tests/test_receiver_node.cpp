@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -1142,6 +1143,42 @@ TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
     auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
     EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
                  std::invalid_argument);
+  }
+}
+
+TEST_F(ReceiverNodeTest, ValidatesReadChunkSizeBeforeConversionToSizeT)
+{
+  constexpr std::int64_t kMaximumReadChunkSize = 1024 * 1024;
+
+  for (const std::int64_t value : {
+           std::int64_t{-1},
+           std::numeric_limits<std::int64_t>::min(),
+           std::int64_t{0},
+           kMaximumReadChunkSize + 1,
+           std::numeric_limits<std::int64_t>::max(),
+       })
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(
+        std::vector<rclcpp::Parameter>{rclcpp::Parameter("read_chunk_size", value)});
+    auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+    EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
+                 std::invalid_argument)
+        << "read_chunk_size=" << value << " should be rejected before conversion to size_t";
+  }
+
+  for (const std::int64_t value : {
+           std::int64_t{1},
+           std::int64_t{65536},
+           kMaximumReadChunkSize,
+       })
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(
+        std::vector<rclcpp::Parameter>{rclcpp::Parameter("read_chunk_size", value)});
+    auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+    EXPECT_NO_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options))
+        << "read_chunk_size=" << value << " should remain valid";
   }
 }
 

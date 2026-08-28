@@ -50,6 +50,8 @@ enum class ReceiverTransportKind : std::uint8_t
   kTcp = 1,
 };
 
+constexpr std::int64_t kMaximumReadChunkSizeBytes = 1024 * 1024;
+
 struct ReceiverNodeConfig
 {
   universal_gnss_driver::ReceiverSessionConfig session{};
@@ -494,8 +496,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.tcp_host = node.declare_parameter<std::string>("tcp_host", "");
   const auto tcp_port = node.declare_parameter<std::int64_t>("tcp_port", 0);
   config.publish_rate_hz = node.declare_parameter<double>("publish_rate_hz", 10.0);
-  config.read_chunk_size = static_cast<std::size_t>(
-      node.declare_parameter<std::int64_t>("read_chunk_size", 65536));
+  const auto read_chunk_size = node.declare_parameter<std::int64_t>("read_chunk_size", 65536);
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.discovery_include_platform_uarts =
       node.declare_parameter<bool>("discovery_include_platform_uarts", false);
@@ -574,6 +575,12 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   {
     ThrowInvalidParameter(node, "publish_rate_hz", "must be finite and strictly positive");
   }
+
+  if (read_chunk_size <= 0 || read_chunk_size > kMaximumReadChunkSizeBytes)
+  {
+    ThrowInvalidParameter(node, "read_chunk_size", "must be in the 1..1048576 range");
+  }
+  config.read_chunk_size = static_cast<std::size_t>(read_chunk_size);
 
   if (config.frame_id.empty())
   {
