@@ -194,51 +194,87 @@ Recommended next action: Retain manual-derived golden command assertions for bot
 
 ### UGA-011 — `SIGNALGROUP` can reboot before the remainder of the plan
 
-Status: **PARTIALLY FIXED**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: Current default runtime UM982 planning no longer emits `CONFIG SIGNALGROUP`, eliminating the original default-plan hazard. An explicit override still produces a production-ready plan with `SIGNALGROUP` at command 6 before all output commands. `gnss_tools/src/config_apply.cpp`, `ExecuteUnicoreSignalGroupAwarePhase`, current lines 1592-1891 now models a dedicated required-command workflow: query, apply the signal group before the other profile commands, settle, close/reopen, wait for an active response, query/verify the new group, reopen, then execute the remaining phases. However `ExecuteConfigApply` lines 2507-2511 enters it only when `FindFirstRequiredUnicoreSignalGroupCommandIndex` succeeds. Runtime explicit overrides are marked optional/continue-on-failure, so they bypass all reopen/reprobe handling and use ordinary sequential apply.
+Current evidence: `gnss_tools/src/config_apply.cpp` now routes every emitted Unicore `CONFIG SIGNALGROUP` command—not only required commands—through `ExecuteUnicoreSignalGroupAwarePhase`. That phase queries the current value, closes/reopens before the dedicated command, waits for recovery, reprobes an active receiver response, queries/verifies the applied value, reopens again, and only then executes the pre/post profile phases. The generic apply path rejects an emitted `SIGNALGROUP` plan without transport hooks before any write. A plan with no `SIGNALGROUP` still stays on the ordinary apply path and makes no recovery calls.
 
-Relevant changes since old audit: The Unicore commits substantially reduce and model the risk: `2431bcb` removed the automatic runtime command, made overrides optional, and added the dedicated recovery machinery; the broader recovery/baud commits added transport hooks and bounded reopen/probe support. Required `SIGNALGROUP` commands in reset/persistent workflows now use that machinery, and current tests simulate their recovery. The same `2431bcb` deliberately excludes optional overrides from the special path, leaving a supported execution route exposed.
+Relevant changes since old audit: The production base had already added the dedicated workflow for required persistent/recovery plans, but intentionally limited its selection to `FindFirstRequiredUnicoreSignalGroupCommandIndex`. This fix replaces that condition with the all-command `FindFirstUnicoreSignalGroupCommandIndex` in the normal, recovery-profile, and runtime-baud workflow selections. It retains optional-command semantics: a receiver-rejected optional override is verified as unchanged after recovery and the rest of the plan continues; a required mismatch, missing verification, or failed reopen/reprobe stops safely.
 
-Reproduction/test result: The current planner without an override emitted 13 commands and no `SIGNALGROUP`; with `--signal-group '3 6'` it emitted a production-ready 14-command plan with command 6 `CONFIG SIGNALGROUP 3 6` and command 7 `GPGGA 1`. `/tmp/universal-gnss-current-uga011-repro` then simulated six accepted responses followed by a reboot/disconnect, while providing usable transport hooks. It printed `status=9 completed=6 reopen_calls=0 probe_calls=0 signal_written=1 following_gpgga_written=1 following_on_same_transport=1`: normal apply wrote the next command on the unrecovered connection and failed, without invoking either hook. The complete current `gnss_tools_test_config_apply` binary passed, including its required-workflow recovery tests but no accepted-optional-override reboot case.
+Files changed: `gnss_tools/src/config_apply.cpp`, `gnss_tools/tests/test_config_apply.cpp`, and this delta report.
 
-Remaining defect, if any: Default runtime and required persistent/recovery plans are protected, but an explicitly requested runtime `SIGNALGROUP` remains production-ready, precedes later commands, and is not treated as a reboot boundary because it is optional. If accepted and followed by receiver restart, later output commands are attempted on the stale transport. Optional rejection may continue safely; optional acceptance with reboot is the unhandled branch.
+Regression tests added: `TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary` simulates an accepted runtime override followed by a disconnect and asserts recovery hooks run, verified reopen/reprobe succeeds, no stale write occurs, and `GPGGA` follows the recovered boundary. `TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase` proves a failed verification returns `kRejected` before `GPGGA`. The existing optional-rejection test now covers an explicit `PARSING FAILED GRAMMAR ERROR` response, required recovery, and safe continuation only after verification.
 
-Recommended next action: In a separate implementation task, route every actually accepted `SIGNALGROUP` through the bounded close/reopen/active-response/verification boundary while preserving optional failure semantics for receiver rejection, and add the accepted-override disconnect/recovery regression.
+Pre-fix failure evidence: Before the production change, the new tests failed four assertions: the accepted optional override did not complete or prove post-boundary recovery, and verification failure neither stopped safely nor prevented the later output command. After broadening the selection but before preserving optional-rejection semantics, the existing optional-rejection regression failed two assertions; that proved the recovery path must distinguish receiver rejection from an accepted rebooting override.
+
+Production fix: Select the dedicated state boundary whenever any Unicore `SIGNALGROUP` command is actually present. Refuse the generic no-hook path without writing. After a verified optional command rejection, retain the receiver's reported unchanged group and continue the pre/post phases only through reopened transport; verification absence, required mismatch, and recovery failures remain terminal.
+
+Post-fix validation: `gnss_tools_test_config_apply` passed 1/1. The complete `gnss_tools` CTest selection passed 11/11. Full non-ROS CTest passed 61/61 outside the restricted sandbox; the sandbox itself denies the socket `send(MSG_NOSIGNAL)` used by unrelated TCP/NTRIP tests. No ROS2 test is applicable: this change is limited to the CLI/configuration-application workflow and does not alter ROS2 surfaces.
+
+Compatibility/public-behavior impact: Normal no-override plans remain unchanged. Explicit runtime `SIGNALGROUP` plans now require the existing recovery hooks and return `kTransportUnavailable` rather than risking a stale write when hooks are unavailable. Save and output commands retain their existing plan order, but are now sent only after the documented recovery/verification boundary.
+
+Sanitizer result: Not separately run; the regression exercises deterministic transport lifecycle and state-machine behavior. Targeted, tools-wide, and full non-ROS validation passed.
+
+Remaining defect, if any: None in the configuration-application state-machine path. Physical Unicore validation remains recommended because actual reset duration, port movement, and baud behavior vary by model and firmware.
+
+Recommended next action: Run the accepted-override recovery sequence on every supported Unicore model/firmware while retaining the hook-based recovery assertions.
 
 ### UGA-012 — unknown Unicore models receive guessed production-ready configuration
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_driver/src/receiver_auto_config.cpp`, `BuildUnicorePlan`, current lines 950-975 resolves an unrecognized explicit model to the generic profile but still hard-codes `receiver_recognized=true` and `config_supported=true`. Lines 1027-1158 build the ordinary rover profile, and lines 1166-1167 mark it production-ready and executable regardless of model identity. The warning at lines 978-993 calls this a safe generic fallback, but the plan still contains required `MODE ROVER`, NMEA-version, RTK/DGPS mutations and optional output mutations. Current tests explicitly expect this unknown-model plan to succeed.
+Current evidence: `gnss_driver/src/receiver_auto_config.cpp`, `BuildUnicorePlan`, now stops before profile construction when `ResolveUnicoreModelProfile` returns `kUnknown`. Mutating requests return `kUnsupportedReceiver`, an empty command list, `receiver_recognized=false`, `config_supported=false`, `production_ready=false`, and `ready_to_execute=false`. This applies equally to absent, empty, malformed, case-variant, and future model identifiers and prevents a `SIGNALGROUP` override from bypassing the guard. Documented UM960, UM980, UM981, and UM982 profiles retain their normal supported plans. `runtime_only` remains a successful zero-command/read-only plan but explicitly reports no recognized model or configuration support and is not ready to execute as configuration.
 
-Relevant changes since old audit: The intervening Unicore work removed default `UNLOG` and automatic runtime `SIGNALGROUP`, corrected output grammar, changed model-specific mower mode selection, and improved warnings. That reduces the old unknown-model plan from 14 to 13 commands and avoids two particular mutations, but no commit changes the unknown-model safety precondition or the production-ready classification. New logic can additionally allow an explicit advanced `SIGNALGROUP` override for an unknown model with warnings, rather than treating unknown identity as a configuration stop.
+Relevant changes since old audit: The production-base changes removed automatic `UNLOG` and runtime `SIGNALGROUP`, corrected command grammar, and added warnings, but still treated the generic unknown profile as production-ready. This fix replaces that fallback only at the model-recognition boundary; it neither narrows any documented model profile nor introduces an expert bypass.
 
-Reproduction/test result: `gnss_config_plan unicore rover_high_precision --model FUTURE123` still exited successfully with `Production ready: yes`, `Ready to execute later: yes`, and 13 commands, including five required configuration mutations and eight output commands. Its JSON reported `receiver_recognized=true`, `config_supported=true`, and `production_ready=true`. `/tmp/universal-gnss-current-uga012-repro` then executed that plan against an in-memory duplex and printed `planned=13 apply_status=0 completed=13 mutations_written=1`, confirming the unknown model can reach actual write dispatch rather than only dry-run presentation. The current receiver-auto-config tests passed and encode the generic fallback as expected behavior.
+Files changed: `gnss_driver/src/receiver_auto_config.cpp`, `gnss_driver/tests/test_receiver_auto_config.cpp`, `gnss_tools/tests/test_config_plan.cpp`, `gnss_tools/tests/test_profile_preview.cpp`, and this delta report.
 
-Remaining defect, if any: Explicitly unknown model identity still does not block vendor-specific mutation or the production-ready claim. Removing `UNLOG` and automatic `SIGNALGROUP` narrows the damage surface but does not establish that `MODE`, NMEA/RTK/DGPS settings, output grammar, or behavior are valid for the unknown product.
+Regression test added: `TestUnicoreUnknownModelConfigurationIsBlocked` covers `FUTURE123`, `future123`, malformed `UM98?`, empty, and absent identifiers; a `SIGNALGROUP` override; persistent mutation; unknown-model `runtime_only`; and all four currently documented models. Config-plan and profile-preview assertions now preserve the model identifier in the reported error while requiring zero commands for unknown models. Existing profile-workflow fixtures now identify UM981 explicitly instead of relying on the removed unsafe generic fallback.
 
-Recommended next action: In a separate implementation task, make explicit unknown models read-only/no-op for portable configuration unless a clearly unsafe expert override is selected, set `config_supported`/`production_ready` accordingly, and assert zero mutating commands for unknown, empty, and malformed model tokens.
+Pre-fix failure evidence: Before the production change, `gnss_driver_test_receiver_auto_config` failed eight new assertions: each of the five unknown/empty forms returned a 13-command production-ready plan, an unknown override emitted a command, persistent configuration was accepted, and unknown `runtime_only` falsely claimed recognition/configuration support and readiness.
+
+Production fix: Gate Unicore mutation on a documented resolved model. For unknown identity, return a no-command `kUnsupportedReceiver` plan with an explicit error and no capabilities claim; for `runtime_only`, construct only the existing no-change plan and clear the configuration-support/readiness claims. The guard executes before rate, baud, output, signal-profile, or persistence profile construction.
+
+Post-fix validation: The focused driver/config-plan/profile-preview tests passed 3/3. Complete `gnss_driver` plus `gnss_tools` CTest passed 30/30. Complete non-ROS CTest passed 61/61 outside the restricted sandbox; the sandbox denies socket operations required by unrelated TCP/NTRIP tests. Repository search found no ROS2 caller of `BuildReceiverAutoConfigPlan` or the config-apply workflow, so no ROS2 test applies.
+
+Compatibility/public-behavior impact: A prior generic Unicore profile without `--model`, or an unrecognized model string, no longer produces a mutating plan. Operators must supply one of the documented model identities for configuration. Read-only `runtime_only` discovery/inspection behavior remains available with zero receiver writes; no unsafe expert override was added.
+
+Sanitizer result: Not separately run; this is deterministic planner classification/command-generation coverage. Focused, driver/tools-wide, and complete non-ROS validation passed.
+
+Remaining defect, if any: None for unknown-model mutation or production-ready classification. Hardware/vendor validation is still recommended when adding a new supported model, before adding it to the documented model resolver.
+
+Recommended next action: Keep the unknown-model guard tests and require a local vendor-documentation review plus hardware provisioning evidence for every future supported model entry.
 
 ### UGA-013 — high Unicore rate overrides round to a zero-period command
 
-Status: **PARTIALLY FIXED**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_driver/src/receiver_auto_config.cpp` current lines 289-358 now normalizes user rates to documented `{1,2,5,10,20,50}` Hz values before computing a period. `gnss_driver/src/unicore_config_profile_builder.cpp` lines 17-28 and 159-186 independently accept only periods within `1e-6` of `{1,0.5,0.2,0.1,0.05,0.02}` seconds before `BuildOutputCommand` serializes them at lines 147-156. Thus the original path from accepted 10,000 Hz to `BESTNAVA 0` is gone. The generic front-end validation at auto-config lines 486-500 still accepts every positive finite double, leaving extreme handling to nearest-rate normalization.
+Current evidence: `gnss_driver/src/receiver_auto_config.cpp` now validates every supplied Unicore rate against the existing documented `{1,2,5,10,20,50}` Hz domain before `NormalizeUnicoreOutputRateHz` performs distance arithmetic. Non-finite and non-positive values remain rejected by the shared validator; finite values below 1 Hz or above 50 Hz are now `kInvalidArgument` with no commands. The existing `gnss_driver/src/unicore_config_profile_builder.cpp` period allowlist continues to validate the final output periods `{1,0.5,0.2,0.1,0.05,0.02}` before three-decimal command serialization. Accepted input therefore reaches only an exactly representable documented period.
 
-Relevant changes since old audit: `f4417dd` introduced both the documented supported-rate/period tables, nearest-rate normalization with warnings, and low-level period validation; `56d747e` retained those checks while switching to current-port command grammar. These commits directly fix zero-period serialization. No later commit changes the floating-point nearest-rate calculation or compact warning formatting.
+Relevant changes since old audit: `f4417dd` added documented rate/period tables and final-period validation, eliminating the original `BESTNAVA 0` serialization. It retained a broad positive-finite front-end domain, however, allowing extreme values to corrupt nearest-rate selection. This fix makes the front-end domain match the pre-existing documented table without changing the accepted in-domain rounding policy or low-level serializer.
 
-Reproduction/test result: The current CLI rejected 0, negative, and infinity. Requests `7.49999`, `7.5`, and `7.50001` serialized respectively to `BESTNAVA 0.2`, `0.2`, and `0.1`; `34.99999`, `35`, and `35.00001` serialized to `0.05`, `0.05`, and `0.02`. The original `10000` case now warns and emits `BESTNAVA 0.02`, never zero. `/tmp/universal-gnss-current-uga013-repro` exercised low-level representability boundaries: period `0.0001` and values more than `1e-6` outside 0.02/0.05 were rejected, while in-tolerance values serialized exactly to `0.02`/`0.05`. Both current builder and config-plan tests passed. An adversarial `1e308` request, however, normalized to `BESTNAVA 1` rather than the mathematically nearest supported 50 Hz because all subtraction distances lose distinction at that magnitude; `1e-300` normalized safely to 1 Hz but its warning rendered the requested rate as `0`.
+Files changed: `gnss_driver/src/receiver_auto_config.cpp`, `gnss_driver/tests/test_receiver_auto_config.cpp`, and this delta report.
 
-Remaining defect, if any: Validated and serialized commands can no longer become zero, so the receiver-invalid command defect is fixed. Extreme finite front-end inputs remain accepted, and the documented nearest-rate policy is numerically wrong at very large magnitudes (1e308 becomes 1 Hz); sub-millihertz warning text also loses the requested magnitude. These are remaining input-normalization/reporting defects within the same rate path.
+Regression test added: `TestUnicoreOutputRateDomainAndSerialization` asserts exact serialized BESTNAVA periods at all six documented boundaries, lower-tie/upper-neighbor behavior at 7.5/7.5001 Hz, and rejection before command generation for zero, negative, `+NaN`, `-NaN`, `+Inf`, `-Inf`, a subnormal, immediately below 1 Hz, immediately above 50 Hz, 10,000 Hz, and `1e308`.
 
-Recommended next action: In a separate implementation task, reject or explicitly clamp rates outside the documented 1-50 Hz domain before distance arithmetic, preserve scientific notation for extreme warning values, and retain final serialized-period validation plus midpoint, tolerance-edge, subnormal, and maximum-finite regression cases.
+Pre-fix failure evidence: Before the production change, the focused driver test failed five new assertions: the subnormal, both just-outside-boundary values, 10,000 Hz, and `1e308` each produced a valid mutation plan. The latter reproduced the delta defect by collapsing to `BESTNAVA 1`; the old 10,000-Hz case was normalized to 50 Hz rather than rejected. The existing shared validation already rejected zero, negative, NaN, and infinities.
+
+Production fix: Add `ValidateUnicoreOutputRateHz` after shared finiteness/positivity validation and before output-rate normalization. It rejects rate inputs outside the documented inclusive 1–50 Hz range, so the nearest-distance computation cannot overflow, underflow, or normalize an absurd request to an unrelated command.
+
+Post-fix validation: The focused auto-config, Unicore builder, config-plan, and profile-preview tests passed 4/4. The rebuilt CLI now returns exit 1 with `Unicore rate-hz must be within the documented portable range of 1 to 50 Hz` for `--rate-hz 1e308`; 50 Hz succeeds and emits `BESTNAVA 0.02`. Complete `gnss_driver` plus `gnss_tools` CTest passed 30/30. Complete non-ROS CTest passed 61/61 outside the restricted sandbox. No ROS2 caller uses the auto-configuration planner or config-apply workflow, so no ROS2 test applies.
+
+Compatibility/public-behavior impact: Legal documented rates and existing in-range nearest-rate behavior are unchanged. Prior finite out-of-range requests that were silently normalized (including 10,000 Hz) now fail explicitly rather than generate an unrelated receiver command.
+
+Sanitizer result: Not separately run; this is bounded numeric input validation plus deterministic planner serialization. Focused, driver/tools-wide, CLI, and complete non-ROS validation passed.
+
+Remaining defect, if any: None for Unicore output-rate validation and serialized-period representability in the portable 1–50 Hz contract. Hardware validation remains recommended for the existing manual-derived rate table on each supported model/firmware.
+
+Recommended next action: Retain boundary/midpoint/extreme-rate regressions and require vendor-documentation plus hardware acceptance evidence before extending the portable rate table.
 
 ### UGA-014 — RTCM ROS stamps mix monotonic and ROS/system clock domains
 
@@ -270,9 +306,9 @@ Recommended next action: In a separate implementation task, define the public `R
 | UGA-008 | STILL PRESENT | Confirmed |
 | UGA-009 | STILL PRESENT | Confirmed |
 | UGA-010 | ALREADY FIXED | Confirmed |
-| UGA-011 | PARTIALLY FIXED | Confirmed |
-| UGA-012 | STILL PRESENT | Confirmed |
-| UGA-013 | PARTIALLY FIXED | Confirmed |
+| UGA-011 | FIXED | Confirmed |
+| UGA-012 | FIXED | Confirmed |
+| UGA-013 | FIXED | Confirmed |
 | UGA-014 | STILL PRESENT | Confirmed |
 | UGA-015 | ALREADY FIXED | Confirmed |
 | UGA-016 | STILL PRESENT | Confirmed |

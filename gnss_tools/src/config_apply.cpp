@@ -470,20 +470,6 @@ std::optional<std::size_t> FindFirstUnicoreSignalGroupCommandIndex(
   return std::nullopt;
 }
 
-std::optional<std::size_t> FindFirstRequiredUnicoreSignalGroupCommandIndex(
-    const std::vector<ConfigPlanCommand>& commands, const std::size_t begin_index)
-{
-  for (std::size_t index = begin_index; index < commands.size(); ++index)
-  {
-    if (IsUnicoreSignalGroupCommand(commands[index]) && commands[index].required)
-    {
-      return index;
-    }
-  }
-
-  return std::nullopt;
-}
-
 std::string ResolveRequestedDevicePath(const ConfigApplyOptions& options)
 {
   if (!options.device_path.empty())
@@ -1730,6 +1716,8 @@ CommandPhaseOutcome ExecuteUnicoreSignalGroupAwarePhase(
   const auto signalgroup_outcome = ExecuteUnicoreCommandPhase(
       result, transport, signalgroup_command, options, command_index_offset + *signalgroup_index);
   MergeExecutionSummaries(outcome.summary, signalgroup_outcome.summary);
+  const bool signalgroup_failure_was_optional =
+      signalgroup_outcome.summary.optional_commands_failed > 0u;
   if (!IsSuccessfulApplyStatus(signalgroup_outcome.status))
   {
     outcome.status = signalgroup_outcome.status;
@@ -1814,12 +1802,20 @@ CommandPhaseOutcome ExecuteUnicoreSignalGroupAwarePhase(
 
   if (!UnicoreSignalGroupsMatch(*verification_query.groups, *planned_groups))
   {
-    outcome.status = ConfigApplyStatus::kRejected;
-    outcome.error_message =
-        "receiver kept CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*verification_query.groups) +
-        " after applying CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*planned_groups);
-    outcome.summary.final_status = "rejected";
-    return outcome;
+    if (!signalgroup_failure_was_optional)
+    {
+      outcome.status = ConfigApplyStatus::kRejected;
+      outcome.error_message =
+          "receiver kept CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*verification_query.groups) +
+          " after applying CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*planned_groups);
+      outcome.summary.final_status = "rejected";
+      return outcome;
+    }
+
+    result.progress_log.push_back(
+        "Receiver rejected the optional CONFIG SIGNALGROUP command; verified that it retained " +
+        FormatUnicoreSignalGroup(*verification_query.groups) +
+        " and will continue the remaining profile after recovery");
   }
 
   static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
@@ -2071,7 +2067,7 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
 
   result.progress_log.push_back("Reopened transport at " + std::to_string(recovery_baud) +
                                 " bps for post-reset profile apply");
-  if (FindFirstRequiredUnicoreSignalGroupCommandIndex(profile_phase, 0u).has_value())
+  if (FindFirstUnicoreSignalGroupCommandIndex(profile_phase, 0u).has_value())
   {
     phase = ExecuteUnicoreSignalGroupAwarePhase(result,
                                                 transport,
@@ -2281,7 +2277,7 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
     }
   }
 
-  if (FindFirstRequiredUnicoreSignalGroupCommandIndex(profile_phase, 0u).has_value())
+  if (FindFirstUnicoreSignalGroupCommandIndex(profile_phase, 0u).has_value())
   {
     phase = ExecuteUnicoreSignalGroupAwarePhase(
         result, transport, profile_phase, options, baud_phase.size(), hooks, active_baud);
@@ -2504,9 +2500,18 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
     return ExecuteUnicoreRuntimeBaudSwitchWorkflow(transport, options, std::move(result), *hooks);
   }
 
-  if (result.plan.vendor == "unicore" && hooks != nullptr &&
-      FindFirstRequiredUnicoreSignalGroupCommandIndex(result.plan.commands, 0u).has_value())
+  if (result.plan.vendor == "unicore" &&
+      FindFirstUnicoreSignalGroupCommandIndex(result.plan.commands, 0u).has_value())
   {
+    if (hooks == nullptr)
+    {
+      result.status = ConfigApplyStatus::kTransportUnavailable;
+      result.error_message =
+          "Unicore SIGNALGROUP apply requires transport hooks for reopen and verification";
+      result.execution_summary.final_status = "transport_unavailable";
+      return result;
+    }
+
     auto phase = ExecuteUnicoreSignalGroupAwarePhase(
         result, transport, result.plan.commands, options, 0u, *hooks, result.transport_baud_rate);
     result.execution_summary = phase.summary;

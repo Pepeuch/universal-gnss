@@ -1,6 +1,9 @@
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -282,14 +285,13 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   generic_request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
 
   const auto generic_plan = BuildReceiverAutoConfigPlan(generic_request);
-  ctx.Expect(generic_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 generic_plan.validation.generated_command_count == 13u &&
-                 generic_plan.validation.runtime_command_count == 13u &&
-                 !ContainsCommandText(generic_plan, "CONFIG SIGNALGROUP") &&
-                 !ContainsCommandText(generic_plan, "UNLOG") &&
-                 ContainsWarning(generic_plan, "model identity is unknown"),
-             "generic Unicore rover planning should skip CONFIG SIGNALGROUP and warn when the "
-             "model is unknown");
+  ctx.Expect(generic_plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
+                 generic_plan.commands.empty() && !generic_plan.validation.receiver_recognized &&
+                 !generic_plan.validation.config_supported &&
+                 !generic_plan.validation.production_ready &&
+                 ContainsWarning(generic_plan, "requires an explicitly recognized model"),
+             "Unicore rover planning without a documented model must be blocked before it emits "
+             "mutating commands");
 
   ReceiverAutoConfigRequest um982_request = generic_request;
   um982_request.receiver_model = "UM982";
@@ -456,15 +458,13 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   unknown_model_request.receiver_model = "UM952";
   unknown_model_request.signal_profile = ReceiverAutoConfigSignalProfile::kBalanced;
   const auto unknown_model_plan = BuildReceiverAutoConfigPlan(unknown_model_request);
-  ctx.Expect(unknown_model_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+  ctx.Expect(unknown_model_plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
                  unknown_model_plan.receiver_model == std::optional<std::string>{"UM952"} &&
-                 ContainsCommandText(unknown_model_plan, "MODE ROVER") &&
-                 !ContainsCommandText(unknown_model_plan, "MODE ROVER SURVEY MOW") &&
+                 unknown_model_plan.commands.empty() &&
                  !ContainsCommandText(unknown_model_plan, "CONFIG SIGNALGROUP") &&
                  ContainsWarning(unknown_model_plan, "UM952") &&
-                 ContainsWarning(unknown_model_plan, "safe generic non-baseline fallback"),
-             "unknown Unicore models should keep the safe non-baseline fallback and report why "
-             "CONFIG SIGNALGROUP was skipped");
+                 ContainsWarning(unknown_model_plan, "requires an explicitly recognized model"),
+             "unknown Unicore models must not receive a generic fallback mutation plan");
 
   ReceiverAutoConfigRequest ublox_request;
   ublox_request.receiver_family = ReceiverDetectedFamily::kUblox;
@@ -482,18 +482,159 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
              "honest and warn while keeping the standard plan");
 }
 
+void TestUnicoreUnknownModelConfigurationIsBlocked(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  const std::array<std::optional<std::string>, 5u> unknown_models = {
+      std::optional<std::string>{"FUTURE123"},
+      std::optional<std::string>{"future123"},
+      std::optional<std::string>{"UM98?"},
+      std::optional<std::string>{""},
+      std::nullopt,
+  };
+  for (const auto& model : unknown_models)
+  {
+    request.receiver_model = model;
+    const auto plan = BuildReceiverAutoConfigPlan(request);
+    ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
+                   plan.commands.empty() && !plan.validation.receiver_recognized &&
+                   !plan.validation.config_supported && !plan.validation.production_ready &&
+                   !plan.validation.ready_to_execute,
+               "unknown, malformed, empty, and absent Unicore models must not receive a "
+               "mutating production-ready configuration");
+  }
+
+  request.receiver_model = "FUTURE123";
+  request.signal_group_override = std::vector<std::uint8_t>{9u, 0u};
+  const auto override_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(override_plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
+                 override_plan.commands.empty() &&
+                 !ContainsCommandText(override_plan, "CONFIG SIGNALGROUP"),
+             "an unknown Unicore model must not bypass the configuration guard with a "
+             "SIGNALGROUP override");
+
+  request.signal_group_override.reset();
+  request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  const auto persistent_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(persistent_plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
+                 persistent_plan.commands.empty() && !persistent_plan.validation.production_ready,
+             "persistent configuration must be blocked for an unknown Unicore model");
+
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  const auto read_only_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(read_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 read_only_plan.commands.empty() && !read_only_plan.validation.receiver_recognized &&
+                 !read_only_plan.validation.config_supported &&
+                 !read_only_plan.validation.production_ready &&
+                 !read_only_plan.validation.ready_to_execute,
+             "runtime_only should remain a zero-command read-only plan for an unknown Unicore "
+             "model without claiming configuration support");
+
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  for (const std::string supported_model : {"UM960", "UM980", "UM981", "UM982"})
+  {
+    request.receiver_model = supported_model;
+    const auto plan = BuildReceiverAutoConfigPlan(request);
+    ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk && !plan.commands.empty() &&
+                   plan.validation.receiver_recognized && plan.validation.config_supported &&
+                   plan.validation.production_ready,
+               "each documented Unicore model must retain its supported configuration plan");
+  }
+}
+
+void TestUnicoreOutputRateDomainAndSerialization(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.receiver_model = "UM982";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  struct AcceptedRate
+  {
+    double rate_hz;
+    const char* serialized_bestnava;
+  };
+  const std::array<AcceptedRate, 6u> accepted_rates = {{
+      {1.0, "BESTNAVA 1"},
+      {2.0, "BESTNAVA 0.5"},
+      {5.0, "BESTNAVA 0.2"},
+      {10.0, "BESTNAVA 0.1"},
+      {20.0, "BESTNAVA 0.05"},
+      {50.0, "BESTNAVA 0.02"},
+  }};
+  for (const auto& accepted : accepted_rates)
+  {
+    request.rate_hz = accepted.rate_hz;
+    const auto plan = BuildReceiverAutoConfigPlan(request);
+    ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                   plan.validation.production_ready &&
+                   ContainsCommandText(plan, accepted.serialized_bestnava),
+               "each documented Unicore output-rate boundary must serialize to its exact "
+               "documented BESTNAVA period");
+  }
+
+  request.rate_hz = 7.5;
+  const auto lower_midpoint_plan = BuildReceiverAutoConfigPlan(request);
+  request.rate_hz = 7.5001;
+  const auto upper_midpoint_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(lower_midpoint_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(lower_midpoint_plan, "BESTNAVA 0.2") &&
+                 upper_midpoint_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(upper_midpoint_plan, "BESTNAVA 0.1"),
+             "Unicore rate rounding must retain the documented lower-tie/upper-neighbor "
+             "serialization behavior");
+
+  const std::array<double, 11u> invalid_rates = {{
+      0.0,
+      -1.0,
+      std::numeric_limits<double>::quiet_NaN(),
+      -std::numeric_limits<double>::quiet_NaN(),
+      std::numeric_limits<double>::infinity(),
+      -std::numeric_limits<double>::infinity(),
+      std::numeric_limits<double>::denorm_min(),
+      std::nextafter(1.0, 0.0),
+      std::nextafter(50.0, std::numeric_limits<double>::infinity()),
+      10000.0,
+      1e308,
+  }};
+  for (const double invalid_rate : invalid_rates)
+  {
+    request.rate_hz = invalid_rate;
+    const auto plan = BuildReceiverAutoConfigPlan(request);
+    ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kInvalidArgument &&
+                   plan.commands.empty() && !plan.validation.production_ready &&
+                   !ContainsCommandText(plan, "BESTNAVA"),
+               "non-finite, out-of-domain, and unrepresentable Unicore rate requests must be "
+               "rejected before command serialization");
+  }
+}
+
 void TestUnicoreFactoryResetPlan(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kFactoryReset,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.receiver_model = "UM981";
+  request.requested_profile = ReceiverAutoConfigProfile::kFactoryReset;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  const auto plan = BuildReceiverAutoConfigPlan(request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  plan.validation.generated_command_count == 15u &&
                  plan.validation.runtime_command_count == 14u &&
                  plan.validation.factory_reset_command_count == 1u,
-             "generic Unicore factory_reset planning should expand into reset plus runtime "
+             "a documented Unicore factory_reset plan should expand into reset plus runtime "
              "recovery commands without guessing a signal-group selection");
   ctx.Expect(plan.validation.production_ready && plan.validation.ready_to_execute &&
                  ContainsWarning(plan, "115200") && ContainsWarning(plan, "reconnect/probe") &&
@@ -504,10 +645,14 @@ void TestUnicoreFactoryResetPlan(TestContext& ctx)
 
 void TestRuntimeOnlyPersistentModeRejected(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kRuntimeOnly,
-      ReceiverAutoConfigApplyMode::kPersistent);
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.receiver_model = "UM981";
+  request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  const auto plan = BuildReceiverAutoConfigPlan(request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode &&
                  !plan.validation.apply_mode_supported,
@@ -522,6 +667,7 @@ void TestPersistentApplyWarnings(TestContext& ctx)
       MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
   generic_request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   generic_request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  generic_request.receiver_model = "UM981";
 
   const auto plan = BuildReceiverAutoConfigPlan(generic_request);
 
@@ -531,8 +677,8 @@ void TestPersistentApplyWarnings(TestContext& ctx)
                  plan.validation.persistent_command_count == 1u &&
                  plan.validation.factory_reset_command_count == 1u &&
                  !ContainsCommandText(plan, "CONFIG SIGNALGROUP"),
-             "generic persistent Unicore planning should rebuild the saved profile from a clean "
-             "reset baseline without guessing signal groups");
+             "a documented single-antenna Unicore plan should rebuild the saved profile from a "
+             "clean reset baseline without guessing signal groups");
   ctx.Expect(ContainsWarning(plan, "FRESET") && ContainsWarning(plan, "SAVECONFIG") &&
                  ContainsWarning(plan, "clean baseline") &&
                  plan.rollback_expectation.operator_action_required,
@@ -551,11 +697,15 @@ void TestPersistentApplyWarnings(TestContext& ctx)
 
 void TestUnicorePersistentBaudOverride(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kRoverHighPrecision,
-      ReceiverAutoConfigApplyMode::kPersistent,
-      460800u);
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  request.receiver_model = "UM981";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  request.config_baud = 460800u;
+  const auto plan = BuildReceiverAutoConfigPlan(request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  plan.request.config_baud == std::optional<std::uint32_t>{460800u} &&
@@ -567,10 +717,14 @@ void TestUnicorePersistentBaudOverride(TestContext& ctx)
 
 void TestUnicorePersistentDefaultTargetBaud(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(
-      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore),
-      ReceiverAutoConfigProfile::kRoverHighPrecision,
-      ReceiverAutoConfigApplyMode::kPersistent);
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 460800u, ReceiverDetectedFamily::kUnicore);
+  request.receiver_model = "UM981";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  const auto plan = BuildReceiverAutoConfigPlan(request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  !plan.request.config_baud.has_value() && !plan.commands.empty() &&
@@ -736,12 +890,11 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
 
   request.receiver_model = "UM952";
   const auto unknown_model_override_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(unknown_model_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 ContainsCommandText(unknown_model_override_plan, "CONFIG SIGNALGROUP 9 0") &&
-                 ContainsWarning(unknown_model_override_plan, "Advanced SIGNALGROUP combination") &&
-                 ContainsWarning(unknown_model_override_plan, "without model-specific guidance"),
-             "signal-group overrides should remain allowed for unknown Unicore models with clear "
-             "guidance warnings instead of a hard error");
+  ctx.Expect(unknown_model_override_plan.status ==
+                     ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
+                 unknown_model_override_plan.commands.empty() &&
+                 !ContainsCommandText(unknown_model_override_plan, "CONFIG SIGNALGROUP"),
+             "signal-group overrides must not bypass the unknown-model configuration guard");
 
   // A runtime-only profile manages no signal groups, so an override must not
   // inject an unsolicited SIGNALGROUP command.
@@ -832,6 +985,8 @@ int main()
   TestUbloxFactoryResetStub(ctx);
   TestUnicoreRoverHighPrecisionPlans(ctx);
   TestSignalProfileCapabilityMapping(ctx);
+  TestUnicoreUnknownModelConfigurationIsBlocked(ctx);
+  TestUnicoreOutputRateDomainAndSerialization(ctx);
   TestUnicoreSignalGroupOverride(ctx);
   TestUnicoreRuntimeBaudOverrideOnlyWhenDifferent(ctx);
   TestUnicoreFactoryResetPlan(ctx);

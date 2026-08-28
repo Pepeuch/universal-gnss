@@ -102,19 +102,16 @@ void TestUnicoreDebugPlan(TestContext& ctx)
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);
 
-  ctx.Expect(result.status == ConfigPlanStatus::kOk && result.receiver_family == "UM98x",
-             "Unicore rover_high_precision_debug plan should resolve the expected receiver family");
-  ctx.Expect(result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
-                 result.summary.persistent_commands == 0u,
-             "generic Unicore rover_high_precision_debug plans should report the expected safe "
-             "command counts");
-  ctx.Expect(text.find("MODE ROVER") != std::string::npos &&
-                 text.find("UNLOG") == std::string::npos &&
-                 text.find("PVTSLNA 0.2") != std::string::npos &&
-                 text.find("model identity is unknown") != std::string::npos &&
-                 !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
-             "generic Unicore debug plans should skip CONFIG SIGNALGROUP and report the safe "
-             "unknown-model fallback");
+  ctx.Expect(result.status == ConfigPlanStatus::kUnsupportedReceiver &&
+                 result.receiver_family == "UM98x" && result.summary.commands_total == 0u &&
+                 !result.receiver_recognized && !result.config_supported &&
+                 !result.production_ready,
+             "Unicore rover_high_precision_debug planning must require an explicitly recognized "
+             "model before generating mutating commands");
+  ctx.Expect(text.find("requires an explicitly recognized model") != std::string::npos &&
+                 !HasTextCommand(result, "MODE ROVER") &&
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
+             "unknown-model config-plan text must expose the safety stop and no commands");
 
   options.receiver_model = "UM982";
   const auto um982_result = BuildConfigPlan(options);
@@ -229,15 +226,14 @@ void TestSignalProfilePlanning(TestContext& ctx)
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
   const auto unknown_unicore_result = BuildConfigPlan(unknown_unicore_options);
   const std::string unknown_unicore_text = FormatConfigPlanText(unknown_unicore_result);
-  ctx.Expect(unknown_unicore_result.status == ConfigPlanStatus::kOk &&
+  ctx.Expect(unknown_unicore_result.status == ConfigPlanStatus::kUnsupportedReceiver &&
                  unknown_unicore_result.receiver_model == std::optional<std::string>{"UM952"} &&
-                 unknown_unicore_result.summary.commands_total == 13u &&
-                 unknown_unicore_text.find("Receiver model: UM952") != std::string::npos &&
-                 unknown_unicore_text.find("safe generic non-baseline fallback") !=
+                 unknown_unicore_result.summary.commands_total == 0u &&
+                 unknown_unicore_result.error_message.find("UM952") != std::string::npos &&
+                 unknown_unicore_text.find("requires an explicitly recognized model") !=
                      std::string::npos &&
                  !HasTextCommand(unknown_unicore_result, "CONFIG SIGNALGROUP"),
-             "unknown Unicore model plan text should report the safe fallback and skip CONFIG "
-             "SIGNALGROUP");
+             "unknown Unicore model plan text should block all mutating configuration");
 
   ConfigPlanOptions known_non_baseline_options;
   known_non_baseline_options.vendor = "unicore";
@@ -366,6 +362,7 @@ void TestPersistentSafetySummary(TestContext& ctx)
   unicore_options.vendor = "unicore";
   unicore_options.profile = "rover_high_precision_debug";
   unicore_options.persistent = true;
+  unicore_options.receiver_model = "UM981";
 
   const auto unicore_result = BuildConfigPlan(unicore_options);
   ctx.Expect(unicore_result.status == ConfigPlanStatus::kOk &&
@@ -381,6 +378,7 @@ void TestFactoryResetPlan(TestContext& ctx)
   ConfigPlanOptions options;
   options.vendor = "unicore";
   options.profile = "factory_reset";
+  options.receiver_model = "UM981";
 
   const auto result = BuildConfigPlan(options);
   const std::string text = FormatConfigPlanText(result);

@@ -500,6 +500,27 @@ bool ValidateRateHz(const ReceiverAutoConfigRequest& request, ReceiverAutoConfig
   return true;
 }
 
+bool ValidateUnicoreOutputRateHz(const ReceiverAutoConfigRequest& request,
+                                 ReceiverAutoConfigPlan& plan)
+{
+  if (!request.rate_hz.has_value())
+  {
+    return true;
+  }
+
+  const double rate_hz = *request.rate_hz;
+  if (rate_hz < kSupportedUnicoreOutputRatesHz.front() ||
+      rate_hz > kSupportedUnicoreOutputRatesHz.back())
+  {
+    plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+    plan.error_message =
+        "Unicore rate-hz must be within the documented portable range of 1 to 50 Hz";
+    return false;
+  }
+
+  return true;
+}
+
 bool ValidateConfigBaud(const ReceiverAutoConfigRequest& request, ReceiverAutoConfigPlan& plan)
 {
   if (!request.config_baud.has_value())
@@ -971,27 +992,48 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   {
     plan.receiver_model = std::string(model_profile.model);
   }
-  plan.validation.receiver_recognized = true;
-  plan.validation.config_supported = true;
   AppendIgnoredOutputPortWarning(plan);
 
-  if (!normalized_requested_model.empty() && model_profile.model_id == UnicoreModel::kUnknown)
+  if (model_profile.model_id == UnicoreModel::kUnknown)
   {
-    if (request.signal_group_override.has_value() &&
-        request.requested_profile != ReceiverAutoConfigProfile::kRuntimeOnly)
+    const std::string model_description = normalized_requested_model.empty()
+                                              ? "Unicore model identity is unknown"
+                                              : "Unicore model " + normalized_requested_model +
+                                                    " is not documented";
+    const std::string configuration_message =
+        model_description +
+        "; portable mutating configuration requires an explicitly recognized model";
+
+    if (ProfileLeavesReceiverUnchanged(request.requested_profile))
     {
-      plan.warnings.push_back(
-          "Unicore model " + normalized_requested_model +
-          " has no documented portable signal-group/capability profile yet; applying the "
-          "requested SIGNALGROUP override without model-specific guidance");
+      auto no_change =
+          MakeNoChangePlan(request, ReceiverVendor::kUnicore, "UM98x", ReceiverCapabilities{});
+      no_change.receiver_model = plan.receiver_model;
+      no_change.capabilities_known = false;
+      no_change.validation.receiver_recognized = false;
+      no_change.validation.config_supported = false;
+      no_change.validation.production_ready = false;
+      no_change.validation.ready_to_execute = false;
+      no_change.warnings.push_back(configuration_message);
+      return no_change;
     }
-    else
-    {
-      plan.warnings.push_back("Unicore model " + normalized_requested_model +
-                              " has no documented portable signal-group/capability profile yet; "
-                              "using the safe generic non-baseline fallback");
-    }
+
+    plan.capabilities_known = false;
+    plan.capabilities = {};
+    plan.status = ReceiverAutoConfigPlanStatus::kUnsupportedReceiver;
+    plan.validation.receiver_recognized = false;
+    plan.validation.config_supported = false;
+    plan.validation.profile_supported = false;
+    plan.validation.apply_mode_supported = false;
+    plan.error_message = configuration_message;
+    plan.unsupported_reason = configuration_message;
+    plan.warnings.push_back(configuration_message);
+    ApplyNoChangeRollback(plan);
+    return plan;
   }
+
+  plan.validation.receiver_recognized = true;
+  plan.validation.config_supported = true;
 
   if (ProfileLeavesReceiverUnchanged(request.requested_profile))
   {
@@ -1003,6 +1045,11 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
   }
 
   if (!ValidateRateHz(request, plan))
+  {
+    return plan;
+  }
+
+  if (!ValidateUnicoreOutputRateHz(request, plan))
   {
     return plan;
   }

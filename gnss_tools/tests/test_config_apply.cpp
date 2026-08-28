@@ -5,6 +5,7 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "universal_gnss_driver/receiver_auto_config.hpp"
@@ -133,6 +134,11 @@ std::string BuildUnicoreConfigResponse(const std::string& signalgroup,
 {
   return "$command,CONFIG,response: OK*54\r\n$CONFIG,SIGNALGROUP,CONFIG SIGNALGROUP " +
          signalgroup + "*00\r\n$CONFIG,COM1,CONFIG COM1 " + std::to_string(com1_baud) + "*00\r\n";
+}
+
+std::string BuildUnicoreSignalGroupConfigDump(const std::string& signalgroup)
+{
+  return "$CONFIG,SIGNALGROUP,CONFIG SIGNALGROUP " + signalgroup + "*00\r\n";
 }
 
 std::string BuildUnicoreResponsesWithSingleError(const std::size_t count,
@@ -267,8 +273,29 @@ public:
       return ReadResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
     }
 
+    if (pending_signalgroup_disconnect_)
+    {
+      const auto bytes_to_copy = std::min(capacity, signalgroup_response_.size());
+      std::copy_n(reinterpret_cast<const std::uint8_t*>(signalgroup_response_.data()),
+                  static_cast<std::ptrdiff_t>(bytes_to_copy),
+                  destination);
+      pending_signalgroup_disconnect_ = false;
+      stale_after_signalgroup_ = true;
+      open_ = false;
+      return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
+    }
+
     if (read_offset_ >= input_.size())
     {
+      if (auto_text_ok_responses_)
+      {
+        static constexpr std::string_view kTextOk = "<OK\r\n";
+        const auto bytes_to_copy = std::min(capacity, kTextOk.size());
+        std::copy_n(reinterpret_cast<const std::uint8_t*>(kTextOk.data()),
+                    static_cast<std::ptrdiff_t>(bytes_to_copy),
+                    destination);
+        return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
+      }
       return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
     }
 
@@ -285,6 +312,10 @@ public:
   {
     if (!open_)
     {
+      if (stale_after_signalgroup_)
+      {
+        stale_write_attempted_ = true;
+      }
       return WriteResult{0u, TransportStatus::kClosed, TransportError::kClosed};
     }
 
@@ -299,6 +330,12 @@ public:
     }
 
     written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
+    const std::string_view text(reinterpret_cast<const char*>(data), size);
+    if (disconnect_after_signalgroup_response_ &&
+        text.find("CONFIG SIGNALGROUP ") != std::string_view::npos)
+    {
+      pending_signalgroup_disconnect_ = true;
+    }
     return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
   }
 
@@ -317,6 +354,28 @@ public:
     input_ = std::move(input);
     read_offset_ = 0u;
     open_ = true;
+    pending_signalgroup_disconnect_ = false;
+    stale_after_signalgroup_ = false;
+  }
+
+  void DisconnectAfterSignalGroupResponse()
+  {
+    disconnect_after_signalgroup_response_ = true;
+  }
+
+  void ProvideTextOkResponses()
+  {
+    auto_text_ok_responses_ = true;
+  }
+
+  void SetSignalGroupResponse(std::string response)
+  {
+    signalgroup_response_ = std::move(response);
+  }
+
+  bool stale_write_attempted() const
+  {
+    return stale_write_attempted_;
   }
 
   const std::vector<std::uint8_t>& written_bytes() const
@@ -329,6 +388,12 @@ private:
   std::vector<std::uint8_t> written_{};
   std::size_t read_offset_{0u};
   bool open_{true};
+  bool disconnect_after_signalgroup_response_{false};
+  bool pending_signalgroup_disconnect_{false};
+  bool stale_after_signalgroup_{false};
+  bool stale_write_attempted_{false};
+  bool auto_text_ok_responses_{false};
+  std::string signalgroup_response_{"<OK\r\n"};
 };
 
 class ScriptedConfigApplyHooks final : public ConfigApplyTransportHooks
@@ -502,6 +567,47 @@ void AddUm982SignalGroupProfileSteps(ScriptedConfigApplyHooks& hooks,
        baud_rate,
        100u,
        std::vector<std::uint8_t>(verification_input.begin(), verification_input.end())});
+
+  const std::string pre_input = BuildRepeatedUnicoreOkResponses(pre_command_responses);
+  hooks.AddReopenStep({device_path,
+                       baud_rate,
+                       100u,
+                       std::vector<std::uint8_t>(pre_input.begin(), pre_input.end())});
+
+  const std::string post_input = BuildRepeatedUnicoreOkResponses(post_command_responses);
+  hooks.AddReopenStep({device_path,
+                       baud_rate,
+                       100u,
+                       std::vector<std::uint8_t>(post_input.begin(), post_input.end())});
+}
+
+void AddUnicoreSignalGroupRecoverySteps(ScriptedConfigApplyHooks& hooks,
+                                        const std::string& device_path,
+                                        const std::uint32_t baud_rate,
+                                        const std::string& verified_signalgroup,
+                                        const std::size_t pre_command_responses,
+                                        const std::size_t post_command_responses)
+{
+  const std::string signalgroup_apply_input = "<OK\r\n";
+  hooks.AddReopenStep(
+      {device_path,
+       baud_rate,
+       100u,
+       std::vector<std::uint8_t>(signalgroup_apply_input.begin(), signalgroup_apply_input.end())});
+
+  const std::string active_probe_input = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({device_path,
+                       baud_rate,
+                       100u,
+                       std::vector<std::uint8_t>(active_probe_input.begin(),
+                                                 active_probe_input.end())});
+
+  const std::string verification_input = BuildUnicoreSignalGroupConfigDump(verified_signalgroup);
+  hooks.AddReopenStep({device_path,
+                       baud_rate,
+                       100u,
+                       std::vector<std::uint8_t>(verification_input.begin(),
+                                                 verification_input.end())});
 
   const std::string pre_input = BuildRepeatedUnicoreOkResponses(pre_command_responses);
   hooks.AddReopenStep({device_path,
@@ -966,13 +1072,46 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(Te
   ctx.Expect(!prepared.plan.commands[*signalgroup_index].required,
              "explicit SIGNALGROUP overrides should be optional in runtime-only Unicore plans");
 
-  const std::string responses =
-      BuildUnicoreResponsesWithSingleError(prepared.plan.summary.commands_total,
-                                           *signalgroup_index,
-                                           "PARSING FAILED GRAMMAR ERROR,*73");
-  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.ProvideTextOkResponses();
+  transport.DisconnectAfterSignalGroupResponse();
+  transport.SetSignalGroupResponse("PARSING FAILED GRAMMAR ERROR,*73\r\n");
+  ScriptedConfigApplyHooks hooks(transport);
 
-  const auto result = ExecuteConfigApply(transport, options);
+  const std::string rejected_signalgroup_input = "PARSING FAILED GRAMMAR ERROR,*73\r\n";
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(rejected_signalgroup_input.begin(),
+                                 rejected_signalgroup_input.end())});
+  const std::string active_probe_input = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(active_probe_input.begin(),
+                                                 active_probe_input.end())});
+  const std::string verification_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(verification_input.begin(),
+                                                 verification_input.end())});
+  const std::string pre_input = BuildRepeatedUnicoreOkResponses(*signalgroup_index);
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(pre_input.begin(), pre_input.end())});
+  const std::string post_input = BuildRepeatedUnicoreOkResponses(
+      prepared.plan.summary.commands_total - *signalgroup_index - 1u);
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(post_input.begin(), post_input.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kPartialSuccess && result.executed &&
@@ -986,10 +1125,119 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(Te
              "optional SIGNALGROUP overrides should not abort the apply sequence when the "
              "receiver rejects them");
   ctx.Expect(written.find("CONFIG SIGNALGROUP 2 0\r\n") != std::string::npos &&
-                 written.find("CONFIG\r\n") == std::string::npos &&
+                 written.find("CONFIG\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") != std::string::npos &&
+                 hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 !transport.stale_write_attempted() &&
                  ContainsProgressLine(result, "failed (optional, continuing)"),
-             "optional SIGNALGROUP overrides should use the normal apply path and record the "
-             "optional failure without entering the dedicated CONFIG query workflow");
+             "optional SIGNALGROUP rejection should continue only after the dedicated recovery "
+             "and verification boundary");
+}
+
+void TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const auto signalgroup_index = FindTextCommandIndex(prepared, "CONFIG SIGNALGROUP 2 0\r\n");
+  const auto gpgga_index = FindTextCommandIndex(prepared, "GPGGA 1\r\n");
+  if (!signalgroup_index.has_value() || !gpgga_index.has_value())
+  {
+    std::cerr << "FAILED: test setup could not find the runtime SIGNALGROUP/GPGGA commands\n";
+    std::exit(EXIT_FAILURE);
+  }
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.ProvideTextOkResponses();
+  transport.DisconnectAfterSignalGroupResponse();
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreSignalGroupRecoverySteps(hooks,
+                                      "/dev/ttyUSB0",
+                                      921600u,
+                                      "2 0",
+                                      *signalgroup_index,
+                                      prepared.plan.summary.commands_total - *signalgroup_index - 1u);
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  const auto signalgroup_position = written.find("CONFIG SIGNALGROUP 2 0\r\n");
+  const auto gpgga_position = written.find("GPGGA 1\r\n");
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.executed &&
+                 result.execution_summary.commands_completed ==
+                     prepared.plan.summary.commands_total &&
+                 result.execution_summary.commands_failed == 0u,
+             "accepted runtime SIGNALGROUP override should complete only after recovery and "
+             "verification (status=" +
+                 std::to_string(static_cast<int>(result.status)) + ", error=" +
+                 result.error_message + ")");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 !transport.stale_write_attempted() &&
+                 signalgroup_position != std::string::npos && gpgga_position != std::string::npos &&
+                 signalgroup_position < gpgga_position,
+             "post-SIGNALGROUP output commands must wait for the reopened, verified transport "
+             "(hooks=" + std::to_string(hooks.AllStepsConsumed()) + ", hook_failure=" +
+                 hooks.failure() + ", stale=" +
+                 std::to_string(transport.stale_write_attempted()) + ")");
+}
+
+void TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.confirm = true;
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.ProvideTextOkResponses();
+  transport.DisconnectAfterSignalGroupResponse();
+  ScriptedConfigApplyHooks hooks(transport);
+
+  const std::string signalgroup_apply_input = "<OK\r\n";
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(signalgroup_apply_input.begin(), signalgroup_apply_input.end())});
+  const std::string active_probe_input = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(active_probe_input.begin(),
+                                                 active_probe_input.end())});
+  const std::string missing_signalgroup_input = "$CONFIG,COM1,CONFIG COM1 921600 8 n 1*00\r\n";
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0",
+       921600u,
+       100u,
+       std::vector<std::uint8_t>(missing_signalgroup_input.begin(),
+                                 missing_signalgroup_input.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kRejected && result.executed &&
+                 result.error_message.find("did not report CONFIG SIGNALGROUP") != std::string::npos,
+             "failed SIGNALGROUP verification must terminate the apply safely");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 !transport.stale_write_attempted() &&
+                 written.find("GPGGA 1\r\n") == std::string::npos,
+             "failed recovery/reprobe must prevent every post-SIGNALGROUP profile command");
 }
 
 void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestContext& ctx)
@@ -1477,6 +1725,8 @@ int main()
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(ctx);
   TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(ctx);
+  TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(ctx);
+  TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(ctx);
   TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
   TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);

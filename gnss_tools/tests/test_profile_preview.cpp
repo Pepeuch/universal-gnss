@@ -90,23 +90,13 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(
-      result.status == ProfilePreviewStatus::kOk && result.commands.size() == 13u,
-      "generic Unicore rover_high_precision preview should build the expected safe command count");
-  ctx.Expect(result.summary.commands_total == 13u && result.summary.runtime_commands == 13u &&
-                 result.summary.persistent_commands == 0u,
-             "generic Unicore rover_high_precision preview summary should count runtime commands");
-  ctx.Expect(!result.commands.empty() &&
-                 result.commands.front().description == "set receiver mode to rover",
-             "Unicore rover_high_precision preview should decode the MODE ROVER description");
-  ctx.Expect(text.find("command: MODE ROVER") != std::string::npos &&
-                 text.find("UNLOG") == std::string::npos &&
-                 text.find("PVTSLNA 1") != std::string::npos &&
-                 text.find("SATSINFOA 1") != std::string::npos &&
-                 text.find("model identity is unknown") != std::string::npos &&
-                 !HasTextCommand(result, "CONFIG SIGNALGROUP") && !HasTextCommand(result, "UNLOG"),
-             "generic Unicore rover_high_precision preview text should expose the safe fallback "
-             "and skip CONFIG SIGNALGROUP");
+  ctx.Expect(result.status == ProfilePreviewStatus::kUnsupportedVendor &&
+                 result.commands.empty() && result.summary.commands_total == 0u,
+             "Unicore rover_high_precision preview must block mutation when the model is unknown");
+  ctx.Expect(text.find("requires an explicitly recognized model") != std::string::npos &&
+                 !HasTextCommand(result, "MODE ROVER") &&
+                 !HasTextCommand(result, "CONFIG SIGNALGROUP"),
+             "unknown-model preview text must expose the safety stop and no commands");
 
   options.receiver_model = "UM982";
   const auto um982_result = BuildProfilePreview(options);
@@ -157,6 +147,7 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
   unicore_options.vendor = "unicore";
   unicore_options.profile = "rover_high_precision_debug";
   unicore_options.persistent = true;
+  unicore_options.receiver_model = "UM981";
 
   const auto unicore_result = BuildProfilePreview(unicore_options);
   ctx.Expect(unicore_result.status == ProfilePreviewStatus::kOk &&
@@ -164,8 +155,8 @@ void TestPersistentSummaryGeneration(TestContext& ctx)
                  unicore_result.summary.runtime_commands == 14u &&
                  unicore_result.summary.persistent_commands == 1u &&
                  unicore_result.summary.factory_reset_commands == 1u,
-             "generic persistent Unicore previews should expose the reset-first recovery workflow "
-             "plus SAVECONFIG without guessing signal groups");
+             "documented persistent Unicore previews should expose the reset-first recovery "
+             "workflow plus SAVECONFIG without guessing signal groups");
 }
 
 void TestUnicorePersistentTargetBaudPreview(TestContext& ctx)
@@ -255,14 +246,14 @@ void TestSignalProfilePreview(TestContext& ctx)
       universal_gnss_driver::ReceiverAutoConfigSignalProfile::kHighPrecision;
   const auto unknown_model_result = BuildProfilePreview(unknown_model_options);
   const std::string unknown_model_text = FormatProfilePreviewText(unknown_model_result);
-  ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kOk &&
+  ctx.Expect(unknown_model_result.status == ProfilePreviewStatus::kUnsupportedVendor &&
                  unknown_model_result.receiver_model == std::optional<std::string>{"UM952"} &&
-                 unknown_model_result.summary.commands_total == 13u &&
-                 unknown_model_text.find("Receiver model: UM952") != std::string::npos &&
-                 unknown_model_text.find("safe generic non-baseline fallback") !=
+                 unknown_model_result.summary.commands_total == 0u &&
+                 unknown_model_result.error_message.find("UM952") != std::string::npos &&
+                 unknown_model_text.find("requires an explicitly recognized model") !=
                      std::string::npos &&
                  !HasTextCommand(unknown_model_result, "CONFIG SIGNALGROUP"),
-             "unknown-model preview should report the safe fallback and skip CONFIG SIGNALGROUP");
+             "unknown-model preview should block all mutating configuration");
 
   ProfilePreviewOptions known_non_baseline_options;
   known_non_baseline_options.vendor = "unicore";
@@ -331,6 +322,7 @@ void TestFactoryResetPreview(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "unicore";
   options.profile = "factory_reset";
+  options.receiver_model = "UM981";
 
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
@@ -375,6 +367,7 @@ void TestUnicoreRuntimeTargetBaudPreview(TestContext& ctx)
   ProfilePreviewOptions options;
   options.vendor = "unicore";
   options.profile = "rover_high_precision";
+  options.receiver_model = "UM981";
   options.baud = 921600u;
 
   const auto result = BuildProfilePreview(options);
