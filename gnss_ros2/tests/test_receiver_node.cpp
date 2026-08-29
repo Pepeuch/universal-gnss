@@ -1,7 +1,9 @@
+#include <algorithm>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -372,6 +374,12 @@ std::vector<std::uint8_t> MakeUbxRxmRtcmPayload(const std::uint16_t message_type
 class ScriptedByteSource : public universal_gnss_transport::ByteSource
 {
 public:
+  struct Counters
+  {
+    std::size_t reads{0u};
+    std::size_t destructions{0u};
+  };
+
   struct Action
   {
     universal_gnss_transport::TransportStatus status{
@@ -381,13 +389,29 @@ public:
     bool keep_open{true};
   };
 
-  explicit ScriptedByteSource(std::vector<Action> actions) : actions_(std::move(actions))
+  explicit ScriptedByteSource(std::vector<Action> actions,
+                              std::shared_ptr<Counters> counters = nullptr)
+      : actions_(std::move(actions)), counters_(std::move(counters))
   {
+  }
+
+  ~ScriptedByteSource() override
+  {
+    if (counters_ != nullptr)
+    {
+      ++counters_->destructions;
+    }
   }
 
   universal_gnss_transport::ReadResult Read(std::uint8_t* destination,
                                             std::size_t capacity) override
   {
+    ++read_call_count_;
+    if (counters_ != nullptr)
+    {
+      ++counters_->reads;
+    }
+
     if (!open_)
     {
       return {0u,
@@ -395,15 +419,21 @@ public:
               universal_gnss_transport::TransportError::kClosed};
     }
 
-    if (next_index_ >= actions_.size())
+    if (next_index_ >= actions_.size() && !repeated_action_.has_value())
     {
       return {0u,
               universal_gnss_transport::TransportStatus::kOk,
               universal_gnss_transport::TransportError::kNone};
     }
 
-    const Action action = actions_[next_index_++];
+    const Action action = next_index_ < actions_.size() ? actions_[next_index_++]
+                                                        : *repeated_action_;
     open_ = action.keep_open;
+
+    if (before_return_)
+    {
+      before_return_(read_call_count_, action.payload.size());
+    }
 
     if (action.status != universal_gnss_transport::TransportStatus::kOk)
     {
@@ -433,9 +463,33 @@ public:
     open_ = false;
   }
 
+  void SetRepeatedAction(Action action)
+  {
+    repeated_action_ = std::move(action);
+  }
+
+  void SetBeforeReturn(std::function<void(std::size_t, std::size_t)> callback)
+  {
+    before_return_ = std::move(callback);
+  }
+
+  std::size_t read_call_count() const
+  {
+    return read_call_count_;
+  }
+
+  std::size_t remaining_action_count() const
+  {
+    return actions_.size() - next_index_;
+  }
+
 private:
   std::vector<Action> actions_{};
   std::size_t next_index_{0u};
+  std::optional<Action> repeated_action_{};
+  std::function<void(std::size_t, std::size_t)> before_return_{};
+  std::shared_ptr<Counters> counters_{};
+  std::size_t read_call_count_{0u};
   bool open_{true};
 };
 
@@ -457,15 +511,37 @@ public:
     session_bytes_.emplace_back();
   }
 
-  universal_gnss_transport::ReadResult Read(std::uint8_t*, std::size_t) override
+  universal_gnss_transport::ReadResult Read(std::uint8_t* destination,
+                                            const std::size_t capacity) override
   {
+    ++read_call_count_;
     if (!open_)
     {
       return {0u,
               universal_gnss_transport::TransportStatus::kClosed,
               universal_gnss_transport::TransportError::kClosed};
     }
-    return {};
+    if (!repeated_read_action_.has_value())
+    {
+      return {};
+    }
+
+    const auto& action = *repeated_read_action_;
+    open_ = action.keep_open;
+    if (action.status != universal_gnss_transport::TransportStatus::kOk)
+    {
+      return {0u, action.status, action.error};
+    }
+    if (destination == nullptr || capacity < action.payload.size())
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kError,
+              universal_gnss_transport::TransportError::kInvalidArgument};
+    }
+    std::copy(action.payload.begin(), action.payload.end(), destination);
+    return {action.payload.size(),
+            universal_gnss_transport::TransportStatus::kOk,
+            universal_gnss_transport::TransportError::kNone};
   }
 
   universal_gnss_transport::WriteResult Write(const std::uint8_t* data,
@@ -487,7 +563,7 @@ public:
 
     const WriteAction action = next_action_ < actions_.size()
                                    ? actions_[next_action_++]
-                                   : WriteAction{};
+                                   : default_write_action_;
     const std::size_t accepted = std::min(size, action.maximum_bytes);
     session_bytes_.back().insert(session_bytes_.back().end(), data, data + accepted);
     return {accepted, action.status, action.error};
@@ -514,6 +590,21 @@ public:
     return write_call_count_;
   }
 
+  std::size_t read_call_count() const
+  {
+    return read_call_count_;
+  }
+
+  void SetRepeatedReadAction(ScriptedByteSource::Action action)
+  {
+    repeated_read_action_ = std::move(action);
+  }
+
+  void SetDefaultWriteAction(WriteAction action)
+  {
+    default_write_action_ = std::move(action);
+  }
+
   const std::vector<std::uint8_t>& session_bytes(const std::size_t index) const
   {
     return session_bytes_.at(index);
@@ -522,6 +613,9 @@ public:
 private:
   std::vector<WriteAction> actions_{};
   std::size_t next_action_{0u};
+  WriteAction default_write_action_{};
+  std::optional<ScriptedByteSource::Action> repeated_read_action_{};
+  std::size_t read_call_count_{0u};
   std::size_t write_call_count_{0u};
   std::vector<std::vector<std::uint8_t>> session_bytes_{};
   bool open_{true};
@@ -566,11 +660,23 @@ public:
     message.message_type = message_type;
     message.data = data;
     publisher_->publish(message);
-    for (std::size_t attempt = 0u; attempt < 8u; ++attempt)
+    for (std::size_t attempt = 0u; attempt < 100u; ++attempt)
     {
-      executor_.spin_some();
+      const std::size_t reads_before = duplex_->read_call_count();
+      const std::size_t writes_before = duplex_->write_call_count();
+      executor_.spin_once(std::chrono::milliseconds(1));
+      if (duplex_->read_call_count() == reads_before &&
+          duplex_->write_call_count() > writes_before)
+      {
+        return;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+  }
+
+  void SpinOnce(const std::chrono::milliseconds timeout)
+  {
+    executor_.spin_once(timeout);
   }
 
   ScriptedWriteByteDuplex& duplex()
@@ -642,6 +748,16 @@ protected:
     }
   }
 };
+
+template <typename Predicate>
+void SpinExecutorUntil(rclcpp::executors::SingleThreadedExecutor& executor,
+                       Predicate predicate)
+{
+  for (std::size_t attempt = 0u; attempt < 10u && !predicate(); ++attempt)
+  {
+    executor.spin_once(std::chrono::milliseconds(20));
+  }
+}
 
 universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
     const std::string& path,
@@ -1399,6 +1515,368 @@ TEST_F(ReceiverNodeTest, ValidatesReadChunkSizeBeforeConversionToSizeT)
     EXPECT_NO_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options))
         << "read_chunk_size=" << value << " should remain valid";
   }
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionDrainsMultiChunkBacklogAtLowPublishRate)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  std::vector<ScriptedByteSource::Action> actions;
+  for (std::size_t index = 0u; index < 3u; ++index)
+  {
+    actions.push_back({universal_gnss_transport::TransportStatus::kOk,
+                       universal_gnss_transport::TransportError::kNone,
+                       gga,
+                       true});
+  }
+
+  auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+
+  EXPECT_EQ(source_ptr->read_call_count(), 4u)
+      << "one acquisition callback should drain three chunks and stop on kOk + 0";
+  node->PublishNow();
+  ASSERT_TRUE(node->last_status_message().has_value());
+  EXPECT_EQ(node->last_status_message()->position_observation_sequence, 3u);
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionIsIndependentOfPublicationRate)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+
+  for (const double publish_rate_hz : {1.0, 5.0, 10.0, 20.0})
+  {
+    auto source = std::make_unique<ScriptedByteSource>(
+        std::vector<ScriptedByteSource::Action>{
+            {universal_gnss_transport::TransportStatus::kOk,
+             universal_gnss_transport::TransportError::kNone,
+             gga,
+             true},
+            {universal_gnss_transport::TransportStatus::kOk,
+             universal_gnss_transport::TransportError::kNone,
+             gga,
+             true},
+        });
+    auto* source_ptr = source.get();
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("receiver_family", "nmea"),
+        rclcpp::Parameter("publish_rate_hz", publish_rate_hz),
+    });
+    auto node =
+        std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node->get_node_base_interface());
+
+    SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+    node->PublishNow();
+
+    EXPECT_EQ(source_ptr->read_call_count(), 3u) << "publish_rate_hz=" << publish_rate_hz;
+    ASSERT_TRUE(node->last_status_message().has_value());
+    EXPECT_EQ(node->last_status_message()->position_observation_sequence, 2u)
+        << "publish_rate_hz=" << publish_rate_hz;
+  }
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionBoundsBurstByByteBudget)
+{
+  constexpr std::size_t kChunkSize = 1024u * 1024u;
+  std::vector<ScriptedByteSource::Action> actions;
+  actions.push_back({universal_gnss_transport::TransportStatus::kOk,
+                     universal_gnss_transport::TransportError::kNone,
+                     std::vector<std::uint8_t>(kChunkSize, 0u),
+                     true});
+  actions.push_back({universal_gnss_transport::TransportStatus::kOk,
+                     universal_gnss_transport::TransportError::kNone,
+                     std::vector<std::uint8_t>(kChunkSize, 0u),
+                     true});
+  auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+      rclcpp::Parameter("read_chunk_size", static_cast<std::int64_t>(kChunkSize)),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 1u);
+  EXPECT_EQ(source_ptr->remaining_action_count(), 1u)
+      << "the first callback must yield after max(read_chunk_size, 4 * 65536) bytes";
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 1u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 2u);
+  EXPECT_EQ(source_ptr->remaining_action_count(), 0u);
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionContinuousSourceYieldsAndResumes)
+{
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{});
+  source->SetRepeatedAction({universal_gnss_transport::TransportStatus::kOk,
+                             universal_gnss_transport::TransportError::kNone,
+                             std::vector<std::uint8_t>(64u, 0u),
+                             true});
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+      rclcpp::Parameter("read_chunk_size", 64),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+  const std::size_t first_callback_reads = source_ptr->read_call_count();
+  EXPECT_GT(first_callback_reads, 0u);
+  EXPECT_LE(first_callback_reads, 4096u)
+      << "the byte budget must bound even an always-readable source";
+  node->PublishNow();
+
+  SpinExecutorUntil(
+      executor, [&]() { return source_ptr->read_call_count() > first_callback_reads; });
+  EXPECT_GT(source_ptr->read_call_count(), first_callback_reads)
+      << "budget exhaustion must yield, not cancel later acquisition";
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionIdleStopsWithoutBusyLoopOrCancellation)
+{
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{});
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 1u)
+      << "kOk + 0 must end the current callback immediately";
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 1u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 2u)
+      << "idle must leave the acquisition timer active";
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionParsesFragmentedFrameWithLeaderReceipt)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  std::vector<ScriptedByteSource::Action> actions{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       std::vector<std::uint8_t>(gga.begin(), gga.begin() + 1),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       std::vector<std::uint8_t>(gga.begin() + 1, gga.begin() + 20),
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       std::vector<std::uint8_t>(gga.begin() + 20, gga.end()),
+       true},
+  };
+  auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
+  auto* source_ptr = source.get();
+  universal_gnss_ros2::ReceiverNode* node_ptr = nullptr;
+  std::vector<std::int64_t> read_return_times;
+  source_ptr->SetBeforeReturn(
+      [&](const std::size_t read_index, const std::size_t payload_size)
+      {
+        if (payload_size == 0u)
+        {
+          return;
+        }
+        if (read_index > 1u)
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        read_return_times.push_back(node_ptr->now().nanoseconds());
+      });
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  node_ptr = node.get();
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return read_return_times.size() == 3u; });
+  node->PublishNow();
+
+  ASSERT_EQ(read_return_times.size(), 3u);
+  ASSERT_TRUE(node->last_status_message().has_value());
+  const auto observation_stamp_ns = RosTimeToNanoseconds(node->last_status_message()->stamp);
+  EXPECT_GE(observation_stamp_ns, read_return_times[0]);
+  EXPECT_LT(observation_stamp_ns, read_return_times[1])
+      << "a fragmented frame must retain the leader read's receipt provenance";
+  EXPECT_EQ(node->last_status_message()->position_observation_sequence, 1u);
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionCountsIdenticalObservationsButNotRepublication)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{
+          {universal_gnss_transport::TransportStatus::kOk,
+           universal_gnss_transport::TransportError::kNone,
+           gga,
+           true},
+          {universal_gnss_transport::TransportStatus::kOk,
+           universal_gnss_transport::TransportError::kNone,
+           gga,
+           true},
+      });
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 3u);
+  node->PublishNow();
+  ASSERT_TRUE(node->last_status_message().has_value());
+  const auto observation_stamp = node->last_status_message()->stamp;
+  EXPECT_EQ(node->last_status_message()->position_observation_sequence, 2u);
+
+  node->PublishNow();
+  ASSERT_TRUE(node->last_status_message().has_value());
+  EXPECT_EQ(node->last_status_message()->position_observation_sequence, 2u);
+  EXPECT_EQ(node->last_status_message()->stamp.sec, observation_stamp.sec);
+  EXPECT_EQ(node->last_status_message()->stamp.nanosec, observation_stamp.nanosec);
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionFlushesPendingRtcmAtMostOnceWhileDraining)
+{
+  using WriteAction = ScriptedWriteByteDuplex::WriteAction;
+  std::vector<WriteAction> write_actions;
+  write_actions.push_back(WriteAction{1u});
+  write_actions.insert(write_actions.end(), 256u, WriteAction{0u});
+  RtcmForwardingHarness harness(std::move(write_actions));
+  ASSERT_TRUE(harness.WaitForSubscription());
+  harness.Publish(1077u, BuildRtcmFrame(1077u));
+
+  harness.duplex().SetRepeatedReadAction(
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       std::vector<std::uint8_t>(64u, 0u),
+       true});
+  const std::size_t reads_before = harness.duplex().read_call_count();
+  const std::size_t writes_before = harness.duplex().write_call_count();
+
+  for (std::size_t attempt = 0u;
+       attempt < 10u && harness.duplex().read_call_count() == reads_before;
+       ++attempt)
+  {
+    harness.SpinOnce(std::chrono::milliseconds(20));
+  }
+
+  EXPECT_GT(harness.duplex().read_call_count(), reads_before)
+      << "continuous receiver input must still be drained";
+  EXPECT_EQ(harness.duplex().write_call_count(), writes_before + 1u)
+      << "one acquisition callback may retry the pending RTCM FIFO only once";
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionTerminalErrorCancelsOnlyAcquisitionTimer)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{
+          {universal_gnss_transport::TransportStatus::kOk,
+           universal_gnss_transport::TransportError::kNone,
+           gga,
+           true},
+          {universal_gnss_transport::TransportStatus::kError,
+           universal_gnss_transport::TransportError::kReadFailure,
+           {},
+           false},
+      });
+  auto* source_ptr = source.get();
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+
+  SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 0u; });
+  EXPECT_EQ(source_ptr->read_call_count(), 2u);
+  node->PublishNow();
+  ASSERT_TRUE(node->last_diagnostics_message().has_value());
+  const auto* read_error = FindDiagnosticStatusByName(*node->last_diagnostics_message(),
+                                                      "universal_gnss/transport_read_error");
+  ASSERT_NE(read_error, nullptr);
+  EXPECT_EQ(read_error->level, diagnostic_msgs::msg::DiagnosticStatus::ERROR);
+
+  for (std::size_t attempt = 0u; attempt < 4u; ++attempt)
+  {
+    executor.spin_once(std::chrono::milliseconds(20));
+  }
+  EXPECT_EQ(source_ptr->read_call_count(), 2u)
+      << "terminal input must cancel acquisition polling";
+}
+
+TEST_F(ReceiverNodeTest, Uga003AcquisitionTimerIsDestroyedWithNode)
+{
+  auto counters = std::make_shared<ScriptedByteSource::Counters>();
+  auto source = std::make_unique<ScriptedByteSource>(
+      std::vector<ScriptedByteSource::Action>{}, counters);
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("publish_rate_hz", 0.1),
+  });
+  auto node =
+      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+  SpinExecutorUntil(executor, [&]() { return counters->reads > 0u; });
+  EXPECT_EQ(counters->reads, 1u);
+
+  executor.remove_node(node->get_node_base_interface());
+  node.reset();
+  EXPECT_EQ(counters->destructions, 1u);
+  const std::size_t reads_after_destruction = counters->reads;
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  executor.spin_some();
+  EXPECT_EQ(counters->reads, reads_after_destruction);
 }
 
 TEST_F(ReceiverNodeTest, ReportsNoDataReceivedAfterGracePeriod)
@@ -2336,10 +2814,10 @@ TEST_F(ReceiverNodeTest, BoundsPendingRtcmQueueAndDropsOnlyWholeNewFrame)
 {
   using Action = ScriptedWriteByteDuplex::WriteAction;
   constexpr std::size_t kExpectedQueueCapacity = 50u;
-  std::vector<Action> actions(kExpectedQueueCapacity + 1u, Action{0u});
   const auto frame = BuildRtcmFrame(1077u);
-  RtcmForwardingHarness harness(std::move(actions));
+  RtcmForwardingHarness harness({});
   ASSERT_TRUE(harness.WaitForSubscription());
+  harness.duplex().SetDefaultWriteAction(Action{0u});
 
   for (std::size_t index = 0u; index < kExpectedQueueCapacity + 1u; ++index)
   {
@@ -2347,6 +2825,7 @@ TEST_F(ReceiverNodeTest, BoundsPendingRtcmQueueAndDropsOnlyWholeNewFrame)
   }
   EXPECT_TRUE(harness.duplex().session_bytes(0u).empty());
 
+  harness.duplex().SetDefaultWriteAction(Action{});
   harness.receiver().StepOnce();
   std::vector<std::uint8_t> expected;
   for (std::size_t index = 0u; index < kExpectedQueueCapacity; ++index)

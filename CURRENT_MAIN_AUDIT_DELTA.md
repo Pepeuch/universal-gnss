@@ -62,19 +62,27 @@ Recommended next action: Keep the runner and delayed-publication regressions in 
 
 ### UGA-003 — receiver drain throughput is coupled to ROS publish cadence
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/receiver_node.cpp` current lines 783-794 still creates one timer from `publish_rate_hz`, and `OnTimer()` still calls exactly one `StepOnce()` before `PublishNow()`. `gnss_driver/src/receiver_session_runner.cpp` current lines 27-47 still performs exactly one source `Read` per `StepOnce`. The source comment at ReceiverNode lines 71-76 still explicitly states the resulting `read_chunk_size * publish_rate_hz` bound.
+Files changed: `gnss_ros2/src/receiver_node.cpp`, `gnss_ros2/tests/test_receiver_node.cpp`, and this delta report.
 
-Relevant changes since old audit: The focused old-to-current diff for ReceiverNode, runner, and their tests contains no throughput/drain-loop change. No intervening path commit changes `OnTimer` or `StepOnce`; the 64 KiB mitigation predates the old audit and remains the only mitigation.
+Regression tests added: Ten `ReceiverNodeTest.Uga003Acquisition*` cases cover low publication rate with a multi-read backlog; identical acquisition at 1/5/10/20 Hz publication; a burst larger than the per-callback byte budget; an always-readable source yielding and resuming; `kOk + 0` idle behavior; a fragmented NMEA frame spanning reads and acquisition callbacks; leader-read receipt provenance; two identical genuine observations versus cached republication; one pending-RTCM retry during continuous RX; terminal error; and node/timer destruction. The scripted duplex saturation fixture was made deterministic under the independent acquisition timer without changing its product assertions.
 
-Reproduction/test result: A focused current-library runner scenario used 24 pending bytes and `read_chunk_size=8`, then called the same single `StepOnce` performed by one ROS timer. `/tmp/universal-gnss-current-uga003-repro` returned `reads=1 bytes=8 remaining=16`. At the accepted `publish_rate_hz=0.1` and default 65,536-byte chunk, the request-capacity ceiling remains 6,553.6 B/s versus the source comment's approximately 13,000 B/s measured producer, a 6,446.4 B/s deficit before considering short reads.
+Pre-fix failure evidence: With the production code still using its publication timer for acquisition, the focused CTest executed all ten new cases and passed 0/10. At low publication rates every counter remained at zero during the bounded executor window; no backlog was read, no position observation was accepted, continuous RX did not progress, the RTCM acquisition retry did not occur, and the terminal/lifecycle paths were not reached. This independently reproduced the scheduling coupling rather than only inferring it from changed code.
 
-Remaining defect, if any: Input draining is still scheduled by publication cadence; legal parameter combinations can build an unobservable transport backlog even though individual reads and parses succeed.
+Production fix: ReceiverNode now owns two wall timers in the existing default mutually-exclusive callback group. The 10 ms acquisition timer invokes a private bounded drain while the publication timer invokes only `PublishNow()`. `ReceiverSessionRunner::StepOnce` retains its public one-read behavior. Each acquisition callback continues only on positive read progress and stops on the first `kOk + 0`, terminal result, byte budget `max(read_chunk_size, 4 * 65536)`, or five milliseconds of monotonic work checked between complete reads. Idle leaves acquisition active; terminal status applies the existing unavailable/pending-RTCM cleanup, cancels acquisition, and leaves publication active for diagnostics. One acquisition drain attempts the pending UGA-009 RTCM FIFO at most once and never flushes after terminal input.
 
-Recommended next action: In a separate implementation task, decouple bounded readiness-driven draining from publication and add sustained-rate/backlog-latency regression coverage across independent input and publish rates.
+Post-fix validation: Focused UGA-003 passed 10/10 gtests after the 0/10 pre-fix run. Complete ReceiverNode passed 53/53, including UGA-002/007 receipt and sequence provenance, all UGA-009 FIFO cases, UGA-014 clock separation, UGA-019 activity, UGA-020 cadence-aware freshness, and ROS projection of UGA-021 state. NtripNode passed 11/11. Component suites passed: `gnss_driver` 19/19, `gnss_core` 3/3, `gnss_protocols` 18/18, `gnss_transport` 3/3, and `gnss_ntrip` 7/7. Complete non-ROS CTest passed 61/61 and complete sequential ROS2 CTest passed 6/6.
+
+Sanitizer result: The ten focused ReceiverNode cases passed under combined ASan+UBSan (`-fsanitize=address,undefined`, leak detection disabled for ROS process-global allocations) with no sanitizer diagnostic.
+
+API/ABI/ROS impact: No public header, message, parameter, topic, or runner contract changed. `publish_rate_hz` now controls publication only; the private acquisition cadence and work bounds are fixed implementation policy. The same default mutually-exclusive callback group serializes acquisition, publication, and RTCM subscription callbacks, so no worker thread or new data race is introduced.
+
+Remaining defect, if any: None for publication-coupled input capacity. The cooperative five-millisecond budget is intentionally checked only after a complete nonblocking read and synchronous parse, so one unusually expensive read may exceed it; later reads still yield at the next check. No hardware/vendor validation is required for the scheduling invariant.
+
+Recommended next action: Keep the focused timer, budget, provenance, terminal, lifecycle, and RTCM-fairness cases in the normal and sanitizer ROS2 lanes.
 
 ### UGA-004 — negative ROS `read_chunk_size` becomes a huge allocation
 
@@ -334,7 +342,7 @@ Recommended next action: Keep the public-stamp-domain, future-time, ROS-jump, st
 |---|---|---|
 | UGA-001 | FIXED | Confirmed |
 | UGA-002 | FIXED | Confirmed |
-| UGA-003 | STILL PRESENT | Confirmed |
+| UGA-003 | FIXED | Confirmed |
 | UGA-004 | FIXED | Confirmed |
 | UGA-005 | FIXED | Confirmed |
 | UGA-006 | FIXED | Confirmed |

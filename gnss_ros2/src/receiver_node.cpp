@@ -51,6 +51,11 @@ enum class ReceiverTransportKind : std::uint8_t
 };
 
 constexpr std::int64_t kMaximumReadChunkSizeBytes = 1024 * 1024;
+constexpr std::size_t kDefaultReadChunkSizeBytes = 65536u;
+constexpr std::chrono::milliseconds kReceiverAcquisitionPeriod{10};
+constexpr std::chrono::milliseconds kReceiverAcquisitionWorkBudget{5};
+constexpr std::size_t kReceiverAcquisitionMinimumByteBudget =
+    4u * kDefaultReadChunkSizeBytes;
 constexpr double kDefaultRtcmForwardingActivityTimeoutSeconds = 5.0;
 constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
 constexpr double kRuntimeObservationJitterPeriods = 3.0;
@@ -79,13 +84,10 @@ struct ReceiverNodeConfig
   double expected_runtime_observation_rate_hz{0.0};
   double runtime_observation_fallback_timeout_s{
       kDefaultRuntimeObservationFallbackTimeoutSeconds};
-  // Bytes pulled from the transport per receiver tick. The node reads ONE chunk
-  // per publish cycle, so effective read throughput is read_chunk_size *
-  // publish_rate_hz. The previous fixed 512 B (= 2.56 KB/s at 5 Hz) sits below a
-  // busy u-blox F9P's UBX output (~13 KB/s measured), so the OS serial buffer
-  // backlogs and published fixes lag by seconds. 64 KB drains the buffer in one
-  // read per tick; a single ::read() returns all bytes available up to capacity.
-  std::size_t read_chunk_size{65536u};
+  // Capacity of each complete nonblocking transport read. Acquisition runs on
+  // its own cadence and drains multiple positive-progress reads within bounded
+  // byte and monotonic-time budgets, independently from ROS publication.
+  std::size_t read_chunk_size{kDefaultReadChunkSizeBytes};
   // This is correction-stream receipt liveness, not GNSS observation freshness.
   // It is measured from local successful writes so public ROS timestamps never
   // cross clock domains here.
@@ -784,6 +786,13 @@ struct ReceiverNode::Impl
     kFailed = 2,
   };
 
+  enum class InputStepResult : std::uint8_t
+  {
+    kProgress = 0,
+    kIdle = 1,
+    kTerminal = 2,
+  };
+
   explicit Impl(ReceiverNode& owner,
                 std::unique_ptr<universal_gnss_transport::ByteSource> injected_source,
                 ReceiverNode::DiscoveryFunction discovery_function)
@@ -860,11 +869,19 @@ struct ReceiverNode::Impl
       runner_.emplace(*transport_source_, *session_, runner_config);
     }
 
-    timer_ = owner_.create_wall_timer(ComputePublishPeriod(config_.publish_rate_hz),
-                                      [this]()
-                                      {
-                                        this->OnTimer();
-                                      });
+    if (runner_.has_value())
+    {
+      acquisition_timer_ = owner_.create_wall_timer(kReceiverAcquisitionPeriod,
+                                                     [this]()
+                                                     {
+                                                       this->OnAcquisitionTimer();
+                                                     });
+    }
+    publication_timer_ = owner_.create_wall_timer(ComputePublishPeriod(config_.publish_rate_hz),
+                                                   [this]()
+                                                   {
+                                                     this->PublishNow();
+                                                   });
   }
 
   void AbandonPendingRtcmWrites(const std::string& reason, const bool close_transport)
@@ -938,10 +955,52 @@ struct ReceiverNode::Impl
     return RtcmWriteFlushResult::kDrained;
   }
 
-  void OnTimer()
+  void FlushPendingRtcmWritesIfReady()
   {
-    StepOnce();
-    PublishNow();
+    if (runner_.has_value() &&
+        runner_->metrics().last_status == universal_gnss_transport::TransportStatus::kOk &&
+        transport_ready_ && !pending_rtcm_writes_.empty())
+    {
+      FlushPendingRtcmWrites();
+    }
+  }
+
+  void OnAcquisitionTimer()
+  {
+    if (!runner_.has_value())
+    {
+      return;
+    }
+
+    const std::size_t byte_budget =
+        std::max(config_.read_chunk_size, kReceiverAcquisitionMinimumByteBudget);
+    std::size_t bytes_drained = 0u;
+    const auto started_at = SteadyClock::now();
+
+    while (true)
+    {
+      const std::size_t bytes_before = runner_->metrics().bytes_read;
+      const InputStepResult result = StepInputOnce();
+      if (result == InputStepResult::kTerminal)
+      {
+        return;
+      }
+      if (result == InputStepResult::kIdle)
+      {
+        break;
+      }
+
+      bytes_drained += runner_->metrics().bytes_read - bytes_before;
+      if (bytes_drained >= byte_budget ||
+          SteadyClock::now() - started_at >= kReceiverAcquisitionWorkBudget)
+      {
+        break;
+      }
+    }
+
+    // Preserve UGA-009 fairness: a receiver-input drain may retry the pending
+    // correction FIFO once, never once per successful transport read.
+    FlushPendingRtcmWritesIfReady();
   }
 
   void OnRtcmMessage(const universal_gnss_ros2::msg::RtcmFrame& message)
@@ -1051,11 +1110,11 @@ struct ReceiverNode::Impl
     }
   }
 
-  bool StepOnce()
+  InputStepResult StepInputOnce()
   {
     if (!runner_.has_value())
     {
-      return false;
+      return InputStepResult::kIdle;
     }
 
     const std::size_t bytes_before = runner_->metrics().bytes_read;
@@ -1100,15 +1159,24 @@ struct ReceiverNode::Impl
       AbandonPendingRtcmWrites(
           "Receiver transport ended with incomplete RTCM correction data", false);
       LogTransportTerminalTransition(runner_metrics.last_status, runner_metrics.last_error);
+      if (acquisition_timer_ != nullptr)
+      {
+        acquisition_timer_->cancel();
+      }
+      return InputStepResult::kTerminal;
     }
 
-    if (runner_metrics.last_status == universal_gnss_transport::TransportStatus::kOk &&
-        transport_ready_ && !pending_rtcm_writes_.empty())
+    return advanced ? InputStepResult::kProgress : InputStepResult::kIdle;
+  }
+
+  bool StepOnce()
+  {
+    const InputStepResult result = StepInputOnce();
+    if (result != InputStepResult::kTerminal)
     {
-      FlushPendingRtcmWrites();
+      FlushPendingRtcmWritesIfReady();
     }
-
-    return advanced;
+    return result == InputStepResult::kProgress;
   }
 
   universal_gnss::GnssHealthSummary BuildHealthSummary() const
@@ -1909,7 +1977,8 @@ struct ReceiverNode::Impl
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_publisher_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
   rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
-  rclcpp::TimerBase::SharedPtr timer_{};
+  rclcpp::TimerBase::SharedPtr acquisition_timer_{};
+  rclcpp::TimerBase::SharedPtr publication_timer_{};
   std::vector<universal_gnss::GnssDiagnosticEvent> startup_events_{};
   std::optional<sensor_msgs::msg::NavSatFix> last_fix_message_{};
   std::optional<universal_gnss_ros2::msg::GnssStatus> last_status_message_{};
