@@ -1,4 +1,5 @@
 #include <csignal>
+#include <chrono>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
@@ -6,6 +7,7 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
@@ -332,6 +334,16 @@ std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
   return BuildRtcmFrameFromPayload(payload);
 }
 
+std::vector<std::uint8_t> BuildRtcm1005Frame(const std::uint16_t station_id)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1005u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendZeroBits(payload, bit_offset, 128u);
+  return BuildRtcmFrameFromPayload(payload);
+}
+
 void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8_t>& source)
 {
   destination.insert(destination.end(), source.begin(), source.end());
@@ -346,6 +358,50 @@ NtripConfig MakeConfig()
   config.user_agent = "universal-gnss-test";
   config.version = NtripVersion::kV2;
   return config;
+}
+
+void ConfigureNonblockingReads(NtripClient& client)
+{
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.nonblocking = true;
+  client.set_tcp_config(tcp_config);
+}
+
+bool BeginStreaming(TestContext& ctx,
+                    SocketPair& sockets,
+                    NtripClient& client,
+                    const std::int64_t timestamp_ns,
+                    const std::vector<std::uint8_t>& initial_payload = {})
+{
+  if (!sockets.Open())
+  {
+    ctx.Expect(false, "socketpair fixture should open before starting an NTRIP stream");
+    return false;
+  }
+
+  if (client.AdoptConnectedSocket(sockets.ReleaseClientFd()) != NtripClientError::kNone ||
+      client.SendRequest(timestamp_ns) != NtripClientError::kNone)
+  {
+    ctx.Expect(false, "adopted NTRIP setup should connect and send its request");
+    return false;
+  }
+  sockets.ReadPeerExact(client.request().request_text.size());
+
+  std::vector<std::uint8_t> response{
+      'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
+  response.insert(response.end(), initial_payload.begin(), initial_payload.end());
+  if (!sockets.WritePeer(response))
+  {
+    ctx.Expect(false, "fake caster should write its accepted response");
+    return false;
+  }
+
+  std::vector<std::uint8_t> buffer(4096u, 0u);
+  const auto read_result = client.Read(buffer.data(), buffer.size(), timestamp_ns);
+  const bool streaming = read_result.client_error == NtripClientError::kNone &&
+                         client.state() == NtripClientState::kStreaming;
+  ctx.Expect(streaming, "a valid NTRIP response should enter Streaming for liveness tests");
+  return streaming;
 }
 
 universal_gnss::GnssRuntimeState MakeRuntimeState()
@@ -770,6 +826,247 @@ void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
   }
 }
 
+void TestCorrectionFlowLivenessUsesCompleteValidFrames(TestContext& ctx)
+{
+  constexpr std::int64_t kSecond = 1000000000LL;
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.first_rtcm_frame_timeout_ms = 5u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond))
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(8));
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      const auto timeout = client.Read(buffer.data(), buffer.size(), 31 * kSecond + 1);
+      ctx.Expect(timeout.client_error == NtripClientError::kTimeout &&
+                     client.state() == NtripClientState::kFailed,
+                 "an accepted response with no first RTCM frame must time out and enter reconnect");
+    }
+  }
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.rtcm_frame_timeout_ms = 5u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    const auto frame = BuildRtcmFrame(1077u);
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond, frame))
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(8));
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      const auto timeout = client.Read(buffer.data(), buffer.size(), 31 * kSecond + 1);
+      ctx.Expect(timeout.client_error == NtripClientError::kTimeout &&
+                     client.state() == NtripClientState::kFailed,
+                 "a valid RTCM frame followed by inter-frame silence must time out");
+    }
+  }
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.first_rtcm_frame_timeout_ms = 5u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    const std::vector<std::uint8_t> junk{'g', 'a', 'r', 'b', 'a', 'g', 'e'};
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond, junk))
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(8));
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      const auto timeout = client.Read(buffer.data(), buffer.size(), 31 * kSecond + 1);
+      ctx.Expect(timeout.client_error == NtripClientError::kTimeout &&
+                     client.correction_monitor().valid_frames() == 0u,
+                 "arbitrary TCP payload must not keep correction flow alive");
+    }
+  }
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.first_rtcm_frame_timeout_ms = 100u;
+    config.rtcm_frame_timeout_ms = 100u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    const auto frame = BuildRtcmFrame(1077u);
+    const std::size_t split = frame.size() / 2u;
+    const auto split_offset = static_cast<std::ptrdiff_t>(split);
+    const std::vector<std::uint8_t> prefix(frame.begin(), frame.begin() + split_offset);
+    const std::vector<std::uint8_t> suffix(frame.begin() + split_offset, frame.end());
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond, prefix))
+    {
+      ctx.Expect(client.correction_monitor().valid_frames() == 0u,
+                 "a fragmented RTCM prefix must not count as correction flow");
+      ctx.Expect(sockets.WritePeer(suffix), "fake caster should finish the fragmented RTCM frame");
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      client.Read(buffer.data(), buffer.size(), 20 * kSecond);
+      const auto below_timeout = client.Read(buffer.data(), buffer.size(), 49 * kSecond);
+      ctx.Expect(client.correction_monitor().valid_frames() == 1u &&
+                     below_timeout.client_error == NtripClientError::kNone &&
+                     client.state() == NtripClientState::kStreaming,
+                 "only the completed valid frame should refresh the inter-frame deadline");
+    }
+  }
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.rtcm_frame_timeout_ms = 20u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    const auto frame = BuildRtcmFrame(1077u);
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond, frame))
+    {
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      ctx.Expect(sockets.WritePeer(frame), "slow valid caster should send its next RTCM frame");
+      client.Read(buffer.data(), buffer.size(), 21 * kSecond);
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      ctx.Expect(sockets.WritePeer(frame), "slow valid caster should keep sending below timeout");
+      client.Read(buffer.data(), buffer.size(), 41 * kSecond);
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+      const auto still_live = client.Read(buffer.data(), buffer.size(), 70 * kSecond);
+      ctx.Expect(still_live.client_error == NtripClientError::kNone &&
+                     client.state() == NtripClientState::kStreaming &&
+                     client.correction_monitor().valid_frames() == 3u,
+                 "regular low-rate valid RTCM below the configured deadline must not reconnect");
+    }
+  }
+
+  {
+    SocketPair sockets;
+    NtripConfig config = MakeConfig();
+    config.first_rtcm_frame_timeout_ms = 5u;
+    NtripClient client(config);
+    ConfigureNonblockingReads(client);
+    if (BeginStreaming(ctx, sockets, client, 1 * kSecond))
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(8));
+      std::vector<std::uint8_t> buffer(64u, 0u);
+      const auto timeout = client.Read(buffer.data(), buffer.size());
+      ctx.Expect(timeout.client_error == NtripClientError::kTimeout &&
+                     client.state() == NtripClientState::kFailed,
+                 "correction-flow deadlines must remain active when callers omit timestamps");
+    }
+  }
+}
+
+void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
+{
+  constexpr std::int64_t kSecond = 1000000000LL;
+  NtripConfig config = MakeConfig();
+  NtripClient client(config);
+  ConfigureNonblockingReads(client);
+
+  std::vector<std::uint8_t> station_a_stream = BuildRtcm1005Frame(23u);
+  const auto station_a_msm = BuildRtcmMsmFrame(1077u, 23u, {1u}, {1u}, {true});
+  station_a_stream.insert(station_a_stream.end(), station_a_msm.begin(), station_a_msm.end());
+
+  SocketPair first_connection;
+  if (!BeginStreaming(ctx, first_connection, client, 1 * kSecond, station_a_stream))
+  {
+    return;
+  }
+  ctx.Expect(client.correction_monitor().HasBaseStationPosition() &&
+                 client.correction_monitor().MsmConstellationCount(
+                     universal_gnss_protocols::RtcmConstellation::kGps) == 1u,
+             "initial source session should decode station-owned base and dynamic RTCM state");
+
+  SocketPair same_source_reconnect;
+  ctx.Expect(same_source_reconnect.Open(), "same-source reconnect socketpair should open");
+  ctx.Expect(client.AdoptConnectedSocket(same_source_reconnect.ReleaseClientFd()) ==
+                 NtripClientError::kNone,
+             "same-source reconnect should adopt the replacement transport");
+  ctx.Expect(client.correction_monitor().HasBaseStationPosition(),
+             "same-source reconnect should provisionally retain valid static 1005 metadata");
+  ctx.Expect(client.correction_monitor().MsmConstellationCount(
+                 universal_gnss_protocols::RtcmConstellation::kGps) == 0u,
+             "same-source reconnect must always clear dynamic MSM freshness");
+
+  ctx.Expect(client.SendRequest(2 * kSecond) == NtripClientError::kNone,
+             "same-source reconnect should send a fresh request");
+  same_source_reconnect.ReadPeerExact(client.request().request_text.size());
+  std::vector<std::uint8_t> same_station_response{
+      'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
+  same_station_response.insert(
+      same_station_response.end(), station_a_msm.begin(), station_a_msm.end());
+  ctx.Expect(same_source_reconnect.WritePeer(same_station_response),
+             "same source/station should resume with fresh MSM");
+  std::vector<std::uint8_t> buffer(4096u, 0u);
+  client.Read(buffer.data(), buffer.size(), 2 * kSecond);
+
+  universal_gnss_protocols::RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 2 * kSecond;
+  options.stale_after_ns = 5 * kSecond;
+  options.required_observation_window_ns = 30 * kSecond;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+  ctx.Expect(client.correction_monitor().HasRequiredCorrectionMessages(options),
+             "same source/station reconnect should combine retained static metadata only with new MSM");
+
+  const auto station_b_msm = BuildRtcmMsmFrame(1077u, 24u, {1u}, {1u}, {true});
+  ctx.Expect(same_source_reconnect.WritePeer(station_b_msm),
+             "same endpoint may later reveal a different RTCM station");
+  client.Read(buffer.data(), buffer.size(), 3 * kSecond);
+  ctx.Expect(!client.correction_monitor().HasBaseStationPosition() &&
+                 !client.correction_monitor().HasRequiredCorrectionMessages(options),
+             "a different post-reconnect station must invalidate provisionally retained metadata");
+
+  NtripClient changed_source_client(config);
+  ConfigureNonblockingReads(changed_source_client);
+  SocketPair original_source;
+  if (!BeginStreaming(ctx, original_source, changed_source_client, 1 * kSecond,
+                      BuildRtcm1005Frame(23u)))
+  {
+    return;
+  }
+  NtripConfig normalized_same_source = config;
+  normalized_same_source.host = "CASTER.EXAMPLE.COM";
+  normalized_same_source.mountpoint = "/RTCM32";
+  changed_source_client.set_config(normalized_same_source);
+  ctx.Expect(changed_source_client.state() == NtripClientState::kStreaming &&
+                 changed_source_client.correction_monitor().HasBaseStationPosition(),
+             "host case and equivalent mountpoint path must preserve the same source identity");
+
+  NtripConfig changed_source = config;
+  changed_source.mountpoint = "OTHER";
+  changed_source_client.set_config(changed_source);
+  ctx.Expect(changed_source_client.state() == NtripClientState::kDisconnected &&
+                 !changed_source_client.correction_monitor().HasBaseStationPosition(),
+             "explicit mountpoint/source change must close the session and clear old static metadata");
+
+  NtripClient changed_port_client(config);
+  ConfigureNonblockingReads(changed_port_client);
+  SocketPair original_port_source;
+  if (!BeginStreaming(ctx, original_port_source, changed_port_client, 1 * kSecond,
+                      BuildRtcm1005Frame(23u)))
+  {
+    return;
+  }
+  NtripConfig changed_port = config;
+  changed_port.port = 2201u;
+  changed_port_client.set_config(changed_port);
+  ctx.Expect(changed_port_client.state() == NtripClientState::kDisconnected &&
+                 !changed_port_client.correction_monitor().HasBaseStationPosition(),
+             "explicit caster port change must close the session and clear source-owned metadata");
+
+  NtripClient changed_host_client(config);
+  ConfigureNonblockingReads(changed_host_client);
+  SocketPair original_host_source;
+  if (!BeginStreaming(ctx, original_host_source, changed_host_client, 1 * kSecond,
+                      BuildRtcm1005Frame(23u)))
+  {
+    return;
+  }
+  NtripConfig changed_host = config;
+  changed_host.host = "other-caster.example.com";
+  changed_host_client.set_config(changed_host);
+  ctx.Expect(changed_host_client.state() == NtripClientState::kDisconnected &&
+                 !changed_host_client.correction_monitor().HasBaseStationPosition(),
+             "explicit caster host change must close the session and clear source-owned metadata");
+}
+
 void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
 {
   {
@@ -1099,6 +1396,8 @@ int main()
   TestLegacyIcyResponseWithMidFrameBinary(ctx);
   TestNtripStatusCodeTokenValidation(ctx);
   TestInvalidResponsesAndConnectFailure(ctx);
+  TestCorrectionFlowLivenessUsesCompleteValidFrames(ctx);
+  TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
   TestExplicitStreamingOnlyGgaInjection(ctx);
 

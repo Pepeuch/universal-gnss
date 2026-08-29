@@ -303,7 +303,7 @@ void TestSummaryFormatting(TestContext& ctx)
   correction_monitor.ObserveFrame(
       BuildRtcmMsmFrame(1077u, 1500000000LL, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}));
   correction_monitor.ObserveFrame(
-      BuildRtcmMsmFrame(1087u, 1700000000LL, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
+      BuildRtcmMsmFrame(1087u, 1700000000LL, 42u, {2u}, {1u, 3u, 4u}, {true, false, true}));
   correction_monitor.ObserveFrame(BuildRtcm1230Frame(2000000000LL));
   correction_monitor.ObserveInvalidFrame(2200000000LL);
 

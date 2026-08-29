@@ -441,7 +441,7 @@ void TestDecodedMsmSummary(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes;
   Append(bytes, BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u));
-  Append(bytes, BuildRtcmMsmFrame(1087u, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
+  Append(bytes, BuildRtcmMsmFrame(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true}));
 
   const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
   const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
@@ -450,7 +450,7 @@ void TestDecodedMsmSummary(TestContext& ctx)
   ctx.Expect(summary.find("msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=0 malformed=0 message_type=1087") !=
                      std::string::npos &&
                  summary.find("constellations_seen=gps,glonass") != std::string::npos &&
-                 summary.find("station_id=7") != std::string::npos &&
+                 summary.find("station_id=42") != std::string::npos &&
                  summary.find("satellite_count=1") != std::string::npos &&
                  summary.find("signal_count=3") != std::string::npos &&
                  summary.find("cell_count=2") != std::string::npos,

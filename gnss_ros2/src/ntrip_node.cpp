@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cctype>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -175,6 +177,28 @@ std::int64_t RosTimestampNs(const builtin_interfaces::msg::Time& stamp)
          static_cast<std::int64_t>(stamp.nanosec);
 }
 
+std::uint32_t LoadTimeoutMilliseconds(rclcpp::Node& node,
+                                      const std::string& parameter_name,
+                                      const double default_seconds)
+{
+  const double seconds = node.declare_parameter<double>(parameter_name, default_seconds);
+  constexpr double kMillisecondsPerSecond = 1000.0;
+  const double max_seconds =
+      static_cast<double>(std::numeric_limits<std::uint32_t>::max()) /
+      kMillisecondsPerSecond;
+  const double milliseconds = std::ceil(seconds * kMillisecondsPerSecond);
+  if (!std::isfinite(seconds) || seconds < 0.0 || seconds > max_seconds ||
+      milliseconds > static_cast<double>(std::numeric_limits<std::uint32_t>::max()))
+  {
+    ThrowInvalidParameter(
+        node,
+        parameter_name,
+        "must be finite, non-negative, and representable in milliseconds (zero disables it)");
+  }
+
+  return static_cast<std::uint32_t>(milliseconds);
+}
+
 bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
 {
   if (state.fix_type == universal_gnss::GnssFixType::kRtkFloat ||
@@ -210,6 +234,12 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   config.tls_enabled = node.declare_parameter<bool>("tls_enabled", false);
   config.rtcm_forwarding_activity_timeout_s =
       node.declare_parameter<double>("rtcm_forwarding_activity_timeout_s", 5.0);
+  config.ntrip.first_rtcm_frame_timeout_ms =
+      LoadTimeoutMilliseconds(node, "correction_first_frame_timeout_s", 30.0);
+  config.ntrip.rtcm_frame_timeout_ms =
+      LoadTimeoutMilliseconds(node, "correction_inter_frame_timeout_s", 30.0);
+  const auto operational_min_valid_rtcm_frames =
+      node.declare_parameter<std::int64_t>("correction_operational_min_valid_frames", 2);
 
   if (config.ntrip.host.empty())
   {
@@ -232,6 +262,16 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
     ThrowInvalidParameter(node, "gga_interval_s", "must be in the 1..86400 range");
   }
   config.ntrip.gga_interval_s = static_cast<std::uint32_t>(gga_interval_s);
+
+  if (operational_min_valid_rtcm_frames <= 0 ||
+      operational_min_valid_rtcm_frames > 1000000)
+  {
+    ThrowInvalidParameter(node,
+                          "correction_operational_min_valid_frames",
+                          "must be in the 1..1000000 range");
+  }
+  config.ntrip.operational_min_valid_rtcm_frames =
+      static_cast<std::uint32_t>(operational_min_valid_rtcm_frames);
 
   if (config.tls_enabled)
   {
@@ -264,7 +304,6 @@ struct NtripNode::Impl
   static constexpr std::chrono::milliseconds kPollPeriod{200};
   static constexpr std::chrono::seconds kGnssInputGracePeriod{3};
   static constexpr std::chrono::seconds kGnssInputStaleTimeout{5};
-  static constexpr std::chrono::seconds kCorrectionStartupGrace{3};
   static constexpr universal_gnss_protocols::ProtocolTimestampNs kCorrectionStaleAfterNs =
       5000000000LL;
   static constexpr universal_gnss_protocols::ProtocolTimestampNs
@@ -504,14 +543,8 @@ struct NtripNode::Impl
       if (read_result.bytes_read > 0u)
       {
         advanced = true;
-        last_correction_activity_time_ = SteadyClock::now();
         const auto public_receipt_stamp = ToRosTime(
             std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
-        if (client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming &&
-            !first_streaming_time_.has_value())
-        {
-          first_streaming_time_ = SteadyClock::now();
-        }
 
         for (const auto& frame : observed_frames)
         {
@@ -589,7 +622,6 @@ struct NtripNode::Impl
       return false;
     }
 
-    first_streaming_time_.reset();
     return true;
 #else
     (void)now_ns;
@@ -732,8 +764,8 @@ struct NtripNode::Impl
 
     if (client_state == universal_gnss_ntrip::NtripClientState::kStreaming)
     {
-      if (metrics.rtcm_frames_received == 0u && first_streaming_time_.has_value() &&
-          now - *first_streaming_time_ < kCorrectionStartupGrace)
+      const auto& correction_flow = client_->correction_flow_state();
+      if (correction_flow.valid_rtcm_frames == 0u)
       {
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
                                    universal_gnss::GnssDiagnosticCategory::kCorrection,
@@ -742,6 +774,13 @@ struct NtripNode::Impl
       }
       else
       {
+        if (client_->IsCorrectionFlowing())
+        {
+          summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                     universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                     "correction_flowing",
+                                     "Complete integrity-valid RTCM frames are arriving"));
+        }
         auto correction_health =
             client_->BuildCorrectionHealth(BuildCorrectionHealthOptions(now_ns));
         summary.correction_available = correction_health.correction_available;
@@ -917,9 +956,7 @@ struct NtripNode::Impl
   std::optional<SteadyClock::time_point> last_position_observation_time_{};
   std::optional<std::uint64_t> last_position_observation_sequence_{};
   std::optional<std::int64_t> last_legacy_position_stamp_ns_{};
-  std::optional<SteadyClock::time_point> last_correction_activity_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_published_time_{};
-  std::optional<SteadyClock::time_point> first_streaming_time_{};
   std::optional<universal_gnss_ntrip::NtripGgaSendResult> last_gga_result_{};
   std::optional<std::uint16_t> last_rtcm_message_type_{};
   SteadyClock::time_point startup_time_{SteadyClock::now()};

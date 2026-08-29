@@ -311,16 +311,63 @@ void RtcmCorrectionMonitor::Reset()
   msm_decode_success_count_ = 0;
   msm_decode_failure_count_ = 0;
   msm_malformed_count_ = 0;
+  station_id_.reset();
+}
+
+void RtcmCorrectionMonitor::ResetDynamicState()
+{
+  // Static base metadata is reusable only when it was fully decoded and is
+  // therefore owned by a known station. Merely seeing a 1005/1006 message type
+  // is not enough to carry it into another transport session.
+  if (!station_id_.has_value() || !last_base_station_arp_.has_value())
+  {
+    Reset();
+    return;
+  }
+
+  const std::optional<std::uint16_t> retained_station_id = station_id_;
+  const bool retained_1005 = seen_base_position_1005_;
+  const bool retained_1006 = seen_base_position_1006_;
+  const auto retained_arp = last_base_station_arp_;
+  const auto retained_arp_timestamp_ns = last_base_station_arp_timestamp_ns_;
+  const std::uint64_t retained_decode_success_count =
+      base_station_arp_decode_success_count_;
+
+  const auto activity_1005 = message_type_activity_.find(1005u);
+  const std::optional<RtcmCorrectionActivityStats> retained_activity_1005 =
+      activity_1005 == message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{activity_1005->second};
+  const auto activity_1006 = message_type_activity_.find(1006u);
+  const std::optional<RtcmCorrectionActivityStats> retained_activity_1006 =
+      activity_1006 == message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{activity_1006->second};
+  Reset();
+
+  station_id_ = retained_station_id;
+  seen_base_position_1005_ = retained_1005;
+  seen_base_position_1006_ = retained_1006;
+  last_base_station_arp_ = retained_arp;
+  last_base_station_arp_timestamp_ns_ = retained_arp_timestamp_ns;
+  base_station_arp_decode_success_count_ = retained_decode_success_count;
+  if (retained_activity_1005.has_value())
+  {
+    message_type_activity_.emplace(1005u, *retained_activity_1005);
+  }
+  if (retained_activity_1006.has_value())
+  {
+    message_type_activity_.emplace(1006u, *retained_activity_1006);
+  }
 }
 
 void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
 {
-  ++total_frames_;
-  UpdateLatestTimestamp(frame.timestamp_ns, last_frame_timestamp_ns_);
-  AppendTimestamp(frame.timestamp_ns, total_frame_timestamps_);
-
   if (frame.checksum_status != ChecksumStatus::kValid)
   {
+    ++total_frames_;
+    UpdateLatestTimestamp(frame.timestamp_ns, last_frame_timestamp_ns_);
+    AppendTimestamp(frame.timestamp_ns, total_frame_timestamps_);
     ++invalid_frames_;
     return;
   }
@@ -328,16 +375,73 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   const auto parsed_info = ParseRtcmMessageInfo(frame);
   if (parsed_info.status != ParserStatus::kRecordReady || !parsed_info.record.has_value())
   {
+    ++total_frames_;
+    UpdateLatestTimestamp(frame.timestamp_ns, last_frame_timestamp_ns_);
+    AppendTimestamp(frame.timestamp_ns, total_frame_timestamps_);
     ++invalid_frames_;
     return;
   }
+
+  std::optional<RtcmBaseStationArpRecord> parsed_arp_record{};
+  std::optional<RtcmGlonassCodePhaseBiasRecord> parsed_bias_record{};
+  std::optional<RtcmMsmSummaryRecord> parsed_msm_record{};
 
   if (parsed_info.record->is_station_arp)
   {
     const auto parsed_arp = ParseRtcmBaseStationArp(frame);
     if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
     {
-      last_base_station_arp_ = *parsed_arp.record;
+      parsed_arp_record = *parsed_arp.record;
+    }
+  }
+
+  if (parsed_info.record->is_glonass_bias)
+  {
+    const auto parsed_bias = ParseRtcmGlonassCodePhaseBias(frame);
+    if (parsed_bias.status == ParserStatus::kRecordReady && parsed_bias.record.has_value())
+    {
+      parsed_bias_record = *parsed_bias.record;
+    }
+  }
+
+  if (parsed_info.record->is_msm)
+  {
+    const auto parsed_msm = ParseRtcmMsmSummary(frame);
+    if (parsed_msm.status == ParserStatus::kRecordReady && parsed_msm.record.has_value())
+    {
+      parsed_msm_record = *parsed_msm.record;
+    }
+  }
+
+  std::optional<std::uint16_t> decoded_station_id{};
+  if (parsed_arp_record.has_value())
+  {
+    decoded_station_id = parsed_arp_record->station_id;
+  }
+  else if (parsed_bias_record.has_value())
+  {
+    decoded_station_id = parsed_bias_record->station_id;
+  }
+  else if (parsed_msm_record.has_value())
+  {
+    decoded_station_id = parsed_msm_record->station_id;
+  }
+  if (decoded_station_id.has_value())
+  {
+    // Resolve ownership before recording the current frame. A station change
+    // can therefore never create a transient healthy state from mixed data.
+    PrepareStationOwnership(*decoded_station_id);
+  }
+
+  ++total_frames_;
+  UpdateLatestTimestamp(frame.timestamp_ns, last_frame_timestamp_ns_);
+  AppendTimestamp(frame.timestamp_ns, total_frame_timestamps_);
+
+  if (parsed_info.record->is_station_arp)
+  {
+    if (parsed_arp_record.has_value())
+    {
+      last_base_station_arp_ = *parsed_arp_record;
       ++base_station_arp_decode_success_count_;
       UpdateLatestTimestamp(frame.timestamp_ns, last_base_station_arp_timestamp_ns_);
     }
@@ -350,10 +454,9 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
 
   if (parsed_info.record->is_glonass_bias)
   {
-    const auto parsed_bias = ParseRtcmGlonassCodePhaseBias(frame);
-    if (parsed_bias.status == ParserStatus::kRecordReady && parsed_bias.record.has_value())
+    if (parsed_bias_record.has_value())
     {
-      last_glonass_code_phase_bias_ = *parsed_bias.record;
+      last_glonass_code_phase_bias_ = *parsed_bias_record;
       ++glonass_bias_1230_decode_success_count_;
       UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_glonass_bias_1230_timestamp_ns_);
     }
@@ -367,13 +470,12 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   if (parsed_info.record->is_msm)
   {
     RtcmMsmSummaryActivityStats& msm_stats = msm_summary_activity_[parsed_info.record->message_type];
-    const auto parsed_msm = ParseRtcmMsmSummary(frame);
-    if (parsed_msm.status == ParserStatus::kRecordReady && parsed_msm.record.has_value())
+    if (parsed_msm_record.has_value())
     {
-      msm_stats.last_summary = *parsed_msm.record;
+      msm_stats.last_summary = *parsed_msm_record;
       ++msm_stats.decode_success_count;
       UpdateLatestTimestamp(frame.timestamp_ns, msm_stats.last_decoded_timestamp_ns);
-      last_msm_summary_ = *parsed_msm.record;
+      last_msm_summary_ = *parsed_msm_record;
       ++msm_decode_success_count_;
       UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_msm_timestamp_ns_);
     }
@@ -443,6 +545,11 @@ std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::last_frame_timestamp_n
 std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::first_valid_frame_timestamp_ns() const
 {
   return first_valid_frame_timestamp_ns_;
+}
+
+std::optional<std::uint16_t> RtcmCorrectionMonitor::station_id() const
+{
+  return station_id_;
 }
 
 const RtcmMessageTypeActivityMap& RtcmCorrectionMonitor::message_type_activity() const
@@ -644,6 +751,14 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   const auto window_start_timestamp_ns = ComputeObservationWindowStart(options);
   const auto has_message_type = [&](const std::uint16_t message_type)
   {
+    if (message_type == 1005u)
+    {
+      return HasSeenBasePosition1005();
+    }
+    if (message_type == 1006u)
+    {
+      return HasSeenBasePosition1006();
+    }
     return HasActivityInWindow(MessageCount(message_type),
                                LastSeenMessageTimestampNs(message_type),
                                window_start_timestamp_ns,
@@ -693,7 +808,7 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     }
   }
 
-  if (options.require_base_position && !has_message_type(1005u) && !has_message_type(1006u))
+  if (options.require_base_position && !HasSeenBasePositionMessage())
   {
     return false;
   }
@@ -823,6 +938,15 @@ void RtcmCorrectionMonitor::RecordValidMessage(const RtcmMessageInfo& info,
     AppendTimestamp(timestamp_ns, msm_constellation_timestamps_[info.msm_constellation]);
     UpdateLatestTimestamp(timestamp_ns, last_msm_timestamp_ns_);
   }
+}
+
+void RtcmCorrectionMonitor::PrepareStationOwnership(const std::uint16_t station_id)
+{
+  if (station_id_.has_value() && *station_id_ != station_id)
+  {
+    Reset();
+  }
+  station_id_ = station_id;
 }
 
 universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(

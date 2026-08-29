@@ -3,7 +3,9 @@
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
+#include <limits>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -17,6 +19,15 @@ namespace
 {
 
 constexpr std::size_t kMaxResponseHeaderBytes = 8192u;
+
+bool HasSteadyElapsed(
+    const std::optional<std::chrono::steady_clock::time_point>& start_time,
+    const std::uint32_t timeout_ms)
+{
+  return timeout_ms != 0u && start_time.has_value() &&
+         std::chrono::steady_clock::now() - *start_time >=
+             std::chrono::milliseconds(timeout_ms);
+}
 
 bool StartsWith(const std::string_view text, const std::string_view prefix)
 {
@@ -240,6 +251,11 @@ bool NtripGgaSendResult::sent() const
   return status == NtripGgaSendStatus::kSent;
 }
 
+void NtripCorrectionFlowState::Reset()
+{
+  *this = NtripCorrectionFlowState{};
+}
+
 bool NtripGgaSendResult::skipped() const
 {
   return status == NtripGgaSendStatus::kSkippedDisabled ||
@@ -256,6 +272,7 @@ bool NtripGgaSendResult::ok() const
 
 NtripClient::NtripClient(NtripConfig config)
     : config_(std::move(config)),
+      source_identity_(BuildNtripSourceIdentity(config_)),
       gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
       gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
 {
@@ -264,6 +281,7 @@ NtripClient::NtripClient(NtripConfig config)
 NtripClient::NtripClient(NtripConfig config,
                          universal_gnss_transport::TcpClientConfig tcp_config)
     : config_(std::move(config)),
+      source_identity_(BuildNtripSourceIdentity(config_)),
       tcp_config_(std::move(tcp_config)),
       gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
       gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
@@ -272,11 +290,24 @@ NtripClient::NtripClient(NtripConfig config,
 
 void NtripClient::set_config(NtripConfig config)
 {
+  const NtripSourceIdentity new_source_identity = BuildNtripSourceIdentity(config);
+  const bool source_changed = new_source_identity != source_identity_;
   config_ = std::move(config);
+  source_identity_ = new_source_identity;
   gga_injection_policy_ = BuildGgaInjectionPolicy(config_);
   gga_injector_.set_config(GgaInjectorConfig{
       gga_injection_policy_,
       gga_injector_.config().sentence_builder_options});
+
+  if (source_changed)
+  {
+    transport_.Close();
+    state_ = NtripClientState::kDisconnected;
+    reconnect_state_.Reset();
+    ResetSourceState();
+    ResetSessionMetrics();
+    MarkDisconnected(metrics_, NtripClientError::kNone);
+  }
 }
 
 const NtripConfig& NtripClient::config() const
@@ -301,7 +332,17 @@ NtripClientError NtripClient::Connect(
   transport_config.host = config_.host;
   transport_config.port = config_.port;
   transport_.Close();
-  ResetSessionState();
+  const NtripSourceIdentity configured_source_identity = BuildNtripSourceIdentity(config_);
+  if (configured_source_identity != source_identity_)
+  {
+    source_identity_ = configured_source_identity;
+    reconnect_state_.Reset();
+    ResetSourceState();
+  }
+  else
+  {
+    ResetSessionState();
+  }
   ResetSessionMetrics();
 
   if (transport_config.host.empty() || transport_config.port == 0u)
@@ -319,14 +360,23 @@ NtripClientError NtripClient::Connect(
   state_ = NtripClientState::kConnected;
   MarkConnected(metrics_);
   ClearLastError(metrics_);
-  RecordReconnectSuccess(timestamp_ns);
   return NtripClientError::kNone;
 }
 
 NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
 {
   transport_.Close();
-  ResetSessionState();
+  const NtripSourceIdentity configured_source_identity = BuildNtripSourceIdentity(config_);
+  if (configured_source_identity != source_identity_)
+  {
+    source_identity_ = configured_source_identity;
+    reconnect_state_.Reset();
+    ResetSourceState();
+  }
+  else
+  {
+    ResetSessionState();
+  }
   ResetSessionMetrics();
 
   state_ = NtripClientState::kConnecting;
@@ -339,7 +389,6 @@ NtripClientError NtripClient::AdoptConnectedSocket(const int fd)
   state_ = NtripClientState::kConnected;
   MarkConnected(metrics_);
   ClearLastError(metrics_);
-  RecordReconnectSuccess(std::nullopt);
   return NtripClientError::kNone;
 }
 
@@ -571,6 +620,11 @@ NtripClientReadResult NtripClient::Read(
     return result;
   }
 
+  if (CheckCorrectionFlowTimeout(timestamp_ns, result))
+  {
+    return result;
+  }
+
   std::vector<std::uint8_t> read_buffer(capacity, 0u);
   const auto read_result = transport_.Read(read_buffer.data(), read_buffer.size());
   result.transport_status = read_result.status;
@@ -600,7 +654,9 @@ NtripClientReadResult NtripClient::Read(
   {
     std::memcpy(destination, read_buffer.data(), read_result.bytes_read);
     result.bytes_read = read_result.bytes_read;
+    const std::uint64_t valid_frames_before = metrics_.rtcm_frames_received;
     FeedRtcmMonitor(destination, result.bytes_read, timestamp_ns, observed_frames);
+    NoteCorrectionFlowProgress(metrics_.rtcm_frames_received - valid_frames_before, timestamp_ns);
     return result;
   }
 
@@ -694,6 +750,27 @@ bool NtripClient::IsConnected() const
          state_ == NtripClientState::kStreaming;
 }
 
+const NtripCorrectionFlowState& NtripClient::correction_flow_state() const
+{
+  return correction_flow_state_;
+}
+
+bool NtripClient::IsCorrectionFlowing() const
+{
+  if (correction_flow_state_.valid_rtcm_frames == 0u)
+  {
+    return false;
+  }
+
+  return config_.rtcm_frame_timeout_ms == 0u ||
+         !HasSteadyElapsed(last_valid_rtcm_frame_steady_time_, config_.rtcm_frame_timeout_ms);
+}
+
+const NtripSourceIdentity& NtripClient::source_identity() const
+{
+  return source_identity_;
+}
+
 const NtripReconnectState& NtripClient::reconnect_state() const
 {
   return reconnect_state_;
@@ -750,6 +827,21 @@ void NtripClient::ResetSessionState()
   response_buffer_.clear();
   response_header_.clear();
   rtcm_framer_.Reset();
+  correction_flow_state_.Reset();
+  response_accepted_steady_time_.reset();
+  last_valid_rtcm_frame_steady_time_.reset();
+  correction_monitor_.ResetDynamicState();
+}
+
+void NtripClient::ResetSourceState()
+{
+  request_ = NtripRequest{};
+  response_buffer_.clear();
+  response_header_.clear();
+  rtcm_framer_.Reset();
+  correction_flow_state_.Reset();
+  response_accepted_steady_time_.reset();
+  last_valid_rtcm_frame_steady_time_.reset();
   correction_monitor_.Reset();
 }
 
@@ -761,6 +853,73 @@ void NtripClient::ResetSessionMetrics()
   gga_injector_ = GgaInjector(GgaInjectorConfig{
       gga_injection_policy_,
       gga_injector_.config().sentence_builder_options});
+}
+
+bool NtripClient::CheckCorrectionFlowTimeout(
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns,
+    NtripClientReadResult& result)
+{
+  if (state_ != NtripClientState::kStreaming ||
+      !correction_flow_state_.response_accepted)
+  {
+    return false;
+  }
+
+  const bool has_valid_frame = correction_flow_state_.valid_rtcm_frames > 0u;
+  const std::uint32_t timeout_ms = has_valid_frame
+                                       ? config_.rtcm_frame_timeout_ms
+                                       : config_.first_rtcm_frame_timeout_ms;
+  const bool timed_out =
+      has_valid_frame ? HasSteadyElapsed(last_valid_rtcm_frame_steady_time_, timeout_ms)
+                      : HasSteadyElapsed(response_accepted_steady_time_, timeout_ms);
+  if (!timed_out)
+  {
+    return false;
+  }
+
+  result.transport_status = universal_gnss_transport::TransportStatus::kError;
+  result.transport_error = universal_gnss_transport::TransportError::kTimeout;
+  result.client_error = FailWith(NtripClientError::kTimeout, timestamp_ns);
+  return true;
+}
+
+void NtripClient::NoteCorrectionFlowProgress(
+    const std::uint64_t valid_frame_count,
+    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+{
+  if (valid_frame_count == 0u)
+  {
+    return;
+  }
+
+  if (correction_flow_state_.valid_rtcm_frames >
+      std::numeric_limits<std::uint64_t>::max() - valid_frame_count)
+  {
+    correction_flow_state_.valid_rtcm_frames = std::numeric_limits<std::uint64_t>::max();
+  }
+  else
+  {
+    correction_flow_state_.valid_rtcm_frames += valid_frame_count;
+  }
+
+  if (timestamp_ns.has_value())
+  {
+    if (!correction_flow_state_.first_valid_rtcm_frame_timestamp_ns.has_value())
+    {
+      correction_flow_state_.first_valid_rtcm_frame_timestamp_ns = timestamp_ns;
+    }
+    correction_flow_state_.last_valid_rtcm_frame_timestamp_ns = timestamp_ns;
+  }
+  last_valid_rtcm_frame_steady_time_ = std::chrono::steady_clock::now();
+
+  const std::uint64_t operational_threshold =
+      std::max<std::uint64_t>(1u, config_.operational_min_valid_rtcm_frames);
+  if (!correction_flow_state_.operational &&
+      correction_flow_state_.valid_rtcm_frames >= operational_threshold)
+  {
+    correction_flow_state_.operational = true;
+    RecordReconnectSuccess(timestamp_ns);
+  }
 }
 
 NtripGgaSendResult NtripClient::MakeGgaSendErrorResult(
@@ -919,6 +1078,9 @@ NtripClientError NtripClient::HandleResponseBytes(
   response_header_ = header_text;
   MarkResponseReceived(metrics_);
   state_ = NtripClientState::kStreaming;
+  correction_flow_state_.response_accepted = true;
+  correction_flow_state_.response_accepted_timestamp_ns = timestamp_ns;
+  response_accepted_steady_time_ = std::chrono::steady_clock::now();
 
   const std::size_t payload_size = response_buffer_.size() - header_size;
   payload_bytes_written = std::min(payload_size, capacity);
@@ -927,7 +1089,9 @@ NtripClientError NtripClient::HandleResponseBytes(
     std::memcpy(destination,
                 response_buffer_.data() + static_cast<std::ptrdiff_t>(header_size),
                 payload_bytes_written);
+    const std::uint64_t valid_frames_before = metrics_.rtcm_frames_received;
     FeedRtcmMonitor(destination, payload_bytes_written, timestamp_ns, observed_frames);
+    NoteCorrectionFlowProgress(metrics_.rtcm_frames_received - valid_frames_before, timestamp_ns);
   }
 
   response_buffer_.clear();

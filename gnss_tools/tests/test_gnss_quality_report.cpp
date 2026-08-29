@@ -426,7 +426,7 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
                                   {true, false, true, true},
                                   true,
                                   5u));
-  Append(bytes, BuildRtcmMsmFrame(1087u, 7u, {2u}, {1u, 3u, 4u}, {true, false, true}));
+  Append(bytes, BuildRtcmMsmFrame(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true}));
 
   auto malformed_msm_payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true});
   malformed_msm_payload.resize(21u);

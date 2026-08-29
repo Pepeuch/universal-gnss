@@ -1,5 +1,7 @@
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <sstream>
 
 namespace universal_gnss_ntrip
@@ -59,6 +61,14 @@ std::string ResolveUserAgent(const std::string& user_agent)
   return user_agent.empty() ? std::string{kDefaultNtripUserAgent} : user_agent;
 }
 
+std::string NormalizeHost(std::string host)
+{
+  std::transform(host.begin(), host.end(), host.begin(), [](const unsigned char ch) {
+    return static_cast<char>(std::tolower(ch));
+  });
+  return host;
+}
+
 }  // namespace
 
 std::string NormalizeMountpointPath(const std::string_view mountpoint)
@@ -75,6 +85,14 @@ std::string NormalizeMountpointPath(const std::string_view mountpoint)
   }
 
   return "/" + std::string(mountpoint.substr(index));
+}
+
+NtripSourceIdentity BuildNtripSourceIdentity(const NtripConfig& config)
+{
+  return NtripSourceIdentity{
+      NormalizeHost(config.host),
+      config.port,
+      NormalizeMountpointPath(config.mountpoint)};
 }
 
 std::string BuildBasicAuthorizationValue(const std::string_view username,

@@ -82,6 +82,9 @@ public:
   static constexpr ProtocolTimestampNs kTimestampHistoryRetentionNs = 60000000000LL;
 
   void Reset();
+  // Preserve decoded, station-owned 1005/1006 metadata while clearing
+  // session/dynamic correction observations (MSM, 1230, rates, freshness).
+  void ResetDynamicState();
 
   void ObserveFrame(const RtcmFrame& frame);
   void ObserveMessage(const RtcmMessageInfo& info,
@@ -94,6 +97,7 @@ public:
   std::size_t RetainedTimestampCount() const;
   std::optional<ProtocolTimestampNs> last_frame_timestamp_ns() const;
   std::optional<ProtocolTimestampNs> first_valid_frame_timestamp_ns() const;
+  std::optional<std::uint16_t> station_id() const;
 
   const RtcmMessageTypeActivityMap& message_type_activity() const;
   const RtcmMsmConstellationActivityMap& msm_constellation_activity() const;
@@ -195,7 +199,9 @@ private:
   std::uint64_t msm_decode_success_count_{0};
   std::uint64_t msm_decode_failure_count_{0};
   std::uint64_t msm_malformed_count_{0};
+  std::optional<std::uint16_t> station_id_{};
 
+  void PrepareStationOwnership(std::uint16_t station_id);
   void RecordValidMessage(const RtcmMessageInfo& info,
                           std::optional<ProtocolTimestampNs> timestamp_ns);
 };

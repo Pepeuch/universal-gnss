@@ -8,7 +8,7 @@ Checked-out `review` HEAD: `483a717b9a0fe1c7609d173fb1a8931cd2dfc1d9` (exactly o
 
 Comparison base for the old audit: `804bed8d7f753f6834212cfbc9dc329f88360299`
 
-The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-002, UGA-007, UGA-014, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
+The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-002, UGA-005, UGA-006, UGA-007, UGA-014, UGA-016, UGA-018, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
 
 ### UGA-001 — NMEA header parsing uses a dangling `string_view`
 
@@ -104,35 +104,39 @@ Recommended next action: Keep the signed boundary coverage with the ReceiverNode
 
 ### UGA-005 — NTRIP `Streaming` has no correction-flow liveness transition
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ntrip/src/ntrip_client.cpp` still sets `state_=kStreaming` as soon as a valid response header terminates, returns successful zero-byte reads without a state transition, and has no inactivity deadline in `Read`. In `gnss_ros2/src/ntrip_node.cpp`, `last_correction_activity_time_` is still assigned at current line 466 but never consumed; `first_streaming_time_` is still initialized only inside `read_result.bytes_read > 0` at lines 463-471; and `BuildHealthSummary` can report stale health but never disconnect/reconnect a silent `Streaming` client.
+Pre-fix reproduction: `gnss_ntrip_test_ntrip_client` failed three focused assertions: an accepted response with no first RTCM frame never timed out, one CRC-valid frame followed by silence never timed out, and arbitrary junk bytes kept the client in `Streaming`. The additional fragmented-frame and slow-valid-stream scenarios established the required boundary: only a complete CRC-valid frame is progress, while valid frames below the configured inter-frame deadline remain live.
 
-Relevant changes since old audit: The 14 commits from `804bed8d...` to `aaacc6be...` are Unicore configuration changes plus optional RTCM 1230 health. The focused diff/log for NTRIP client, NtripNode, and their tests contains no change. The commits do not affect transport/application liveness.
+Shared state/liveness contract: TCP connectivity, accepted NTRIP response, recent complete CRC-valid RTCM flow, and semantic correction health are independent. A successful HTTP/ICY header still establishes `Streaming`, but it starts a first-frame deadline. Each complete CRC-valid RTCM frame refreshes the separate inter-frame deadline; partial frames and arbitrary bytes do not. Defaults are 30 seconds for each deadline, zero disables the corresponding deadline, and ROS2 exposes `correction_first_frame_timeout_s` and `correction_inter_frame_timeout_s`. Expiry closes the transport, enters `kFailed`, and uses the existing reconnect path. Deadline decisions use only the client's internal `steady_clock`; optional caller timestamps remain observable provenance/metrics and cannot disable or spuriously advance liveness.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga005-repro`, linked against freshly built current libraries, used an adopted socket pair, sent a complete `ICY 200` header and no payload, then read at simulated 1 s, 7 s, and 60 s timestamps. Result: `after_header_state=3 first_bytes=0 ... silent1=0 silent2=0 frames=0 connected=1`. State 3 is `kStreaming`; it remains connected after 60 seconds with no first RTCM frame.
+Production fix: `NtripClient` now owns an explicit `NtripCorrectionFlowState`, first/inter-frame monotonic deadlines, and `IsCorrectionFlowing`; `Read` transitions silent flows through `FailWith(kTimeout)`. `NtripNode` reports `ntrip_streaming`, `correction_stream_waiting`, `correction_flowing`, and semantic correction health separately. UGA-019 forwarding/publication activity remains a different diagnostic and does not drive reconnect.
 
-Remaining defect, if any: Both header-only and post-frame silent streams still lack a forced liveness transition. The three-second node startup grace is additionally bypassed for a header-only response because its start time is never set. Diagnostic stale, correction availability, first-frame deadline, and reconnect deadline remain conflated/absent rather than independently controlled.
+Post-fix validation: Focused NTRIP client, reconnect-policy, and RTCM-monitor CTests passed 3/3. The ROS integration regression `SilentAcceptedStreamTimesOutAndEntersReconnectState` passed, including the waiting-to-reconnecting transition. Complete `gnss_ntrip` passed 7/7, `gnss_protocols` 18/18, non-ROS CTest 61/61, and affected ROS2 CTest 6/6. The four touched non-ROS test binaries passed 4/4 under combined ASan+UBSan and 4/4 under standalone UBSan.
 
-Recommended next action: In a separate implementation task, add distinct first-valid-frame and last-valid-frame liveness tracking plus a conservatively configured forced-reconnect threshold integrated with backoff; add header-only, frame-then-silence, legitimate-gap, and threshold-boundary tests.
+Compatibility impact and remaining limitation: `NtripConfig` gains additive liveness fields and NtripNode gains three parameters; dependent C++ code must be rebuilt. Correction-flow progress intentionally means integrity-valid framing, not semantic validity: CRC-valid but semantically malformed RTCM remains UGA-008 and can prove flow without proving semantic health. Validate deployed timeout values against each caster's real cadence.
+
+Recommended next action: Keep the header-only, post-frame silence, junk, fragmentation, low-rate, omitted-timestamp, and ROS reconnect scenarios in continuous testing; field-test the selected deadlines against the intended caster.
 
 ### UGA-006 — reconnect backoff is reset before NTRIP success
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ntrip/src/ntrip_client.cpp` current lines 276-322 still calls `RecordReconnectSuccess` immediately after TCP `Open` or socket adoption. `RecordReconnectSuccess` at lines 845-862 still resets the reconnect state when `reset_after_success` is true. Authentication/header failures occur later through `FailWith` lines 711-723, so the new failure always starts from a reset state.
+Pre-fix reproduction: `gnss_ntrip_test_ntrip_reconnect_policy` failed four focused assertions. Repeated TCP-success/HTTP-failure cycles reset attempts instead of preserving exponential progression; an accepted response with no correction flow reset history; and a one-frame-then-drop stream reset backoff too early. The original three-cycle HTTP-401 reproducer likewise stayed at attempt 1/minimum delay.
 
-Relevant changes since old audit: The focused diff from `804bed8d...` to `aaacc6be...` for `ntrip_client`, reconnect policy, headers, and tests is empty. The intervening Unicore/RTCM-1230 commits do not alter the reconnect success boundary.
+Shared operational-success contract: TCP connect and accepted response are progress states, not operational success. Backoff resets only after the accepted response has delivered `operational_min_valid_rtcm_frames` complete CRC-valid frames; the default is two, explicitly preventing connect-one-frame-drop loops from resetting history. ROS2 exposes `correction_operational_min_valid_frames`; its accepted range is 1..1,000,000. Existing initial/max delay, multiplier, max-attempt, and reset-after-success policy remain authoritative.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga006-repro`, linked against current libraries, configured `initial_delay=100 ms`, multiplier 2, and `max_attempts=2`. It ran three independent TCP-success/HTTP-401 cycles. Each printed `attempts=1 delay_ms=100 exhausted=0`; the count never reached 2 and delay never reached 200 ms. Each failure correctly entered state 4 (`kFailed`), but the next socket adoption erased its backoff history before application success.
+Production fix: Removed `RecordReconnectSuccess` from raw `Connect`/`AdoptConnectedSocket` success. `NoteCorrectionFlowProgress` declares the session operational and invokes the existing reset policy exactly once when the configured valid-frame threshold is reached. Failures before that point preserve and advance prior failure history; a failure after operational flow starts again from the normal initial delay.
 
-Remaining defect, if any: TCP connectivity is still treated as full NTRIP success before request/authentication/header/RTCM success. Repeated post-connect failures can retry forever at the minimum delay and evade `max_attempts`.
+Post-fix validation: The regression now proves exponential progression across TCP+HTTP failures, no reset for accepted/no-flow and one-frame-drop sessions, reset after two valid frames, and initial-delay restart after a later failure. Focused CTests passed 3/3; complete `gnss_ntrip` passed 7/7; non-ROS CTest passed 61/61; ROS2 passed 6/6; ASan+UBSan and standalone UBSan each passed the four affected binaries 4/4.
 
-Recommended next action: In a separate implementation task, define and test an application-level success milestone for resetting backoff (not raw TCP connect), including repeated authentication/protocol failures and genuinely healthy flow recovery.
+Compatibility impact and remaining limitation: The default operational milestone is intentionally framing-level, consistent with UGA-005 and separate from UGA-008 semantic health. Deployments may raise the threshold, but setting it excessively high delays backoff reset even on healthy slow streams.
+
+Recommended next action: Keep the failure progression, one-frame-drop, operational reset, max-bound, and post-success failure cases in the reconnect-policy lane.
 
 ### UGA-007 — stale receiver state is kept fresh for NTRIP GGA by republishing
 
@@ -318,8 +322,8 @@ Recommended next action: Keep the public-stamp-domain, future-time, ROS-jump, st
 | UGA-002 | FIXED | Confirmed |
 | UGA-003 | STILL PRESENT | Confirmed |
 | UGA-004 | FIXED | Confirmed |
-| UGA-005 | STILL PRESENT | Confirmed |
-| UGA-006 | STILL PRESENT | Confirmed |
+| UGA-005 | FIXED | Confirmed |
+| UGA-006 | FIXED | Confirmed |
 | UGA-007 | FIXED | Confirmed |
 | UGA-008 | STILL PRESENT | Confirmed |
 | UGA-009 | STILL PRESENT | Confirmed |
@@ -329,9 +333,9 @@ Recommended next action: Keep the public-stamp-domain, future-time, ROS-jump, st
 | UGA-013 | FIXED | Confirmed |
 | UGA-014 | FIXED | Confirmed |
 | UGA-015 | ALREADY FIXED | Confirmed |
-| UGA-016 | STILL PRESENT | Confirmed |
+| UGA-016 | FIXED | Confirmed |
 | UGA-017 | FIXED | Confirmed |
-| UGA-018 | STILL PRESENT | Confirmed |
+| UGA-018 | FIXED | Confirmed |
 | UGA-019 | FIXED | Confirmed |
 | UGA-020 | FIXED | Confirmed |
 | UGA-021 | STILL PRESENT | Confirmed |
@@ -362,19 +366,21 @@ Recommended next action: Keep the two focused regression scenarios in the curren
 
 ### UGA-016 — static base metadata is expired as a 30-second dynamic observation
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_protocols/src/rtcm_correction_monitor.cpp` lines 598-615 computes one `window_start_timestamp_ns` and applies it through the same `HasSeenSince` helper to both message types and MSM constellations. Dynamic MSM freshness is checked against that window at lines 633-657, while `require_base_position` checks the last 1005/1006 message timestamp against the identical window at lines 660-673. The requirement path does not consult the separately retained, successfully decoded `last_base_station_arp`; therefore static/session metadata and dynamic observations still have no distinct lifetime semantics. `gnss_ros2/src/ntrip_node.cpp` lines 251-256 fixes the requirement window at 30 seconds and lines 562-571 passes it unchanged into the portable preset. `gnss_tools/src/gnss_ntrip_monitor.cpp` lines 162-173 does the same. The current test `TestPortableRtkRequirementsUseRecentObservationWindow` at monitor-test lines 760-783 explicitly expects an old base-position message to expire and correction requirements to fail.
+Pre-fix reproduction: `gnss_protocols_test_rtcm_correction_monitor` failed `TestStaticBaseMetadataOutlivesDynamicObservationWindow`: decoded station-42 1005 at T0 plus fresh station-42 MSM through T31 became unavailable solely because the 1005 age exceeded the 30-second dynamic window. The same scenario confirmed that the decoded base record and its age remained observable even though it no longer satisfied health.
 
-Relevant changes since old audit: The only commit touching the focused monitor implementation or tests between `804bed8d7f753f6834212cfbc9dc329f88360299` and `aaacc6be92463ad493d6f4260426cf645188078f` is `3495ffb9ba8eea8be8401c9736ff081e046063a7`. It changes the portable preset so RTCM 1230 is optional and makes a validity-cleared 1230 informational, but it does not change `ComputeObservationWindowStart`, `HasSeenSince`, the 1005/1006 base-position branch, the 30-second NtripNode window, or source/station lifetime tracking. Removing 1230 from the portable requirements narrows the required set but has no effect on expiration of 1005/1006.
+Static/dynamic lifetime contract: Decoded 1005/1006 is static metadata owned by the normalized correction source and decoded RTCM station ID. Its last-seen age remains reportable, but requirement satisfaction does not use the MSM observation window. MSM and other dynamic correction observations remain window/freshness based. RTCM 1230 retains its existing optional portable-policy behavior and is not promoted to static base metadata.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga016-repro` parsed a captured CRC-valid 1006 and verified one successful base-ARP decode at T=1 s, then supplied a structurally valid GPS MSM7/1077 and verified one successful MSM decode at T=31 s. Health was evaluated at T=32 s with the current portable 30-second requirement window and 5-second stream-stale threshold. Output was `base_decoded=1 base_retained=1 base_age_s=31 msm_decoded=1 msm_age_s=1 window_s=30`, followed by `require_glonass_bias=0 required=0 correction_available=0 stale_data=0 missing_required_event=1 stream_stale_event=0`; the reproducer exited 0. The current `gnss_protocols_test_rtcm_correction_monitor` also passed 1/1, including its existing assertion that base metadata outside the common recent window expires.
+Production fix: `HasRequiredCorrectionMessages` treats 1005/1006 presence as static ownership state while retaining the common rolling window for MSM, constellations, optional 1230, and other dynamic types. `ResetDynamicState` clears session/dynamic histories while preserving only fully decoded station-owned 1005/1006 metadata across a same-source reconnect. Full reset, source change, or decoded station mismatch clears it.
 
-Remaining defect, if any: Fresh, successfully decoded MSM traffic still becomes correction-unavailable solely because the last valid and still-retained 1005/1006 is older than 30 seconds. There is no static/session metadata lifetime tied to correction-source or station identity, nor invalidation on such an identity transition; the retained decoded ARP and its recent-message requirement can therefore disagree exactly as reproduced.
+Post-fix validation: The focused test now keeps correction availability true at base age 31 seconds with fresh MSM, reports the base age unchanged, and makes health false once MSM itself expires. Replacement/source/station invalidation scenarios pass with UGA-018. Complete `gnss_protocols` passed 18/18, `gnss_ntrip` 7/7, non-ROS CTest 61/61, and ROS2 6/6. UGA-015 optional-1230 and UGA-017 bounded-history coverage remained green. ASan+UBSan and standalone UBSan each passed 4/4 affected binaries.
 
-Recommended next action: In a separate implementation task, retain decoded 1005/1006 validity per correction source/station session while keeping MSM freshness dynamic, explicitly invalidate retained metadata on source/station transitions, and add long-running MSM plus source-change regression scenarios.
+Compatibility impact and remaining limitation: Static lifetime changes the corrected public health result for valid long-lived base metadata. Integrity-valid but semantically malformed known RTCM is still governed by the separate UGA-008 behavior; only fully decoded 1005/1006 is carried across reconnect.
+
+Recommended next action: Keep long-lived base/fresh MSM, MSM expiry, age reporting, same-source reconnect, station replacement, full reset, and optional-1230 tests together.
 
 ### UGA-017 — RTCM rate history grows without bound and queries are linear
 
@@ -404,19 +410,23 @@ Recommended next action: If a future consumer requires rate windows over 60 seco
 
 ### UGA-018 — correction metadata has no endpoint/station ownership model
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ntrip/src/ntrip_client.cpp` current lines 252-259 lets `set_config` replace host, port, and mountpoint without closing the current transport, rebuilding the already-sent request, resetting the monitor, or recording a source transition. Both `Connect` lines 276-302 and `AdoptConnectedSocket` lines 305-322 unconditionally call the same `ResetSessionState`; that function at lines 726-733 calls `correction_monitor_.Reset()`, whose current lines 248-281 erase all activity and decoded 1005/1006, 1230, and MSM records without checking whether the endpoint or station is unchanged. Conversely, decoded base and MSM records expose independent `station_id` values (`rtcm_parser.cpp` lines 239-266 and 411-450), but `HasRequiredCorrectionMessages` at monitor lines 590-690 tests only recent message-type/constellation presence. No endpoint identity is stored in `RtcmCorrectionMonitor`, and no health branch compares base, MSM, or optional 1230 station identifiers.
+Pre-fix reproduction: The focused monitor test failed five ownership assertions: station-A base combined with station-B MSM, incompatible retained base was not invalidated, station-A MSM combined with station-B base, incompatible MSM remained, and the 0/4095 boundary transition was not deterministic. The NTRIP client test failed three more: same-source reconnect erased decoded base metadata, same-source/same-station MSM could not restore health without a repeated base message, and a mountpoint change neither closed the session nor cleared source-owned metadata.
 
-Relevant changes since old audit: The focused old-to-current history contains only `3495ffb9ba8eea8be8401c9736ff081e046063a7` in the correction monitor. It makes 1230 optional and changes related diagnostics but adds no endpoint/source identity, station-coherence comparison, or reconnect retention policy. There are no changes to `NtripClient::set_config`, `Connect`, `AdoptConnectedSocket`, or `ResetSessionState`. The 1230 change reduces one required category but does not address ownership of the remaining base/MSM state or the unsafe interaction with unconditional retention contemplated by PR #5.
+Source/station ownership contract: `source_identity` is normalized lowercase host, port, and normalized mountpoint path. Host case and equivalent slash spelling do not create a transition; a different host, port, or mountpoint does. `station_identity` is the full decoded 12-bit reference-station ID from 1005/1006, MSM, or 1230, including 0 and 4095. Ownership is established/checked before the current frame is recorded. A decoded mismatch fully invalidates the previous station state, then records only the new frame, so no transient mixed healthy state is possible. Non-station-bearing messages cannot fabricate or replace ownership.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga018-repro` used current NtripClient socket adoption and fully decodable RTCM. With endpoint A unchanged, valid base+MSM health was initially available; adopting a replacement socket with the same A configuration produced `same_endpoint_before=1 same_endpoint_after_reconnect=0 metadata_erased=1`. In a separate client, a decoded 1006 for station 1 plus decoded 1077 for station 2 yielded `ids_mismatch=1 mixed_station_health=1`. After sending an A request for `/MOUNT_A`, `set_config` changed the live client's identity to `caster-b.example:2201/MOUNT_B` while it remained connected, retained both A frames, and returned `source_b_health_from_a=1`; the stored request still identified `/MOUNT_A`. All assertions passed and the reproducer exited 0.
+Reconnect/source-transition behavior: Reconnect to the same normalized source clears the response buffer, framer, flow state, dynamic MSM/1230 freshness, and rate/session histories, while provisionally retaining fully decoded base metadata and station ID. Same-station post-reconnect MSM may reuse it. The first decoded different-station frame immediately clears it. `set_config` to a different source closes the live transport, resets reconnect/session state, and fully clears correction ownership; no source-A state can satisfy source B.
 
-Remaining defect, if any: Same-endpoint/same-station reconnects still discard valid static metadata and incur avoidable unavailability, while inconsistent station IDs inside one session are accepted. A live endpoint configuration change can relabel retained source-A correction state as source B without a transport or monitor transition. UGA-016 cannot be safely fixed by unconditional retention until endpoint and station ownership plus invalidation semantics exist.
+Production fix: Added `NtripSourceIdentity`/`BuildNtripSourceIdentity`, source-change handling in `NtripClient`, split full-source versus session/dynamic monitor resets, and explicit station ownership in `RtcmCorrectionMonitor`. Tests cover A+A health, A+B in both arrival orders, replacement recovery, same-source reconnect, same/different post-reconnect stations, host/port/mountpoint changes and normalization, dynamic reset, boundary IDs, non-station records, and deterministic full reset. Existing single-stream tool fixtures that accidentally used different station IDs were corrected to represent one station; no production expectation was weakened.
 
-Recommended next action: In a separate implementation task, introduce a normalized `(host, port, mountpoint)` correction-source identity and decoded station identity, separate transport/dynamic resets from static metadata lifetime, retain only across a verified same-source reconnect, and invalidate immediately on endpoint or station changes with mixed-ID regressions.
+Post-fix validation: Focused CTests passed 3/3 plus the base-position target. Complete `gnss_protocols` passed 18/18, `gnss_ntrip` 7/7, non-ROS CTest 61/61, and ROS2 6/6. UGA-015, UGA-017, UGA-019, UGA-020, and UGA-014 regression paths remained green. ASan+UBSan and standalone UBSan each passed 4/4 affected binaries.
+
+Compatibility impact and remaining limitation: New additive C++ source/station APIs and monitor state change class ABI, requiring dependent C++ binaries to rebuild; ROS message wire layouts are unchanged. Ownership changes only on fully decoded station-bearing records. A CRC-valid but semantically undecodable frame cannot establish a trustworthy station ID and remains part of UGA-008 rather than being guessed here.
+
+Recommended next action: Keep source normalization/change, reconnect retention, mixed-station ordering, replacement, reset, and boundary-ID tests; validate real caster station IDs across an intentional reconnect/mountpoint switch.
 
 ### UGA-019 — “forwarding active” means “ever forwarded”
 

@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "universal_gnss_ntrip/ntrip_client.hpp"
+#include "universal_gnss_protocols/rtcm_crc24q.hpp"
 
 #endif
 
@@ -245,6 +246,11 @@ public:
     return true;
   }
 
+  bool WritePeer(const std::vector<std::uint8_t>& data)
+  {
+    return WritePeer(std::string(data.begin(), data.end()));
+  }
+
   std::vector<std::uint8_t> ReadPeerExact(const std::size_t size)
   {
     std::vector<std::uint8_t> buffer(size, 0u);
@@ -314,6 +320,51 @@ universal_gnss_ntrip::NtripConfig MakeConfig()
   return config;
 }
 
+std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
+{
+  const std::vector<std::uint8_t> payload = {
+      static_cast<std::uint8_t>((message_type >> 4u) & 0xFFu),
+      static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
+  };
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u,
+                                     static_cast<std::uint8_t>(payload.size())};
+  bytes.insert(bytes.end(), payload.begin(), payload.end());
+  const std::uint32_t crc =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
+  bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
+  return bytes;
+}
+
+void ConfigureNonblockingReads(universal_gnss_ntrip::NtripClient& client)
+{
+  universal_gnss_transport::TcpClientConfig tcp_config;
+  tcp_config.nonblocking = true;
+  client.set_tcp_config(tcp_config);
+}
+
+bool AdoptAndSendRequest(TestContext& ctx,
+                         SocketPair& sockets,
+                         universal_gnss_ntrip::NtripClient& client,
+                         const std::int64_t timestamp_ns)
+{
+  if (!sockets.Open())
+  {
+    ctx.Expect(false, "socketpair fixture should open for reconnect attempt");
+    return false;
+  }
+  if (client.AdoptConnectedSocket(sockets.ReleaseClientFd()) !=
+          universal_gnss_ntrip::NtripClientError::kNone ||
+      client.SendRequest(timestamp_ns) != universal_gnss_ntrip::NtripClientError::kNone)
+  {
+    ctx.Expect(false, "TCP success should allow the NTRIP request to be sent");
+    return false;
+  }
+  sockets.ReadPeerExact(client.request().request_text.size());
+  return true;
+}
+
 void TestNtripClientReconnectStateOnFailure(TestContext& ctx)
 {
   SocketPair sockets;
@@ -347,6 +398,121 @@ void TestNtripClientReconnectStateOnFailure(TestContext& ctx)
              "client reconnect state should capture the failure time and next retry deadline");
 }
 
+void TestClientBackoffResetsOnlyAfterOperationalCorrectionFlow(TestContext& ctx)
+{
+  using universal_gnss_ntrip::NtripClientError;
+  using universal_gnss_ntrip::NtripClientState;
+
+  universal_gnss_ntrip::NtripConfig config = MakeConfig();
+  config.reconnect_policy.max_attempts.reset();
+  universal_gnss_ntrip::NtripClient client(config);
+  ConfigureNonblockingReads(client);
+  std::vector<std::uint8_t> buffer(256u, 0u);
+
+  for (std::uint32_t attempt = 1u; attempt <= 3u; ++attempt)
+  {
+    SocketPair sockets;
+    if (!AdoptAndSendRequest(ctx, sockets, client, attempt * 1000000000LL))
+    {
+      return;
+    }
+    ctx.Expect(sockets.WritePeer("HTTP/1.1 401 Unauthorized\r\n\r\n"),
+               "fake caster should reject the application-level attempt");
+    const auto result =
+        client.Read(buffer.data(), buffer.size(), attempt * 1000000000LL + 1000000LL);
+    const std::uint32_t expected_delay = 1000u << (attempt - 1u);
+    ctx.Expect(result.client_error == NtripClientError::kHttp &&
+                   client.state() == NtripClientState::kFailed &&
+                   client.reconnect_state().attempt_count == attempt &&
+                   client.reconnect_state().current_delay_ms == expected_delay,
+               "TCP success followed by HTTP failure must preserve exponential backoff history");
+  }
+
+  {
+    SocketPair sockets;
+    if (!AdoptAndSendRequest(ctx, sockets, client, 5000000000LL))
+    {
+      return;
+    }
+    ctx.Expect(sockets.WritePeer("ICY 200 OK\r\n\r\n"),
+               "fake caster should accept the NTRIP response without corrections");
+    client.Read(buffer.data(), buffer.size(), 5000000000LL);
+    sockets.ClosePeer();
+    const auto disconnected = client.Read(buffer.data(), buffer.size(), 6000000000LL);
+    ctx.Expect(disconnected.client_error == NtripClientError::kDisconnected &&
+                   client.reconnect_state().attempt_count == 4u &&
+                   client.reconnect_state().current_delay_ms == 8000u,
+               "accepted response without correction flow must not reset reconnect history");
+  }
+
+  universal_gnss_ntrip::NtripClient short_stream_client(config);
+  ConfigureNonblockingReads(short_stream_client);
+  {
+    SocketPair first_failure;
+    if (!AdoptAndSendRequest(ctx, first_failure, short_stream_client, 1000000000LL))
+    {
+      return;
+    }
+    ctx.Expect(first_failure.WritePeer("HTTP/1.1 503 Unavailable\r\n\r\n"),
+               "fake caster should seed reconnect history");
+    short_stream_client.Read(buffer.data(), buffer.size(), 1001000000LL);
+  }
+  {
+    SocketPair one_frame_stream;
+    if (!AdoptAndSendRequest(ctx, one_frame_stream, short_stream_client, 3000000000LL))
+    {
+      return;
+    }
+    std::vector<std::uint8_t> response{'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K',
+                                       '\r', '\n', '\r', '\n'};
+    const auto frame = BuildRtcmFrame(1077u);
+    response.insert(response.end(), frame.begin(), frame.end());
+    ctx.Expect(one_frame_stream.WritePeer(response),
+               "fake caster should send one valid RTCM frame then drop");
+    short_stream_client.Read(buffer.data(), buffer.size(), 3000000000LL);
+    one_frame_stream.ClosePeer();
+    short_stream_client.Read(buffer.data(), buffer.size(), 4000000000LL);
+    ctx.Expect(short_stream_client.reconnect_state().attempt_count == 2u &&
+                   short_stream_client.reconnect_state().current_delay_ms == 2000u,
+               "one-frame-then-drop stream must not be operational enough to reset backoff");
+  }
+
+  universal_gnss_ntrip::NtripClient operational_client(config);
+  ConfigureNonblockingReads(operational_client);
+  {
+    SocketPair seed_failure;
+    if (!AdoptAndSendRequest(ctx, seed_failure, operational_client, 1000000000LL))
+    {
+      return;
+    }
+    ctx.Expect(seed_failure.WritePeer("HTTP/1.1 503 Unavailable\r\n\r\n"),
+               "fake caster should seed operational-stream backoff history");
+    operational_client.Read(buffer.data(), buffer.size(), 1001000000LL);
+  }
+  {
+    SocketPair operational_stream;
+    if (!AdoptAndSendRequest(ctx, operational_stream, operational_client, 3000000000LL))
+    {
+      return;
+    }
+    std::vector<std::uint8_t> response{'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K',
+                                       '\r', '\n', '\r', '\n'};
+    const auto frame = BuildRtcmFrame(1077u);
+    response.insert(response.end(), frame.begin(), frame.end());
+    response.insert(response.end(), frame.begin(), frame.end());
+    ctx.Expect(operational_stream.WritePeer(response),
+               "fake caster should demonstrate sustained correction flow");
+    operational_client.Read(buffer.data(), buffer.size(), 3000000000LL);
+    ctx.Expect(operational_client.reconnect_state().attempt_count == 0u,
+               "two valid RTCM frames should declare the NTRIP attempt operational");
+    operational_stream.ClosePeer();
+    operational_client.Read(buffer.data(), buffer.size(), 4000000000LL);
+    ctx.Expect(operational_client.reconnect_state().attempt_count == 1u &&
+                   operational_client.reconnect_state().current_delay_ms == 1000u,
+               "failure after operational flow should restart from normal backoff");
+  }
+}
+
 #endif
 
 }  // namespace
@@ -365,6 +531,7 @@ int main()
 
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
   TestNtripClientReconnectStateOnFailure(ctx);
+  TestClientBackoffResetsOnlyAfterOperationalCorrectionFlow(ctx);
 #endif
 
   if (ctx.failures != 0)

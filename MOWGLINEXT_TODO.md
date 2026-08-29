@@ -333,6 +333,52 @@ Suggested robot field-validation checks:
 * verify logs preserve the ROS receipt stamp without describing it as GNSS
   measurement time
 
+## 10. Pending downstream integration — expose NTRIP correction-flow liveness separately from connection and semantic health
+
+New Universal GNSS capability:
+
+* NTRIP now distinguishes TCP connectivity, an accepted HTTP/ICY response,
+  recent complete CRC-valid RTCM flow, and RTCM semantic correction health
+* ROS2 exposes configurable `correction_first_frame_timeout_s`,
+  `correction_inter_frame_timeout_s`, and
+  `correction_operational_min_valid_frames` controls
+* the `correction_flowing` diagnostic reports framed correction progress;
+  `ntrip_streaming` continues to mean only that the response stream is open
+* silent accepted streams enter the existing reconnect/backoff path, while
+  source/station-owned static base metadata follows explicit ownership rules
+
+Why this matters for MowgliNext:
+
+* an open caster socket or accepted response must not be shown to an operator
+  as live corrections
+* correction bytes flowing and the required correction set being semantically
+  healthy are distinct operator and localization conditions
+* field deployments with intentionally slow RTCM cadence may need timeout
+  values matched to the caster configuration
+
+Pending MowgliNext work:
+
+* consume `ntrip_streaming`, `correction_flowing`, and semantic correction
+  diagnostics as separate states in the GNSS/operator view and event logs
+* surface reconnect caused by first-frame or inter-frame silence without
+  presenting it as a receiver-position failure
+* retain conservative localization/safety behavior when flow is absent or the
+  required RTCM set is incomplete, even if TCP remains connected
+* expose timeout overrides only in deployment configuration with units and the
+  zero-disables behavior explicit; do not silently derive them from GUI refresh
+  or ROS publication rates
+
+Suggested robot field-validation checks:
+
+* connect to a caster that accepts the request but emits no RTCM and verify the
+  GUI transitions from waiting to reconnecting
+* interrupt a healthy correction stream without closing TCP, then verify flow
+  loss, reconnect/backoff, operator notification, and localization degradation
+* validate a deliberately slow but healthy caster below the configured
+  inter-frame deadline without reconnect thrashing
+* switch mountpoint or reference station and verify old base metadata never
+  makes the new stream appear semantically healthy
+
 ## Notes
 
 Universal GNSS MSM support currently provides correction-stream observability

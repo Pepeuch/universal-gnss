@@ -240,6 +240,46 @@ std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
   return payload;
 }
 
+std::vector<std::uint8_t> BuildRtcm1005Payload(const std::uint16_t station_id)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, 1005u, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 6u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 1u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendSignedBits(payload, bit_offset, 0, 38u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 1u);
+  AppendSignedBits(payload, bit_offset, 0, 38u);
+  AppendUnsignedBits(payload, bit_offset, 0u, 2u);
+  AppendSignedBits(payload, bit_offset, 0, 38u);
+  return payload;
+}
+
+RtcmFrame MakeDecodedBaseFrame(const std::uint16_t station_id,
+                               const std::int64_t timestamp_ns)
+{
+  RtcmFrame frame;
+  frame.timestamp_ns = timestamp_ns;
+  frame.payload = BuildRtcm1005Payload(station_id);
+  frame.checksum_status = ChecksumStatus::kValid;
+  return frame;
+}
+
+RtcmFrame MakeDecodedMsmFrame(const std::uint16_t station_id,
+                              const std::int64_t timestamp_ns)
+{
+  RtcmFrame frame;
+  frame.timestamp_ns = timestamp_ns;
+  frame.payload = BuildRtcmMsmPayload(1077u, station_id, {1u}, {1u}, {true});
+  frame.checksum_status = ChecksumStatus::kValid;
+  return frame;
+}
+
 RtcmFrame MakeValidRtcmFrame(const std::uint16_t message_type,
                              const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
@@ -568,7 +608,7 @@ void TestMsmDecodeTracking(TestContext& ctx)
 
   RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
   glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
-                                             7u,
+                                             42u,
                                              {2u},
                                              {1u, 3u, 4u},
                                              {true, false, true});
@@ -598,7 +638,7 @@ void TestMsmDecodeTracking(TestContext& ctx)
   if (monitor.last_msm_summary().has_value())
   {
     ctx.Expect(monitor.last_msm_summary()->message_type == 1087u &&
-                   monitor.last_msm_summary()->station_id == 7u &&
+                   monitor.last_msm_summary()->station_id == 42u &&
                    monitor.last_msm_summary()->constellation == RtcmConstellation::kGlonass &&
                    monitor.last_msm_summary()->satellite_count == 1u &&
                    monitor.last_msm_summary()->signal_count == 3u &&
@@ -637,7 +677,7 @@ void TestMsmSemanticObservations(TestContext& ctx)
 
   RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
   glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
-                                             7u,
+                                             42u,
                                              {2u},
                                              {1u, 3u, 4u},
                                              {true, false, true});
@@ -660,7 +700,7 @@ void TestMsmSemanticObservations(TestContext& ctx)
     bool saw_constellations = false;
     for (const auto& field : summary->fields)
     {
-      if (field.key == "station_id" && field.value == "7")
+      if (field.key == "station_id" && field.value == "42")
       {
         saw_station = true;
       }
@@ -858,6 +898,80 @@ void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
              "missing recent required RTCM content should remain an error after startup grace");
 }
 
+void TestStaticBaseMetadataOutlivesDynamicObservationWindow(TestContext& ctx)
+{
+  constexpr std::int64_t kSecond = 1000000000LL;
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveFrame(MakeDecodedBaseFrame(42u, 0));
+  monitor.ObserveFrame(MakeDecodedMsmFrame(42u, 30 * kSecond));
+  monitor.ObserveFrame(MakeDecodedMsmFrame(42u, 31 * kSecond));
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 31 * kSecond;
+  options.stale_after_ns = 5 * kSecond;
+  options.required_observation_window_ns = 30 * kSecond;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  const auto health = universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
+  ctx.Expect(monitor.AgeSinceBaseStationArpNs(*options.now_timestamp_ns) ==
+                 std::optional<std::int64_t>(31 * kSecond),
+             "retained static base metadata should continue reporting its age");
+  ctx.Expect(monitor.HasRequiredCorrectionMessages(options) && health.correction_available,
+             "fresh MSM must remain healthy after valid 1005 metadata exceeds the dynamic window");
+
+  options.now_timestamp_ns = 62 * kSecond;
+  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options),
+             "retained static metadata must not keep expired dynamic MSM healthy");
+}
+
+void TestStationOwnershipPreventsMixedCorrectionHealth(TestContext& ctx)
+{
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 3000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 5000;
+  universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
+
+  RtcmCorrectionMonitor base_a_msm_b;
+  base_a_msm_b.ObserveFrame(MakeDecodedBaseFrame(10u, 1000));
+  base_a_msm_b.ObserveFrame(MakeDecodedMsmFrame(11u, 2000));
+  ctx.Expect(!base_a_msm_b.HasRequiredCorrectionMessages(options),
+             "station A base metadata must not combine with station B MSM");
+  ctx.Expect(!base_a_msm_b.last_base_station_arp().has_value(),
+             "a decoded station transition must invalidate incompatible retained base metadata");
+  base_a_msm_b.ObserveFrame(MakeDecodedBaseFrame(11u, 2500));
+  ctx.Expect(base_a_msm_b.HasRequiredCorrectionMessages(options) &&
+                 base_a_msm_b.station_id() == std::optional<std::uint16_t>(11u),
+             "valid replacement metadata for the current station should restore correction health");
+
+  base_a_msm_b.ObserveMessage(MakeMessageInfo(1013u), 2700);
+  ctx.Expect(base_a_msm_b.station_id() == std::optional<std::uint16_t>(11u) &&
+                 base_a_msm_b.HasRequiredCorrectionMessages(options),
+             "non-station-bearing messages must not fabricate or replace station ownership");
+
+  RtcmCorrectionMonitor msm_a_base_b;
+  msm_a_base_b.ObserveFrame(MakeDecodedMsmFrame(10u, 1000));
+  msm_a_base_b.ObserveFrame(MakeDecodedBaseFrame(11u, 2000));
+  ctx.Expect(!msm_a_base_b.HasRequiredCorrectionMessages(options),
+             "station A MSM must not combine with station B base metadata");
+  ctx.Expect(msm_a_base_b.MsmConstellationCount(RtcmConstellation::kGps) == 0u,
+             "a decoded station transition must invalidate incompatible dynamic observations");
+
+  RtcmCorrectionMonitor boundary_station_ids;
+  boundary_station_ids.ObserveFrame(MakeDecodedBaseFrame(0u, 1000));
+  boundary_station_ids.ObserveFrame(MakeDecodedMsmFrame(0u, 2000));
+  ctx.Expect(boundary_station_ids.HasRequiredCorrectionMessages(options),
+             "RTCM station id zero must be handled as a valid 12-bit identity");
+  boundary_station_ids.ObserveFrame(MakeDecodedBaseFrame(4095u, 2500));
+  ctx.Expect(!boundary_station_ids.HasRequiredCorrectionMessages(options),
+             "the maximum station id must trigger the same deterministic ownership transition");
+  boundary_station_ids.Reset();
+  ctx.Expect(!boundary_station_ids.station_id().has_value() &&
+                 !boundary_station_ids.HasSeenBasePositionMessage() &&
+                 boundary_station_ids.valid_frames() == 0u,
+             "a full monitor reset must deterministically clear ownership and retained state");
+}
+
 void TestPortableRtkRequirementsRespectStartupGrace(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
@@ -983,6 +1097,8 @@ int main()
   TestPortableRtkRequirementsDoNotRequireGlonassBias(ctx);
   TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(ctx);
   TestPortableRtkRequirementsUseRecentObservationWindow(ctx);
+  TestStaticBaseMetadataOutlivesDynamicObservationWindow(ctx);
+  TestStationOwnershipPreventsMixedCorrectionHealth(ctx);
   TestPortableRtkRequirementsRespectStartupGrace(ctx);
 
   if (ctx.failures != 0)

@@ -346,6 +346,9 @@ TEST_F(NtripNodeTest, ConstructsWithParametersAndDiagnosticsPublisherReady)
       rclcpp::Parameter("mountpoint", "RTCM3"),
       rclcpp::Parameter("gga_enabled", true),
       rclcpp::Parameter("gga_interval_s", 5),
+      rclcpp::Parameter("correction_first_frame_timeout_s", 12.5),
+      rclcpp::Parameter("correction_inter_frame_timeout_s", 7.25),
+      rclcpp::Parameter("correction_operational_min_valid_frames", 3),
   });
 
   universal_gnss_ros2::NtripNode node(options);
@@ -356,6 +359,9 @@ TEST_F(NtripNodeTest, ConstructsWithParametersAndDiagnosticsPublisherReady)
   EXPECT_EQ(node.get_parameter("mountpoint").as_string(), "RTCM3");
   EXPECT_TRUE(node.get_parameter("gga_enabled").as_bool());
   EXPECT_EQ(node.get_parameter("gga_interval_s").as_int(), 5);
+  EXPECT_DOUBLE_EQ(node.get_parameter("correction_first_frame_timeout_s").as_double(), 12.5);
+  EXPECT_DOUBLE_EQ(node.get_parameter("correction_inter_frame_timeout_s").as_double(), 7.25);
+  EXPECT_EQ(node.get_parameter("correction_operational_min_valid_frames").as_int(), 3);
 }
 
 TEST_F(NtripNodeTest, RejectsInvalidParameters)
@@ -385,6 +391,26 @@ TEST_F(NtripNodeTest, RejectsInvalidParameters)
         rclcpp::Parameter("caster_host", "caster.example.com"),
         rclcpp::Parameter("mountpoint", "RTCM3"),
         rclcpp::Parameter("tls_enabled", true),
+    });
+    EXPECT_THROW(universal_gnss_ros2::NtripNode(options), std::invalid_argument);
+  }
+
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("caster_host", "caster.example.com"),
+        rclcpp::Parameter("mountpoint", "RTCM3"),
+        rclcpp::Parameter("correction_first_frame_timeout_s", -1.0),
+    });
+    EXPECT_THROW(universal_gnss_ros2::NtripNode(options), std::invalid_argument);
+  }
+
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("caster_host", "caster.example.com"),
+        rclcpp::Parameter("mountpoint", "RTCM3"),
+        rclcpp::Parameter("correction_operational_min_valid_frames", 0),
     });
     EXPECT_THROW(universal_gnss_ros2::NtripNode(options), std::invalid_argument);
   }
@@ -602,6 +628,49 @@ TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "last_message_type"),
             std::optional<std::string>{"1077"});
   EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_forwarding_active"),
+            nullptr);
+}
+
+TEST_F(NtripNodeTest, SilentAcceptedStreamTimesOutAndEntersReconnectState)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", false),
+      rclcpp::Parameter("correction_first_frame_timeout_s", 0.05),
+      rclcpp::Parameter("correction_inter_frame_timeout_s", 1.0),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+  EXPECT_TRUE(node.StepOnce());
+  EXPECT_NE(sockets.ReadPeerText(1024u).find("GET /RTCM3 HTTP/1.1"), std::string::npos);
+
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\n\r\n"));
+  EXPECT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_NE(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/ntrip_streaming"),
+            nullptr);
+  EXPECT_NE(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/correction_stream_waiting"),
+            nullptr);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(70));
+  node.StepOnce();
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_NE(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/ntrip_reconnecting"),
+            nullptr);
+  EXPECT_EQ(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/ntrip_streaming"),
             nullptr);
 }
 

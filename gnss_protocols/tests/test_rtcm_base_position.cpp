@@ -349,7 +349,7 @@ void TestCorrectionMonitorStoresLatestBasePosition(TestContext& ctx)
       1005u, 7u, 18u, true, true, false, true, 100LL, false, 200LL, 0u, 300LL, std::nullopt,
       1000LL));
   monitor.ObserveFrame(BuildBaseStationArpFrame(
-      1006u, 9u, 19u, true, false, true, false, -400LL, true, 500LL, 3u, -600LL, 70u, 2500LL));
+      1006u, 7u, 19u, true, false, true, false, -400LL, true, 500LL, 3u, -600LL, 70u, 2500LL));
 
   ctx.Expect(monitor.HasSeenBasePositionMessage() && monitor.HasSeenBasePosition1005() &&
                  monitor.HasSeenBasePosition1006(),
@@ -361,7 +361,7 @@ void TestCorrectionMonitorStoresLatestBasePosition(TestContext& ctx)
   ctx.Expect(monitor.AgeSinceBaseStationArpNs(2600LL) == std::optional<std::int64_t>(100LL),
              "monitor should compute base-station ARP age when timestamps are available");
   ctx.Expect(monitor.last_base_station_arp().has_value() &&
-                 monitor.last_base_station_arp()->station_id == 9u &&
+                 monitor.last_base_station_arp()->station_id == 7u &&
                  monitor.last_base_station_arp()->antenna_height_m.has_value(),
              "monitor should retain the latest decoded base station ARP record");
   if (monitor.last_base_station_arp().has_value() &&

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -40,6 +41,18 @@ struct NtripClientReadResult
   universal_gnss_transport::TransportError transport_error{
       universal_gnss_transport::TransportError::kNone};
   NtripClientError client_error{NtripClientError::kNone};
+};
+
+struct NtripCorrectionFlowState
+{
+  bool response_accepted{false};
+  std::optional<universal_gnss::GnssTimestampNs> response_accepted_timestamp_ns{};
+  std::uint64_t valid_rtcm_frames{0u};
+  std::optional<universal_gnss::GnssTimestampNs> first_valid_rtcm_frame_timestamp_ns{};
+  std::optional<universal_gnss::GnssTimestampNs> last_valid_rtcm_frame_timestamp_ns{};
+  bool operational{false};
+
+  void Reset();
 };
 
 enum class NtripGgaSendStatus : std::uint8_t
@@ -107,6 +120,9 @@ public:
 
   NtripClientState state() const;
   bool IsConnected() const;
+  const NtripCorrectionFlowState& correction_flow_state() const;
+  bool IsCorrectionFlowing() const;
+  const NtripSourceIdentity& source_identity() const;
   const NtripReconnectState& reconnect_state() const;
   const GgaInjectionPolicy& gga_injection_policy() const;
   const GgaInjectorMetrics& gga_metrics() const;
@@ -121,7 +137,14 @@ private:
       NtripClientError error,
       std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   void ResetSessionState();
+  void ResetSourceState();
   void ResetSessionMetrics();
+  bool CheckCorrectionFlowTimeout(
+      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns,
+      NtripClientReadResult& result);
+  void NoteCorrectionFlowProgress(
+      std::uint64_t valid_frame_count,
+      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
   NtripGgaSendResult MakeGgaSendErrorResult(
       NtripGgaSendError error,
       NtripClientError client_error = NtripClientError::kNone,
@@ -141,6 +164,7 @@ private:
       std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames);
 
   NtripConfig config_{};
+  NtripSourceIdentity source_identity_{};
   universal_gnss_transport::TcpClientConfig tcp_config_{};
   universal_gnss_transport::TcpClientTransport transport_{};
   NtripClientState state_{NtripClientState::kDisconnected};
@@ -150,6 +174,11 @@ private:
   std::string response_header_{};
   NtripConnectionMetrics metrics_{};
   NtripReconnectState reconnect_state_{};
+  NtripCorrectionFlowState correction_flow_state_{};
+  std::optional<std::chrono::steady_clock::time_point>
+      response_accepted_steady_time_{};
+  std::optional<std::chrono::steady_clock::time_point>
+      last_valid_rtcm_frame_steady_time_{};
   GgaInjectionPolicy gga_injection_policy_{};
   GgaInjector gga_injector_{};
 
