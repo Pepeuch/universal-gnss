@@ -462,7 +462,7 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
              "the peer should receive the exact formatted NTRIP GET request");
 
   std::vector<std::uint8_t> payload;
-  Append(payload, BuildRtcmFrame(1005u));
+  Append(payload, BuildRtcm1005Frame(42u));
   Append(payload, BuildRtcmMsmFrame(1077u, 42u, {1u}, {2u}, {true}));
 
   std::vector<std::uint8_t> response;

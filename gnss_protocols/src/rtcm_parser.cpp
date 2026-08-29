@@ -12,6 +12,7 @@ constexpr std::size_t kRtcm1005Bits = 152u;
 constexpr std::size_t kRtcm1006Bits = 168u;
 constexpr std::size_t kRtcm1230HeaderBits = 32u;
 constexpr std::size_t kRtcmMsmHeaderBits = 169u;
+constexpr std::size_t kRtcmMsmMaximumCellMaskBits = 64u;
 
 bool IsRtcmMsmVariant(const std::uint16_t message_type)
 {
@@ -107,6 +108,31 @@ std::optional<std::uint16_t> CountSetBitsInRange(const ByteVector& payload,
   }
 
   return count;
+}
+
+std::optional<std::size_t> ComputeRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                                                  const std::size_t satellite_count,
+                                                  const std::size_t cell_count)
+{
+  switch (msm_variant)
+  {
+    case 1u:
+      return satellite_count * 10u + cell_count * 15u;
+    case 2u:
+      return satellite_count * 10u + cell_count * 27u;
+    case 3u:
+      return satellite_count * 10u + cell_count * 42u;
+    case 4u:
+      return satellite_count * 18u + cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + cell_count * 80u;
+    default:
+      return std::nullopt;
+  }
 }
 
 }  // namespace
@@ -438,8 +464,24 @@ ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
       CountSetBits(static_cast<std::uint64_t>(*signal_mask));
   const std::size_t cell_mask_bits =
       static_cast<std::size_t>(satellite_count) * static_cast<std::size_t>(signal_count);
+  if (cell_mask_bits > kRtcmMsmMaximumCellMaskBits)
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
   const auto cell_count = CountSetBitsInRange(frame.payload, bit_offset, cell_mask_bits);
   if (!cell_count.has_value())
+  {
+    return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
+  }
+
+  const std::uint8_t msm_variant =
+      GetRtcmMsmVariant(static_cast<std::uint16_t>(*parsed_message_type));
+  const auto body_bits = ComputeRtcmMsmBodyBits(msm_variant,
+                                                satellite_count,
+                                                *cell_count);
+  if (!body_bits.has_value() ||
+      bit_offset + cell_mask_bits + *body_bits > frame.payload.size() * 8u)
   {
     return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
   }
@@ -448,7 +490,7 @@ ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
   record.message_type = static_cast<std::uint16_t>(*parsed_message_type);
   record.station_id = static_cast<std::uint16_t>(*station_id);
   record.constellation = GetRtcmMsmConstellation(record.message_type);
-  record.msm_variant = GetRtcmMsmVariant(record.message_type);
+  record.msm_variant = msm_variant;
   record.multiple_message = *multiple_message != 0u;
   record.issue_of_data_station = static_cast<std::uint8_t>(*issue_of_data_station);
   record.session_transmission_time =

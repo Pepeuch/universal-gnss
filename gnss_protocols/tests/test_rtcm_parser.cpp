@@ -131,6 +131,12 @@ std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
 {
   switch (msm_variant)
   {
+    case 1u:
+      return satellite_count * 10u + cell_count * 15u;
+    case 2u:
+      return satellite_count * 10u + cell_count * 27u;
+    case 3u:
+      return satellite_count * 10u + cell_count * 42u;
     case 4u:
       return satellite_count * 18u + cell_count * 48u;
     case 5u:
@@ -473,6 +479,37 @@ void TestGlonassMsmSummaryParsing(TestContext& ctx)
 
 void TestMsmSummaryRejectsTruncatedPayload(TestContext& ctx)
 {
+  for (std::uint8_t variant = 1u; variant <= 7u; ++variant)
+  {
+    const std::uint16_t message_type = static_cast<std::uint16_t>(1070u + variant);
+    RtcmFrame frame = MakeValidRtcmFrame(message_type);
+    frame.payload = BuildRtcmMsmPayload(message_type,
+                                        42u,
+                                        123456u,
+                                        false,
+                                        1u,
+                                        1u,
+                                        0u,
+                                        0u,
+                                        false,
+                                        0u,
+                                        {1u},
+                                        {1u},
+                                        {true});
+
+    const auto complete = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
+    ctx.Expect(complete.status == ParserStatus::kRecordReady,
+               "complete RTCM MSM1-7 payloads should expose a summary");
+
+    frame.payload.pop_back();
+    const auto truncated = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
+    ctx.Expect(truncated.status == ParserStatus::kInvalidData,
+               "RTCM MSM1-7 payloads truncated inside mask-declared data should be rejected");
+  }
+}
+
+void TestMsmSummaryRejectsOversizedCellMask(TestContext& ctx)
+{
   RtcmFrame frame = MakeValidRtcmFrame(1077u);
   frame.payload = BuildRtcmMsmPayload(1077u,
                                       42u,
@@ -484,14 +521,13 @@ void TestMsmSummaryRejectsTruncatedPayload(TestContext& ctx)
                                       0u,
                                       false,
                                       0u,
-                                      {1u},
-                                      {1u},
-                                      {true});
-  frame.payload.resize(21u);
+                                      {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u},
+                                      {1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u},
+                                      std::vector<bool>(72u, true));
 
   const auto parsed = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
   ctx.Expect(parsed.status == ParserStatus::kInvalidData,
-             "truncated RTCM MSM payloads should be rejected");
+             "RTCM MSM cell masks larger than the protocol's 64-cell capacity should be rejected");
 }
 
 }  // namespace
@@ -509,6 +545,7 @@ int main()
   TestGpsMsmSummaryParsing(ctx);
   TestGlonassMsmSummaryParsing(ctx);
   TestMsmSummaryRejectsTruncatedPayload(ctx);
+  TestMsmSummaryRejectsOversizedCellMask(ctx);
 
   if (ctx.failures != 0)
   {

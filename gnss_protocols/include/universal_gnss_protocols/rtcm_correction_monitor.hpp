@@ -173,6 +173,11 @@ private:
   RtcmMessageTypeActivityMap message_type_activity_{};
   RtcmMsmConstellationActivityMap msm_constellation_activity_{};
   RtcmMsmSummaryActivityMap msm_summary_activity_{};
+  // Frame activity supports integrity/flow diagnostics. Semantic activity is
+  // populated only after the message-specific decoder accepts the payload and
+  // is the sole source for correction requirement satisfaction.
+  RtcmMessageTypeActivityMap semantic_message_type_activity_{};
+  RtcmMsmConstellationActivityMap semantic_msm_constellation_activity_{};
 
   std::map<std::uint16_t, std::multiset<ProtocolTimestampNs>> message_type_timestamps_{};
   std::map<RtcmConstellation, std::multiset<ProtocolTimestampNs>> msm_constellation_timestamps_{};
@@ -202,8 +207,10 @@ private:
   std::optional<std::uint16_t> station_id_{};
 
   void PrepareStationOwnership(std::uint16_t station_id);
-  void RecordValidMessage(const RtcmMessageInfo& info,
-                          std::optional<ProtocolTimestampNs> timestamp_ns);
+  void RecordValidFrameMessage(const RtcmMessageInfo& info,
+                               std::optional<ProtocolTimestampNs> timestamp_ns);
+  void RecordSemanticMessage(const RtcmMessageInfo& info,
+                             std::optional<ProtocolTimestampNs> timestamp_ns);
 };
 
 universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(

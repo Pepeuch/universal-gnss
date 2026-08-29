@@ -287,6 +287,8 @@ void RtcmCorrectionMonitor::Reset()
   message_type_activity_.clear();
   msm_constellation_activity_.clear();
   msm_summary_activity_.clear();
+  semantic_message_type_activity_.clear();
+  semantic_msm_constellation_activity_.clear();
   message_type_timestamps_.clear();
   msm_constellation_timestamps_.clear();
   total_frame_timestamps_.clear();
@@ -343,6 +345,16 @@ void RtcmCorrectionMonitor::ResetDynamicState()
       activity_1006 == message_type_activity_.end()
           ? std::nullopt
           : std::optional<RtcmCorrectionActivityStats>{activity_1006->second};
+  const auto semantic_activity_1005 = semantic_message_type_activity_.find(1005u);
+  const std::optional<RtcmCorrectionActivityStats> retained_semantic_activity_1005 =
+      semantic_activity_1005 == semantic_message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{semantic_activity_1005->second};
+  const auto semantic_activity_1006 = semantic_message_type_activity_.find(1006u);
+  const std::optional<RtcmCorrectionActivityStats> retained_semantic_activity_1006 =
+      semantic_activity_1006 == semantic_message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{semantic_activity_1006->second};
   Reset();
 
   station_id_ = retained_station_id;
@@ -358,6 +370,14 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   if (retained_activity_1006.has_value())
   {
     message_type_activity_.emplace(1006u, *retained_activity_1006);
+  }
+  if (retained_semantic_activity_1005.has_value())
+  {
+    semantic_message_type_activity_.emplace(1005u, *retained_semantic_activity_1005);
+  }
+  if (retained_semantic_activity_1006.has_value())
+  {
+    semantic_message_type_activity_.emplace(1006u, *retained_semantic_activity_1006);
   }
 }
 
@@ -413,16 +433,33 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     }
   }
 
+  const bool msm_observation_accepted =
+      parsed_msm_record.has_value() && parsed_msm_record->cell_count > 0u;
+
+  bool semantic_message_accepted = false;
+  if (parsed_info.record->is_station_arp)
+  {
+    semantic_message_accepted = parsed_arp_record.has_value();
+  }
+  else if (parsed_info.record->is_glonass_bias)
+  {
+    semantic_message_accepted = parsed_bias_record.has_value() && parsed_bias_record->valid;
+  }
+  else if (parsed_info.record->is_msm)
+  {
+    semantic_message_accepted = msm_observation_accepted;
+  }
+
   std::optional<std::uint16_t> decoded_station_id{};
   if (parsed_arp_record.has_value())
   {
     decoded_station_id = parsed_arp_record->station_id;
   }
-  else if (parsed_bias_record.has_value())
+  else if (parsed_bias_record.has_value() && parsed_bias_record->valid)
   {
     decoded_station_id = parsed_bias_record->station_id;
   }
-  else if (parsed_msm_record.has_value())
+  else if (msm_observation_accepted)
   {
     decoded_station_id = parsed_msm_record->station_id;
   }
@@ -456,9 +493,12 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   {
     if (parsed_bias_record.has_value())
     {
-      last_glonass_code_phase_bias_ = *parsed_bias_record;
       ++glonass_bias_1230_decode_success_count_;
-      UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_glonass_bias_1230_timestamp_ns_);
+      if (!station_id_.has_value() || *station_id_ == parsed_bias_record->station_id)
+      {
+        last_glonass_code_phase_bias_ = *parsed_bias_record;
+        UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_glonass_bias_1230_timestamp_ns_);
+      }
     }
     else
     {
@@ -472,12 +512,15 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     RtcmMsmSummaryActivityStats& msm_stats = msm_summary_activity_[parsed_info.record->message_type];
     if (parsed_msm_record.has_value())
     {
-      msm_stats.last_summary = *parsed_msm_record;
       ++msm_stats.decode_success_count;
-      UpdateLatestTimestamp(frame.timestamp_ns, msm_stats.last_decoded_timestamp_ns);
-      last_msm_summary_ = *parsed_msm_record;
       ++msm_decode_success_count_;
-      UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_msm_timestamp_ns_);
+      if (!station_id_.has_value() || *station_id_ == parsed_msm_record->station_id)
+      {
+        msm_stats.last_summary = *parsed_msm_record;
+        UpdateLatestTimestamp(frame.timestamp_ns, msm_stats.last_decoded_timestamp_ns);
+        last_msm_summary_ = *parsed_msm_record;
+        UpdateLatestTimestamp(frame.timestamp_ns, last_decoded_msm_timestamp_ns_);
+      }
     }
     else
     {
@@ -488,7 +531,11 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     }
   }
 
-  RecordValidMessage(*parsed_info.record, frame.timestamp_ns);
+  RecordValidFrameMessage(*parsed_info.record, frame.timestamp_ns);
+  if (semantic_message_accepted)
+  {
+    RecordSemanticMessage(*parsed_info.record, frame.timestamp_ns);
+  }
 }
 
 void RtcmCorrectionMonitor::ObserveMessage(const RtcmMessageInfo& info,
@@ -497,7 +544,11 @@ void RtcmCorrectionMonitor::ObserveMessage(const RtcmMessageInfo& info,
   ++total_frames_;
   UpdateLatestTimestamp(timestamp_ns, last_frame_timestamp_ns_);
   AppendTimestamp(timestamp_ns, total_frame_timestamps_);
-  RecordValidMessage(info, timestamp_ns);
+  // ObserveMessage is the trusted, already-classified observation API. Raw
+  // frames must use ObserveFrame so known semantic message types are decoded
+  // before they can reach the semantic-health registry.
+  RecordValidFrameMessage(info, timestamp_ns);
+  RecordSemanticMessage(info, timestamp_ns);
 }
 
 void RtcmCorrectionMonitor::ObserveInvalidFrame(std::optional<ProtocolTimestampNs> timestamp_ns)
@@ -731,7 +782,8 @@ bool RtcmCorrectionMonitor::HasRequiredMessageTypes(
 {
   for (const std::uint16_t message_type : message_types)
   {
-    if (MessageCount(message_type) == 0u)
+    const auto it = semantic_message_type_activity_.find(message_type);
+    if (it == semantic_message_type_activity_.end() || it->second.count == 0u)
     {
       return false;
     }
@@ -743,7 +795,7 @@ bool RtcmCorrectionMonitor::HasRequiredMessageTypes(
 bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     const RtcmCorrectionHealthOptions& options) const
 {
-  if (valid_frames_ == 0u)
+  if (valid_frames_ == 0u || semantic_message_type_activity_.empty())
   {
     return false;
   }
@@ -751,25 +803,40 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   const auto window_start_timestamp_ns = ComputeObservationWindowStart(options);
   const auto has_message_type = [&](const std::uint16_t message_type)
   {
+    const auto semantic_activity = semantic_message_type_activity_.find(message_type);
+    const std::uint64_t semantic_count =
+        semantic_activity == semantic_message_type_activity_.end()
+            ? 0u
+            : semantic_activity->second.count;
+    const std::optional<ProtocolTimestampNs> semantic_timestamp_ns =
+        semantic_activity == semantic_message_type_activity_.end()
+            ? std::nullopt
+            : semantic_activity->second.last_seen_timestamp_ns;
     if (message_type == 1005u)
     {
-      return HasSeenBasePosition1005();
+      return semantic_count > 0u;
     }
     if (message_type == 1006u)
     {
-      return HasSeenBasePosition1006();
+      return semantic_count > 0u;
     }
-    return HasActivityInWindow(MessageCount(message_type),
-                               LastSeenMessageTimestampNs(message_type),
+    return HasActivityInWindow(semantic_count,
+                               semantic_timestamp_ns,
                                window_start_timestamp_ns,
                                options.now_timestamp_ns);
   };
   const auto has_constellation = [&](const RtcmConstellation constellation)
   {
-    return HasActivityInWindow(MsmConstellationCount(constellation),
-                               LastSeenMsmConstellationTimestampNs(constellation),
-                               window_start_timestamp_ns,
-                               options.now_timestamp_ns);
+    const auto semantic_activity = semantic_msm_constellation_activity_.find(constellation);
+    return HasActivityInWindow(
+        semantic_activity == semantic_msm_constellation_activity_.end()
+            ? 0u
+            : semantic_activity->second.count,
+        semantic_activity == semantic_msm_constellation_activity_.end()
+            ? std::nullopt
+            : semantic_activity->second.last_seen_timestamp_ns,
+        window_start_timestamp_ns,
+        options.now_timestamp_ns);
   };
 
   for (const std::uint16_t message_type : options.required_message_types)
@@ -791,7 +858,7 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   if (options.require_any_msm)
   {
     bool seen_recent_msm = false;
-    for (const auto& entry : msm_constellation_activity_)
+    for (const auto& entry : semantic_msm_constellation_activity_)
     {
       if (HasActivityInWindow(entry.second.count,
                               entry.second.last_seen_timestamp_ns,
@@ -808,7 +875,14 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     }
   }
 
-  if (options.require_base_position && !HasSeenBasePositionMessage())
+  const auto semantic_1005 = semantic_message_type_activity_.find(1005u);
+  const auto semantic_1006 = semantic_message_type_activity_.find(1006u);
+  const bool has_semantic_base_position =
+      (semantic_1005 != semantic_message_type_activity_.end() &&
+       semantic_1005->second.count > 0u) ||
+      (semantic_1006 != semantic_message_type_activity_.end() &&
+       semantic_1006->second.count > 0u);
+  if (options.require_base_position && !has_semantic_base_position)
   {
     return false;
   }
@@ -901,8 +975,9 @@ std::optional<double> RtcmCorrectionMonitor::MsmConstellationRateHz(
   return ComputeRateHz(it->second, window_end_timestamp_ns, window_duration_ns);
 }
 
-void RtcmCorrectionMonitor::RecordValidMessage(const RtcmMessageInfo& info,
-                                               std::optional<ProtocolTimestampNs> timestamp_ns)
+void RtcmCorrectionMonitor::RecordValidFrameMessage(
+    const RtcmMessageInfo& info,
+    std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (!first_valid_frame_timestamp_ns_.has_value() && timestamp_ns.has_value())
   {
@@ -940,9 +1015,45 @@ void RtcmCorrectionMonitor::RecordValidMessage(const RtcmMessageInfo& info,
   }
 }
 
+void RtcmCorrectionMonitor::RecordSemanticMessage(
+    const RtcmMessageInfo& info,
+    const std::optional<ProtocolTimestampNs> timestamp_ns)
+{
+  RtcmCorrectionActivityStats& message_stats =
+      semantic_message_type_activity_[info.message_type];
+  ++message_stats.count;
+  UpdateLatestTimestamp(timestamp_ns, message_stats.last_seen_timestamp_ns);
+
+  if (info.is_msm)
+  {
+    RtcmCorrectionActivityStats& constellation_stats =
+        semantic_msm_constellation_activity_[info.msm_constellation];
+    ++constellation_stats.count;
+    UpdateLatestTimestamp(timestamp_ns, constellation_stats.last_seen_timestamp_ns);
+  }
+}
+
 void RtcmCorrectionMonitor::PrepareStationOwnership(const std::uint16_t station_id)
 {
-  if (station_id_.has_value() && *station_id_ != station_id)
+  bool unowned_decoded_state_from_other_station = false;
+  if (!station_id_.has_value())
+  {
+    unowned_decoded_state_from_other_station =
+        last_glonass_code_phase_bias_.has_value() &&
+        last_glonass_code_phase_bias_->station_id != station_id;
+    for (const auto& entry : msm_summary_activity_)
+    {
+      if (entry.second.last_summary.has_value() &&
+          entry.second.last_summary->station_id != station_id)
+      {
+        unowned_decoded_state_from_other_station = true;
+        break;
+      }
+    }
+  }
+
+  if ((station_id_.has_value() && *station_id_ != station_id) ||
+      unowned_decoded_state_from_other_station)
   {
     Reset();
   }
@@ -954,7 +1065,28 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
     const RtcmCorrectionHealthOptions& options)
 {
   universal_gnss::GnssHealthSummary summary;
-  summary.parser_healthy = monitor.invalid_frames() == 0u;
+  summary.parser_healthy = monitor.invalid_frames() == 0u &&
+                           monitor.BaseStationArpMalformedCount() == 0u &&
+                           monitor.GlonassBias1230MalformedCount() == 0u &&
+                           monitor.MsmMalformedCount() == 0u;
+
+  if (monitor.BaseStationArpMalformedCount() > 0u)
+  {
+    const auto timestamp_1005 = monitor.LastSeenMessageTimestampNs(1005u);
+    const auto timestamp_1006 = monitor.LastSeenMessageTimestampNs(1006u);
+    const auto malformed_timestamp_ns =
+        !timestamp_1005.has_value()
+            ? timestamp_1006
+            : (!timestamp_1006.has_value() || *timestamp_1005 >= *timestamp_1006
+                   ? timestamp_1005
+                   : timestamp_1006);
+    summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kWarning,
+                      universal_gnss::GnssDiagnosticCategory::kParser,
+                      "rtcm.base_station_arp_malformed",
+                      "Malformed RTCM 1005/1006 base-station payloads were observed",
+                      malformed_timestamp_ns,
+                      std::string("rtcm_correction_monitor")});
+  }
 
   if (monitor.GlonassBias1230MalformedCount() > 0u)
   {
