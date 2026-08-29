@@ -8,7 +8,7 @@ Checked-out `review` HEAD: `483a717b9a0fe1c7609d173fb1a8931cd2dfc1d9` (exactly o
 
 Comparison base for the old audit: `804bed8d7f753f6834212cfbc9dc329f88360299`
 
-The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-002, UGA-005, UGA-006, UGA-007, UGA-014, UGA-016, UGA-018, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
+The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-002, UGA-005, UGA-006, UGA-007, UGA-009, UGA-014, UGA-016, UGA-018, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
 
 ### UGA-001 — NMEA header parsing uses a dangling `string_view`
 
@@ -178,19 +178,23 @@ Recommended next action: In a separate implementation task, track decoded-valid 
 
 ### UGA-009 — partial nonblocking RTCM writes discard an already-started frame
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/receiver_node.cpp`, `ReceiverNode::Impl::OnRtcmMessage`, current lines 815-850 still keeps the write offset only in a callback-local lambda. It stops on an otherwise successful zero-byte write, records an error, and retains no suffix or queue for a later callback. `gnss_transport/src/tcp_client_transport.cpp`, `TcpClientTransport::Write`, current lines 442-473 still legally maps nonblocking `EAGAIN`/`EWOULDBLOCK` to `{0, kOk, kNone}`. The next RTCM callback therefore begins its new frame after any prefix already emitted by the failed callback.
+Pre-fix reproduction: Seven focused ReceiverNode scenarios were added before changing production. On the current code, only the ordinary full/short-write case passed; 6/7 failed. The controlled `partial(3) -> WouldBlock -> next frame` sequence emitted exactly the three-byte prefix of frame A followed by all eight bytes of frame B, versus the required 16-byte `A || B`. Zero-progress and multiple-partial cases were never retried by `StepOnce`; a hard error did not close the session; partial bytes were absent from `forwarded_bytes`; and the would-block path was counted as a write error.
 
-Relevant changes since old audit: The focused old-to-current diff and path log for ReceiverNode, its ROS tests, TCP/serial transports, and byte-stream interfaces are empty. None of the 14 intervening commits adds persistent forwarding state, writable-event retry, or whole-frame queueing. The current ROS test still uses `MemoryByteDuplex`, whose writes always complete, so it does not exercise this path.
+Persistent-write invariant: `ReceiverNode` owns a persistent FIFO bounded to the existing RTCM subscription depth of 50 complete frames. Each entry retains its complete byte vector, current offset, and message type. Only the FIFO head may reach the transport. Once any prefix of A is accepted, no byte of B is written until A completes or the transport/session fails and the entire session-local FIFO is explicitly abandoned. Queue saturation drops only the new whole frame before writing any byte; it cannot grow without bound or interleave frames.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga009-repro`, compiled and linked against the current ROS2 build, injected a `ByteDuplex` that wrote a three-byte prefix, then returned the same zero-progress success used for nonblocking would-block. After the first eight-byte frame it printed `after_first_bytes=3 calls_after_first=2`; an intervening `StepOnce`/`PublishNow` left `after_idle_bytes=3`. Publishing the following eight-byte frame produced `final_bytes=11 complete_ordered_size=16 prefix_then_next=1`: the first five-byte suffix was never retried, and the second frame immediately followed the orphaned prefix.
+Production fix: `ReceiverNode::Impl` replaces callback-local `write_all` state with the bounded `pending_rtcm_writes_` FIFO and `FlushPendingRtcmWrites`. Positive partial progress advances only the head offset and may continue synchronously; a successful zero-byte result stops that flush immediately without an error or busy loop, preserving the suffix for the next timer `StepOnce` or RTCM callback. A following callback first retries the head and otherwise queues its complete frame. A non-OK write closes the sink, clears all old-session pending bytes, marks the transport unavailable, and records one failure. A terminal read similarly clears pending state. No old suffix can reach a subsequently opened transport session.
 
-Remaining defect, if any: Once any frame prefix has reached a stream sink, ordinary backpressure can still discard its suffix. No callback-independent state preserves the remainder, and later frames are not ordered behind it, so the receiver observes a corrupt concatenation rather than whole-frame loss.
+Accounting semantics: `forwarded_bytes` now advances for every byte actually accepted by the transport, including a prefix later abandoned after a hard failure. `forwarded_frame_count`, `last_message_type`, and forwarding-active time advance only after the complete frame is written, preserving UGA-019 completion-based liveness. Would-block/zero progress does not increment `write_error_count`; hard failures, disconnect with pending data, unsupported/closed sinks, and bounded-queue overflow do.
 
-Recommended next action: In a separate implementation task, introduce a bounded persistent whole-frame queue with offsets and retry scheduling, document overflow/drop behavior, and test every split point, zero progress, recovery, terminal errors, and ordering of consecutive frames.
+Post-fix validation: Focused UGA-009 regressions passed 7/7 after failing 6/7 pre-fix. Complete ReceiverNode passed 43/43, including UGA-014 timestamp-domain, UGA-019 forwarding active/stale/recovery, and UGA-020 cadence-aware freshness coverage. Complete affected ROS2 CTest passed 6/6, including NtripNode 11/11; complete non-ROS CTest passed 61/61, including all NTRIP reconnect/liveness and transport tests. The seven focused ReceiverNode cases passed 7/7 under combined ASan+UBSan.
+
+Remaining limitation: The bounded FIFO intentionally drops the newest complete frame when all 50 entries remain occupied; it does not block the ROS executor or allocate an unbounded backlog. ReceiverNode still has no in-place transport reconnection facility: a hard write failure closes that session, and reconnect/reconstruction remains the owning deployment's responsibility. No public header, ROS message, topic, or parameter changed.
+
+Recommended next action: Keep full write, short write, WouldBlock continuation, zero progress, multiple partials, two-frame ordering, queue bound, hard failure, disconnect, and new-session isolation in the ReceiverNode regression lane.
 
 ### UGA-010 — Unicore GPGGA and PVTSLNA commands use the wrong grammar
 
@@ -326,7 +330,7 @@ Recommended next action: Keep the public-stamp-domain, future-time, ROS-jump, st
 | UGA-006 | FIXED | Confirmed |
 | UGA-007 | FIXED | Confirmed |
 | UGA-008 | STILL PRESENT | Confirmed |
-| UGA-009 | STILL PRESENT | Confirmed |
+| UGA-009 | FIXED | Confirmed |
 | UGA-010 | ALREADY FIXED | Confirmed |
 | UGA-011 | FIXED | Confirmed |
 | UGA-012 | FIXED | Confirmed |

@@ -439,6 +439,158 @@ private:
   bool open_{true};
 };
 
+class ScriptedWriteByteDuplex : public universal_gnss_transport::ByteDuplex
+{
+public:
+  struct WriteAction
+  {
+    std::size_t maximum_bytes{std::numeric_limits<std::size_t>::max()};
+    universal_gnss_transport::TransportStatus status{
+        universal_gnss_transport::TransportStatus::kOk};
+    universal_gnss_transport::TransportError error{
+        universal_gnss_transport::TransportError::kNone};
+  };
+
+  explicit ScriptedWriteByteDuplex(std::vector<WriteAction> actions)
+      : actions_(std::move(actions))
+  {
+    session_bytes_.emplace_back();
+  }
+
+  universal_gnss_transport::ReadResult Read(std::uint8_t*, std::size_t) override
+  {
+    if (!open_)
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kClosed,
+              universal_gnss_transport::TransportError::kClosed};
+    }
+    return {};
+  }
+
+  universal_gnss_transport::WriteResult Write(const std::uint8_t* data,
+                                               const std::size_t size) override
+  {
+    ++write_call_count_;
+    if (!open_)
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kClosed,
+              universal_gnss_transport::TransportError::kClosed};
+    }
+    if (size != 0u && data == nullptr)
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kError,
+              universal_gnss_transport::TransportError::kInvalidArgument};
+    }
+
+    const WriteAction action = next_action_ < actions_.size()
+                                   ? actions_[next_action_++]
+                                   : WriteAction{};
+    const std::size_t accepted = std::min(size, action.maximum_bytes);
+    session_bytes_.back().insert(session_bytes_.back().end(), data, data + accepted);
+    return {accepted, action.status, action.error};
+  }
+
+  bool IsOpen() const override
+  {
+    return open_;
+  }
+
+  void Close() override
+  {
+    open_ = false;
+  }
+
+  void OpenNewSession()
+  {
+    open_ = true;
+    session_bytes_.emplace_back();
+  }
+
+  std::size_t write_call_count() const
+  {
+    return write_call_count_;
+  }
+
+  const std::vector<std::uint8_t>& session_bytes(const std::size_t index) const
+  {
+    return session_bytes_.at(index);
+  }
+
+private:
+  std::vector<WriteAction> actions_{};
+  std::size_t next_action_{0u};
+  std::size_t write_call_count_{0u};
+  std::vector<std::vector<std::uint8_t>> session_bytes_{};
+  bool open_{true};
+};
+
+class RtcmForwardingHarness
+{
+public:
+  explicit RtcmForwardingHarness(
+      std::vector<ScriptedWriteByteDuplex::WriteAction> actions)
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(
+        std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
+                                       rclcpp::Parameter("publish_rate_hz", 0.01)});
+
+    auto duplex = std::make_unique<ScriptedWriteByteDuplex>(std::move(actions));
+    duplex_ = duplex.get();
+    receiver_ = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(duplex), options);
+    publisher_node_ = std::make_shared<rclcpp::Node>("receiver_rtcm_scripted_writer");
+    publisher_ =
+        publisher_node_->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
+    executor_.add_node(receiver_->get_node_base_interface());
+    executor_.add_node(publisher_node_->get_node_base_interface());
+  }
+
+  bool WaitForSubscription()
+  {
+    for (std::size_t attempt = 0u;
+         attempt < 100u && publisher_->get_subscription_count() == 0u;
+         ++attempt)
+    {
+      executor_.spin_some();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    return publisher_->get_subscription_count() > 0u;
+  }
+
+  void Publish(const std::uint16_t message_type, const std::vector<std::uint8_t>& data)
+  {
+    universal_gnss_ros2::msg::RtcmFrame message;
+    message.message_type = message_type;
+    message.data = data;
+    publisher_->publish(message);
+    for (std::size_t attempt = 0u; attempt < 8u; ++attempt)
+    {
+      executor_.spin_some();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
+  ScriptedWriteByteDuplex& duplex()
+  {
+    return *duplex_;
+  }
+
+  universal_gnss_ros2::ReceiverNode& receiver()
+  {
+    return *receiver_;
+  }
+
+private:
+  ScriptedWriteByteDuplex* duplex_{nullptr};
+  std::shared_ptr<universal_gnss_ros2::ReceiverNode> receiver_{};
+  std::shared_ptr<rclcpp::Node> publisher_node_{};
+  rclcpp::Publisher<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr publisher_{};
+  rclcpp::executors::SingleThreadedExecutor executor_{};
+};
+
 const diagnostic_msgs::msg::DiagnosticStatus* FindDiagnosticStatusByName(
     const diagnostic_msgs::msg::DiagnosticArray& array, const std::string& name)
 {
@@ -1994,6 +2146,223 @@ TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmStatusFromUnicoreStream)
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "receiver_last_satellites_in_message"),
             std::optional<std::string>{"21"});
   EXPECT_EQ(receiver_rtcm->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+}
+
+TEST_F(ReceiverNodeTest, CompletesImmediateAndShortRtcmWritesWithoutDuplicateBytes)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame = BuildRtcmFrame(1077u);
+
+  {
+    RtcmForwardingHarness harness({});
+    ASSERT_TRUE(harness.WaitForSubscription());
+    harness.Publish(1077u, frame);
+
+    EXPECT_EQ(harness.duplex().session_bytes(0u), frame);
+    EXPECT_EQ(harness.duplex().write_call_count(), 1u);
+    harness.receiver().PublishNow();
+    const auto* forwarding = FindDiagnosticStatusByName(
+        *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+    ASSERT_NE(forwarding, nullptr);
+    EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+              std::optional<std::string>{"1"});
+    EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
+              std::optional<std::string>{std::to_string(frame.size())});
+  }
+
+  {
+    RtcmForwardingHarness harness({Action{3u}, Action{}});
+    ASSERT_TRUE(harness.WaitForSubscription());
+    harness.Publish(1077u, frame);
+
+    EXPECT_EQ(harness.duplex().session_bytes(0u), frame);
+    EXPECT_EQ(harness.duplex().write_call_count(), 2u);
+    harness.receiver().PublishNow();
+    const auto* forwarding = FindDiagnosticStatusByName(
+        *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+    ASSERT_NE(forwarding, nullptr);
+    EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+              std::optional<std::string>{"1"});
+    EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
+              std::optional<std::string>{"0"});
+  }
+}
+
+TEST_F(ReceiverNodeTest, PreservesWouldBlockSuffixBeforeFollowingRtcmFrame)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame_a = BuildRtcmFrame(1077u);
+  const auto frame_b = BuildRtcmFrame(1087u);
+  std::vector<std::uint8_t> expected = frame_a;
+  AppendBytes(expected, frame_b);
+
+  RtcmForwardingHarness harness({Action{3u}, Action{0u}, Action{}, Action{}});
+  ASSERT_TRUE(harness.WaitForSubscription());
+  harness.Publish(1077u, frame_a);
+  ASSERT_EQ(harness.duplex().session_bytes(0u).size(), 3u);
+
+  harness.Publish(1087u, frame_b);
+
+  EXPECT_EQ(harness.duplex().session_bytes(0u), expected)
+      << "frame B must not follow an orphaned prefix of frame A";
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"2"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
+            std::optional<std::string>{std::to_string(expected.size())});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
+            std::optional<std::string>{"0"});
+}
+
+TEST_F(ReceiverNodeTest, RetriesZeroProgressRtcmWriteWithoutBusyLoop)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame = BuildRtcmFrame(1077u);
+  RtcmForwardingHarness harness({Action{0u}, Action{}});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, frame);
+  EXPECT_EQ(harness.duplex().write_call_count(), 1u)
+      << "one zero-progress result must end the current flush attempt";
+  EXPECT_TRUE(harness.duplex().session_bytes(0u).empty());
+
+  harness.receiver().StepOnce();
+  EXPECT_EQ(harness.duplex().write_call_count(), 2u);
+  EXPECT_EQ(harness.duplex().session_bytes(0u), frame);
+
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
+            std::optional<std::string>{"0"});
+}
+
+TEST_F(ReceiverNodeTest, RetainsRtcmOffsetAcrossMultiplePartialFlushes)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame = BuildRtcmFrame(1077u);
+  RtcmForwardingHarness harness(
+      {Action{1u}, Action{2u}, Action{0u}, Action{1u}, Action{0u}, Action{}});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, frame);
+  EXPECT_EQ(harness.duplex().session_bytes(0u).size(), 3u);
+  EXPECT_EQ(harness.duplex().write_call_count(), 3u);
+
+  harness.receiver().StepOnce();
+  EXPECT_EQ(harness.duplex().session_bytes(0u).size(), 4u);
+  EXPECT_EQ(harness.duplex().write_call_count(), 5u);
+
+  harness.receiver().StepOnce();
+  EXPECT_EQ(harness.duplex().session_bytes(0u), frame);
+  EXPECT_EQ(harness.duplex().write_call_count(), 6u);
+}
+
+TEST_F(ReceiverNodeTest, HardRtcmWriteErrorAbandonsOldSessionSuffix)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame_a = BuildRtcmFrame(1077u);
+  const auto frame_b = BuildRtcmFrame(1087u);
+  const std::vector<std::uint8_t> prefix(frame_a.begin(), frame_a.begin() + 3);
+  RtcmForwardingHarness harness(
+      {Action{3u},
+       Action{0u},
+       Action{0u,
+              universal_gnss_transport::TransportStatus::kError,
+              universal_gnss_transport::TransportError::kWriteFailure}});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, frame_a);
+  ASSERT_EQ(harness.duplex().session_bytes(0u), prefix);
+  harness.receiver().StepOnce();
+
+  EXPECT_FALSE(harness.duplex().IsOpen());
+  EXPECT_EQ(harness.duplex().session_bytes(0u), prefix);
+
+  harness.duplex().OpenNewSession();
+  harness.receiver().StepOnce();
+  harness.Publish(1087u, frame_b);
+  EXPECT_EQ(harness.duplex().session_bytes(1u), frame_b)
+      << "a new transport session must never receive frame A's stale suffix";
+
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
+            std::optional<std::string>{std::to_string(prefix.size() + frame_b.size())});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
+            std::optional<std::string>{"1"});
+}
+
+TEST_F(ReceiverNodeTest, DisconnectClearsPendingRtcmBeforeNewSession)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame_a = BuildRtcmFrame(1077u);
+  const auto frame_b = BuildRtcmFrame(1087u);
+  const std::vector<std::uint8_t> prefix(frame_a.begin(), frame_a.begin() + 3);
+  RtcmForwardingHarness harness({Action{3u}, Action{0u}});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, frame_a);
+  ASSERT_EQ(harness.duplex().session_bytes(0u), prefix);
+  harness.duplex().Close();
+  harness.receiver().StepOnce();
+
+  harness.duplex().OpenNewSession();
+  harness.receiver().StepOnce();
+  harness.Publish(1087u, frame_b);
+  EXPECT_EQ(harness.duplex().session_bytes(1u), frame_b);
+
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
+            std::optional<std::string>{std::to_string(prefix.size() + frame_b.size())});
+}
+
+TEST_F(ReceiverNodeTest, BoundsPendingRtcmQueueAndDropsOnlyWholeNewFrame)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  constexpr std::size_t kExpectedQueueCapacity = 50u;
+  std::vector<Action> actions(kExpectedQueueCapacity + 1u, Action{0u});
+  const auto frame = BuildRtcmFrame(1077u);
+  RtcmForwardingHarness harness(std::move(actions));
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  for (std::size_t index = 0u; index < kExpectedQueueCapacity + 1u; ++index)
+  {
+    harness.Publish(1077u, frame);
+  }
+  EXPECT_TRUE(harness.duplex().session_bytes(0u).empty());
+
+  harness.receiver().StepOnce();
+  std::vector<std::uint8_t> expected;
+  for (std::size_t index = 0u; index < kExpectedQueueCapacity; ++index)
+  {
+    AppendBytes(expected, frame);
+  }
+  EXPECT_EQ(harness.duplex().session_bytes(0u), expected);
+
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
+            std::optional<std::string>{std::to_string(kExpectedQueueCapacity)});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
+            std::optional<std::string>{"1"});
 }
 
 TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
