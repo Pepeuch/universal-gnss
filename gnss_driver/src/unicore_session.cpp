@@ -173,6 +173,7 @@ template <typename ParseFn, typename MapFn>
 bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
                                ParseFn&& parse_fn,
                                MapFn&& map_fn,
+                               const bool is_position_observation,
                                universal_gnss::GnssRuntimeAggregator& aggregator,
                                UnicoreSessionMetrics& metrics)
 {
@@ -185,6 +186,10 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
 
   ++metrics.records_parsed;
   ++metrics.runtime_observations;
+  if (is_position_observation)
+  {
+    ++metrics.position_observations;
+  }
   if (aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -574,6 +579,7 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
     ++metrics_.records_parsed;
     ++metrics_.runtime_observations;
+    ++metrics_.position_observations;
 
     GnssRuntimeState update = universal_gnss_protocols::UnicorePvtslnToRuntimeState(*parsed.record);
     if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
@@ -607,6 +613,7 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
     ++metrics_.records_parsed;
     ++metrics_.runtime_observations;
+    ++metrics_.position_observations;
 
     GnssRuntimeState update = universal_gnss_protocols::UnicoreBestNavToRuntimeState(*parsed.record);
     if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
@@ -719,6 +726,7 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
 
     ++metrics_.records_parsed;
     ++metrics_.runtime_observations;
+    ++metrics_.position_observations;
     seen_valid_nmea_gga_ = true;
     last_nmea_gga_timestamp_ns_ = sentence.timestamp_ns;
 
@@ -918,6 +926,7 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
     ParseAndMergeBinaryRecord(frame,
                               universal_gnss_protocols::ParseUnicoreBestNavB,
                               universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
+                              true,
                               aggregator_,
                               metrics_);
     return;
@@ -926,6 +935,7 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
   ParseAndMergeBinaryRecord(frame,
                             universal_gnss_protocols::ParseUnicorePvtslnB,
                             universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
+                            true,
                             aggregator_,
                             metrics_);
 }

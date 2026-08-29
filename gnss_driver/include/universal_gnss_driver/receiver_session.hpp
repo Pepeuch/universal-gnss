@@ -38,6 +38,7 @@ struct ReceiverSessionMetrics
   bool selection_locked{false};
   std::size_t sessions_switched{0u};
   std::size_t runtime_observations{0u};
+  std::size_t position_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t malformed_records{0u};
   std::size_t rejected_records{0u};

@@ -25,6 +25,7 @@ struct NmeaSessionMetrics
   std::size_t records_parsed{0u};
   std::size_t records_rejected{0u};
   std::size_t runtime_observations{0u};
+  std::size_t position_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t semantic_only_records{0u};
   std::size_t unknown_sentences{0u};

@@ -465,6 +465,12 @@ std::optional<std::string> FindDiagnosticValue(const diagnostic_msgs::msg::Diagn
   return std::nullopt;
 }
 
+std::int64_t RosTimeToNanoseconds(const builtin_interfaces::msg::Time& stamp)
+{
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL +
+         static_cast<std::int64_t>(stamp.nanosec);
+}
+
 class ReceiverNodeTest : public ::testing::Test
 {
 protected:
@@ -1027,6 +1033,67 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_FALSE(diagnostics.status.empty());
   EXPECT_TRUE(diagnostics.header.stamp.sec != 0 || diagnostics.header.stamp.nanosec != 0u);
   EXPECT_EQ(diagnostics.header.frame_id, "gnss");
+}
+
+TEST_F(ReceiverNodeTest, PublishesStableReceiptProvenanceInsteadOfPublicationTime)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       gga,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "nmea")});
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  EXPECT_EQ(RosTimeToNanoseconds(node.last_status_message()->stamp), 0)
+      << "publication time must not be substituted before an observation is accepted";
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence, 0u);
+
+  const auto first_receipt_lower_ns = node.now().nanoseconds();
+  ASSERT_TRUE(node.StepOnce());
+  const auto first_receipt_upper_ns = node.now().nanoseconds();
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  const auto first_published_stamp_ns =
+      RosTimeToNanoseconds(node.last_status_message()->stamp);
+  const auto first_position_sequence =
+      node.last_status_message()->position_observation_sequence;
+  EXPECT_GE(first_published_stamp_ns, first_receipt_lower_ns);
+  EXPECT_LE(first_published_stamp_ns, first_receipt_upper_ns);
+  EXPECT_EQ(first_position_sequence, 1u);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  EXPECT_EQ(RosTimeToNanoseconds(node.last_status_message()->stamp),
+            first_published_stamp_ns)
+      << "republishing cached state must preserve its original receipt provenance";
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence,
+            first_position_sequence)
+      << "republishing cached state must not invent a position observation";
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  EXPECT_GT(RosTimeToNanoseconds(node.last_status_message()->stamp),
+            first_published_stamp_ns)
+      << "a genuinely new observation must carry new receipt provenance";
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence,
+            first_position_sequence + 1u)
+      << "an identical newly received fix must advance position provenance";
 }
 
 TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)
@@ -1692,7 +1759,7 @@ TEST_F(ReceiverNodeTest, ForwardedRtcmSemanticTrafficDoesNotRefreshRuntimeFreshn
   std::this_thread::sleep_for(std::chrono::milliseconds(3100));
 
   universal_gnss_ros2::msg::RtcmFrame message;
-  message.stamp.sec = 123;
+  message.stamp.sec = 2000000000;
   message.stamp.nanosec = 456u;
   message.message_type = 1006u;
   message.data = BuildRtcm1006Frame(88u, 1000LL, -2000LL, 3000LL, 2500u);
@@ -2095,7 +2162,31 @@ TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostic
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"),
             std::optional<std::string>{"1"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "cell_count"), std::optional<std::string>{"1"});
-  EXPECT_NE(FindDiagnosticValue(*msm_summary, "age_ns"), std::nullopt);
+  const auto msm_age_ns = FindDiagnosticValue(*msm_summary, "age_ns");
+  ASSERT_NE(msm_age_ns, std::nullopt);
+  EXPECT_GE(std::stoll(*msm_age_ns), 0)
+      << "RTCM freshness must never subtract a public ROS stamp from steady now";
+  EXPECT_LT(std::stoll(*msm_age_ns), 1000000000LL)
+      << "freshly received RTCM should have a small local monotonic age";
+
+  message.stamp.sec = 1;
+  message.stamp.nanosec = 0u;
+  publisher->publish(message);
+  for (std::size_t attempt = 0u; attempt < 4u; ++attempt)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* recovered_msm = FindDiagnosticStatusByName(
+      *node.last_diagnostics_message(), "universal_gnss/rtcm_semantic/msm_summary");
+  ASSERT_NE(recovered_msm, nullptr);
+  const auto recovered_age_ns = FindDiagnosticValue(*recovered_msm, "age_ns");
+  ASSERT_NE(recovered_age_ns, std::nullopt);
+  EXPECT_GE(std::stoll(*recovered_age_ns), 0);
+  EXPECT_LT(std::stoll(*recovered_age_ns), 1000000000LL)
+      << "a ROS-stamp jump must not prevent monotonic RTCM freshness recovery";
 }
 
 }  // namespace

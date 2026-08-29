@@ -8,7 +8,7 @@ Checked-out `review` HEAD: `483a717b9a0fe1c7609d173fb1a8931cd2dfc1d9` (exactly o
 
 Comparison base for the old audit: `804bed8d7f753f6834212cfbc9dc329f88360299`
 
-The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
+The staged revalidation below covers UGA-001 through UGA-029. The fix continuations modify only UGA-001, UGA-002, UGA-007, UGA-014, UGA-022, UGA-023, UGA-026, and UGA-027; no other audit finding was changed.
 
 ### UGA-001 — NMEA header parsing uses a dangling `string_view`
 
@@ -40,19 +40,25 @@ Recommended next action: Keep the focused foundation test in the normal and sani
 
 ### UGA-002 — live acquisition timestamps are lost and publish time is substituted
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_driver/src/receiver_session_runner.cpp`, `ReceiverSessionRunner::StepOnce`, current lines 27-46 still calls `session_.FeedBytes(buffer.data(), read_result.bytes_read)` without the optional timestamp. `gnss_ros2/src/receiver_node.cpp`, `ReceiverNode::Impl::PublishNow`, current lines 1418-1436 still copies the state and assigns `owner_.now().nanoseconds()` whenever the state has no timestamp.
+Old defect: Live reads reached `ReceiverSession::FeedBytes` without a timestamp, so parsed runtime state had no acquisition provenance and `ReceiverNode::PublishNow` substituted publication-time `owner_.now()`.
 
-Relevant changes since old audit: The focused diff from `804bed8d...` to `aaacc6be...` for the runner, its header/test, ReceiverNode, and ReceiverNode tests is empty; their path logs contain no intervening commit. None of the 14 production-base commits changes timestamp capture or fallback behavior.
+Pre-fix reproduction: The new receiver-runner regression failed two assertions because the first accepted GGA had no timestamp and a following GGA could not have a newer timestamp. `ReceiverNodeTest.PublishesStableReceiptProvenanceInsteadOfPublicationTime` then showed the public stamp fell about 50 ms after the receipt window and changed again when the cached state was republished.
 
-Reproduction/test result: A current-tree focused program linked against freshly built current libraries fed one valid GGA through `MemoryByteSource -> ReceiverSessionRunner -> ReceiverSession`. Command: `/tmp/universal-gnss-current-uga002-repro`. Result: `runtime_updates=1 fix=1 timestamp_present=0`. The inspected ROS path would therefore replace the missing timestamp with publication-time `owner_.now()`.
+Temporal contract applied: `ReceiverSessionRunner::StepOnce` captures one immutable local receipt timestamp immediately after each successful non-empty transport read and supplies it to the existing session/parser buffering path. The portable default is `steady_clock`; ReceiverNode supplies ROS time captured at the same receipt boundary for the public runtime stamp and separately retains the paired `steady_clock` time for local freshness. Observations decoded from one read may share that local receipt time; it is explicitly not a receiver-provided GNSS measurement epoch or publication time. Before any observation has been accepted, public observation provenance remains explicitly unavailable/zero rather than being synthesized from publication time.
 
-Remaining defect, if any: The live runner still records neither byte-receipt nor acquisition time, and the ROS layer still relabels such data with publish time. Backlogged/delayed observations remain indistinguishable from current observations in the public timestamp.
+Production files changed: `gnss_driver/include/universal_gnss_driver/receiver_session_runner.hpp`, `gnss_driver/src/receiver_session_runner.cpp`, `gnss_ros2/src/receiver_node.cpp`, and the timestamp contract comment in `gnss_ros2/msg/GnssStatus.msg`.
 
-Recommended next action: In a separate implementation task, define receipt/measurement/public ROS clock semantics, capture time at read, propagate it through the session, and add a delayed-publication regression test.
+Post-fix validation: The focused runner binary passes, including receipt presence, no mutation without new input, newer provenance for a following observation, fragmented input, and batched identical fixes. The targeted ReceiverNode provenance test passes, including the final no-observation/zero-provenance assertion. Complete `gnss_driver` CTest passed 19/19, complete non-ROS CTest passed 61/61, and complete ROS2 CTest passed 6/6; ReceiverNode contributed 36/36 gtests. The two touched non-ROS binaries also passed ASan+UBSan with leak detection disabled for the sandbox and passed standalone UBSan.
+
+Public/API compatibility impact: `ReceiverSessionRunnerConfig` gains an additive receipt-timestamp provider at the end of the configuration struct. `GnssStatus.stamp` now has explicit local-receipt-in-ROS-time semantics instead of receiving a later publication fallback. This is a corrected timestamp contract; it does not claim GNSS measurement time.
+
+Remaining limitation: Byte-level arrival times inside one read are unknowable in the current transport API, so records beginning in the same read can share receipt provenance. No hardware validation is required for the software lifetime/propagation invariant.
+
+Recommended next action: Keep the runner and delayed-publication regressions in normal and sanitizer lanes.
 
 ### UGA-003 — receiver drain throughput is coupled to ROS publish cadence
 
@@ -130,19 +136,25 @@ Recommended next action: In a separate implementation task, define and test an a
 
 ### UGA-007 — stale receiver state is kept fresh for NTRIP GGA by republishing
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/receiver_node.cpp`, `ReceiverNode::Impl::OnTimer` and `PublishNow`, current lines 790-793 and 1418-1426 still publish the current state every timer tick even when `StepOnce()` produced no new observation. `gnss_ros2/src/ntrip_node.cpp`, `NtripNode::Impl::OnStatusMessage`, current lines 319-323 still replaces `last_status_time_` with callback time on every message. `MaybeInjectGga` at lines 516-530 and the diagnostic check at lines 727-732 still use only that callback age; neither checks the message timestamp, observation identity, nor upstream receiver progress.
+Old defect: Every `GnssStatus` callback replaced NtripNode's local status receipt time, so ReceiverNode's periodic republication made one cached fix remain eligible for GGA indefinitely.
 
-Relevant changes since old audit: The focused diff and path log from `804bed8d...` to `aaacc6be...` for ReceiverNode, NtripNode, `GnssStatus.msg`, and their tests are empty. The intervening commits do not affect this cross-layer freshness path. The existing `DoesNotInjectGgaWhenStatusIsStaleAndReportsStaleSource` test still covers one message followed by 5.2 seconds of silence, not repeated identical republishes.
+Pre-fix reproduction: `NtripNodeTest.RepeatedCachedStatusCannotKeepGgaSourceFresh` repeatedly published one fixed status for more than the five-second freshness interval. Before the fix, the final read still began with `$GPGGA`, `gga_source_stale` was absent, and the recovery assertion also failed because the incorrect stale-period send had reset the GGA interval.
 
-Reproduction/test result: A current-tree ROS2 build succeeded, then `/tmp/universal-gnss-current-uga007-repro` established an adopted NTRIP stream and published the exact same valid status seven times at 1.1-second intervals; its observation stamp remained fixed at one second. At the final repetition, about 6.6 seconds after the first callback, it printed `final_cycle_gga=1 stale_after_repeats=0`. The control phase stopped callbacks for 5.2 seconds and printed `stale_after_silence=1`. Thus callback repetition, not observation age, both suppresses the stale diagnostic and preserves GGA eligibility.
+Temporal contract applied: The driver sessions now count only accepted position/fix observations: NMEA GGA/RMC, u-blox NAV-PVT or its GGA/RMC paths, and Unicore BESTNAV/PVTSLN/GGA ASCII or binary paths. GSA/GSV/GST, receiver-health, and correction enrichment do not advance this generation. ReceiverNode publishes the generation as `GnssStatus.position_observation_sequence`; NtripNode refreshes its steady-clock GGA source time only when that nonzero generation changes, so identical coordinates remain valid new observations while cached republication does nothing.
 
-Remaining defect, if any: An unchanged receiver observation can still be kept indefinitely fresh by the ReceiverNode publication timer, so stale coordinates remain eligible for caster GGA. The inverse fixed five-second callback threshold also remains independent of a legitimate receiver's configured observation cadence.
+Production files changed: the NMEA/u-blox/Unicore/aggregate session metric headers and sources under `gnss_driver`, `gnss_ros2/msg/GnssStatus.msg`, `gnss_ros2/src/receiver_node.cpp`, and `gnss_ros2/src/ntrip_node.cpp`. `MOWGLINEXT_TODO.md` records the required pending downstream projection and stale-policy integration for the new ROS field.
 
-Recommended next action: In a separate implementation task, carry and validate observation/receipt freshness independently of publish cadence, and add the repeated-identical-status regression plus slow-valid-source and exact-boundary cases.
+Post-fix validation: The focused repeated-cache test passes: no GGA after expiry, stale diagnostics appear, and a following observation with identical numeric values restores eligibility. The runner regression also proves fragmented GGA counts once, GSV enrichment does not advance provenance, and two identical GGA records in one batch advance it twice. Complete `gnss_driver` passed 19/19, NtripNode passed 10/10 gtests, complete ROS2 CTest passed 6/6, and complete non-ROS CTest passed 61/61. Existing UGA-019 forwarding activity and UGA-020 cadence-aware runtime freshness scenarios remain green in those full ROS suites.
+
+Public/API compatibility impact: `GnssStatus.msg` gains `uint64 position_observation_sequence`, changing the ROS interface type hash/wire layout and requiring downstream ROS packages to rebuild. Zero is reserved for publishers without explicit provenance; NtripNode retains a stamp-based compatibility fallback for those legacy messages.
+
+Remaining limitation: A legacy external publisher that leaves the sequence at zero and rewrites its stamp on every cached publication can still appear new; current Universal GNSS publishers always provide the explicit generation. The GGA freshness duration itself remains the existing five seconds and was not increased.
+
+Recommended next action: Rebuild downstream ROS consumers, preserve the new field through projections, and keep the cached/high-publication-rate regression.
 
 ### UGA-008 — semantically malformed RTCM satisfies correction health
 
@@ -278,38 +290,44 @@ Recommended next action: Retain boundary/midpoint/extreme-rate regressions and r
 
 ### UGA-014 — RTCM ROS stamps mix monotonic and ROS/system clock domains
 
-Status: **STILL PRESENT**
+Status: **FIXED**
 
 Confidence: **Confirmed**
 
-Current evidence: `gnss_ros2/src/ntrip_node.cpp` lines 164-168 defines `MonotonicNowNs()` from `steady_clock`; `StepOnce` passes that value into the NTRIP client at lines 325-340, and `ReadOnce` copies the resulting frame timestamp directly into public `RtcmFrame.stamp` at lines 455-488. In contrast, the same node stamps the diagnostic array header with its ROS clock at lines 346-360. `gnss_ros2/msg/RtcmFrame.msg` still exposes only an unqualified `builtin_interfaces/Time stamp`. `gnss_ros2/src/receiver_node.cpp` lines 270-280 accepts every nonzero public stamp as a protocol timestamp; lines 855-872 record it unchanged, while lines 1440-1444 calculate semantic ages using the receiver's local monotonic clock. Finally, `gnss_protocols/src/rtcm_correction_monitor.cpp` lines 81-102 subtracts timestamps without rejecting negative ages and checks only the lower observation-window bound; lines 886-920 therefore do not mark a future frame stale and can report corrections available. This traces two distinct domains end-to-end: the public ROS/system/sim-capable field and the local steady receipt clock are still conflated.
+Old defect: NtripNode copied boot-relative steady nanoseconds into public ROS `RtcmFrame.stamp`; ReceiverNode then interpreted any public ROS/system/sim stamp as a steady protocol timestamp. The correction monitor subtracted incompatible epochs, allowed negative ages, and let future observations satisfy correction requirements.
 
-Relevant changes since old audit: The focused diff from `804bed8d7f753f6834212cfbc9dc329f88360299` to `aaacc6be92463ad493d6f4260426cf645188078f` is empty for `ntrip_node.cpp`, `receiver_node.cpp`, and `RtcmFrame.msg`. The only change in `rtcm_correction_monitor.cpp` is `3495ffb`, which makes RTCM 1230 optional and adjusts its diagnostic severity; it does not alter timestamp arithmetic, future rejection, or clock-domain handling. The commits therefore do not affect this finding.
+Pre-fix reproduction: The focused monitor regression failed four assertions: a future RTCM observation produced a negative age, satisfied the bounded MSM requirement, made corrections available, and omitted `rtcm.freshness_unknown`. ReceiverNode's semantic test produced immediate RTCM ages of thousands of seconds after deliberately incompatible public stamps, and NtripNode's public frame stamp was about `2.47e12` ns while the node ROS clock was about `1.79e18` ns.
 
-Reproduction/test result: `/tmp/universal-gnss-current-uga014-repro` used the current ROS2 libraries, a socket-pair NTRIP stream carrying a fully decodable CRC-valid 1006 frame, a real `RtcmFrame` publisher, `ReceiverNode`, and a direct monitor scenario. The NTRIP-published stamp was within 5,102,661 ns of local steady time but 1,787,867,443,985,476,510 ns from the node's ROS/system clock (`stamp_matches_steady=1`). Passing that frame to ReceiverNode produced a plausible same-host age of 59,330,128 ns. Republishing the identical valid frame with the current ROS/system stamp produced `system_to_receiver_age_ns=-1787867443928923000`. Independently, a future message timestamp gave `monitor_future_age_ns=-1795000000000000000`, yet `required=1`, `stale=0`, and `correction_available=1`. The reproducer exited 0. The existing focused `ReceiverNodeTest.ReceiverConsumesRtcmPublishedByNtripNode` also passed, confirming why the defect is masked when both components happen to share the same host steady epoch.
+Temporal contract applied: NtripNode captures public `RtcmFrame.stamp` from its ROS clock at local read receipt while its NTRIP client and correction monitor retain steady timestamps internally. ReceiverNode ignores the public stamp for freshness and captures one new steady timestamp at its RTCM callback receipt boundary. The correction monitor now treats `last_seen > now` as unknown age, excludes future values from lower-and-upper-bounded requirement windows, and disallows future timestamps from startup grace. No value is clamped and no epoch conversion or absolute-age workaround exists.
 
-Remaining defect, if any: Public ROS/system or simulated timestamps, remote-host values, and replay-relative values can still be compared directly with local steady time. Future values yield negative ages, satisfy the lower-bound-only requirement window, and can keep correction freshness available indefinitely; NtripNode also continues to publish boot-relative steady values in a ROS `Time` field.
+Production files changed: `gnss_protocols/src/rtcm_correction_monitor.cpp`, `gnss_ros2/src/ntrip_node.cpp`, `gnss_ros2/src/receiver_node.cpp`, and the clarified contract in `gnss_ros2/msg/RtcmFrame.msg`.
 
-Recommended next action: In a separate implementation task, define the public `RtcmFrame.stamp` ROS clock semantics, capture a distinct local steady receipt timestamp for freshness, reject future/out-of-domain observations, and add cross-process system/steady/sim/replay plus zero, future, and out-of-order regression cases.
+Post-fix validation: Both focused ROS clock-domain tests pass: the NTRIP stamp lies within the ROS receipt window, and ReceiverNode reports a small non-negative monotonic age before and after public stamp jumps from a far-future value to an old value. The monitor future-timestamp regression passes. Complete protocols passed 18/18, full ReceiverNode 36/36 and NtripNode 10/10 gtests passed, complete ROS2 CTest passed 6/6, and non-ROS CTest passed 61/61. `TestTimestampHistoryRetention` (UGA-017), forwarding active/stale/recovery tests (UGA-019), and all cadence/fallback/boundary/recovery tests (UGA-020) remained green. ASan+UBSan and standalone UBSan passed the two touched non-ROS binaries.
+
+Public/API compatibility impact: `RtcmFrame` wire layout is unchanged, but its formerly ambiguous stamp is now explicitly ROS-clock local receipt time. Internal correction freshness no longer consumes that public value. The `GnssStatus` interface change described under UGA-007 is the only ROS wire-layout change in this batch.
+
+Remaining limitation: Public ROS timestamps can move with simulated/system time by design and are unsuitable for age arithmetic; consumers must capture their own local monotonic receipt time, as documented. Hardware/vendor validation is not required for the clock-domain separation.
+
+Recommended next action: Keep the public-stamp-domain, future-time, ROS-jump, stale, and recovery cases in continuous testing.
 
 ## Summary
 
 | Finding | Status | Confidence |
 |---|---|---|
 | UGA-001 | FIXED | Confirmed |
-| UGA-002 | STILL PRESENT | Confirmed |
+| UGA-002 | FIXED | Confirmed |
 | UGA-003 | STILL PRESENT | Confirmed |
 | UGA-004 | FIXED | Confirmed |
 | UGA-005 | STILL PRESENT | Confirmed |
 | UGA-006 | STILL PRESENT | Confirmed |
-| UGA-007 | STILL PRESENT | Confirmed |
+| UGA-007 | FIXED | Confirmed |
 | UGA-008 | STILL PRESENT | Confirmed |
 | UGA-009 | STILL PRESENT | Confirmed |
 | UGA-010 | ALREADY FIXED | Confirmed |
 | UGA-011 | FIXED | Confirmed |
 | UGA-012 | FIXED | Confirmed |
 | UGA-013 | FIXED | Confirmed |
-| UGA-014 | STILL PRESENT | Confirmed |
+| UGA-014 | FIXED | Confirmed |
 | UGA-015 | ALREADY FIXED | Confirmed |
 | UGA-016 | STILL PRESENT | Confirmed |
 | UGA-017 | FIXED | Confirmed |

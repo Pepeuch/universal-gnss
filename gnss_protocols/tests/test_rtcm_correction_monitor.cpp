@@ -772,6 +772,41 @@ void TestHealthStates(TestContext& ctx)
   ctx.Expect(error.HasErrors(), "missing required correction content should emit an error event");
 }
 
+void TestFutureTimestampsCannotSatisfyFreshness(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveMessage(MakeMessageInfo(1077u), 10000);
+
+  RtcmCorrectionHealthOptions options;
+  options.now_timestamp_ns = 1000;
+  options.stale_after_ns = 5000;
+  options.required_observation_window_ns = 5000;
+  options.startup_grace_ns = 5000;
+  options.require_any_msm = true;
+
+  const auto age_ns = monitor.AgeSinceLastFrameNs(*options.now_timestamp_ns);
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
+  ctx.Expect(!age_ns.has_value(),
+             "an observation later than diagnostic now must not produce a negative age");
+  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options),
+             "a future observation must not satisfy a bounded correction requirement");
+  ctx.Expect(!health.correction_available,
+             "a future observation must not make corrections available");
+
+  bool found_freshness_unknown = false;
+  for (const auto& event : health.events)
+  {
+    if (event.code == "rtcm.freshness_unknown")
+    {
+      found_freshness_unknown = true;
+      break;
+    }
+  }
+  ctx.Expect(found_freshness_unknown,
+             "future-dated correction activity should report unknown freshness");
+}
+
 void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
@@ -943,6 +978,7 @@ int main()
   TestMsmSemanticObservations(ctx);
   TestMsmMalformedHealthEvent(ctx);
   TestHealthStates(ctx);
+  TestFutureTimestampsCannotSatisfyFreshness(ctx);
   TestPortableRtkRequirementsAccept1006(ctx);
   TestPortableRtkRequirementsDoNotRequireGlonassBias(ctx);
   TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(ctx);

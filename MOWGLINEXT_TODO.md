@@ -291,6 +291,48 @@ Suggested validation checks:
 * verify operator review pages preserve the selected receiver model and any
   skip/rejection warning in logs or exported plans
 
+## 9. Pending downstream integration — preserve GNSS observation provenance
+
+New Universal GNSS capability:
+
+* ROS `GnssStatus.stamp` now explicitly denotes local receiver receipt time in
+  the ROS clock domain, not publication time or a receiver-provided measurement
+  epoch
+* `position_observation_sequence` advances only when Universal GNSS accepts a
+  new position/fix observation; republishing cached state leaves it unchanged
+* public `RtcmFrame.stamp` remains ROS time while correction freshness is kept
+  on an internal monotonic clock
+
+Why this matters for MowgliNext:
+
+* a high ROS publication rate must not make stale GNSS input appear newer
+* two real consecutive fixes may have identical coordinates and still need to
+  be recognized as distinct observations
+* robot-side age or safety logic must not subtract ROS timestamps from a local
+  steady-clock timestamp
+
+Pending MowgliNext work:
+
+* preserve `position_observation_sequence` through the robot-side GNSS status
+  projection or explicitly document where equivalent provenance is retained
+* drive any cached-status/new-observation distinction from this provenance,
+  not coordinate equality or callback frequency
+* keep GUI/operator stale indications based on a local monotonic receipt timer;
+  do not display publication activity as receiver observation activity
+* ensure localization and safety consumers reject stale observations even when
+  the status topic continues to publish
+
+Suggested robot field-validation checks:
+
+* pause receiver observations while leaving ROS status publication active and
+  verify the operator display and localization policy still transition stale
+* resume with a numerically identical fix and verify freshness recovers because
+  the observation sequence advances
+* test simulated-time jumps in both directions and verify correction/GNSS
+  liveness remains governed by monotonic elapsed time
+* verify logs preserve the ROS receipt stamp without describing it as GNSS
+  measurement time
+
 ## Notes
 
 Universal GNSS MSM support currently provides correction-stream observability

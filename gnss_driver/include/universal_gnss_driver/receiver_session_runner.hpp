@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 
 #include "universal_gnss_driver/receiver_session.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
@@ -13,10 +14,13 @@ namespace universal_gnss_driver
 
 struct ReceiverSessionRunnerConfig
 {
+  using ReceiptTimestampProvider = std::function<std::int64_t()>;
+
   std::size_t read_chunk_size{512u};
   bool finalize_session_on_end_of_stream{true};
   bool finalize_session_on_closed{true};
   bool finalize_session_on_error{false};
+  ReceiptTimestampProvider receipt_timestamp_provider{};
 };
 
 struct ReceiverSessionRunnerMetrics

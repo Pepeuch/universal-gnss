@@ -403,6 +403,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   {
     const auto& child = ublox_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
+    metrics_.position_observations = child.position_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records = child.malformed_frames;
     metrics_.rejected_records = child.frames_rejected;
@@ -415,6 +416,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   {
     const auto& child = unicore_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
+    metrics_.position_observations = child.position_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records = child.malformed_lines + child.malformed_frames;
     metrics_.rejected_records = child.records_rejected;
@@ -427,6 +429,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   {
     const auto& child = nmea_session_.metrics();
     metrics_.runtime_observations = child.runtime_observations;
+    metrics_.position_observations = child.position_observations;
     metrics_.runtime_updates = child.runtime_updates;
     metrics_.malformed_records = child.malformed_sentences;
     metrics_.rejected_records = child.records_rejected;
@@ -436,6 +439,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   }
 
   metrics_.runtime_observations = 0u;
+  metrics_.position_observations = 0u;
   metrics_.runtime_updates = 0u;
   metrics_.malformed_records = 0u;
   metrics_.rejected_records = 0u;

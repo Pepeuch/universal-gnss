@@ -1,6 +1,7 @@
 #include "universal_gnss_driver/receiver_session_runner.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <vector>
 
 namespace universal_gnss_driver
@@ -12,6 +13,13 @@ namespace
 std::size_t NormalizeReadChunkSize(const std::size_t configured_size)
 {
   return std::max<std::size_t>(configured_size, 1u);
+}
+
+std::int64_t MonotonicNowNs()
+{
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
 }  // namespace
@@ -41,8 +49,11 @@ bool ReceiverSessionRunner::StepOnce()
     ++metrics_.chunks_read;
     metrics_.bytes_read += read_result.bytes_read;
 
+    const std::int64_t receipt_timestamp_ns = config_.receipt_timestamp_provider
+                                                  ? config_.receipt_timestamp_provider()
+                                                  : MonotonicNowNs();
     const std::size_t before_runtime_updates = session_.metrics().runtime_updates;
-    session_.FeedBytes(buffer.data(), read_result.bytes_read);
+    session_.FeedBytes(buffer.data(), read_result.bytes_read, receipt_timestamp_ns);
     NoteRuntimeUpdateDelta(before_runtime_updates);
     return true;
   }

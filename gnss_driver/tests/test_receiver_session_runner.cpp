@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <chrono>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "universal_gnss/gnss_types.hpp"
@@ -292,6 +294,59 @@ void TestResetMetrics(TestContext& ctx)
              "resetting runner metrics should not rewind receiver-session state");
 }
 
+void TestCapturesAndPreservesLocalReceiptTimestamp(TestContext& ctx)
+{
+  const auto gga = BuildNmeaSentence(
+      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  MemoryByteSource source(gga);
+  ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
+  ReceiverSessionRunner runner(source, session);
+
+  ctx.Expect(runner.StepOnce(), "a complete GGA chunk should advance the receiver runner");
+  const auto first_timestamp_ns = session.current_state().timestamp_ns;
+  ctx.Expect(first_timestamp_ns.has_value(),
+             "the receiver runner must attach a local receipt timestamp at the read boundary");
+
+  ctx.Expect(!runner.StepOnce(), "end of input should not advance the receiver runner");
+  ctx.Expect(session.current_state().timestamp_ns == first_timestamp_ns,
+             "a read with no new observation must not mutate the retained receipt timestamp");
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  source.Reset(gga);
+  ctx.Expect(runner.StepOnce(), "a second complete GGA chunk should advance the receiver runner");
+  const auto second_timestamp_ns = session.current_state().timestamp_ns;
+  ctx.Expect(second_timestamp_ns.has_value() && first_timestamp_ns.has_value() &&
+                 *second_timestamp_ns > *first_timestamp_ns,
+             "a genuinely new observation must receive a newer local receipt timestamp");
+}
+
+void TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(TestContext& ctx)
+{
+  const auto gga = BuildNmeaSentence(
+      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto gsv = BuildNmeaSentence(
+      "GPGSV,1,1,04,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39");
+  std::vector<std::uint8_t> fragmented_stream = gga;
+  fragmented_stream.insert(fragmented_stream.end(), gsv.begin(), gsv.end());
+
+  MemoryByteSource source(fragmented_stream);
+  ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
+  ReceiverSessionRunner runner(source, session, ReceiverSessionRunnerConfig{3u});
+  runner.RunUntilEof();
+
+  ctx.Expect(session.metrics().runtime_observations == 2u &&
+                 session.metrics().position_observations == 1u,
+             "fragmented GGA should count once while GSV enrichment must not create position provenance");
+
+  std::vector<std::uint8_t> batched_identical_fixes = gga;
+  batched_identical_fixes.insert(batched_identical_fixes.end(), gga.begin(), gga.end());
+  source.Reset(std::move(batched_identical_fixes));
+  runner.RunUntilEof();
+
+  ctx.Expect(session.metrics().position_observations == 3u,
+             "two batched, numerically identical GGA fixes must count as two new observations");
+}
+
 }  // namespace
 
 int main()
@@ -304,6 +359,8 @@ int main()
   TestReadErrorHandling(ctx);
   TestFinalizePropagationOnEof(ctx);
   TestResetMetrics(ctx);
+  TestCapturesAndPreservesLocalReceiptTimestamp(ctx);
+  TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(ctx);
 
   if (ctx.failures != 0)
   {

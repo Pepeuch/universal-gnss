@@ -282,19 +282,6 @@ std::int64_t MonotonicNowNs()
       .count();
 }
 
-std::optional<universal_gnss_protocols::ProtocolTimestampNs> RtcmTimestampFromRosMessage(
-    const universal_gnss_ros2::msg::RtcmFrame& message)
-{
-  if (message.stamp.sec == 0 && message.stamp.nanosec == 0u)
-  {
-    return std::nullopt;
-  }
-
-  return static_cast<universal_gnss_protocols::ProtocolTimestampNs>(message.stamp.sec) *
-             1000000000LL +
-         static_cast<universal_gnss_protocols::ProtocolTimestampNs>(message.stamp.nanosec);
-}
-
 [[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node,
                                         const std::string& parameter_name,
                                         const std::string& message)
@@ -848,6 +835,13 @@ struct ReceiverNode::Impl
       runner_config.finalize_session_on_end_of_stream = true;
       runner_config.finalize_session_on_closed = true;
       runner_config.finalize_session_on_error = true;
+      runner_config.receipt_timestamp_provider = [this]()
+      {
+        last_transport_read_receipt_time_ = SteadyClock::now();
+        // Public runtime stamps use ROS time captured at receipt. Local
+        // freshness retains the paired steady time separately.
+        return owner_.now().nanoseconds();
+      };
       runner_.emplace(*transport_source_, *session_, runner_config);
     }
 
@@ -925,11 +919,10 @@ struct ReceiverNode::Impl
 
   void ObserveRtcmSemanticMessage(const universal_gnss_ros2::msg::RtcmFrame& message)
   {
-    auto timestamp_ns = RtcmTimestampFromRosMessage(message);
-    if (!timestamp_ns.has_value())
-    {
-      timestamp_ns = static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs());
-    }
+    // RtcmFrame.stamp belongs to the public ROS clock. Semantic freshness is
+    // local receipt liveness, so it receives an independent steady timestamp.
+    const auto timestamp_ns =
+        static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs());
 
     rtcm_forward_framer_.Reset();
     bool observed_frame = false;
@@ -983,16 +976,17 @@ struct ReceiverNode::Impl
     const std::size_t runtime_observations_before = session_->metrics().runtime_observations;
     const bool advanced = runner_->StepOnce();
     const auto now = SteadyClock::now();
+    const auto receipt_time = last_transport_read_receipt_time_.value_or(now);
     const auto& runner_metrics = runner_->metrics();
 
     if (runner_metrics.bytes_read > bytes_before)
     {
-      last_transport_activity_time_ = now;
+      last_transport_activity_time_ = receipt_time;
     }
 
     if (session_->metrics().runtime_observations > runtime_observations_before)
     {
-      last_runtime_observation_time_ = now;
+      last_runtime_observation_time_ = receipt_time;
     }
 
     UpdateReceiverReportedRtcmActivity(now);
@@ -1521,12 +1515,10 @@ struct ReceiverNode::Impl
   void PublishNow()
   {
     auto state = session_->current_state();
-    if (!state.timestamp_ns.has_value())
-    {
-      state.timestamp_ns = owner_.now().nanoseconds();
-    }
 
     last_status_message_ = ToGnssStatusMessage(state);
+    last_status_message_->position_observation_sequence =
+        static_cast<std::uint64_t>(session_->metrics().position_observations);
 
     auto summary = BuildHealthSummary();
     last_diagnostics_message_ = ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
@@ -1535,7 +1527,10 @@ struct ReceiverNode::Impl
     if (last_diagnostics_message_->header.stamp.sec == 0 &&
         last_diagnostics_message_->header.stamp.nanosec == 0u)
     {
-      last_diagnostics_message_->header.stamp = ToRosTime(state.timestamp_ns);
+      // DiagnosticArray.header is publication metadata, not observation
+      // provenance. Keep it useful before the first receiver observation.
+      last_diagnostics_message_->header.stamp = ToRosTime(
+          std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;
     AppendDiscoveryStatus(*last_diagnostics_message_);
@@ -1827,6 +1822,7 @@ struct ReceiverNode::Impl
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
   SteadyClock::time_point startup_time_{SteadyClock::now()};
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
+  std::optional<SteadyClock::time_point> last_transport_read_receipt_time_{};
   std::optional<SteadyClock::time_point> last_runtime_observation_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<SteadyClock::time_point> last_ublox_receiver_rtcm_used_time_{};

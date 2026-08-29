@@ -169,6 +169,12 @@ std::int64_t MonotonicNowNs()
       .count();
 }
 
+std::int64_t RosTimestampNs(const builtin_interfaces::msg::Time& stamp)
+{
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL +
+         static_cast<std::int64_t>(stamp.nanosec);
+}
+
 bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
 {
   if (state.fix_type == universal_gnss::GnssFixType::kRtkFloat ||
@@ -330,7 +336,31 @@ struct NtripNode::Impl
   void OnStatusMessage(const universal_gnss_ros2::msg::GnssStatus& message)
   {
     runtime_state_ = FromGnssStatusMessage(message);
-    last_status_time_ = SteadyClock::now();
+
+    bool is_new_position_observation = false;
+    if (message.position_observation_sequence != 0u)
+    {
+      is_new_position_observation =
+          !last_position_observation_sequence_.has_value() ||
+          message.position_observation_sequence != *last_position_observation_sequence_;
+      last_position_observation_sequence_ = message.position_observation_sequence;
+      last_legacy_position_stamp_ns_.reset();
+    }
+    else
+    {
+      const std::int64_t stamp_ns = RosTimestampNs(message.stamp);
+      is_new_position_observation =
+          !received_status_ || !last_legacy_position_stamp_ns_.has_value() ||
+          stamp_ns != *last_legacy_position_stamp_ns_;
+      last_legacy_position_stamp_ns_ = stamp_ns;
+      last_position_observation_sequence_.reset();
+    }
+
+    received_status_ = true;
+    if (is_new_position_observation)
+    {
+      last_position_observation_time_ = SteadyClock::now();
+    }
   }
 
   bool StepOnce()
@@ -475,6 +505,8 @@ struct NtripNode::Impl
       {
         advanced = true;
         last_correction_activity_time_ = SteadyClock::now();
+        const auto public_receipt_stamp = ToRosTime(
+            std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
         if (client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming &&
             !first_streaming_time_.has_value())
         {
@@ -484,12 +516,7 @@ struct NtripNode::Impl
         for (const auto& frame : observed_frames)
         {
           universal_gnss_ros2::msg::RtcmFrame message;
-          message.stamp = ToRosTime(frame.timestamp_ns);
-          if (message.stamp.sec == 0 && message.stamp.nanosec == 0u)
-          {
-            message.stamp = ToRosTime(
-                std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
-          }
+          message.stamp = public_receipt_stamp;
           message.message_type = frame.message_type;
           message.data = frame.raw_bytes;
           last_rtcm_message_ = message;
@@ -532,8 +559,8 @@ struct NtripNode::Impl
       return false;
     }
 
-    if (last_status_time_.has_value() &&
-        SteadyClock::now() - *last_status_time_ >= kGnssInputStaleTimeout)
+    if (last_position_observation_time_.has_value() &&
+        SteadyClock::now() - *last_position_observation_time_ >= kGnssInputStaleTimeout)
     {
       return false;
     }
@@ -754,7 +781,8 @@ struct NtripNode::Impl
                                      "GGA injection is enabled but no GNSS status has been received yet"));
         }
       }
-      else if (last_status_time_.has_value() && now - *last_status_time_ >= kGnssInputStaleTimeout)
+      else if (last_position_observation_time_.has_value() &&
+               now - *last_position_observation_time_ >= kGnssInputStaleTimeout)
       {
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
                                    universal_gnss::GnssDiagnosticCategory::kTiming,
@@ -886,7 +914,9 @@ struct NtripNode::Impl
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
   std::optional<universal_gnss_ros2::msg::RtcmFrame> last_rtcm_message_{};
   std::optional<universal_gnss::GnssRuntimeState> runtime_state_{};
-  std::optional<SteadyClock::time_point> last_status_time_{};
+  std::optional<SteadyClock::time_point> last_position_observation_time_{};
+  std::optional<std::uint64_t> last_position_observation_sequence_{};
+  std::optional<std::int64_t> last_legacy_position_stamp_ns_{};
   std::optional<SteadyClock::time_point> last_correction_activity_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_published_time_{};
   std::optional<SteadyClock::time_point> first_streaming_time_{};
@@ -897,6 +927,7 @@ struct NtripNode::Impl
   universal_gnss_ntrip::NtripClientError last_logged_error_{
       universal_gnss_ntrip::NtripClientError::kNone};
   std::size_t rtcm_published_frames_{0u};
+  bool received_status_{false};
   bool client_ready_{false};
   bool initial_connect_attempted_{false};
 

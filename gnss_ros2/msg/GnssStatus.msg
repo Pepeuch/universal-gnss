@@ -52,7 +52,14 @@ uint8 BASELINE_STATUS_OUT_OF_TOLERANCE=5
 uint8 BASELINE_STATUS_COVARIANCE_TRACE_EXCEEDED=6
 uint8 BASELINE_STATUS_NOT_CONFIGURED=7
 
+# Local receiver acceptance/receipt time expressed in the ROS clock domain.
+# Zero when no observation has been accepted. This is not a receiver-provided
+# GNSS measurement epoch or publication time.
 builtin_interfaces/Time stamp
+# Monotonic generation within one ReceiverNode process. It advances only when
+# a new position/fix observation is accepted, even if its numeric values match
+# the preceding observation. Zero means provenance is unavailable (legacy).
+uint64 position_observation_sequence
 bool fix_valid
 uint8 fix_type
 uint8 rtk_mode

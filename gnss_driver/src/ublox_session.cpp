@@ -93,6 +93,7 @@ template <typename FrameT, typename ParseFn, typename MapFn>
 void ParseAndMergeFrame(const ParseFn& parse_fn,
                         const MapFn& map_fn,
                         const FrameT& frame,
+                        const bool is_position_observation,
                         universal_gnss::GnssRuntimeAggregator& aggregator,
                         UbloxSessionMetrics& metrics)
 {
@@ -105,6 +106,10 @@ void ParseAndMergeFrame(const ParseFn& parse_fn,
 
   ++metrics.frames_parsed;
   ++metrics.runtime_observations;
+  if (is_position_observation)
+  {
+    ++metrics.position_observations;
+  }
   if (aggregator.Merge(map_fn(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -379,6 +384,10 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
 
     ++metrics_.frames_parsed;
     ++metrics_.runtime_observations;
+    if (config_.enable_nmea_runtime_updates)
+    {
+      ++metrics_.position_observations;
+    }
     if (config_.enable_nmea_runtime_updates &&
         aggregator_.Merge(universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record)))
     {
@@ -398,6 +407,10 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
 
     ++metrics_.frames_parsed;
     ++metrics_.runtime_observations;
+    if (config_.enable_nmea_runtime_updates)
+    {
+      ++metrics_.position_observations;
+    }
     if (config_.enable_nmea_runtime_updates &&
         aggregator_.Merge(universal_gnss_protocols::NmeaRmcToRuntimeState(*parsed.record)))
     {
@@ -477,6 +490,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxNavPvt,
                        universal_gnss_protocols::UbxNavPvtToRuntimeState,
                        frame,
+                       true,
                        aggregator_,
                        metrics_);
     return;
@@ -487,6 +501,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxNavSat,
                        universal_gnss_protocols::UbxNavSatToRuntimeState,
                        frame,
+                       false,
                        aggregator_,
                        metrics_);
     return;
@@ -497,6 +512,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxNavStatus,
                        universal_gnss_protocols::UbxNavStatusToRuntimeState,
                        frame,
+                       false,
                        aggregator_,
                        metrics_);
     return;
@@ -507,6 +523,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxNavDop,
                        universal_gnss_protocols::UbxNavDopToRuntimeState,
                        frame,
+                       false,
                        aggregator_,
                        metrics_);
     return;
@@ -517,6 +534,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
     ParseAndMergeFrame(universal_gnss_protocols::ParseUbxMonHw,
                        universal_gnss_protocols::UbxMonHwToRuntimeState,
                        frame,
+                       false,
                        aggregator_,
                        metrics_);
     return;
@@ -573,6 +591,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
   ParseAndMergeFrame(universal_gnss_protocols::ParseUbxMonRf,
                      universal_gnss_protocols::UbxMonRfToRuntimeState,
                      frame,
+                     false,
                      aggregator_,
                      metrics_);
 }

@@ -20,6 +20,7 @@ template <typename ParseFn, typename MapFn>
 void ParseAndMergeSentence(const NmeaSentence& sentence,
                            ParseFn&& parse_fn,
                            MapFn&& map_fn,
+                           const bool is_position_observation,
                            const bool enable_runtime_updates,
                            universal_gnss::GnssRuntimeAggregator& aggregator,
                            NmeaSessionMetrics& metrics)
@@ -33,6 +34,10 @@ void ParseAndMergeSentence(const NmeaSentence& sentence,
 
   ++metrics.records_parsed;
   ++metrics.runtime_observations;
+  if (is_position_observation && enable_runtime_updates)
+  {
+    ++metrics.position_observations;
+  }
   if (enable_runtime_updates && aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
   {
     ++metrics.runtime_updates;
@@ -170,6 +175,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     ParseAndMergeSentence(sentence,
                           universal_gnss_protocols::ParseNmeaGga,
                           universal_gnss_protocols::NmeaGgaToRuntimeState,
+                          true,
                           config_.enable_runtime_updates,
                           aggregator_,
                           metrics_);
@@ -181,6 +187,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     ParseAndMergeSentence(sentence,
                           universal_gnss_protocols::ParseNmeaRmc,
                           universal_gnss_protocols::NmeaRmcToRuntimeState,
+                          true,
                           config_.enable_runtime_updates,
                           aggregator_,
                           metrics_);
@@ -192,6 +199,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     ParseAndMergeSentence(sentence,
                           universal_gnss_protocols::ParseNmeaGsa,
                           universal_gnss_protocols::NmeaGsaToRuntimeState,
+                          false,
                           config_.enable_runtime_updates,
                           aggregator_,
                           metrics_);
@@ -226,6 +234,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     ParseAndMergeSentence(sentence,
                           universal_gnss_protocols::ParseNmeaGst,
                           universal_gnss_protocols::NmeaGstToRuntimeState,
+                          false,
                           config_.enable_runtime_updates,
                           aggregator_,
                           metrics_);

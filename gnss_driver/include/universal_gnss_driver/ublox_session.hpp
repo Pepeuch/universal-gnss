@@ -30,6 +30,7 @@ struct UbloxSessionMetrics
   std::size_t frames_parsed{0u};
   std::size_t frames_rejected{0u};
   std::size_t runtime_observations{0u};
+  std::size_t position_observations{0u};
   std::size_t runtime_updates{0u};
   std::size_t unknown_frames{0u};
   std::size_t malformed_frames{0u};

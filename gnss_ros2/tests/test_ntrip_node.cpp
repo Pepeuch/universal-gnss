@@ -58,6 +58,12 @@ std::optional<std::string> FindDiagnosticValue(const diagnostic_msgs::msg::Diagn
   return std::nullopt;
 }
 
+std::int64_t RosTimeToNanoseconds(const builtin_interfaces::msg::Time& stamp)
+{
+  return static_cast<std::int64_t>(stamp.sec) * 1000000000LL +
+         static_cast<std::int64_t>(stamp.nanosec);
+}
+
 universal_gnss_ros2::msg::GnssStatus MakeGnssStatus()
 {
   universal_gnss::GnssRuntimeState state;
@@ -570,15 +576,20 @@ TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
   const auto rtcm = BuildRtcmFrame(1077u);
   ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\n"));
   ASSERT_TRUE(sockets.WritePeer(rtcm));
+  const auto receipt_lower_ns = node.now().nanoseconds();
   for (std::size_t attempt = 0u; attempt < 8u && !node.last_rtcm_message().has_value(); ++attempt)
   {
     node.StepOnce();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
+  const auto receipt_upper_ns = node.now().nanoseconds();
 
   ASSERT_TRUE(node.last_rtcm_message().has_value());
   EXPECT_EQ(node.last_rtcm_message()->message_type, 1077u);
   EXPECT_EQ(node.last_rtcm_message()->data, rtcm);
+  EXPECT_GE(RosTimeToNanoseconds(node.last_rtcm_message()->stamp), receipt_lower_ns);
+  EXPECT_LE(RosTimeToNanoseconds(node.last_rtcm_message()->stamp), receipt_upper_ns)
+      << "public RTCM stamps must remain in the node's ROS clock domain";
 
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
@@ -853,6 +864,77 @@ TEST_F(NtripNodeTest, DoesNotInjectGgaWhenStatusIsStaleAndReportsStaleSource)
   const auto& diagnostics = *node.last_diagnostics_message();
   EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_source_stale"),
             nullptr);
+}
+
+TEST_F(NtripNodeTest, RepeatedCachedStatusCannotKeepGgaSourceFresh)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("caster_port", 2101),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("gga_enabled", true),
+      rclcpp::Parameter("gga_interval_s", 1),
+  });
+
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  ASSERT_TRUE(node.client_ready());
+
+  auto publisher_node = std::make_shared<rclcpp::Node>("ntrip_republished_status_source");
+  auto publisher =
+      publisher_node->create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node.get_node_base_interface());
+  executor.add_node(publisher_node->get_node_base_interface());
+  executor.spin_some();
+
+  auto cached_status = MakeGnssStatus();
+  cached_status.stamp.sec = 100;
+  publisher->publish(cached_status);
+  executor.spin_some();
+  ASSERT_TRUE(node.has_runtime_state());
+
+  ASSERT_TRUE(node.StepOnce());
+  EXPECT_NE(sockets.ReadPeerText(1024u).find("GET /RTCM3 HTTP/1.1"), std::string::npos);
+  ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"));
+  node.StepOnce();
+  sockets.ReadPeerText(1024u);
+
+  const auto stale_deadline =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(5300);
+  while (std::chrono::steady_clock::now() < stale_deadline)
+  {
+    publisher->publish(cached_status);
+    executor.spin_some();
+    sockets.ReadPeerText(1024u, std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+  publisher->publish(cached_status);
+  executor.spin_some();
+  node.StepOnce();
+  const auto stale_peer_text =
+      sockets.ReadPeerText(1024u, std::chrono::milliseconds(250));
+  EXPECT_EQ(stale_peer_text.find("$GPGGA"), std::string::npos)
+      << "high-rate republication of one cached observation must not refresh GGA input";
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_NE(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/gga_source_stale"),
+            nullptr);
+
+  ++cached_status.stamp.nanosec;
+  publisher->publish(cached_status);
+  executor.spin_some();
+  node.StepOnce();
+  const auto recovered_peer_text = sockets.ReadPeerText(1024u);
+  EXPECT_NE(recovered_peer_text.find("$GPGGA"), std::string::npos)
+      << "a new observation with identical values must restore GGA freshness";
 }
 
 #endif
