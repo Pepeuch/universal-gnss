@@ -30,8 +30,9 @@ public:
 
   bool Merge(const GnssRuntimeState& update)
   {
-    const GnssValueFlags effective_value_flags =
-        static_cast<GnssValueFlags>(update.value_flags & update.capability_flags);
+    const ValueUpdateFlags effective_value_flags{
+        static_cast<GnssValueFlags>(update.value_flags & update.capability_flags),
+        static_cast<GnssValueFlags>(update.clear_value_flags & update.capability_flags)};
 
     bool applied = false;
 
@@ -44,18 +45,21 @@ public:
     }
 
     applied = MergeFix(update) || applied;
-    applied = MergeDirectField(update.timestamp_ns,
+    applied = MergeDirectField(update,
                                FieldSlot::kLatitude,
+                               GnssDirectValue::kLatitude,
                                update.latitude_deg,
                                state_.latitude_deg) ||
               applied;
-    applied = MergeDirectField(update.timestamp_ns,
+    applied = MergeDirectField(update,
                                FieldSlot::kLongitude,
+                               GnssDirectValue::kLongitude,
                                update.longitude_deg,
                                state_.longitude_deg) ||
               applied;
-    applied = MergeDirectField(update.timestamp_ns,
+    applied = MergeDirectField(update,
                                FieldSlot::kAltitude,
+                               GnssDirectValue::kAltitude,
                                update.altitude_m,
                                state_.altitude_m) ||
               applied;
@@ -271,6 +275,12 @@ private:
     std::optional<GnssTimestampNs> timestamp_ns{};
   };
 
+  struct ValueUpdateFlags
+  {
+    GnssValueFlags set{0};
+    GnssValueFlags clear{0};
+  };
+
   static constexpr std::size_t kFieldCount = static_cast<std::size_t>(FieldSlot::kCount);
 
   static constexpr std::size_t ToIndex(FieldSlot slot)
@@ -318,36 +328,57 @@ private:
   }
 
   template <typename T>
-  bool MergeDirectField(const std::optional<GnssTimestampNs>& update_timestamp_ns,
+  bool MergeDirectField(const GnssRuntimeState& update,
                         FieldSlot slot,
+                        GnssDirectValue direct_value,
                         const std::optional<T>& source,
                         std::optional<T>& target)
   {
-    if (!source.has_value() || !ShouldApply(slot, update_timestamp_ns))
+    const bool set_requested = source.has_value();
+    const bool clear_requested =
+        !set_requested && HasDirectValueFlag(update.clear_direct_value_flags, direct_value);
+    if ((!set_requested && !clear_requested) || !ShouldApply(slot, update.timestamp_ns))
     {
       return false;
     }
 
-    target = source;
-    MarkApplied(slot, update_timestamp_ns);
+    if (set_requested)
+    {
+      target = source;
+    }
+    else
+    {
+      target.reset();
+    }
+    MarkApplied(slot, update.timestamp_ns);
     return true;
   }
 
   template <typename T>
   bool MergeCapabilityField(const std::optional<GnssTimestampNs>& update_timestamp_ns,
-                            GnssValueFlags effective_value_flags,
+                            ValueUpdateFlags effective_value_flags,
                             GnssCapability capability,
                             FieldSlot slot,
                             const std::optional<T>& source,
                             std::optional<T>& target)
   {
-    if (!HasCapabilityFlag(effective_value_flags, capability) || !source.has_value() ||
-        !ShouldApply(slot, update_timestamp_ns))
+    const bool set_requested =
+        source.has_value() && HasCapabilityFlag(effective_value_flags.set, capability);
+    const bool clear_requested =
+        !set_requested && HasCapabilityFlag(effective_value_flags.clear, capability);
+    if ((!set_requested && !clear_requested) || !ShouldApply(slot, update_timestamp_ns))
     {
       return false;
     }
 
-    target = source;
+    if (set_requested)
+    {
+      target = source;
+    }
+    else
+    {
+      target.reset();
+    }
     MarkApplied(slot, update_timestamp_ns);
     return true;
   }

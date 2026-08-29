@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "universal_gnss/gnss_runtime_aggregator.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_protocols/unicore_parser.hpp"
@@ -625,6 +626,63 @@ void TestMalformedAndMissingFields(TestContext& ctx)
              "HWSTATUSA should reject unsupported clock validity values");
 }
 
+void TestExplicitInvalidityClearsMappedUnicoreValues(TestContext& ctx)
+{
+  universal_gnss_protocols::UnicorePvtslnRecord valid;
+  valid.header.timestamp_ns = 8000;
+  valid.best_position_type = universal_gnss_protocols::UnicorePositionType::kNarrowInt;
+  valid.best_latitude_deg = 40.07898130522;
+  valid.best_longitude_deg = 116.23663134427;
+  valid.best_altitude_m = 60.5060;
+  valid.best_latitude_std_m = 0.15f;
+  valid.best_longitude_std_m = 0.18f;
+  valid.best_altitude_std_m = 0.20f;
+  valid.best_tracked_satellites = 46u;
+  valid.best_used_satellites = 28u;
+  valid.baseline_solution_status =
+      universal_gnss_protocols::UnicoreSolutionStatus::kSolComputed;
+  valid.baseline_length_m = 1.5f;
+  valid.baseline_azimuth_deg = 182.25f;
+  valid.baseline_pitch_deg = 0.1f;
+
+  auto invalid = valid;
+  invalid.header.timestamp_ns = 8001;
+  invalid.best_position_type = universal_gnss_protocols::UnicorePositionType::kNone;
+  invalid.baseline_solution_status =
+      universal_gnss_protocols::UnicoreSolutionStatus::kInsufficientObs;
+
+  universal_gnss::GnssRuntimeAggregator aggregator;
+  aggregator.Merge(universal_gnss_protocols::UnicorePvtslnToRuntimeState(valid));
+  aggregator.Merge(universal_gnss_protocols::UnicorePvtslnToRuntimeState(invalid));
+
+  const auto& state = aggregator.state();
+  ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kNoFix,
+             "the second PVTSLNA observation should report no fix");
+  ctx.Expect(!state.latitude_deg.has_value() && !state.longitude_deg.has_value() &&
+                 !state.altitude_m.has_value(),
+             "explicit Unicore no-fix state must clear cached coordinates");
+  ctx.Expect(!state.horizontal_accuracy_m.has_value() &&
+                 !state.vertical_accuracy_m.has_value(),
+             "explicit Unicore no-fix state must clear position accuracy");
+  ctx.Expect(!state.heading_deg.has_value() && !state.baseline_azimuth_deg.has_value() &&
+                 !state.baseline_pitch_deg.has_value() && !state.baseline_length_m.has_value(),
+             "an explicitly unsolved Unicore baseline must clear cached geometry");
+  ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselineAzimuth) &&
+                 universal_gnss::HasCapability(state, GnssCapability::kBaselineLength),
+             "Unicore invalidation must preserve support metadata");
+  ctx.Expect(state.dual_antenna_baseline == std::optional<bool>(false) &&
+                 state.baseline_solution_status ==
+                     std::optional<GnssBaselineSolutionStatus>(
+                         GnssBaselineSolutionStatus::kInsufficientObservations),
+             "the unsolved baseline status itself must remain a current known value");
+  ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(28u) &&
+                 state.satellites_tracked == std::optional<std::uint16_t>(46u),
+             "invalidating position and baseline geometry must preserve unrelated satellite values");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(8001),
+             "the invalidating Unicore observation must own aggregate provenance");
+}
+
 }  // namespace
 
 int main()
@@ -639,6 +697,7 @@ int main()
   TestBestSatParsingAndRuntimeMapping(ctx);
   TestRfAndHardwareParsingAndMapping(ctx);
   TestMalformedAndMissingFields(ctx);
+  TestExplicitInvalidityClearsMappedUnicoreValues(ctx);
 
   if (ctx.failures != 0)
   {

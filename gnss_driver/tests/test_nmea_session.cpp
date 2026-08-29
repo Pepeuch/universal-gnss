@@ -218,6 +218,46 @@ void TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
   }
 }
 
+void TestExplicitInvalidityClearsRuntimeValues(TestContext& ctx)
+{
+  NmeaSession session;
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
+      6000);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 6001);
+
+  session.FeedBytes(BuildNmeaSentence("GPGGA,123520,,,,,0,00,,,,,,"), 6002);
+  const auto& no_fix_state = session.current_state();
+  ctx.Expect(!no_fix_state.fix_valid && no_fix_state.fix_type == GnssFixType::kNoFix,
+             "an explicit no-fix GGA should update fix validity");
+  ctx.Expect(!no_fix_state.latitude_deg.has_value() &&
+                 !no_fix_state.longitude_deg.has_value() &&
+                 !no_fix_state.altitude_m.has_value(),
+             "an explicit no-fix GGA must clear previously valid coordinates");
+  ctx.Expect(no_fix_state.hdop == std::optional<float>(1.0f) &&
+                 no_fix_state.vdop == std::optional<float>(1.5f),
+             "fields omitted by GGA must retain values supplied by GSA");
+
+  session.FeedBytes(BuildNmeaSentence("GPGSA,A,1,,,,,,,,,,,,,,,"), 6003);
+  const auto& cleared_state = session.current_state();
+  ctx.Expect(!cleared_state.hdop.has_value() && !cleared_state.vdop.has_value() &&
+                 !cleared_state.satellites_used.has_value(),
+             "an explicit empty/no-fix GSA must clear its DOP and used-satellite values");
+  ctx.Expect(!HasValueAvailable(cleared_state, universal_gnss::GnssCapability::kHdop) &&
+                 !HasValueAvailable(cleared_state, universal_gnss::GnssCapability::kVdop) &&
+                 !HasValueAvailable(
+                     cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
+             "cleared NMEA values must not remain publicly available");
+  ctx.Expect(HasCapability(cleared_state, universal_gnss::GnssCapability::kHdop) &&
+                 HasCapability(cleared_state, universal_gnss::GnssCapability::kVdop) &&
+                 HasCapability(
+                     cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
+             "NMEA CLEAR must retain support metadata while removing current availability");
+  ctx.Expect(cleared_state.timestamp_ns == std::optional<std::int64_t>(6003),
+             "the clearing GSA observation must own aggregate provenance");
+}
+
 }  // namespace
 
 int main()
@@ -230,6 +270,7 @@ int main()
   TestVtgAndZdaRemainSemanticOnly(ctx);
   TestMalformedAndResetBehavior(ctx);
   TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(ctx);
+  TestExplicitInvalidityClearsRuntimeValues(ctx);
 
   if (ctx.failures != 0)
   {

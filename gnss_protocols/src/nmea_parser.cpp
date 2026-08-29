@@ -484,6 +484,7 @@ void UpdateFixDimensionInState(NmeaFixDimension fix_dimension,
     case NmeaFixDimension::kNoFix:
       state.fix_valid = false;
       state.fix_type = universal_gnss::GnssFixType::kNoFix;
+      universal_gnss::ClearPositionValues(state);
       break;
     case NmeaFixDimension::k2D:
     case NmeaFixDimension::k3D:
@@ -1140,9 +1141,16 @@ universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& reco
   state.fix_valid = record.fix_valid;
   state.fix_type = record.fix_valid ? universal_gnss::GnssFixType::kFix
                                     : universal_gnss::GnssFixType::kNoFix;
-  state.latitude_deg = record.latitude_deg;
-  state.longitude_deg = record.longitude_deg;
-  state.altitude_m = record.altitude_m;
+  if (record.fix_valid)
+  {
+    state.latitude_deg = record.latitude_deg;
+    state.longitude_deg = record.longitude_deg;
+    state.altitude_m = record.altitude_m;
+  }
+  else
+  {
+    universal_gnss::ClearPositionValues(state);
+  }
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
@@ -1176,8 +1184,15 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   state.fix_valid = record.fix_valid;
   state.fix_type = record.fix_valid ? universal_gnss::GnssFixType::kFix
                                     : universal_gnss::GnssFixType::kNoFix;
-  state.latitude_deg = record.latitude_deg;
-  state.longitude_deg = record.longitude_deg;
+  if (record.fix_valid)
+  {
+    state.latitude_deg = record.latitude_deg;
+    state.longitude_deg = record.longitude_deg;
+  }
+  else
+  {
+    universal_gnss::ClearPositionValues(state);
+  }
   return state;
 }
 

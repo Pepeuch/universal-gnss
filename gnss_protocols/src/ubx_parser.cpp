@@ -248,6 +248,27 @@ void SetCorrectionState(universal_gnss::GnssRuntimeState& state,
                                    differential_solution);
 }
 
+void ClearPositionSolutionValues(universal_gnss::GnssRuntimeState& state)
+{
+  universal_gnss::ClearPositionValues(state);
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeadingAccuracy);
+  universal_gnss::ClearOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                     state.horizontal_accuracy_m);
+  universal_gnss::ClearOptionalValue(state,
+                                     universal_gnss::GnssCapability::kVerticalAccuracy,
+                                     state.vertical_accuracy_m);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
+  universal_gnss::ClearOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHeadingAccuracy,
+                                     state.heading_accuracy_deg);
+}
+
 }  // namespace
 
 ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame)
@@ -814,6 +835,10 @@ universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRe
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kRtkMode);
   SetCorrectionState(state, record.differential_solution);
+  if (state.fix_type != universal_gnss::GnssFixType::kUnknown && !state.fix_valid)
+  {
+    ClearPositionSolutionValues(state);
+  }
   if (!record.carrier_solution_valid)
   {
     return state;
@@ -895,6 +920,7 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeadingAccuracy);
 
   switch (record.carrier_solution)
@@ -944,16 +970,27 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
                                      state.vertical_accuracy_m,
                                      record.vertical_accuracy_m);
   }
+  else
+  {
+    ClearPositionSolutionValues(state);
+  }
 
   if (record.heading_vehicle_valid && position_valid)
   {
-    universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
     universal_gnss::SetOptionalValue(
         state, universal_gnss::GnssCapability::kHeading, state.heading_deg, record.heading_vehicle_deg);
     universal_gnss::SetOptionalValue(state,
                                      universal_gnss::GnssCapability::kHeadingAccuracy,
                                      state.heading_accuracy_deg,
                                      record.heading_accuracy_deg);
+  }
+  else if (position_valid)
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kHeadingAccuracy,
+                                       state.heading_accuracy_deg);
   }
 
   return state;

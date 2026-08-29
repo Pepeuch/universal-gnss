@@ -12,8 +12,10 @@
 namespace
 {
 
-using universal_gnss::GnssCapability;
+using universal_gnss::ClearOptionalValue;
+using universal_gnss::ClearPositionValues;
 using universal_gnss::GnssBaselineSolutionStatus;
+using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRuntimeAggregator;
 using universal_gnss::GnssRuntimeState;
@@ -323,6 +325,135 @@ void TestAggregateTimestampTracksNewestKnownSample(TestContext& ctx)
              "untimed updates should not invent or clear the aggregate timestamp");
 }
 
+void TestExplicitClearIsDistinctFromOmission(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+
+  GnssRuntimeState initial;
+  initial.timestamp_ns = 100;
+  SetCapability(initial, GnssCapability::kHdop);
+  SetCapability(initial, GnssCapability::kVdop);
+  SetOptionalValue(initial, GnssCapability::kHdop, initial.hdop, 0.9f);
+  SetOptionalValue(initial, GnssCapability::kVdop, initial.vdop, 1.4f);
+  ctx.Expect(aggregator.Merge(initial), "initial SET update should merge");
+
+  GnssRuntimeState omit;
+  omit.timestamp_ns = 110;
+  SetCapability(omit, GnssCapability::kSatellitesVisible);
+  SetOptionalValue(
+      omit, GnssCapability::kSatellitesVisible, omit.satellites_visible, 12u);
+  ctx.Expect(aggregator.Merge(omit), "unrelated OMIT update should merge");
+  ctx.Expect(aggregator.state().hdop == std::optional<float>(0.9f),
+             "SET -> OMIT must preserve the existing value");
+
+  GnssRuntimeState replacement;
+  replacement.timestamp_ns = 120;
+  SetCapability(replacement, GnssCapability::kHdop);
+  SetOptionalValue(replacement, GnssCapability::kHdop, replacement.hdop, 1.1f);
+  ctx.Expect(aggregator.Merge(replacement), "SET -> SET update should merge");
+  ctx.Expect(aggregator.state().hdop == std::optional<float>(1.1f),
+             "SET -> SET must replace the previous value");
+
+  GnssRuntimeState clear;
+  clear.timestamp_ns = 130;
+  SetCapability(clear, GnssCapability::kHdop);
+  ClearOptionalValue(clear, GnssCapability::kHdop, clear.hdop);
+  ctx.Expect(aggregator.Merge(clear), "explicit CLEAR update should merge");
+  ctx.Expect(!aggregator.state().hdop.has_value(),
+             "SET -> CLEAR must remove the previous value");
+  ctx.Expect(!HasValueAvailable(aggregator.state(), GnssCapability::kHdop),
+             "CLEAR must remove the associated value-availability flag");
+  ctx.Expect(HasCapability(aggregator.state(), GnssCapability::kHdop),
+             "CLEAR must preserve support metadata for the invalidated field");
+  ctx.Expect(aggregator.state().clear_value_flags == 0u,
+             "aggregate/public state must not retain update-only CLEAR intent");
+  ctx.Expect(aggregator.state().vdop == std::optional<float>(1.4f),
+             "clearing one field must preserve an unrelated omitted field");
+  ctx.Expect(aggregator.state().timestamp_ns == std::optional<std::int64_t>(130),
+             "CLEAR must advance aggregate provenance to the invalidating observation");
+
+  GnssRuntimeState omit_after_clear;
+  omit_after_clear.timestamp_ns = 140;
+  SetCapability(omit_after_clear, GnssCapability::kSatellitesVisible);
+  SetOptionalValue(omit_after_clear,
+                   GnssCapability::kSatellitesVisible,
+                   omit_after_clear.satellites_visible,
+                   13u);
+  ctx.Expect(aggregator.Merge(omit_after_clear), "post-CLEAR unrelated update should merge");
+  ctx.Expect(!aggregator.state().hdop.has_value(),
+             "CLEAR -> OMIT must not resurrect the invalidated value");
+
+  GnssRuntimeState stale_set;
+  stale_set.timestamp_ns = 125;
+  SetCapability(stale_set, GnssCapability::kHdop);
+  SetOptionalValue(stale_set, GnssCapability::kHdop, stale_set.hdop, 9.9f);
+  aggregator.Merge(stale_set);
+  ctx.Expect(!aggregator.state().hdop.has_value(),
+             "an older SET must not resurrect a value after a newer CLEAR");
+
+  GnssRuntimeState restore;
+  restore.timestamp_ns = 150;
+  SetCapability(restore, GnssCapability::kHdop);
+  SetOptionalValue(restore, GnssCapability::kHdop, restore.hdop, 1.2f);
+  ctx.Expect(aggregator.Merge(restore), "SET -> CLEAR -> SET update should merge");
+  ctx.Expect(aggregator.state().hdop == std::optional<float>(1.2f),
+             "a later valid SET must restore the invalidated value");
+
+  GnssRuntimeState identical_set;
+  identical_set.timestamp_ns = 160;
+  SetCapability(identical_set, GnssCapability::kHdop);
+  SetOptionalValue(identical_set, GnssCapability::kHdop, identical_set.hdop, 1.2f);
+  ctx.Expect(aggregator.Merge(identical_set),
+             "an identical numerical value from a new observation remains a SET");
+  ctx.Expect(aggregator.state().timestamp_ns == std::optional<std::int64_t>(160),
+             "an identical SET must advance observation provenance");
+}
+
+void TestDirectPositionClearUsesFieldProvenance(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+
+  GnssRuntimeState initial;
+  initial.timestamp_ns = 200;
+  initial.latitude_deg = 48.0;
+  initial.longitude_deg = 2.0;
+  initial.altitude_m = 100.0;
+  SetCapability(initial, GnssCapability::kSatellitesUsed);
+  SetOptionalValue(initial, GnssCapability::kSatellitesUsed, initial.satellites_used, 12u);
+  aggregator.Merge(initial);
+
+  GnssRuntimeState clear;
+  clear.timestamp_ns = 300;
+  ClearPositionValues(clear);
+  ctx.Expect(aggregator.Merge(clear), "explicit direct-position CLEAR should merge");
+  ctx.Expect(!aggregator.state().latitude_deg.has_value() &&
+                 !aggregator.state().longitude_deg.has_value() &&
+                 !aggregator.state().altitude_m.has_value(),
+             "direct-position CLEAR must remove all invalidated coordinates");
+  ctx.Expect(aggregator.state().clear_direct_value_flags == 0u,
+             "aggregate/public state must not retain direct CLEAR intent");
+  ctx.Expect(aggregator.state().satellites_used == std::optional<std::uint16_t>(12u),
+             "direct-position CLEAR must preserve unrelated omitted enrichment");
+  ctx.Expect(aggregator.state().timestamp_ns == std::optional<std::int64_t>(300),
+             "direct-position CLEAR must advance aggregate provenance");
+
+  GnssRuntimeState stale_set;
+  stale_set.timestamp_ns = 250;
+  stale_set.latitude_deg = 49.0;
+  aggregator.Merge(stale_set);
+  ctx.Expect(!aggregator.state().latitude_deg.has_value(),
+             "an older direct SET must not resurrect a newer CLEAR");
+
+  GnssRuntimeState restore;
+  restore.timestamp_ns = 400;
+  restore.latitude_deg = 50.0;
+  ctx.Expect(aggregator.Merge(restore), "a later direct SET should merge after CLEAR");
+  ctx.Expect(aggregator.state().latitude_deg == std::optional<double>(50.0) &&
+                 !aggregator.state().longitude_deg.has_value() &&
+                 !aggregator.state().altitude_m.has_value(),
+             "a later direct SET must restore only the genuinely supplied field");
+}
+
 }  // namespace
 
 int main()
@@ -339,6 +470,8 @@ int main()
   TestKnownFalseBooleanStateSurvivesAggregation(ctx);
   TestBaselineFoundationFieldsMergeIndependently(ctx);
   TestAggregateTimestampTracksNewestKnownSample(ctx);
+  TestExplicitClearIsDistinctFromOmission(ctx);
+  TestDirectPositionClearUsesFieldProvenance(ctx);
 
   if (ctx.failures != 0)
   {

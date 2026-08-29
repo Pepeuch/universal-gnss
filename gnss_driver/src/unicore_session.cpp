@@ -20,10 +20,10 @@ namespace universal_gnss_driver
 namespace
 {
 
-using universal_gnss::ClearOptionalValue;
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRuntimeState;
+using universal_gnss::OmitOptionalValue;
 using universal_gnss::SetCapability;
 using universal_gnss::SetOptionalValue;
 using universal_gnss_protocols::ChecksumStatus;
@@ -68,11 +68,11 @@ void PruneNmeaGgaFallback(const GnssRuntimeState& current_state,
   }
   if (current_state.hdop.has_value())
   {
-    ClearOptionalValue(update, GnssCapability::kHdop, update.hdop);
+    OmitOptionalValue(update, GnssCapability::kHdop, update.hdop);
   }
   if (!preserve_satellites_used && current_state.satellites_used.has_value())
   {
-    ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+    OmitOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
   }
 }
 
@@ -80,12 +80,12 @@ void PruneNmeaGstFallback(const GnssRuntimeState& current_state, GnssRuntimeStat
 {
   if (current_state.horizontal_accuracy_m.has_value())
   {
-    ClearOptionalValue(
+    OmitOptionalValue(
         update, GnssCapability::kHorizontalAccuracy, update.horizontal_accuracy_m);
   }
   if (current_state.vertical_accuracy_m.has_value())
   {
-    ClearOptionalValue(update, GnssCapability::kVerticalAccuracy, update.vertical_accuracy_m);
+    OmitOptionalValue(update, GnssCapability::kVerticalAccuracy, update.vertical_accuracy_m);
   }
 }
 
@@ -586,13 +586,13 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
                                 last_nmea_gga_timestamp_ns_,
                                 update.timestamp_ns))
     {
-      ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+      OmitOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
     }
     if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
                                 last_nmea_gsv_timestamp_ns_,
                                 update.timestamp_ns))
     {
-      ClearOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
+      OmitOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
     }
 
     if (aggregator_.Merge(update))
@@ -620,13 +620,13 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
                                 last_nmea_gga_timestamp_ns_,
                                 update.timestamp_ns))
     {
-      ClearOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
+      OmitOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
     }
     if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
                                 last_nmea_gsv_timestamp_ns_,
                                 update.timestamp_ns))
     {
-      ClearOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
+      OmitOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
     }
 
     if (aggregator_.Merge(update))

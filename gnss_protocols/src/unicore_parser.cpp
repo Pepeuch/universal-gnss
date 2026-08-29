@@ -940,6 +940,19 @@ std::optional<bool> MapCorrectionsActive(const UnicorePositionType type)
   return MapDifferentialCorrections(type);
 }
 
+void ClearPositionSolutionValues(universal_gnss::GnssRuntimeState& state)
+{
+  universal_gnss::ClearPositionValues(state);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
+  universal_gnss::ClearOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                     state.horizontal_accuracy_m);
+  universal_gnss::ClearOptionalValue(state,
+                                     universal_gnss::GnssCapability::kVerticalAccuracy,
+                                     state.vertical_accuracy_m);
+}
+
 void ApplyFixType(universal_gnss::GnssRuntimeState& state, const UnicorePositionType type)
 {
   const auto fix_type = MapFixType(type);
@@ -947,6 +960,11 @@ void ApplyFixType(universal_gnss::GnssRuntimeState& state, const UnicorePosition
   state.fix_valid =
       fix_type != universal_gnss::GnssFixType::kUnknown &&
       fix_type != universal_gnss::GnssFixType::kNoFix;
+
+  if (fix_type == universal_gnss::GnssFixType::kNoFix)
+  {
+    ClearPositionSolutionValues(state);
+  }
 }
 
 void ApplyRtkMode(universal_gnss::GnssRuntimeState& state, const UnicorePositionType type)
@@ -1168,6 +1186,20 @@ void SetBaselineGeometryAndCompatibilityHeading(
 
   if (baseline_solution_status != UnicoreSolutionStatus::kSolComputed)
   {
+    if (baseline_solution_status != UnicoreSolutionStatus::kUnknown)
+    {
+      universal_gnss::ClearOptionalValue(
+          state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
+      universal_gnss::ClearOptionalValue(state,
+                                         universal_gnss::GnssCapability::kBaselineAzimuth,
+                                         state.baseline_azimuth_deg);
+      universal_gnss::ClearOptionalValue(state,
+                                         universal_gnss::GnssCapability::kBaselinePitch,
+                                         state.baseline_pitch_deg);
+      universal_gnss::ClearOptionalValue(state,
+                                         universal_gnss::GnssCapability::kBaselineLength,
+                                         state.baseline_length_m);
+    }
     return;
   }
 
@@ -2000,9 +2032,12 @@ universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtsln
     state.altitude_m = record.best_altitude_m;
   }
 
-  SetHorizontalAccuracyFromSigmas(
-      state, record.best_latitude_std_m, record.best_longitude_std_m);
-  SetVerticalAccuracy(state, record.best_altitude_std_m);
+  if (state.fix_valid)
+  {
+    SetHorizontalAccuracyFromSigmas(
+        state, record.best_latitude_std_m, record.best_longitude_std_m);
+    SetVerticalAccuracy(state, record.best_altitude_std_m);
+  }
   SetTrackedAndUsedSatellites(
       state, record.best_tracked_satellites, record.best_used_satellites);
   SetCorrectionAge(state, record.best_diff_age_s);
@@ -2039,6 +2074,10 @@ universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestN
     {
       state.fix_type = universal_gnss::GnssFixType::kNoFix;
     }
+    if (state.fix_type == universal_gnss::GnssFixType::kNoFix)
+    {
+      ClearPositionSolutionValues(state);
+    }
   }
   ApplyRtkMode(state, record.position_type);
   ApplyCorrectionState(state, record.position_type);
@@ -2049,9 +2088,12 @@ universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestN
     state.altitude_m = record.altitude_m;
   }
 
-  SetHorizontalAccuracyFromSigmas(
-      state, record.latitude_std_m, record.longitude_std_m);
-  SetVerticalAccuracy(state, record.altitude_std_m);
+  if (state.fix_valid)
+  {
+    SetHorizontalAccuracyFromSigmas(
+        state, record.latitude_std_m, record.longitude_std_m);
+    SetVerticalAccuracy(state, record.altitude_std_m);
+  }
   SetTrackedAndUsedSatellites(
       state, record.tracked_satellites, record.used_satellites);
   SetCorrectionAge(state, record.diff_age_s);
@@ -2074,6 +2116,10 @@ universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
     {
       state.fix_type = universal_gnss::GnssFixType::kNoFix;
     }
+    if (state.fix_type == universal_gnss::GnssFixType::kNoFix)
+    {
+      ClearPositionSolutionValues(state);
+    }
   }
   ApplyRtkMode(state, record.position_type);
   ApplyCorrectionState(state, record.position_type);
@@ -2084,8 +2130,11 @@ universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
     state.altitude_m = record.altitude_m;
   }
 
-  SetHorizontalAccuracyFromSigmas(state, record.latitude_std_m, record.longitude_std_m);
-  SetVerticalAccuracy(state, record.altitude_std_m);
+  if (state.fix_valid)
+  {
+    SetHorizontalAccuracyFromSigmas(state, record.latitude_std_m, record.longitude_std_m);
+    SetVerticalAccuracy(state, record.altitude_std_m);
+  }
   SetTrackedAndUsedSatellites(state, record.tracked_satellites, record.used_satellites);
   SetCorrectionAge(state, record.diff_age_s);
 
@@ -2109,9 +2158,12 @@ universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
     state.altitude_m = record.best_altitude_m;
   }
 
-  SetHorizontalAccuracyFromSigmas(
-      state, record.best_latitude_std_m, record.best_longitude_std_m);
-  SetVerticalAccuracy(state, record.best_altitude_std_m);
+  if (state.fix_valid)
+  {
+    SetHorizontalAccuracyFromSigmas(
+        state, record.best_latitude_std_m, record.best_longitude_std_m);
+    SetVerticalAccuracy(state, record.best_altitude_std_m);
+  }
   SetTrackedAndUsedSatellites(
       state, record.best_tracked_satellites, record.best_used_satellites);
   SetCorrectionAge(state, record.best_diff_age_s);

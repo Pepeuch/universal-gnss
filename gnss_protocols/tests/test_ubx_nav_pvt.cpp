@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_capabilities.hpp"
+#include "universal_gnss/gnss_runtime_aggregator.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
@@ -307,6 +308,59 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
              "runtime mapping should expose heading and heading accuracy only when headVehValid is set");
 }
 
+void TestInvalidFixClearsPreviouslyMappedValues(TestContext& ctx)
+{
+  auto valid_payload = MakeNavPvtPayload();
+  valid_payload[21u] = static_cast<std::uint8_t>(0x01u | (1u << 5));
+  const auto valid_result = universal_gnss_protocols::ParseUbxNavPvt(
+      BuildUbxFrame(0x01u, 0x07u, valid_payload, 3000));
+
+  auto invalid_payload = MakeNavPvtPayload();
+  invalid_payload[20u] = static_cast<std::uint8_t>(UbxNavPvtFixType::kNoFix);
+  invalid_payload[21u] = 0x00u;
+  const auto invalid_result = universal_gnss_protocols::ParseUbxNavPvt(
+      BuildUbxFrame(0x01u, 0x07u, invalid_payload, 3001));
+
+  ctx.Expect(valid_result.record.has_value() && invalid_result.record.has_value(),
+             "runtime invalidation test requires two parsed NAV-PVT records");
+  if (!valid_result.record.has_value() || !invalid_result.record.has_value())
+  {
+    return;
+  }
+
+  universal_gnss::GnssRuntimeAggregator aggregator;
+  aggregator.Merge(
+      universal_gnss_protocols::UbxNavPvtToRuntimeState(*valid_result.record));
+  aggregator.Merge(
+      universal_gnss_protocols::UbxNavPvtToRuntimeState(*invalid_result.record));
+
+  const auto& state = aggregator.state();
+  ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kNoFix,
+             "the second NAV-PVT observation should report no fix");
+  ctx.Expect(!state.latitude_deg.has_value() && !state.longitude_deg.has_value() &&
+                 !state.altitude_m.has_value(),
+             "invalid NAV-PVT position validity must clear cached coordinates");
+  ctx.Expect(!state.horizontal_accuracy_m.has_value() &&
+                 !state.vertical_accuracy_m.has_value(),
+             "invalid NAV-PVT position validity must clear position accuracy");
+  ctx.Expect(!state.heading_deg.has_value() && !state.heading_accuracy_deg.has_value(),
+             "invalid NAV-PVT heading/position validity must clear cached heading values");
+  ctx.Expect(!HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
+                 !HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
+                 !HasValueAvailable(state, GnssCapability::kHeading) &&
+                 !HasValueAvailable(state, GnssCapability::kHeadingAccuracy),
+             "invalidated NAV-PVT values must no longer be publicly available");
+  ctx.Expect(HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
+                 HasCapability(state, GnssCapability::kVerticalAccuracy) &&
+                 HasCapability(state, GnssCapability::kHeading) &&
+                 HasCapability(state, GnssCapability::kHeadingAccuracy),
+             "NAV-PVT invalidation must preserve support metadata");
+  ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(18u),
+             "clearing invalid position values must preserve an unrelated current satellite count");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(3001),
+             "the invalidating NAV-PVT observation must own aggregate provenance");
+}
+
 }  // namespace
 
 int main()
@@ -318,6 +372,7 @@ int main()
   TestNoFixMapping(ctx);
   TestMalformedOrWrongFrames(ctx);
   TestHeadingAndAccuracyRuntimeMapping(ctx);
+  TestInvalidFixClearsPreviouslyMappedValues(ctx);
 
   if (ctx.failures != 0)
   {
