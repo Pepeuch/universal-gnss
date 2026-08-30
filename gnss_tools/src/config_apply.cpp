@@ -1805,9 +1805,10 @@ CommandPhaseOutcome ExecuteUnicoreSignalGroupAwarePhase(
     if (!signalgroup_failure_was_optional)
     {
       outcome.status = ConfigApplyStatus::kRejected;
-      outcome.error_message =
-          "receiver kept CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*verification_query.groups) +
-          " after applying CONFIG SIGNALGROUP " + FormatUnicoreSignalGroup(*planned_groups);
+      outcome.error_message = "receiver kept CONFIG SIGNALGROUP " +
+                              FormatUnicoreSignalGroup(*verification_query.groups) +
+                              " after applying CONFIG SIGNALGROUP " +
+                              FormatUnicoreSignalGroup(*planned_groups);
       outcome.summary.final_status = "rejected";
       return outcome;
     }
@@ -2330,6 +2331,9 @@ ReceiverAutoConfigRequest BuildAutoConfigRequest(const ConfigApplyOptions& optio
   request.receiver_model = options.receiver_model;
   request.signal_profile = options.signal_profile;
   request.signal_group_override = options.signal_group_override;
+  request.rover_dynamic_mode_override = options.rover_dynamic_mode_override;
+  request.unicore_rtk_timeout_s_override = options.unicore_rtk_timeout_s_override;
+  request.unicore_dgps_timeout_s_override = options.unicore_dgps_timeout_s_override;
   request.output_port = options.output_port;
   request.config_baud = options.config_baud;
   request.rate_hz = options.rate_hz;

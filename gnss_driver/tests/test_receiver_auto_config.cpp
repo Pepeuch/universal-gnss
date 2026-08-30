@@ -18,13 +18,16 @@ using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::HasReceiverFeature;
 using universal_gnss_driver::ParseReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ParseReceiverAutoConfigProfile;
+using universal_gnss_driver::ParseReceiverAutoConfigRoverDynamicMode;
 using universal_gnss_driver::ParseReceiverAutoConfigSignalProfile;
+using universal_gnss_driver::ParseUnicoreCorrectionAgeTimeout;
 using universal_gnss_driver::ParseUnicoreSignalGroupOverride;
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigOutputPort;
 using universal_gnss_driver::ReceiverAutoConfigPlanStatus;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
 using universal_gnss_driver::ReceiverAutoConfigRequest;
+using universal_gnss_driver::ReceiverAutoConfigRoverDynamicMode;
 using universal_gnss_driver::ReceiverAutoConfigSignalProfile;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverFeature;
@@ -125,6 +128,30 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
   ctx.Expect(ParseReceiverAutoConfigOutputPort("auto") ==
                  std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kAuto},
              "auto should parse as the transport-aware u-blox output-port selector");
+  ctx.Expect(ParseReceiverAutoConfigRoverDynamicMode("uav") ==
+                     std::optional<ReceiverAutoConfigRoverDynamicMode>{
+                         ReceiverAutoConfigRoverDynamicMode::kUav} &&
+                 ParseReceiverAutoConfigRoverDynamicMode("survey_mow") ==
+                     std::optional<ReceiverAutoConfigRoverDynamicMode>{
+                         ReceiverAutoConfigRoverDynamicMode::kSurveyMow} &&
+                 ParseReceiverAutoConfigRoverDynamicMode("survey-mow") ==
+                     std::optional<ReceiverAutoConfigRoverDynamicMode>{
+                         ReceiverAutoConfigRoverDynamicMode::kSurveyMow} &&
+                 ParseReceiverAutoConfigRoverDynamicMode("rover") ==
+                     std::optional<ReceiverAutoConfigRoverDynamicMode>{
+                         ReceiverAutoConfigRoverDynamicMode::kRover},
+             "canonical rover dynamic modes and the documented hyphen alias should parse");
+  ctx.Expect(!ParseReceiverAutoConfigRoverDynamicMode("").has_value() &&
+                 !ParseReceiverAutoConfigRoverDynamicMode("survey").has_value() &&
+                 !ParseReceiverAutoConfigRoverDynamicMode("boat").has_value(),
+             "invalid rover dynamic modes should be rejected");
+  ctx.Expect(ParseUnicoreCorrectionAgeTimeout("1") == std::optional<std::uint32_t>{1u} &&
+                 ParseUnicoreCorrectionAgeTimeout("1800") == std::optional<std::uint32_t>{1800u} &&
+                 !ParseUnicoreCorrectionAgeTimeout("0").has_value() &&
+                 !ParseUnicoreCorrectionAgeTimeout("1801").has_value() &&
+                 !ParseUnicoreCorrectionAgeTimeout("1.5").has_value() &&
+                 !ParseUnicoreCorrectionAgeTimeout("-1").has_value(),
+             "Unicore correction-age parser should accept only whole seconds in 1..1800");
   ctx.Expect(std::string(universal_gnss_driver::ToString(
                  ReceiverAutoConfigProfile::kRoverHighPrecisionDebug)) ==
                  "rover_high_precision_debug",
@@ -337,9 +364,9 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  um980_plan.validation.generated_command_count == 13u &&
                  um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
-                 ContainsCommandText(um980_plan, "MODE ROVER SURVEY MOW") &&
+                 ContainsCommandText(um980_plan, "MODE ROVER UAV") &&
                  !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um980_plan, "Build7923+") &&
+                 !ContainsWarning(um980_plan, "Build7923+") &&
                  ContainsWarning(um980_plan, "model UM980") &&
                  !HasReceiverFeature(um980_plan.capabilities,
                                      ReceiverFeature::kDualAntennaBaseline),
@@ -366,6 +393,109 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
                                      ReceiverFeature::kDualAntennaBaseline),
              "UM981 should be treated as a known non-baseline Unicore model without a documented "
              "automatic signal-group selection");
+}
+
+void TestUnicoreRoverPolicyOverrides(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.receiver_model = "UM980";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  request.rover_dynamic_mode_override = ReceiverAutoConfigRoverDynamicMode::kSurveyMow;
+  const auto survey_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(survey_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(survey_plan, "MODE ROVER SURVEY MOW") &&
+                 !ContainsCommandText(survey_plan, "MODE ROVER UAV") &&
+                 ContainsWarning(survey_plan, "Build7923+"),
+             "an explicit survey_mow override should win over the UM980 UAV default and retain "
+             "the existing firmware warning");
+
+  request.rover_dynamic_mode_override = ReceiverAutoConfigRoverDynamicMode::kRover;
+  const auto rover_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(rover_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(rover_plan, "MODE ROVER") &&
+                 !ContainsCommandText(rover_plan, "MODE ROVER UAV") &&
+                 !ContainsCommandText(rover_plan, "MODE ROVER SURVEY MOW"),
+             "an explicit generic rover override should win over the UM980 UAV default");
+
+  request.receiver_model = "UM982";
+  request.rover_dynamic_mode_override = ReceiverAutoConfigRoverDynamicMode::kUav;
+  const auto uav_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(uav_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(uav_plan, "MODE ROVER UAV") &&
+                 !ContainsCommandText(uav_plan, "MODE ROVER SURVEY MOW"),
+             "an explicit UAV override should win over a supported receiver's SURVEY MOW "
+             "default");
+
+  request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  const auto runtime_only_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(runtime_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 runtime_only_plan.commands.empty() &&
+                 ContainsWarning(runtime_only_plan, "rover_dynamic_mode_override=uav"),
+             "runtime_only profile should remain a zero-command no-op when a rover override is "
+             "supplied");
+}
+
+void TestUnicoreCorrectionAgeOverrides(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.receiver_model = "UM982";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+
+  const auto defaults = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(defaults.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(defaults, "CONFIG RTK TIMEOUT 120") &&
+                 ContainsCommandText(defaults, "CONFIG RTK RELIABILITY 3 1") &&
+                 ContainsCommandText(defaults, "CONFIG DGPS TIMEOUT 300"),
+             "default Unicore rover plans should emit the field-proven 120/300 correction-age "
+             "windows and retain RTK reliability 3 1");
+
+  request.unicore_rtk_timeout_s_override = 42u;
+  const auto rtk_only = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(rtk_only.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(rtk_only, "CONFIG RTK TIMEOUT 42") &&
+                 ContainsCommandText(rtk_only, "CONFIG DGPS TIMEOUT 300"),
+             "an RTK-only override should leave the DGPS default unchanged");
+
+  request.unicore_rtk_timeout_s_override.reset();
+  request.unicore_dgps_timeout_s_override = 84u;
+  const auto dgps_only = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(dgps_only.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(dgps_only, "CONFIG RTK TIMEOUT 120") &&
+                 ContainsCommandText(dgps_only, "CONFIG DGPS TIMEOUT 84"),
+             "a DGPS-only override should leave the RTK default unchanged");
+
+  request.unicore_rtk_timeout_s_override = 21u;
+  const auto both = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(both.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(both, "CONFIG RTK TIMEOUT 21") &&
+                 ContainsCommandText(both, "CONFIG DGPS TIMEOUT 84"),
+             "both explicit correction-age overrides should compose in one plan");
+
+  request.unicore_rtk_timeout_s_override = 0u;
+  const auto disabled = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(disabled.status == ReceiverAutoConfigPlanStatus::kInvalidArgument &&
+                 disabled.commands.empty(),
+             "zero must fail safely instead of disabling the RTK engine");
+
+  request.unicore_rtk_timeout_s_override = 1801u;
+  const auto excessive = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(excessive.status == ReceiverAutoConfigPlanStatus::kInvalidArgument &&
+                 excessive.commands.empty(),
+             "correction-age overrides beyond the documented receiver range must fail safely");
+
+  request.unicore_rtk_timeout_s_override = 120u;
+  request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  const auto runtime_only = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(runtime_only.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 runtime_only.commands.empty() &&
+                 ContainsWarning(runtime_only, "unicore_rtk_timeout_s_override"),
+             "runtime_only profile should ignore correction-age overrides without acquiring rover "
+             "commands");
 }
 
 void TestSignalProfileCapabilityMapping(TestContext& ctx)
@@ -427,10 +557,11 @@ void TestSignalProfileCapabilityMapping(TestContext& ctx)
   um980_request.rate_hz = 5.0;
   const auto um980_plan = BuildReceiverAutoConfigPlan(um980_request);
   ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 ContainsCommandText(um980_plan, "MODE ROVER UAV") &&
                  !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um980_plan, "model UM980"),
-             "single-antenna Unicore signal-profile planning should skip dual-antenna signal-group "
-             "changes and warn instead of guessing");
+                 !ContainsWarning(um980_plan, "Build7923+"),
+             "single-antenna UM980 runtime planning should keep the UAV rover default and skip "
+             "dual-antenna signal-group changes");
 
   ReceiverAutoConfigRequest um960_request = unicore_request;
   um960_request.receiver_model = "UM960";
@@ -530,7 +661,8 @@ void TestUnicoreUnknownModelConfigurationIsBlocked(TestContext& ctx)
   request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
   const auto read_only_plan = BuildReceiverAutoConfigPlan(request);
   ctx.Expect(read_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 read_only_plan.commands.empty() && !read_only_plan.validation.receiver_recognized &&
+                 read_only_plan.commands.empty() &&
+                 !read_only_plan.validation.receiver_recognized &&
                  !read_only_plan.validation.config_supported &&
                  !read_only_plan.validation.production_ready &&
                  !read_only_plan.validation.ready_to_execute,
@@ -984,6 +1116,8 @@ int main()
   TestUbloxOutputPortPlanning(ctx);
   TestUbloxFactoryResetStub(ctx);
   TestUnicoreRoverHighPrecisionPlans(ctx);
+  TestUnicoreRoverPolicyOverrides(ctx);
+  TestUnicoreCorrectionAgeOverrides(ctx);
   TestSignalProfileCapabilityMapping(ctx);
   TestUnicoreUnknownModelConfigurationIsBlocked(ctx);
   TestUnicoreOutputRateDomainAndSerialization(ctx);

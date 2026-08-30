@@ -344,6 +344,39 @@ void TestRuntimeOnlyNoOpPlan(TestContext& ctx)
              "runtime_only plan text should report that no receiver commands are generated");
 }
 
+void TestUnicoreRoverPolicyOverridePlan(TestContext& ctx)
+{
+  ConfigPlanOptions options;
+  options.vendor = "unicore";
+  options.profile = "rover_high_precision";
+  options.receiver_model = "UM980";
+
+  const auto defaults = BuildConfigPlan(options);
+  ctx.Expect(defaults.status == ConfigPlanStatus::kOk &&
+                 HasTextCommand(defaults, "MODE ROVER UAV") &&
+                 HasTextCommand(defaults, "CONFIG RTK TIMEOUT 120") &&
+                 HasTextCommand(defaults, "CONFIG DGPS TIMEOUT 300"),
+             "UM980 config plans should expose the model-aware UAV mode and field-proven "
+             "correction-age defaults");
+
+  options.rover_dynamic_mode_override =
+      universal_gnss_driver::ReceiverAutoConfigRoverDynamicMode::kSurveyMow;
+  options.unicore_rtk_timeout_s_override = 45u;
+  options.unicore_dgps_timeout_s_override = 90u;
+  const auto overridden = BuildConfigPlan(options);
+  const std::string text = FormatConfigPlanText(overridden);
+  const std::string json = FormatConfigPlanJson(overridden);
+  ctx.Expect(overridden.status == ConfigPlanStatus::kOk &&
+                 HasTextCommand(overridden, "MODE ROVER SURVEY MOW") &&
+                 HasTextCommand(overridden, "CONFIG RTK TIMEOUT 45") &&
+                 HasTextCommand(overridden, "CONFIG DGPS TIMEOUT 90") &&
+                 text.find("Rover dynamic-mode override: survey_mow") != std::string::npos &&
+                 text.find("RTK correction-age override: 45 s") != std::string::npos &&
+                 json.find("\"unicore_dgps_timeout_s_override\": 90") != std::string::npos,
+             "config-plan options and reports should retain all explicit rover policy "
+             "overrides");
+}
+
 void TestPersistentSafetySummary(TestContext& ctx)
 {
   ConfigPlanOptions ublox_options;
@@ -456,6 +489,7 @@ int main()
   TestSignalProfilePlanning(ctx);
   TestUbloxOutputPortPlanning(ctx);
   TestRuntimeOnlyNoOpPlan(ctx);
+  TestUnicoreRoverPolicyOverridePlan(ctx);
   TestPersistentSafetySummary(ctx);
   TestFactoryResetPlan(ctx);
   TestJsonFormatting(ctx);

@@ -92,7 +92,21 @@ const char* ToNmeaVersionString(const UnicoreNmeaVersion version)
 bool SupportsRuntimeMode(const UnicoreMode mode)
 {
   return mode == UnicoreMode::kUnspecified || mode == UnicoreMode::kRover ||
-         mode == UnicoreMode::kRoverSurveyMow;
+         mode == UnicoreMode::kRoverSurveyMow || mode == UnicoreMode::kRoverUav;
+}
+
+UnicoreMode DefaultUnicoreRoverDynamicMode(const UnicoreModelProfile& model_profile)
+{
+  // UM980 uses the kinematic engine proven on moving mower platforms. Other
+  // documented mower-oriented models retain SURVEY MOW, while the generic
+  // builder fallback remains MODE ROVER.
+  if (model_profile.model_id == UnicoreModel::kUm980)
+  {
+    return UnicoreMode::kRoverUav;
+  }
+
+  return SupportsUnicorePortableRoverSurveyMow(model_profile) ? UnicoreMode::kRoverSurveyMow
+                                                              : UnicoreMode::kRover;
 }
 
 std::string BuildModeCommand(const UnicoreMode mode)
@@ -109,6 +123,8 @@ std::string BuildModeCommand(const UnicoreMode mode)
       return "MODE ROVER SURVEY";
     case UnicoreMode::kRoverSurveyMow:
       return "MODE ROVER SURVEY MOW";
+    case UnicoreMode::kRoverUav:
+      return "MODE ROVER UAV";
   }
 
   return {};
@@ -223,17 +239,21 @@ bool ValidateProfile(UnicoreConfigProfileBuildResult& result, const UnicoreConfi
     return false;
   }
 
-  if (profile.rtk_timeout_s.has_value() && *profile.rtk_timeout_s == 0u)
+  if (profile.rtk_timeout_s.has_value() &&
+      (*profile.rtk_timeout_s < kUnicoreCorrectionAgeTimeoutMinS ||
+       *profile.rtk_timeout_s > kUnicoreCorrectionAgeTimeoutMaxS))
   {
     result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
-    result.error_message = "unicore RTK timeout must be non-zero";
+    result.error_message = "unicore RTK timeout must be within 1..1800 seconds";
     return false;
   }
 
-  if (profile.dgps_timeout_s.has_value() && *profile.dgps_timeout_s == 0u)
+  if (profile.dgps_timeout_s.has_value() &&
+      (*profile.dgps_timeout_s < kUnicoreCorrectionAgeTimeoutMinS ||
+       *profile.dgps_timeout_s > kUnicoreCorrectionAgeTimeoutMaxS))
   {
     result.status = UnicoreConfigProfileBuildStatus::kInvalidArgument;
-    result.error_message = "unicore DGPS timeout must be non-zero";
+    result.error_message = "unicore DGPS timeout must be within 1..1800 seconds";
     return false;
   }
 
@@ -422,12 +442,13 @@ UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
   UnicoreConfigProfile profile;
   profile.target = BuildUnicoreTargetSelector(model_profile);
   profile.config_kind = ReceiverConfigProfileKind::kRover;
-  profile.mode = SupportsUnicorePortableRoverSurveyMow(model_profile) ? UnicoreMode::kRoverSurveyMow
-                                                                      : UnicoreMode::kRover;
+  profile.mode = DefaultUnicoreRoverDynamicMode(model_profile);
   profile.nmea_version = UnicoreNmeaVersion::kV411;
-  profile.rtk_timeout_s = 10u;
+  profile.rtk_timeout_s = kUnicoreRoverRtkTimeoutDefaultS;
+  // Keep the receiver's documented reliability explicit so a prior manual
+  // change is restored together with the known-good correction-age policy.
   profile.rtk_reliability = UnicoreRtkReliability{3, 1};
-  profile.dgps_timeout_s = 600u;
+  profile.dgps_timeout_s = kUnicoreRoverDgpsTimeoutDefaultS;
   if (const auto* signal_group = FindUnicorePortableRoverSignalGroupSelection(model_profile);
       signal_group != nullptr)
   {

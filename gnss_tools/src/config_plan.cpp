@@ -326,6 +326,9 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
   result.apply_mode = universal_gnss_driver::ToString(plan.request.apply_mode);
   result.persistent = plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
   result.signal_profile = plan.request.signal_profile;
+  result.rover_dynamic_mode_override = plan.request.rover_dynamic_mode_override;
+  result.unicore_rtk_timeout_s_override = plan.request.unicore_rtk_timeout_s_override;
+  result.unicore_dgps_timeout_s_override = plan.request.unicore_dgps_timeout_s_override;
   result.output_port = plan.request.output_port;
   result.resolved_output_port = plan.resolved_output_port;
   result.baud = plan.request.config_baud;
@@ -391,6 +394,9 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   result.apply_mode = options.persistent ? "persistent" : "runtime_only";
   result.persistent = options.persistent;
   result.signal_profile = options.signal_profile;
+  result.rover_dynamic_mode_override = options.rover_dynamic_mode_override;
+  result.unicore_rtk_timeout_s_override = options.unicore_rtk_timeout_s_override;
+  result.unicore_dgps_timeout_s_override = options.unicore_dgps_timeout_s_override;
   result.output_port = options.output_port;
   result.baud = options.baud;
   result.rate_hz = options.rate_hz;
@@ -427,6 +433,9 @@ ConfigPlanResult BuildConfigPlan(const ConfigPlanOptions& options)
   request.receiver_model = options.receiver_model;
   request.signal_profile = options.signal_profile;
   request.signal_group_override = options.signal_group_override;
+  request.rover_dynamic_mode_override = options.rover_dynamic_mode_override;
+  request.unicore_rtk_timeout_s_override = options.unicore_rtk_timeout_s_override;
+  request.unicore_dgps_timeout_s_override = options.unicore_dgps_timeout_s_override;
   request.output_port = options.output_port;
   request.config_baud = options.baud;
   request.rate_hz = options.rate_hz;
@@ -501,6 +510,21 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   {
     output << "Signal profile override: " << universal_gnss_driver::ToString(*result.signal_profile)
            << "\n";
+  }
+  if (result.rover_dynamic_mode_override.has_value())
+  {
+    output << "Rover dynamic-mode override: "
+           << universal_gnss_driver::ToString(*result.rover_dynamic_mode_override) << "\n";
+  }
+  if (result.unicore_rtk_timeout_s_override.has_value())
+  {
+    output << "Unicore RTK correction-age override: " << *result.unicore_rtk_timeout_s_override
+           << " s\n";
+  }
+  if (result.unicore_dgps_timeout_s_override.has_value())
+  {
+    output << "Unicore DGPS correction-age override: " << *result.unicore_dgps_timeout_s_override
+           << " s\n";
   }
   if (result.vendor == "ublox")
   {
@@ -613,6 +637,38 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   if (result.signal_profile.has_value())
   {
     output << "\"" << EscapeJson(universal_gnss_driver::ToString(*result.signal_profile)) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"rover_dynamic_mode_override\": ";
+  if (result.rover_dynamic_mode_override.has_value())
+  {
+    output << "\""
+           << EscapeJson(universal_gnss_driver::ToString(*result.rover_dynamic_mode_override))
+           << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"unicore_rtk_timeout_s_override\": ";
+  if (result.unicore_rtk_timeout_s_override.has_value())
+  {
+    output << *result.unicore_rtk_timeout_s_override;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"unicore_dgps_timeout_s_override\": ";
+  if (result.unicore_dgps_timeout_s_override.has_value())
+  {
+    output << *result.unicore_dgps_timeout_s_override;
   }
   else
   {

@@ -38,6 +38,16 @@ enum class ReceiverAutoConfigSignalProfile : std::uint8_t
   kCustom = 4,
 };
 
+// Portable rover dynamic-motion selector. Vendor builders map this semantic
+// choice to their concrete command language when the selected rover profile
+// supports it.
+enum class ReceiverAutoConfigRoverDynamicMode : std::uint8_t
+{
+  kUav = 0,
+  kSurveyMow = 1,
+  kRover = 2,
+};
+
 enum class ReceiverAutoConfigOutputPort : std::uint8_t
 {
   kUart1 = 0,
@@ -71,6 +81,12 @@ struct ReceiverAutoConfigRequest
   // combinations remain hints/warnings rather than a hard allowlist. Ignored by
   // non-Unicore plans.
   std::optional<std::vector<std::uint8_t>> signal_group_override{};
+  // Optional Unicore rover-profile overrides. When absent, the model-aware
+  // profile owns the dynamic mode and receiver correction-age defaults.
+  // Ignored by non-Unicore plans and by the zero-command runtime_only profile.
+  std::optional<ReceiverAutoConfigRoverDynamicMode> rover_dynamic_mode_override{};
+  std::optional<std::uint32_t> unicore_rtk_timeout_s_override{};
+  std::optional<std::uint32_t> unicore_dgps_timeout_s_override{};
   std::optional<ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};
   std::optional<double> rate_hz{};
@@ -139,6 +155,12 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
 std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(std::string_view profile);
 std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
     std::string_view signal_profile);
+std::optional<ReceiverAutoConfigRoverDynamicMode> ParseReceiverAutoConfigRoverDynamicMode(
+    std::string_view rover_dynamic_mode);
+// Parses an enabled Unicore correction-age window in whole seconds. Zero
+// disables the corresponding receiver engine and is deliberately not an
+// accepted timeout override.
+std::optional<std::uint32_t> ParseUnicoreCorrectionAgeTimeout(std::string_view timeout_s);
 // Parses a Unicore signal-group override such as "3 6", "3,6", or "3/6" into
 // two group bytes. Returns nullopt on empty input, ambiguous collapsed input
 // such as "36", non-numeric tokens, out-of-range values, or anything other
@@ -151,6 +173,7 @@ std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(
 const char* ToString(ReceiverAutoConfigProfile profile);
 const char* ToString(ReceiverAutoConfigApplyMode apply_mode);
 const char* ToString(ReceiverAutoConfigSignalProfile signal_profile);
+const char* ToString(ReceiverAutoConfigRoverDynamicMode rover_dynamic_mode);
 const char* ToString(ReceiverAutoConfigOutputPort output_port);
 const char* ToString(ReceiverAutoConfigPlanStatus status);
 

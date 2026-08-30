@@ -557,6 +557,11 @@ Current behavior:
 - accepts vendor-neutral `--signal-profile balanced|high_precision|all_signals|minimal|custom`
 - for `unicore`, accepts an optional `--model` selector so planning can apply
   documented model/capability-aware signal-group rules
+- for `unicore`, accepts optional
+  `--rover-dynamic-mode uav|survey_mow|rover`, `--rtk-timeout-s`, and
+  `--dgps-timeout-s` overrides;
+  timeout values are whole seconds in `1..1800`, and omitted flags retain the
+  portable `120 s` RTK / `300 s` DGPS defaults
 - current recognized Unicore model selectors are:
   `UM960`, `UM980`, `UM981`, `UM982`, and `UB9A0`
 - accepts `--output-port usb|uart1|uart2|all|auto` for `ublox` interface
@@ -610,6 +615,7 @@ gnss_config_plan ublox rover_high_precision
 gnss_config_plan ublox rover_high_precision --output-port usb --rate-hz 7
 gnss_config_plan ublox rover_high_precision --output-port uart1 --config-baud 460800 --rate-hz 7
 gnss_config_plan unicore rover_high_precision --model UM981
+gnss_config_plan unicore rover_high_precision --model UM980 --rover-dynamic-mode survey_mow --rtk-timeout-s 45 --dgps-timeout-s 90
 gnss_config_plan unicore rover_high_precision_debug
 gnss_config_plan unicore rover_high_precision --model UM982 --signal-profile minimal --rate-hz 1
 gnss_config_plan ublox rover_high_precision --persistent
@@ -664,6 +670,8 @@ Current behavior:
   `gnss_config_plan`
 - for `unicore`, accepts the same optional `--model` selector used by preview
   and plan
+- for `unicore`, accepts the same optional `--rover-dynamic-mode`,
+  `--rtk-timeout-s`, and `--dgps-timeout-s` overrides as `gnss_config_plan`
 - current recognized Unicore model selectors are:
   `UM960`, `UM980`, `UM981`, `UM982`, and `UB9A0`
 - accepts the same `--output-port usb|uart1|uart2|all|auto` values as
@@ -710,6 +718,7 @@ Examples:
 gnss_config_apply --family nmea --device /dev/ttyUSB9 --baud 115200 --profile runtime_only --apply-mode runtime-only
 gnss_config_apply --receiver auto --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud auto --profile rover_high_precision --output-port auto --apply-mode runtime-only --confirm
 gnss_config_apply --family unicore --model UM981 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --apply-mode runtime-only --confirm
+gnss_config_apply --family unicore --model UM980 --device /dev/ttyAMA4 --baud 921600 --profile rover_high_precision --rover-dynamic-mode survey_mow --rtk-timeout-s 45 --dgps-timeout-s 90 --apply-mode runtime-only --confirm
 gnss_config_apply --family unicore --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --profile rover_high_precision --signal-profile high_precision --apply-mode runtime-only --confirm
 gnss_config_apply --family ublox --device /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --profile rover_high_precision_debug --output-port usb --apply-mode runtime-only --confirm
 gnss_config_apply --receiver auto --model UM982 --device /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud auto --profile rover_high_precision --apply-mode runtime-only --confirm --timeout-ms 5000

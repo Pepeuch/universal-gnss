@@ -458,6 +458,7 @@ Current role:
 Current coverage:
 
 - `MODE ROVER`
+- `MODE ROVER UAV`
 - `MODE ROVER SURVEY MOW`
 - `CONFIG NMEA0183`
 - `CONFIG RTK TIMEOUT`
@@ -488,11 +489,13 @@ Current policy:
 - `CONFIG SIGNALGROUP` remains a runtime command, but it is only generated
   when the selected `UnicoreModelProfile` confirms that exact documented
   selection
-- the mower-oriented rover helper may promote `MODE ROVER` to
-  `MODE ROVER SURVEY MOW` when the selected `UnicoreModelProfile` documents
-  support for that dynamic mode; unknown models keep the safe `MODE ROVER`
-  fallback, and models with documented build prerequisites surface a warning
-  because the portable planner cannot currently verify firmware build metadata
+- the rover helper defaults `UM980` to `MODE ROVER UAV`, defaults `UM960`,
+  `UM982`, and `UB9A0` to `MODE ROVER SURVEY MOW`, and leaves unknown models on
+  the safe `MODE ROVER` fallback; an explicit portable dynamic-mode override
+  wins over the model default
+- rover-profile correction-age defaults are `CONFIG RTK TIMEOUT 120` and
+  `CONFIG DGPS TIMEOUT 300`; these receiver CONFIG windows are distinct from
+  runtime correction, observation, and ROS-publication freshness
 - unknown or undocumented Unicore models keep the receiver's current
   signal-group configuration unchanged and surface a warning instead of
   guessing

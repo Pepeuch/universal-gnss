@@ -65,6 +65,8 @@ Current documented model profiles are intentionally narrow:
   - non-baseline
   - documented explicit selections: `1`, `2`, `8`
   - documented support for `MODE ROVER SURVEY MOW` with `Build7923+`
+  - portable rover default: `MODE ROVER UAV`; Survey Mow remains available as
+    an explicit override and retains its firmware-build warning
   - no automatic rover signal-group selection
 - `UM981`
   - known non-baseline
@@ -115,6 +117,7 @@ Current runtime-safe command families:
 
 - `CONFIG COM1 <baud> 8 n 1`
 - `MODE ROVER`
+- `MODE ROVER UAV`
 - `MODE ROVER SURVEY MOW`
 - `CONFIG NMEA0183 V410|V411`
 - `CONFIG RTK TIMEOUT <seconds>`
@@ -219,12 +222,13 @@ sequence for it.
 Current `rover_high_precision` helper always generates the core rover/runtime
 commands:
 
+- `MODE ROVER UAV` for `UM980`
+- `MODE ROVER SURVEY MOW` for `UM960`, `UM982`, and `UB9A0`
 - `MODE ROVER` for unknown or unsupported models
-- `MODE ROVER SURVEY MOW` for documented mower-oriented models
 - `CONFIG NMEA0183 V411`
-- `CONFIG RTK TIMEOUT 10`
+- `CONFIG RTK TIMEOUT 120`
 - `CONFIG RTK RELIABILITY 3 1`
-- `CONFIG DGPS TIMEOUT 600`
+- `CONFIG DGPS TIMEOUT 300`
 - `GPGGA 1`
 - `GPGSV 1`
 - `GPGST 1`
@@ -236,11 +240,11 @@ commands:
 
 Model-specific signal-group behavior:
 
-- `UM960`, `UM980`, `UM982`, and `UB9A0` use the documented mower-oriented
-  rover dynamic mode `MODE ROVER SURVEY MOW`
-- `UM980` requires `Build7923+` and `UM982` requires `Build7650+`; the current
-  portable planner cannot verify firmware build metadata, so it emits a
-  warning when those models are selected
+- `UM980` defaults to `MODE ROVER UAV`; `UM960`, `UM982`, and `UB9A0` default
+  to the mower-oriented `MODE ROVER SURVEY MOW`
+- an explicit `uav`, `survey_mow`, or `rover` override wins over that model
+  default; selecting Survey Mow on `UM980` retains the `Build7923+` warning,
+  while the `UM982` Survey Mow default retains the `Build7650+` warning
 - unknown models and models without documented support keep the safe fallback
   `MODE ROVER`
 - `UM982` adds the documented portable rover selection
@@ -252,6 +256,15 @@ Model-specific signal-group behavior:
   models
 - unknown or undocumented models skip `CONFIG SIGNALGROUP` and keep the
   receiver's current signal-group configuration unchanged
+
+The RTK and DGPS timeout commands are receiver-side correction-age windows.
+They do not define NTRIP health, RTCM cadence, observation freshness, or ROS
+publication freshness. The portable defaults are `120 s` for RTK and `300 s`
+for DGPS. `gnss_config_plan` and `gnss_config_apply` accept optional
+`--rtk-timeout-s` and `--dgps-timeout-s` values in the documented receiver
+range `1..1800`; omitting either flag leaves its portable default in force.
+The `runtime_only` config profile remains a zero-command no-op even if one of
+these rover-only overrides is supplied.
 
 This keeps the primary rover state on `BESTNAVA` at `5 Hz` while trimming the
 fallback/observability logs down to `1 Hz`. It also keeps dual-antenna

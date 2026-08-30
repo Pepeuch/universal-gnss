@@ -13,6 +13,8 @@ void PrintUsage(const char* program_name)
             << " [--json] [--persistent] [--signal-profile "
                "<balanced|high_precision|all_signals|minimal|custom>]"
             << " [--signal-group <\"3 6\"|\"3,6\"|\"3/6\"|...>]"
+            << " [--rover-dynamic-mode <uav|survey_mow|rover>]"
+            << " [--rtk-timeout-s <1..1800>] [--dgps-timeout-s <1..1800>]"
             << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
             << " [--output-port <usb|uart1|uart2|all|auto>]"
             << " [--config-baud <value>] [--rate-hz <value>] <vendor> <profile>\n"
@@ -154,6 +156,56 @@ int main(int argc, char** argv)
       }
 
       options.signal_group_override = *parsed;
+      continue;
+    }
+
+    if (argument == "--rover-dynamic-mode")
+    {
+      if (index + 1 >= argc)
+      {
+        std::cerr << "error: --rover-dynamic-mode requires a value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      const auto parsed =
+          universal_gnss_driver::ParseReceiverAutoConfigRoverDynamicMode(argv[++index]);
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid --rover-dynamic-mode value (expected uav, survey_mow, or "
+                     "rover)\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      options.rover_dynamic_mode_override = *parsed;
+      continue;
+    }
+
+    if (argument == "--rtk-timeout-s" || argument == "--dgps-timeout-s")
+    {
+      if (index + 1 >= argc)
+      {
+        std::cerr << "error: " << argument << " requires a value\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+
+      const auto parsed = universal_gnss_driver::ParseUnicoreCorrectionAgeTimeout(argv[++index]);
+      if (!parsed.has_value())
+      {
+        std::cerr << "error: invalid " << argument
+                  << " value (expected a whole number in 1..1800 seconds)\n";
+        PrintUsage(argv[0]);
+        return EXIT_FAILURE;
+      }
+      if (argument == "--rtk-timeout-s")
+      {
+        options.unicore_rtk_timeout_s_override = *parsed;
+      }
+      else
+      {
+        options.unicore_dgps_timeout_s_override = *parsed;
+      }
       continue;
     }
 

@@ -435,6 +435,32 @@ void AppendRuntimeOnlySignalGroupOverrideWarning(ReceiverAutoConfigPlan& plan)
                           "not send receiver commands");
 }
 
+void AppendRuntimeOnlyRoverOverridesWarning(ReceiverAutoConfigPlan& plan)
+{
+  if (plan.request.rover_dynamic_mode_override.has_value())
+  {
+    plan.warnings.push_back(
+        "rover_dynamic_mode_override=" +
+        std::string(ToString(*plan.request.rover_dynamic_mode_override)) +
+        " is unsupported with the runtime_only profile because runtime_only does not send "
+        "receiver commands");
+  }
+
+  if (plan.request.unicore_rtk_timeout_s_override.has_value())
+  {
+    plan.warnings.push_back(
+        "unicore_rtk_timeout_s_override is unsupported with the runtime_only profile because "
+        "runtime_only does not send receiver commands");
+  }
+
+  if (plan.request.unicore_dgps_timeout_s_override.has_value())
+  {
+    plan.warnings.push_back(
+        "unicore_dgps_timeout_s_override is unsupported with the runtime_only profile because "
+        "runtime_only does not send receiver commands");
+  }
+}
+
 ReceiverAutoConfigPlan MakeNoChangePlan(const ReceiverAutoConfigRequest& request,
                                         const ReceiverVendor vendor,
                                         std::string family_name,
@@ -477,6 +503,7 @@ ReceiverAutoConfigPlan MakeNoChangePlan(const ReceiverAutoConfigRequest& request
   plan.validation.ready_to_execute = request.apply_mode != ReceiverAutoConfigApplyMode::kDryRun;
   AppendRuntimeOnlySignalProfileWarning(plan);
   AppendRuntimeOnlySignalGroupOverrideWarning(plan);
+  AppendRuntimeOnlyRoverOverridesWarning(plan);
   AppendIgnoredOutputPortWarning(plan);
   plan.warnings.push_back("runtime_only profile leaves the receiver configuration unchanged");
   ApplyNoChangeRollback(plan);
@@ -536,6 +563,30 @@ bool ValidateConfigBaud(const ReceiverAutoConfigRequest& request, ReceiverAutoCo
   }
 
   return true;
+}
+
+bool ValidateUnicoreCorrectionAgeTimeoutOverrides(const ReceiverAutoConfigRequest& request,
+                                                  ReceiverAutoConfigPlan& plan)
+{
+  const auto validate =
+      [&](const std::optional<std::uint32_t> timeout_s, const std::string_view option_name)
+  {
+    if (!timeout_s.has_value())
+    {
+      return true;
+    }
+    if (*timeout_s < kUnicoreCorrectionAgeTimeoutMinS ||
+        *timeout_s > kUnicoreCorrectionAgeTimeoutMaxS)
+    {
+      plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+      plan.error_message = std::string(option_name) + " must be within 1..1800 seconds";
+      return false;
+    }
+    return true;
+  };
+
+  return validate(request.unicore_rtk_timeout_s_override, "rtk-timeout-s") &&
+         validate(request.unicore_dgps_timeout_s_override, "dgps-timeout-s");
 }
 
 void ApplyUbloxSignalProfile(const ReceiverAutoConfigRequest& request,
@@ -996,10 +1047,10 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
 
   if (model_profile.model_id == UnicoreModel::kUnknown)
   {
-    const std::string model_description = normalized_requested_model.empty()
-                                              ? "Unicore model identity is unknown"
-                                              : "Unicore model " + normalized_requested_model +
-                                                    " is not documented";
+    const std::string model_description =
+        normalized_requested_model.empty()
+            ? "Unicore model identity is unknown"
+            : "Unicore model " + normalized_requested_model + " is not documented";
     const std::string configuration_message =
         model_description +
         "; portable mutating configuration requires an explicitly recognized model";
@@ -1059,6 +1110,11 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     return plan;
   }
 
+  if (!ValidateUnicoreCorrectionAgeTimeoutOverrides(request, plan))
+  {
+    return plan;
+  }
+
   const bool requires_clean_reset_workflow =
       request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset ||
       request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
@@ -1095,6 +1151,33 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
 
   ApplyUnicoreSignalProfile(
       request, plan, model_profile, profile, allow_automatic_signal_group_selection);
+
+  // Explicit rover policy overrides win over the model-aware profile defaults.
+  // The runtime_only profile returned above before any profile was constructed.
+  if (request.rover_dynamic_mode_override.has_value())
+  {
+    switch (*request.rover_dynamic_mode_override)
+    {
+      case ReceiverAutoConfigRoverDynamicMode::kUav:
+        profile.mode = UnicoreMode::kRoverUav;
+        break;
+      case ReceiverAutoConfigRoverDynamicMode::kSurveyMow:
+        profile.mode = UnicoreMode::kRoverSurveyMow;
+        break;
+      case ReceiverAutoConfigRoverDynamicMode::kRover:
+        profile.mode = UnicoreMode::kRover;
+        break;
+    }
+  }
+
+  if (request.unicore_rtk_timeout_s_override.has_value())
+  {
+    profile.rtk_timeout_s = request.unicore_rtk_timeout_s_override;
+  }
+  if (request.unicore_dgps_timeout_s_override.has_value())
+  {
+    profile.dgps_timeout_s = request.unicore_dgps_timeout_s_override;
+  }
   AppendUnicorePortableRoverModeWarning(plan, model_profile, profile);
 
   if (!request.signal_profile.has_value() && !request.signal_group_override.has_value() &&
@@ -1407,6 +1490,52 @@ std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProf
   return std::nullopt;
 }
 
+std::optional<ReceiverAutoConfigRoverDynamicMode> ParseReceiverAutoConfigRoverDynamicMode(
+    const std::string_view rover_dynamic_mode)
+{
+  const std::string normalized = ToLowerCopy(rover_dynamic_mode);
+  if (normalized == "uav")
+  {
+    return ReceiverAutoConfigRoverDynamicMode::kUav;
+  }
+  if (normalized == "survey_mow" || normalized == "survey-mow")
+  {
+    return ReceiverAutoConfigRoverDynamicMode::kSurveyMow;
+  }
+  if (normalized == "rover")
+  {
+    return ReceiverAutoConfigRoverDynamicMode::kRover;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::uint32_t> ParseUnicoreCorrectionAgeTimeout(const std::string_view timeout_s)
+{
+  if (timeout_s.empty() || !std::all_of(timeout_s.begin(),
+                                        timeout_s.end(),
+                                        [](const unsigned char c)
+                                        {
+                                          return std::isdigit(c) != 0;
+                                        }))
+  {
+    return std::nullopt;
+  }
+
+  try
+  {
+    const unsigned long value = std::stoul(std::string(timeout_s), nullptr, 10);
+    if (value < kUnicoreCorrectionAgeTimeoutMinS || value > kUnicoreCorrectionAgeTimeoutMaxS)
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(value);
+  }
+  catch (...)
+  {
+    return std::nullopt;
+  }
+}
+
 std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
     const std::string_view signal_group)
 {
@@ -1520,6 +1649,21 @@ const char* ToString(const ReceiverAutoConfigSignalProfile signal_profile)
   }
 
   return "balanced";
+}
+
+const char* ToString(const ReceiverAutoConfigRoverDynamicMode rover_dynamic_mode)
+{
+  switch (rover_dynamic_mode)
+  {
+    case ReceiverAutoConfigRoverDynamicMode::kUav:
+      return "uav";
+    case ReceiverAutoConfigRoverDynamicMode::kSurveyMow:
+      return "survey_mow";
+    case ReceiverAutoConfigRoverDynamicMode::kRover:
+      return "rover";
+  }
+
+  return "rover";
 }
 
 const char* ToString(const ReceiverAutoConfigOutputPort output_port)

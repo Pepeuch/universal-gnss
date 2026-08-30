@@ -405,8 +405,15 @@ Current policy:
   signal-group planning
 - the planner may answer differently for `UM960`, `UM980`, `UM981`, `UM982`,
   `UB9A0`, or an unknown model
+- rover dynamic-mode defaults are model-aware: `UM980` uses UAV; `UM960`,
+  `UM982`, and `UB9A0` use Survey Mow; unknown models use generic Rover
+- explicit `uav`, `survey_mow`, and `rover` selections override the model
+  default without changing `runtime_only` profile no-op semantics
 - unknown models fall back safely and skip model-specific commands such as
   `CONFIG SIGNALGROUP`
+- Unicore rover correction-age defaults are `RTK 120 s` and `DGPS 300 s`;
+  optional per-field overrides change receiver CONFIG policy only, not NTRIP,
+  RTCM, observation, or ROS publication freshness
 - config planning does not depend on parsed navigation/runtime state
 - runtime parsers do not infer capability or config legality from observed
   telemetry

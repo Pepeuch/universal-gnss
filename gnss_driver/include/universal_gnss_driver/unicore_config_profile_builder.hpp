@@ -12,6 +12,14 @@
 namespace universal_gnss_driver
 {
 
+// Receiver CONFIG correction-age windows, in whole seconds. The portable
+// rover defaults are field-proven policy; the bounds come from the Unicore N4
+// command contract. Zero disables RTK/DGPS and is not a timeout value.
+inline constexpr std::uint32_t kUnicoreCorrectionAgeTimeoutMinS = 1u;
+inline constexpr std::uint32_t kUnicoreCorrectionAgeTimeoutMaxS = 1800u;
+inline constexpr std::uint32_t kUnicoreRoverRtkTimeoutDefaultS = 120u;
+inline constexpr std::uint32_t kUnicoreRoverDgpsTimeoutDefaultS = 300u;
+
 enum class UnicoreConfigProfileBuildStatus : std::uint8_t
 {
   kOk = 0,
@@ -25,6 +33,7 @@ enum class UnicoreMode : std::uint8_t
   kBase = 2,
   kSurvey = 3,
   kRoverSurveyMow = 4,
+  kRoverUav = 5,
 };
 
 enum class UnicoreNmeaVersion : std::uint8_t

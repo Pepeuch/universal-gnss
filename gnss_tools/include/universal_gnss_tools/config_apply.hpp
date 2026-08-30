@@ -67,6 +67,10 @@ struct ConfigApplyOptions
       universal_gnss_driver::ReceiverAutoConfigApplyMode::kDryRun};
   std::optional<universal_gnss_driver::ReceiverAutoConfigSignalProfile> signal_profile{};
   std::optional<std::vector<std::uint8_t>> signal_group_override{};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigRoverDynamicMode>
+      rover_dynamic_mode_override{};
+  std::optional<std::uint32_t> unicore_rtk_timeout_s_override{};
+  std::optional<std::uint32_t> unicore_dgps_timeout_s_override{};
   std::optional<std::string> receiver_model{};
   std::optional<universal_gnss_driver::ReceiverAutoConfigOutputPort> output_port{};
   std::optional<std::uint32_t> config_baud{};

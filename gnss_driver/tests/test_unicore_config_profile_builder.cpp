@@ -95,8 +95,12 @@ void TestRoverProfileGeneration(TestContext& ctx)
                     ReceiverCommandKind::kApplyConfigProfile,
                     ReceiverCommandSafetyLevel::kRuntime,
                     "CONFIG NMEA0183 V411");
-  ctx.Expect(ContainsText(result.commands[4], "CONFIG DGPS TIMEOUT 600"),
-             "unicore rover helper should include the conservative DGPS timeout command");
+  ctx.Expect(ContainsText(result.commands[2], "CONFIG RTK TIMEOUT 120"),
+             "unicore rover helper should include the field-proven RTK correction-age window");
+  ctx.Expect(ContainsText(result.commands[3], "CONFIG RTK RELIABILITY 3 1"),
+             "unicore rover helper should retain the documented RTK reliability policy");
+  ctx.Expect(ContainsText(result.commands[4], "CONFIG DGPS TIMEOUT 300"),
+             "unicore rover helper should include the field-proven DGPS correction-age window");
   ctx.Expect(!ContainsText(result.commands[5], "CONFIG SIGNALGROUP"),
              "generic unicore rover helper should not guess a signal-group selection");
   ctx.Expect(!ContainsText(result.commands[5], "UNLOG"),
@@ -158,12 +162,12 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
     ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
                    result.commands.size() == 13u,
                "UM980 rover helper should keep the lean command count while selecting the "
-               "documented mower-oriented rover mode");
+               "kinematic UAV rover mode");
     ExpectTextCommand(ctx,
                       result.commands.front(),
                       ReceiverCommandKind::kApplyConfigProfile,
                       ReceiverCommandSafetyLevel::kRuntime,
-                      "MODE ROVER SURVEY MOW",
+                      "MODE ROVER UAV",
                       "unicore_um980");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
@@ -401,6 +405,34 @@ void TestInvalidDeferredInputs(TestContext& ctx)
     ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument,
                "factory-reset profiles should reject mixed portable config mutations");
   }
+
+  {
+    auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile();
+    profile.rtk_timeout_s = 0u;
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument,
+               "zero should be rejected instead of disabling RTK through a timeout profile");
+  }
+
+  {
+    auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile();
+    profile.dgps_timeout_s = 1801u;
+    const auto result = UnicoreConfigProfileBuilder::Build(profile);
+    ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kInvalidArgument,
+               "DGPS correction-age values beyond the documented range should be rejected");
+  }
+}
+
+void TestExplicitUavRuntimeMode(TestContext& ctx)
+{
+  UnicoreConfigProfile profile;
+  profile.mode = UnicoreMode::kRoverUav;
+  const auto result = UnicoreConfigProfileBuilder::Build(profile);
+
+  ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk &&
+                 result.commands.size() == 1u &&
+                 ContainsText(result.commands.front(), "MODE ROVER UAV"),
+             "the Unicore runtime builder should support MODE ROVER UAV");
 }
 
 void TestRuntimeDispatcherBehavior(TestContext& ctx)
@@ -429,6 +461,7 @@ int main()
   TestCom1BaudCommandGeneration(ctx);
   TestFactoryResetProfileGeneration(ctx);
   TestInvalidDeferredInputs(ctx);
+  TestExplicitUavRuntimeMode(ctx);
   TestRuntimeDispatcherBehavior(ctx);
 
   if (ctx.failures != 0)
