@@ -273,6 +273,55 @@ void TestPrettyJsonlExport(TestContext& ctx)
              "pretty JSONL should remain one object per line with stable spaced formatting");
 }
 
+void TestCsvExport(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("nmea/basic_fix.nmea");
+  const auto replay = universal_gnss_tools::ReplayGnssBytes(bytes, true);
+  const auto lines = SplitLines(universal_gnss_tools::FormatRuntimeExportCsv(replay));
+
+  constexpr char kExpectedHeader[] =
+      "schema_version,event_index,timestamp_ns,protocol,message,fix_valid,fix_type,rtk_mode,"
+      "latitude_deg,longitude_deg,altitude_m,horizontal_accuracy_m,vertical_accuracy_m,hdop,vdop,"
+      "satellites_used,satellites_tracked,satellites_visible,mean_cn0_dbhz,max_cn0_dbhz,"
+      "correction_age_s,heading_deg,dual_antenna_heading,dual_antenna_baseline,"
+      "baseline_azimuth_deg,baseline_pitch_deg,baseline_length_m,baseline_solution_status,"
+      "interference_detected,jamming_detected";
+  ctx.Expect(lines.size() == 6u && lines.front() == kExpectedHeader,
+             "CSV export should always emit the stable v1 header before runtime-update rows");
+  ctx.Expect(lines.size() > 1u &&
+                 lines[1].find("1,1,,NMEA,GGA,true,fix,none,48.117300000,11.516666667,") == 0u,
+             "CSV export should preserve event order, missing timestamps, protocol provenance, and coordinate precision");
+  ctx.Expect(lines.size() > 1u && lines[1].find(",,,,") != std::string::npos,
+             "CSV export should represent unavailable optional values as empty cells");
+  ctx.Expect(lines.back().find(",0.6,1.1,") != std::string::npos,
+             "CSV export should preserve normalized runtime values without changing their meaning");
+}
+
+void TestCsvEscapingAndEmptyTimeline(TestContext& ctx)
+{
+  universal_gnss_tools::GnssReplayResult replay;
+  ctx.Expect(universal_gnss_tools::FormatRuntimeExportCsv(replay) ==
+                 "schema_version,event_index,timestamp_ns,protocol,message,fix_valid,fix_type,rtk_mode,"
+                 "latitude_deg,longitude_deg,altitude_m,horizontal_accuracy_m,vertical_accuracy_m,hdop,vdop,"
+                 "satellites_used,satellites_tracked,satellites_visible,mean_cn0_dbhz,max_cn0_dbhz,"
+                 "correction_age_s,heading_deg,dual_antenna_heading,dual_antenna_baseline,"
+                 "baseline_azimuth_deg,baseline_pitch_deg,baseline_length_m,baseline_solution_status,"
+                 "interference_detected,jamming_detected\n",
+             "an empty timeline should still produce the CSV v1 header");
+
+  replay.events.resize(1u);
+  auto& event = replay.events.front();
+  event.event_index = 9u;
+  event.protocol = universal_gnss_protocols::ProtocolType::kUnknown;
+  event.identity = "value,\"quoted\"";
+  event.produced_runtime_update = true;
+  const auto lines = SplitLines(universal_gnss_tools::FormatRuntimeExportCsv(replay));
+  ctx.Expect(lines.size() == 2u &&
+                 lines.back().find(",UNKNOWN,\"value,\"\"quoted\"\"\",false,unknown,") !=
+                     std::string::npos,
+             "CSV export should use standard double-quote escaping for text fields");
+}
+
 void TestFileOutputHandling(TestContext& ctx)
 {
   const auto bytes = universal_gnss_tools::test::ReadBinaryFile("nmea/basic_fix.nmea");
@@ -318,6 +367,8 @@ int main()
   TestMixedJsonlExport(ctx);
   TestUnicoreBinaryJsonlExport(ctx);
   TestPrettyJsonlExport(ctx);
+  TestCsvExport(ctx);
+  TestCsvEscapingAndEmptyTimeline(ctx);
   TestFileOutputHandling(ctx);
 
   if (ctx.failures != 0)

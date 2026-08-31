@@ -17,6 +17,13 @@ namespace
 {
 
 constexpr int kCoordinateOutputPrecision = 9;
+constexpr char kRuntimeExportCsvHeader[] =
+    "schema_version,event_index,timestamp_ns,protocol,message,fix_valid,fix_type,rtk_mode,"
+    "latitude_deg,longitude_deg,altitude_m,horizontal_accuracy_m,vertical_accuracy_m,hdop,vdop,"
+    "satellites_used,satellites_tracked,satellites_visible,mean_cn0_dbhz,max_cn0_dbhz,"
+    "correction_age_s,heading_deg,dual_antenna_heading,dual_antenna_baseline,"
+    "baseline_azimuth_deg,baseline_pitch_deg,baseline_length_m,baseline_solution_status,"
+    "interference_detected,jamming_detected";
 
 const char* DescribeFixType(const universal_gnss::GnssFixType fix_type)
 {
@@ -351,6 +358,115 @@ void WriteRuntimeUpdateJson(std::ostream& output,
   output << '}';
 }
 
+void WriteCsvSeparator(std::ostream& output, bool& first_field)
+{
+  if (first_field)
+  {
+    first_field = false;
+    return;
+  }
+  output << ',';
+}
+
+void WriteCsvText(std::ostream& output, const std::string& value, bool& first_field)
+{
+  WriteCsvSeparator(output, first_field);
+  if (value.find_first_of(",\"\r\n") == std::string::npos)
+  {
+    output << value;
+    return;
+  }
+
+  output << '"';
+  for (const char ch : value)
+  {
+    if (ch == '"')
+    {
+      output << '"';
+    }
+    output << ch;
+  }
+  output << '"';
+}
+
+template <typename T>
+void WriteCsvOptionalNumber(std::ostream& output,
+                            const std::optional<T>& value,
+                            bool& first_field)
+{
+  WriteCsvSeparator(output, first_field);
+  if (value.has_value())
+  {
+    output << *value;
+  }
+}
+
+void WriteCsvOptionalCoordinate(std::ostream& output,
+                                const std::optional<double>& value,
+                                bool& first_field)
+{
+  WriteCsvSeparator(output, first_field);
+  if (value.has_value())
+  {
+    std::ostringstream coordinate;
+    coordinate << std::fixed << std::setprecision(kCoordinateOutputPrecision) << *value;
+    output << coordinate.str();
+  }
+}
+
+void WriteCsvBool(std::ostream& output, const bool value, bool& first_field)
+{
+  WriteCsvText(output, value ? "true" : "false", first_field);
+}
+
+void WriteCsvOptionalBool(std::ostream& output,
+                          const std::optional<bool>& value,
+                          bool& first_field)
+{
+  WriteCsvText(output, value.has_value() ? (*value ? "true" : "false") : "", first_field);
+}
+
+void WriteRuntimeUpdateCsv(std::ostream& output, const GnssReplayEvent& event)
+{
+  const universal_gnss::GnssRuntimeState& state = event.state_after_event;
+  bool first_field = true;
+
+  WriteCsvText(output, "1", first_field);
+  WriteCsvOptionalNumber(
+      output, std::optional<std::size_t>(event.event_index), first_field);
+  WriteCsvOptionalNumber(output, state.timestamp_ns, first_field);
+  WriteCsvText(output, DescribeExportProtocol(event.protocol), first_field);
+  WriteCsvText(output, DescribeExportMessage(event), first_field);
+  WriteCsvBool(output, state.fix_valid, first_field);
+  WriteCsvText(output, DescribeFixType(state.fix_type), first_field);
+  const char* rtk_mode = DescribeRtkMode(state.rtk_mode);
+  WriteCsvText(output, rtk_mode == nullptr ? "" : rtk_mode, first_field);
+  WriteCsvOptionalCoordinate(output, state.latitude_deg, first_field);
+  WriteCsvOptionalCoordinate(output, state.longitude_deg, first_field);
+  WriteCsvOptionalNumber(output, state.altitude_m, first_field);
+  WriteCsvOptionalNumber(output, state.horizontal_accuracy_m, first_field);
+  WriteCsvOptionalNumber(output, state.vertical_accuracy_m, first_field);
+  WriteCsvOptionalNumber(output, state.hdop, first_field);
+  WriteCsvOptionalNumber(output, state.vdop, first_field);
+  WriteCsvOptionalNumber(output, state.satellites_used, first_field);
+  WriteCsvOptionalNumber(output, state.satellites_tracked, first_field);
+  WriteCsvOptionalNumber(output, state.satellites_visible, first_field);
+  WriteCsvOptionalNumber(output, state.mean_cn0_db_hz, first_field);
+  WriteCsvOptionalNumber(output, state.max_cn0_db_hz, first_field);
+  WriteCsvOptionalNumber(output, state.correction_age_s, first_field);
+  WriteCsvOptionalNumber(output, state.heading_deg, first_field);
+  WriteCsvOptionalBool(output, state.dual_antenna_heading, first_field);
+  WriteCsvOptionalBool(output, state.dual_antenna_baseline, first_field);
+  WriteCsvOptionalNumber(output, state.baseline_azimuth_deg, first_field);
+  WriteCsvOptionalNumber(output, state.baseline_pitch_deg, first_field);
+  WriteCsvOptionalNumber(output, state.baseline_length_m, first_field);
+  const char* baseline_status = DescribeBaselineSolutionStatus(state.baseline_solution_status);
+  WriteCsvText(output, baseline_status == nullptr ? "" : baseline_status, first_field);
+  WriteCsvOptionalBool(output, state.interference_detected, first_field);
+  WriteCsvOptionalBool(output, state.jamming_detected, first_field);
+  output << '\n';
+}
+
 }  // namespace
 
 const char* DescribeRuntimeExportFormat(const RuntimeExportFormat format)
@@ -359,6 +475,8 @@ const char* DescribeRuntimeExportFormat(const RuntimeExportFormat format)
   {
     case RuntimeExportFormat::kJsonl:
       return "jsonl";
+    case RuntimeExportFormat::kCsv:
+      return "csv";
   }
 
   return "jsonl";
@@ -389,6 +507,29 @@ std::size_t WriteRuntimeExportJsonl(std::ostream& output,
     ++lines_written;
   }
   return lines_written;
+}
+
+std::string FormatRuntimeExportCsv(const GnssReplayResult& replay_result)
+{
+  std::ostringstream output;
+  WriteRuntimeExportCsv(output, replay_result);
+  return output.str();
+}
+
+std::size_t WriteRuntimeExportCsv(std::ostream& output, const GnssReplayResult& replay_result)
+{
+  output << kRuntimeExportCsvHeader << '\n';
+  std::size_t rows_written = 0u;
+  for (const auto& event : replay_result.events)
+  {
+    if (!event.produced_runtime_update)
+    {
+      continue;
+    }
+    WriteRuntimeUpdateCsv(output, event);
+    ++rows_written;
+  }
+  return rows_written;
 }
 
 }  // namespace universal_gnss_tools

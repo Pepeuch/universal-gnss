@@ -13,10 +13,11 @@ void PrintUsage(const char* program_name)
 {
   std::cout
       << "Usage: " << program_name
-      << " [--format jsonl] [--output path] [--pretty] [path|-]\n"
+      << " [--format jsonl|csv] [--output path] [--pretty] [path|-]\n"
       << "Examples:\n"
       << "  " << program_name << " log.bin\n"
       << "  " << program_name << " --format jsonl log.bin\n"
+      << "  " << program_name << " --format csv log.bin\n"
       << "  " << program_name << " --output runtime.jsonl log.bin\n"
       << "  " << program_name << " --pretty log.bin\n";
 }
@@ -52,13 +53,19 @@ int main(int argc, char** argv)
       }
 
       const std::string format = argv[++index];
-      if (format != "jsonl")
+      if (format == "jsonl")
       {
-        std::cerr << "error: unsupported export format: " << format
-                  << " (only jsonl is implemented)\n";
+        options.format = universal_gnss_tools::RuntimeExportFormat::kJsonl;
+      }
+      else if (format == "csv")
+      {
+        options.format = universal_gnss_tools::RuntimeExportFormat::kCsv;
+      }
+      else
+      {
+        std::cerr << "error: unsupported export format: " << format << '\n';
         return EXIT_FAILURE;
       }
-      options.format = universal_gnss_tools::RuntimeExportFormat::kJsonl;
       continue;
     }
     if (argument == "--output")
@@ -104,6 +111,12 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
+  if (options.pretty && options.format == universal_gnss_tools::RuntimeExportFormat::kCsv)
+  {
+    std::cerr << "error: --pretty is only supported for jsonl output\n";
+    return EXIT_FAILURE;
+  }
+
   std::ofstream output_file;
   std::ostream* output = &std::cout;
   if (!output_path.empty())
@@ -121,6 +134,9 @@ int main(int argc, char** argv)
   {
     case universal_gnss_tools::RuntimeExportFormat::kJsonl:
       universal_gnss_tools::WriteRuntimeExportJsonl(*output, replay_result, options);
+      break;
+    case universal_gnss_tools::RuntimeExportFormat::kCsv:
+      universal_gnss_tools::WriteRuntimeExportCsv(*output, replay_result);
       break;
   }
 

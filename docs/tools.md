@@ -398,8 +398,8 @@ It reuses:
 Current behavior:
 
 - reads an offline GNSS log from a file or stdin
-- emits one JSON object per runtime update, not one object per parsed frame
-- defaults to JSON Lines (`jsonl`) output
+- emits one JSONL object or CSV row per runtime update, not one entry per parsed frame
+- defaults to JSON Lines (`jsonl`) output and also supports CSV v1 (`csv`)
 - can write to stdout or an explicit output file
 - supports a stable key order intended for notebooks, graphing, future GUI
   work, MQTT bridges, and API adapters
@@ -444,9 +444,23 @@ Schema policy:
 - unavailable optional values are emitted as JSON `null`
 - `RTCM3` metadata-only frames are not exported as runtime samples
 
+CSV v1 policy:
+
+- emits one fixed header row, including for an empty replay timeline
+- starts every data row with `schema_version` value `1`, followed by the same
+  event, timestamp, provenance, and normalized-state fields in JSONL order
+- represents unavailable optional values as empty cells; booleans use
+  `true`/`false`; text uses standard double-quote CSV escaping
+- preserves the existing nine-decimal latitude/longitude export precision
+- treats `timestamp_ns` as the normalized runtime observation timestamp; it is
+  not capture-receipt time and is never changed by export
+- treats header/column changes as a new CSV schema version
+
+`--pretty` is JSONL-only and is rejected with `--format csv` so CSV v1 bytes
+remain stable.
+
 Current non-goals:
 
-- CSV export
 - live streaming
 - MQTT / WebSocket export
 - ROS 2 bag export
@@ -457,6 +471,8 @@ Examples:
 ```text
 gnss_export log.bin
 gnss_export --format jsonl log.bin
+gnss_export --format csv log.bin
+gnss_export --output runtime.csv --format csv log.bin
 gnss_export --output runtime.jsonl log.bin
 gnss_export --pretty log.bin
 ```

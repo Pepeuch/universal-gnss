@@ -13,6 +13,7 @@ namespace universal_gnss_tools
 enum class RuntimeExportFormat : std::uint8_t
 {
   kJsonl = 0,
+  kCsv = 1,
 };
 
 struct RuntimeExportOptions
@@ -29,5 +30,9 @@ std::string FormatRuntimeExportJsonl(const GnssReplayResult& replay_result,
 std::size_t WriteRuntimeExportJsonl(std::ostream& output,
                                     const GnssReplayResult& replay_result,
                                     const RuntimeExportOptions& options = {});
+
+std::string FormatRuntimeExportCsv(const GnssReplayResult& replay_result);
+
+std::size_t WriteRuntimeExportCsv(std::ostream& output, const GnssReplayResult& replay_result);
 
 }  // namespace universal_gnss_tools
