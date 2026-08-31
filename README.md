@@ -38,6 +38,16 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 
 Current phase: post-`v0.6.x` stabilization.
 
+<!-- UGA_STATUS_BEGIN -->
+### Development Dashboard
+
+![Generated UGA backlog status](docs/status/uga_backlog.svg)
+
+Baseline: **205** audited items. Remaining unchecked TODO work: **189**. Closed or intentionally resolved: **16**.
+
+Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
+<!-- UGA_STATUS_END -->
+
 Current project state includes:
 
 - Auto Discovery v2 plus `ReceiverNode` auto-discovery wiring
