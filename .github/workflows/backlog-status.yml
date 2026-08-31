@@ -1,0 +1,20 @@
+name: Backlog Status
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backlog-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate dashboard tooling
+        run: |
+          python3 -m py_compile \
+            scripts/update_backlog_status.py \
+            scripts/tests/test_update_backlog_status.py
+          python3 scripts/tests/test_update_backlog_status.py
+          python3 scripts/update_backlog_status.py --check
