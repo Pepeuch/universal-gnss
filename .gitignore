@@ -48,3 +48,10 @@ Thumbs.db
 
 #exemple driver
 exemple/
+
+# Agent state
+# Local checkpoints/caches remain private, while short-lived shared handoffs
+# may be versioned intentionally.
+.agent/*
+!.agent/shared/
+!.agent/shared/**
