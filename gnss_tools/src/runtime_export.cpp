@@ -298,6 +298,11 @@ void WriteRuntimeUpdateJson(std::ostream& output,
   const bool pretty = options.pretty;
   bool first_field = true;
 
+  WriteJsonOptionalNumber(output,
+                          "schema_version",
+                          std::optional<std::uint32_t>(kRuntimeExportJsonlSchemaVersion),
+                          pretty,
+                          first_field);
   WriteJsonOptionalNumber(
       output, "event_index", std::optional<std::size_t>(event.event_index), pretty, first_field);
   WriteJsonOptionalNumber(output, "timestamp_ns", state.timestamp_ns, pretty, first_field);

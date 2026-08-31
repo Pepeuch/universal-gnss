@@ -265,7 +265,7 @@ BlueOS validation:
 - [ ] continue capability/profile consistency cleanup between built-in receiver profiles and driver support beyond the current Unicore model-aware signal-group gating
 - [ ] correction age estimation
 - [x] runtime state CSV export
-- [ ] JSON schema stabilization/versioning
+- [x] JSON schema stabilization/versioning
 - [ ] compare two receivers/logs
 - [ ] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG

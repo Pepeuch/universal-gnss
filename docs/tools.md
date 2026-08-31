@@ -408,6 +408,7 @@ Current behavior:
 
 Current JSONL schema includes:
 
+- `schema_version`
 - `event_index`
 - `timestamp_ns`
 - `protocol`
@@ -438,11 +439,30 @@ Current JSONL schema includes:
 - `interference_detected`
 - `jamming_detected`
 
-Schema policy:
+JSONL v1 compatibility policy:
 
-- every runtime-update line uses the same keys
-- unavailable optional values are emitted as JSON `null`
+- every runtime-update line is one top-level JSON object; there is no array or
+  metadata envelope, and an empty timeline emits zero records
+- every record begins with required integer `schema_version: 1`; required
+  non-null fields are `schema_version`, `event_index`, `protocol`, `message`,
+  `fix_valid`, and `fix_type`
+- all remaining normalized-state keys remain present and use JSON `null` when
+  unavailable; `timestamp_ns` is nanoseconds in the normalized runtime
+  observation timestamp domain, never capture-receipt or scheduler time
+- protocol/fix/RTK/baseline enum spellings and the nine-decimal coordinate
+  representation are stable; other numeric values remain JSON numbers using
+  the existing runtime exporter representation
 - `RTCM3` metadata-only frames are not exported as runtime samples
+- compatible consumers must ignore unrecognized keys. Future additive optional
+  fields may be added within v1 with release/documentation updates; removing or
+  renaming fields, changing field type/nullability/enum spelling, or changing
+  timestamp meaning or units requires a new schema version
+- JSONL v1 is intentionally not byte-for-byte identical to earlier output
+  because of the additive leading schema marker. Existing field names, values,
+  null semantics, and normalized runtime meaning remain unchanged
+
+`gnss_replay --json` remains a separate inspection-report format and is not
+the versioned runtime-export JSONL surface.
 
 CSV v1 policy:
 
@@ -455,6 +475,10 @@ CSV v1 policy:
 - treats `timestamp_ns` as the normalized runtime observation timestamp; it is
   not capture-receipt time and is never changed by export
 - treats header/column changes as a new CSV schema version
+
+CSV v1 and JSONL v1 select the same runtime-update events and preserve the same
+normalized values, but their version markers and unavailable-value encodings are
+format-specific (CSV header/empty cell versus JSONL field/`null`).
 
 `--pretty` is JSONL-only and is rejected with `--format csv` so CSV v1 bytes
 remain stable.

@@ -190,6 +190,8 @@ void TestNmeaJsonlExport(TestContext& ctx)
   ctx.Expect(lines.size() == 5u, "basic NMEA export should emit one JSON line per runtime update");
   ctx.Expect(lines.front().front() == '{' && lines.front().back() == '}',
              "each JSONL export line should be a single JSON object");
+  ctx.Expect(lines.front().find("{\"schema_version\":1,\"event_index\":1,") == 0u,
+             "JSONL export should begin every record with the stable v1 schema marker");
   ctx.Expect(lines.front().find("\"protocol\":\"NMEA\"") != std::string::npos &&
                  lines.front().find("\"message\":\"GGA\"") != std::string::npos,
              "the first NMEA export line should identify the GGA update");
@@ -268,9 +270,39 @@ void TestPrettyJsonlExport(TestContext& ctx)
   const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay, options);
   const auto lines = SplitLines(jsonl);
 
-  ctx.Expect(!lines.empty() && lines.front().find("\"event_index\": ") != std::string::npos &&
+  ctx.Expect(!lines.empty() && lines.front().find("\"schema_version\": 1, ") != std::string::npos &&
+                 lines.front().find("\"event_index\": ") != std::string::npos &&
                  lines.front().find(", \"protocol\": ") != std::string::npos,
              "pretty JSONL should remain one object per line with stable spaced formatting");
+}
+
+void TestJsonlEscapingAndEmptyTimeline(TestContext& ctx)
+{
+  universal_gnss_tools::GnssReplayResult replay;
+  ctx.Expect(universal_gnss_tools::FormatRuntimeExportJsonl(replay).empty(),
+             "an empty runtime timeline should emit zero JSONL records");
+
+  replay.events.resize(1u);
+  auto& event = replay.events.front();
+  event.event_index = 9u;
+  event.protocol = universal_gnss_protocols::ProtocolType::kUnknown;
+  event.identity = "value,\"quoted\"\nline";
+  event.produced_runtime_update = true;
+  const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay);
+  ctx.Expect(jsonl.find("\"schema_version\":1") != std::string::npos &&
+                 jsonl.find("\"message\":\"value,\\\"quoted\\\"\\nline\"") !=
+                     std::string::npos,
+             "JSONL v1 should retain JSON escaping for message provenance");
+}
+
+void TestJsonlCsvRowSelectionConsistency(TestContext& ctx)
+{
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto replay = universal_gnss_tools::ReplayGnssBytes(bytes, true);
+  const auto jsonl_lines = SplitLines(universal_gnss_tools::FormatRuntimeExportJsonl(replay));
+  const auto csv_lines = SplitLines(universal_gnss_tools::FormatRuntimeExportCsv(replay));
+  ctx.Expect(!csv_lines.empty() && jsonl_lines.size() + 1u == csv_lines.size(),
+             "JSONL and CSV should select the same runtime-update events");
 }
 
 void TestCsvExport(TestContext& ctx)
@@ -367,6 +399,8 @@ int main()
   TestMixedJsonlExport(ctx);
   TestUnicoreBinaryJsonlExport(ctx);
   TestPrettyJsonlExport(ctx);
+  TestJsonlEscapingAndEmptyTimeline(ctx);
+  TestJsonlCsvRowSelectionConsistency(ctx);
   TestCsvExport(ctx);
   TestCsvEscapingAndEmptyTimeline(ctx);
   TestFileOutputHandling(ctx);

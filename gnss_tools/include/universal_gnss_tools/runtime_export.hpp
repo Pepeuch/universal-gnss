@@ -10,6 +10,8 @@
 namespace universal_gnss_tools
 {
 
+inline constexpr std::uint32_t kRuntimeExportJsonlSchemaVersion = 1u;
+
 enum class RuntimeExportFormat : std::uint8_t
 {
   kJsonl = 0,
