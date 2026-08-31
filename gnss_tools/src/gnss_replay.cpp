@@ -1,9 +1,12 @@
 #include "universal_gnss_tools/gnss_replay.hpp"
 
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <istream>
+#include <limits>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -691,6 +694,81 @@ GnssReplayResult ReplayGnssStream(std::istream& input, const bool include_events
   return ReplayGnssBytes(ReadAllBytes(input), include_events);
 }
 
+std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(
+    const GnssReplayResult& result,
+    const GnssReplayTimingConfig& config)
+{
+  std::vector<GnssReplayTimingStep> plan;
+  plan.reserve(result.events.size());
+  std::optional<universal_gnss::GnssTimestampNs> previous_timestamp{};
+
+  for (const auto& event : result.events)
+  {
+    GnssReplayTimingStep step;
+    step.event_index = event.event_index;
+    const auto timestamp = event.state_after_event.timestamp_ns;
+    if (config.mode == GnssReplayTimingMode::kWallTime && previous_timestamp.has_value() &&
+        timestamp.has_value())
+    {
+      const auto delta_ns = *timestamp - *previous_timestamp;
+      if (delta_ns < 0)
+      {
+        step.delay_before_event = config.fallback_step;
+      }
+      else if (delta_ns > 0 && std::isfinite(config.speed) && config.speed > 0.0)
+      {
+        const double scaled_ns = static_cast<double>(delta_ns) / config.speed;
+        if (std::isfinite(scaled_ns) && scaled_ns > 0.0 &&
+            scaled_ns <= static_cast<double>(std::numeric_limits<long long>::max()))
+        {
+          step.delay_before_event = std::chrono::nanoseconds(std::llround(scaled_ns));
+        }
+      }
+    }
+    else if (config.mode == GnssReplayTimingMode::kWallTime && !plan.empty())
+    {
+      step.delay_before_event = config.fallback_step;
+    }
+
+    if (timestamp.has_value())
+    {
+      previous_timestamp = timestamp;
+    }
+    plan.push_back(step);
+  }
+  return plan;
+}
+
+std::string FormatGnssReplayEventText(const GnssReplayEvent& event)
+{
+  std::ostringstream output;
+  output << event.event_index << " offset=" << event.byte_offset
+         << " proto=" << DescribeProtocolType(event.protocol) << " len=" << event.length_bytes;
+  if (!event.identity.empty())
+  {
+    if (event.protocol == ProtocolType::kRtcm3)
+    {
+      output << " type=" << event.identity;
+    }
+    else if (event.protocol == ProtocolType::kUbx)
+    {
+      output << " id=" << event.identity;
+      if (!event.classification.empty())
+      {
+        output << " name=" << event.classification;
+      }
+    }
+    else
+    {
+      output << " id=" << event.identity;
+    }
+  }
+  output << " update=" << (event.produced_runtime_update ? "yes" : "no")
+         << " crc=" << DescribeChecksumStatus(event.checksum_status) << ' '
+         << BuildStateTextSummary(event.state_after_event) << '\n';
+  return output.str();
+}
+
 std::string FormatGnssReplayText(const GnssReplayResult& result, const bool summary_only)
 {
   std::ostringstream output;
@@ -699,32 +777,7 @@ std::string FormatGnssReplayText(const GnssReplayResult& result, const bool summ
   {
     for (const auto& event : result.events)
     {
-      output << event.event_index << " offset=" << event.byte_offset
-             << " proto=" << DescribeProtocolType(event.protocol) << " len=" << event.length_bytes;
-
-      if (!event.identity.empty())
-      {
-        if (event.protocol == ProtocolType::kRtcm3)
-        {
-          output << " type=" << event.identity;
-        }
-        else if (event.protocol == ProtocolType::kUbx)
-        {
-          output << " id=" << event.identity;
-          if (!event.classification.empty())
-          {
-            output << " name=" << event.classification;
-          }
-        }
-        else
-        {
-          output << " id=" << event.identity;
-        }
-      }
-
-      output << " update=" << (event.produced_runtime_update ? "yes" : "no")
-             << " crc=" << DescribeChecksumStatus(event.checksum_status) << ' '
-             << BuildStateTextSummary(event.state_after_event) << '\n';
+      output << FormatGnssReplayEventText(event);
     }
   }
 

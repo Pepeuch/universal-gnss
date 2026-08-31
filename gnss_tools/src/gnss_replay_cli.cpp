@@ -1,7 +1,11 @@
 #include <cstdlib>
+#include <chrono>
+#include <cmath>
+#include <exception>
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 
 #include "universal_gnss_tools/gnss_replay.hpp"
 
@@ -11,7 +15,7 @@ namespace
 void PrintUsage(const char* program_name)
 {
   std::cout
-      << "Usage: " << program_name << " [--summary] [--json] [path|-]\n"
+      << "Usage: " << program_name << " [--summary] [--json] [--timing-mode fast|wall_time] [--speed N] [--fallback-step-ms N] [path|-]\n"
       << "Examples:\n"
       << "  " << program_name << " file.bin\n"
       << "  cat file.bin | " << program_name << " -\n"
@@ -25,6 +29,7 @@ int main(int argc, char** argv)
 {
   bool summary_only = false;
   bool json_output = false;
+  universal_gnss_tools::GnssReplayTimingConfig timing_config;
   std::string input_path = "-";
   bool input_path_set = false;
 
@@ -40,6 +45,37 @@ int main(int argc, char** argv)
     if (argument == "--json")
     {
       json_output = true;
+      continue;
+    }
+    if (argument == "--timing-mode" && index + 1 < argc)
+    {
+      const std::string mode = argv[++index];
+      if (mode == "fast")
+      {
+        timing_config.mode = universal_gnss_tools::GnssReplayTimingMode::kFast;
+      }
+      else if (mode == "wall_time")
+      {
+        timing_config.mode = universal_gnss_tools::GnssReplayTimingMode::kWallTime;
+      }
+      else
+      {
+        std::cerr << "error: --timing-mode must be fast or wall_time\n";
+        return EXIT_FAILURE;
+      }
+      continue;
+    }
+    if ((argument == "--speed" || argument == "--fallback-step-ms") && index + 1 < argc)
+    {
+      try {
+        if (argument == "--speed") timing_config.speed = std::stod(argv[++index]);
+        else timing_config.fallback_step = std::chrono::milliseconds(std::stoll(argv[++index]));
+      }
+      catch (const std::exception&)
+      {
+        std::cerr << "error: invalid " << argument << " value\n";
+        return EXIT_FAILURE;
+      }
       continue;
     }
 
@@ -80,7 +116,30 @@ int main(int argc, char** argv)
     return EXIT_FAILURE;
   }
 
-  if (json_output)
+  if (!std::isfinite(timing_config.speed) || !(timing_config.speed > 0.0) ||
+      timing_config.fallback_step.count() <= 0)
+  {
+    std::cerr << "error: timing values must be finite and strictly positive\n";
+    return EXIT_FAILURE;
+  }
+  if (timing_config.mode == universal_gnss_tools::GnssReplayTimingMode::kWallTime &&
+      (json_output || summary_only))
+  {
+    std::cerr << "error: wall_time timing requires text event output\n";
+    return EXIT_FAILURE;
+  }
+
+  if (timing_config.mode == universal_gnss_tools::GnssReplayTimingMode::kWallTime)
+  {
+    const auto plan = universal_gnss_tools::BuildGnssReplayTimingPlan(result, timing_config);
+    for (std::size_t index = 0u; index < result.events.size(); ++index)
+    {
+      std::this_thread::sleep_for(plan[index].delay_before_event);
+      std::cout << universal_gnss_tools::FormatGnssReplayEventText(result.events[index]);
+    }
+    std::cout << universal_gnss_tools::FormatGnssReplayText(result, true);
+  }
+  else if (json_output)
   {
     std::cout << universal_gnss_tools::FormatGnssReplayJson(result, summary_only);
   }

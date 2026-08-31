@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <chrono>
 #include <cstdint>
 #include <iosfwd>
 #include <map>
@@ -56,6 +57,29 @@ struct GnssReplayResult
   universal_gnss::GnssRuntimeState final_state{};
 };
 
+enum class GnssReplayTimingMode : std::uint8_t
+{
+  kFast = 0,
+  kWallTime = 1,
+};
+
+struct GnssReplayTimingConfig
+{
+  GnssReplayTimingMode mode{GnssReplayTimingMode::kFast};
+  double speed{1.0};
+  std::chrono::milliseconds fallback_step{100};
+};
+
+struct GnssReplayTimingStep
+{
+  std::size_t event_index{0};
+  std::chrono::nanoseconds delay_before_event{0};
+};
+
+std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(
+    const GnssReplayResult& result,
+    const GnssReplayTimingConfig& config);
+
 GnssReplayResult ReplayGnssBytes(
     const std::vector<std::uint8_t>& bytes,
     bool include_events = true);
@@ -67,6 +91,8 @@ GnssReplayResult ReplayGnssStream(
 std::string FormatGnssReplayText(
     const GnssReplayResult& result,
     bool summary_only = false);
+
+std::string FormatGnssReplayEventText(const GnssReplayEvent& event);
 
 std::string FormatGnssReplayJson(
     const GnssReplayResult& result,

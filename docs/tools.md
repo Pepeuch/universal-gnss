@@ -303,6 +303,23 @@ gnss_replay --summary file.bin
 gnss_replay --json file.bin
 ```
 
+Portable timing mode is available for text event replay:
+
+```text
+gnss_replay --timing-mode wall_time --speed 2.0 capture.bin
+gnss_replay --timing-mode wall_time --fallback-step-ms 100 capture.bin
+```
+
+`fast` is the default and emits events without intentional delay. `wall_time`
+delays each text event by the adjacent normalized runtime-state timestamp delta
+divided by `--speed` (which must be finite and greater than zero). Equal
+timestamps are emitted immediately; a missing or decreasing timestamp uses the
+positive `--fallback-step-ms` delay (default: 100 ms). These timestamps remain
+observation-state data, not capture-receipt timestamps, and replay scheduling
+does not alter them. Timed event streaming is intentionally incompatible with
+`--summary` and `--json`, which produce aggregate output rather than event
+output.
+
 ROS2 reuse:
 
 - `universal_gnss_ros2/replay_node` reuses `ReplayGnssBytes(...)` instead of

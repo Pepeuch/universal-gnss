@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -822,6 +823,43 @@ void TestFileBackedBasicNmeaReplayIncludesGstAccuracy(TestContext& ctx)
              "file-backed basic NMEA replay should carry GST accuracy into the final state");
 }
 
+void TestReplayTimingPlan(TestContext& ctx)
+{
+  universal_gnss_tools::GnssReplayResult result;
+  result.events.resize(4u);
+  result.events[0].event_index = 10u;
+  result.events[1].event_index = 11u;
+  result.events[2].event_index = 12u;
+  result.events[3].event_index = 13u;
+  result.events[0].state_after_event.timestamp_ns = 1000;
+  result.events[1].state_after_event.timestamp_ns = 3000;
+  result.events[2].state_after_event.timestamp_ns = 3000;
+
+  universal_gnss_tools::GnssReplayTimingConfig config;
+  config.mode = universal_gnss_tools::GnssReplayTimingMode::kWallTime;
+  config.speed = 2.0;
+  config.fallback_step = std::chrono::milliseconds(7);
+  const auto plan = universal_gnss_tools::BuildGnssReplayTimingPlan(result, config);
+
+  ctx.Expect(plan.size() == 4u && plan[0].event_index == 10u &&
+                 plan[0].delay_before_event == std::chrono::nanoseconds(0) &&
+                 plan[1].delay_before_event == std::chrono::nanoseconds(1000) &&
+                 plan[2].delay_before_event == std::chrono::nanoseconds(0) &&
+                 plan[3].delay_before_event == std::chrono::milliseconds(7),
+             "timing plan should scale positive deltas, keep equal timestamps immediate, and fall back for missing timestamps");
+
+  result.events[2].state_after_event.timestamp_ns = 500;
+  const auto decreasing_plan = universal_gnss_tools::BuildGnssReplayTimingPlan(result, config);
+  ctx.Expect(decreasing_plan[2].delay_before_event == std::chrono::milliseconds(7),
+             "timing plan should fall back for decreasing timestamps");
+
+  config.mode = universal_gnss_tools::GnssReplayTimingMode::kFast;
+  const auto fast_plan = universal_gnss_tools::BuildGnssReplayTimingPlan(result, config);
+  ctx.Expect(fast_plan[1].delay_before_event == std::chrono::nanoseconds(0) &&
+                 fast_plan[3].delay_before_event == std::chrono::nanoseconds(0),
+             "fast timing mode should not request wall-clock delays");
+}
+
 }  // namespace
 
 int main()
@@ -841,6 +879,7 @@ int main()
   TestReplayStreamInput(ctx);
   TestFileBackedReplay(ctx);
   TestFileBackedBasicNmeaReplayIncludesGstAccuracy(ctx);
+  TestReplayTimingPlan(ctx);
 
   if (ctx.failures != 0)
   {

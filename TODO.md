@@ -274,7 +274,7 @@ BlueOS validation:
   `heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` after
   `v0.6.x`
 - [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230` / MSM summary
-- [ ] `gnss_replay` timing mode outside the ROS2 replay node
+- [x] `gnss_replay` timing mode outside the ROS2 replay node
 - [ ] TLS support
 - [ ] client certificate authentication
 - [ ] custom CA certificate support
