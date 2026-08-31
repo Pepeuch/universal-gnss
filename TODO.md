@@ -259,13 +259,11 @@ BlueOS validation:
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [ ] production-safe failure handling and rollback expectations
 - [ ] live receiver identity / model / firmware metadata in discovery and planning output
-- [ ] document and preserve generic NMEA runtime_only limitations until a portable write-side config contract exists
 
 ## Universal GNSS core tasks
 
 - [ ] continue capability/profile consistency cleanup between built-in receiver profiles and driver support beyond the current Unicore model-aware signal-group gating
 - [ ] correction age estimation
-- [ ] automatic periodic GGA sending
 - [ ] runtime state CSV export
 - [ ] JSON schema stabilization/versioning
 - [ ] compare two receivers/logs
@@ -283,16 +281,6 @@ BlueOS validation:
 - [ ] UDP transport
 - [ ] multi-caster support
 - [ ] local caster / base mode support
-- [ ] RTCM observation-level decode beyond MSM summary
-
-## Network / NTRIP
-
-- [ ] multi-caster support
-- [ ] local caster / base mode support
-- [ ] UDP transport
-- [ ] TLS support
-- [ ] client certificate authentication
-- [ ] custom CA certificate support
 
 ## ROS2 package tasks
 
@@ -325,7 +313,6 @@ BlueOS validation:
 - [ ] broader Unicore binary `N4` semantic decode beyond `BESTNAVB` /  `PVTSLNB`
 - [ ] raw observations
 - [ ] conservative `AGCA` threshold interpretation if a safe generic policy emerges
-- [ ] Unicore raw observation support
 
 ### Quectel
 
@@ -369,8 +356,6 @@ bug in this repository.
 
 - [ ] contributor architecture guide
 - [ ] parser writing guide
-- [ ] test vector guide
-- [ ] ROS2 integration guide refresh
 - [ ] sanitizer builds
 - [ ] clang-format
 - [ ] clang-tidy
