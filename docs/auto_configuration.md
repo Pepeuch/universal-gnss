@@ -399,6 +399,19 @@ Current capability-oriented translation policy:
 Portable planning may accept a receiver-model hint when a backend needs
 documented model-specific behavior.
 
+Discovery metadata is separate from that planning hint. A probe result may
+carry receiver-incarnation identity, model, and firmware fields when a
+family-owned response supplied them. Current passive Unicore discovery records
+the observed model and firmware from the documented quoted fields of a
+`#VERSIONA,...;"<model>","<firmware>",...` response when the same probe also
+contains verified Unicore evidence. It does not infer metadata from runtime
+telemetry, does not invent generic-NMEA metadata, and leaves receiver identity
+unavailable until a documented response field is mapped to that portable
+meaning. Discovery metadata is reported with the plan but does not silently
+become a model selector for mutating commands.
+Each reconnect or physical receiver replacement produces a fresh discovery
+result, so unavailable metadata cannot retain authority from a prior receiver.
+
 Current policy:
 
 - Unicore uses an optional model selector seam for capability and

@@ -1106,6 +1106,37 @@ void TestUnicoreRuntimeBaudOverrideOnlyWhenDifferent(TestContext& ctx)
              "neither discovery nor an explicit current baud is known");
 }
 
+void TestDiscoveryMetadataDoesNotSurviveReceiverReplacement(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest first_request;
+  first_request.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/unicore-a", 921600u, ReceiverDetectedFamily::kUnicore);
+  first_request.discovery_result->identity.receiver_identity = "unicore-a";
+  first_request.discovery_result->identity.model = "UM982";
+  first_request.discovery_result->identity.firmware_version = "R4.10";
+  first_request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  first_request.apply_mode = ReceiverAutoConfigApplyMode::kDryRun;
+
+  const auto first_plan = BuildReceiverAutoConfigPlan(first_request);
+  ctx.Expect(first_plan.detected_receiver_identity == std::optional<std::string>{"unicore-a"} &&
+                 first_plan.detected_receiver_model == std::optional<std::string>{"UM982"} &&
+                 first_plan.detected_receiver_firmware_version ==
+                     std::optional<std::string>{"R4.10"},
+             "a plan should project metadata from its own discovery result");
+
+  ReceiverAutoConfigRequest replacement_request;
+  replacement_request.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kNmea);
+  replacement_request.requested_profile = ReceiverAutoConfigProfile::kRuntimeOnly;
+  replacement_request.apply_mode = ReceiverAutoConfigApplyMode::kDryRun;
+
+  const auto replacement_plan = BuildReceiverAutoConfigPlan(replacement_request);
+  ctx.Expect(!replacement_plan.detected_receiver_identity.has_value() &&
+                 !replacement_plan.detected_receiver_model.has_value() &&
+                 !replacement_plan.detected_receiver_firmware_version.has_value(),
+             "a replacement receiver discovery result must not retain prior receiver metadata");
+}
+
 int main()
 {
   TestContext ctx;
@@ -1123,6 +1154,7 @@ int main()
   TestUnicoreOutputRateDomainAndSerialization(ctx);
   TestUnicoreSignalGroupOverride(ctx);
   TestUnicoreRuntimeBaudOverrideOnlyWhenDifferent(ctx);
+  TestDiscoveryMetadataDoesNotSurviveReceiverReplacement(ctx);
   TestUnicoreFactoryResetPlan(ctx);
   TestRuntimeOnlyPersistentModeRejected(ctx);
   TestPersistentApplyWarnings(ctx);

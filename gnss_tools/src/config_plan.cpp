@@ -336,6 +336,9 @@ ConfigPlanResult BuildConfigPlanResultFromPlan(const ReceiverAutoConfigPlan& pla
   result.detected_device = plan.detected_device;
   result.detected_stable_id = plan.detected_stable_id;
   result.detected_baud = plan.detected_baud;
+  result.detected_receiver_identity = plan.detected_receiver_identity;
+  result.detected_receiver_model = plan.detected_receiver_model;
+  result.detected_receiver_firmware_version = plan.detected_receiver_firmware_version;
   if (plan.discovery_confidence.has_value())
   {
     result.discovery_confidence = universal_gnss_driver::ToString(*plan.discovery_confidence);
@@ -483,6 +486,18 @@ std::string FormatConfigPlanText(const ConfigPlanResult& result)
   if (result.detected_baud.has_value())
   {
     output << "Current transport baud: " << *result.detected_baud << "\n";
+  }
+  if (result.detected_receiver_identity.has_value())
+  {
+    output << "Detected receiver identity: " << *result.detected_receiver_identity << "\n";
+  }
+  if (result.detected_receiver_model.has_value())
+  {
+    output << "Detected receiver model: " << *result.detected_receiver_model << "\n";
+  }
+  if (result.detected_receiver_firmware_version.has_value())
+  {
+    output << "Detected receiver firmware: " << *result.detected_receiver_firmware_version << "\n";
   }
   if (result.discovery_confidence.has_value())
   {
@@ -767,6 +782,36 @@ std::string FormatConfigPlanJson(const ConfigPlanResult& result)
   if (result.detected_baud.has_value())
   {
     output << *result.detected_baud;
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"receiver_identity\": ";
+  if (result.detected_receiver_identity.has_value())
+  {
+    output << "\"" << EscapeJson(*result.detected_receiver_identity) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"receiver_model\": ";
+  if (result.detected_receiver_model.has_value())
+  {
+    output << "\"" << EscapeJson(*result.detected_receiver_model) << "\"";
+  }
+  else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"receiver_firmware_version\": ";
+  if (result.detected_receiver_firmware_version.has_value())
+  {
+    output << "\"" << EscapeJson(*result.detected_receiver_firmware_version) << "\"";
   }
   else
   {

@@ -93,6 +93,30 @@ void TestUbloxRoverHighPrecisionPlan(TestContext& ctx)
       "u-blox rover_high_precision plan text should show dry-run status and command ordering");
 }
 
+void TestDiscoveryMetadataProjection(TestContext& ctx)
+{
+  universal_gnss_driver::ReceiverProbeResult discovery;
+  discovery.path = "/dev/serial/by-id/receiver";
+  discovery.detected_family = universal_gnss_driver::ReceiverDetectedFamily::kUnicore;
+  discovery.selected_baud = 921600u;
+  discovery.identity.model = "UM982";
+
+  universal_gnss_driver::ReceiverAutoConfigRequest request;
+  request.discovery_result = discovery;
+  request.requested_profile = universal_gnss_driver::ReceiverAutoConfigProfile::kRuntimeOnly;
+  request.apply_mode = universal_gnss_driver::ReceiverAutoConfigApplyMode::kDryRun;
+
+  const auto result = BuildConfigPlan(request);
+  const std::string text = FormatConfigPlanText(result);
+  const std::string json = FormatConfigPlanJson(result);
+
+  ctx.Expect(result.detected_receiver_model == std::optional<std::string>{"UM982"} &&
+                 !result.receiver_model.has_value() &&
+                 text.find("Detected receiver model: UM982") != std::string::npos &&
+                 json.find("\"receiver_model\": \"UM982\"") != std::string::npos,
+             "discovery metadata should project into reports without becoming an operator planning selector");
+}
+
 void TestUnicoreDebugPlan(TestContext& ctx)
 {
   ConfigPlanOptions options;
@@ -484,6 +508,7 @@ int main()
   TestContext ctx;
 
   TestUbloxRoverHighPrecisionPlan(ctx);
+  TestDiscoveryMetadataProjection(ctx);
   TestUnicoreDebugPlan(ctx);
   TestUnicorePersistentTargetBaudPlan(ctx);
   TestSignalProfilePlanning(ctx);

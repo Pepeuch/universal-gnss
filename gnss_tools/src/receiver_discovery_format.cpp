@@ -78,6 +78,18 @@ std::string FormatReceiverDiscoveryText(
     {
       output << " stable_id=" << *result.stable_id;
     }
+    if (result.identity.receiver_identity.has_value())
+    {
+      output << " receiver_identity=" << *result.identity.receiver_identity;
+    }
+    if (result.identity.model.has_value())
+    {
+      output << " model=" << *result.identity.model;
+    }
+    if (result.identity.firmware_version.has_value())
+    {
+      output << " firmware=" << *result.identity.firmware_version;
+    }
     output << ' ';
     AppendEvidenceText(output, result.evidence);
     if (!result.note.empty())
@@ -108,6 +120,36 @@ std::string FormatReceiverDiscoveryJson(
     if (result.stable_id.has_value())
     {
       output << '"' << EscapeJson(*result.stable_id) << '"';
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ",\n"
+           << "    \"receiver_identity\": ";
+    if (result.identity.receiver_identity.has_value())
+    {
+      output << '"' << EscapeJson(*result.identity.receiver_identity) << '"';
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ",\n"
+           << "    \"receiver_model\": ";
+    if (result.identity.model.has_value())
+    {
+      output << '"' << EscapeJson(*result.identity.model) << '"';
+    }
+    else
+    {
+      output << "null";
+    }
+    output << ",\n"
+           << "    \"receiver_firmware_version\": ";
+    if (result.identity.firmware_version.has_value())
+    {
+      output << '"' << EscapeJson(*result.identity.firmware_version) << '"';
     }
     else
     {

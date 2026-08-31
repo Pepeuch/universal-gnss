@@ -81,6 +81,9 @@ struct ConfigPlanResult
   std::optional<std::string> detected_device{};
   std::optional<std::string> detected_stable_id{};
   std::optional<std::uint32_t> detected_baud{};
+  std::optional<std::string> detected_receiver_identity{};
+  std::optional<std::string> detected_receiver_model{};
+  std::optional<std::string> detected_receiver_firmware_version{};
   std::optional<std::string> discovery_confidence{};
   std::optional<int> discovery_score{};
   std::vector<ConfigPlanCommand> commands{};

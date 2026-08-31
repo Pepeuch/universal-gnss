@@ -100,6 +100,9 @@ void CopyDiscoveryContext(ReceiverAutoConfigPlan& plan)
   plan.detected_device = discovery.path;
   plan.detected_stable_id = discovery.stable_id;
   plan.detected_baud = discovery.selected_baud;
+  plan.detected_receiver_identity = discovery.identity.receiver_identity;
+  plan.detected_receiver_model = discovery.identity.model;
+  plan.detected_receiver_firmware_version = discovery.identity.firmware_version;
   plan.discovery_confidence = discovery.confidence;
   plan.discovery_score = discovery.discovery_score;
 }

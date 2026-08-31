@@ -46,6 +46,9 @@ ReceiverProbeResult MakeResult(const std::string& path,
   result.evidence.ubx_frames_seen = 2u;
   result.evidence.mavlink_heartbeats_seen = 1u;
   result.evidence.bytes_read = 512u;
+  result.identity.receiver_identity = "receiver-serial-42";
+  result.identity.model = "UM982";
+  result.identity.firmware_version = "R4.10";
   result.note = "ok";
   result.reason = "valid_ubx_frame:+100";
   return result;
@@ -62,8 +65,11 @@ void TestTextFormatting(TestContext& ctx)
                  text.find("family=ublox") != std::string::npos &&
                  text.find("confidence=high") != std::string::npos &&
                  text.find("score=100") != std::string::npos &&
-                 text.find("evidence=ubx:2") != std::string::npos,
-             "text discovery output should include path, baud, family, confidence, score, and evidence");
+                 text.find("evidence=ubx:2") != std::string::npos &&
+                 text.find("receiver_identity=receiver-serial-42") != std::string::npos &&
+                 text.find("model=UM982") != std::string::npos &&
+                 text.find("firmware=R4.10") != std::string::npos,
+             "text discovery output should include receiver-incarnation metadata when observed");
 }
 
 void TestJsonFormatting(TestContext& ctx)
@@ -76,8 +82,11 @@ void TestJsonFormatting(TestContext& ctx)
                  json.find("\"detected_family\": \"unicore\"") != std::string::npos &&
                  json.find("\"confidence\": \"high\"") != std::string::npos &&
                  json.find("\"score\": 100") != std::string::npos &&
-                 json.find("\"ubx_frames_seen\": 2") != std::string::npos,
-             "JSON discovery output should include stable v2 schema keys");
+                 json.find("\"ubx_frames_seen\": 2") != std::string::npos &&
+                 json.find("\"receiver_identity\": \"receiver-serial-42\"") != std::string::npos &&
+                 json.find("\"receiver_model\": \"UM982\"") != std::string::npos &&
+                 json.find("\"receiver_firmware_version\": \"R4.10\"") != std::string::npos,
+             "JSON discovery output should include stable receiver-incarnation metadata keys");
 }
 
 void TestEmptyFormatting(TestContext& ctx)

@@ -72,6 +72,76 @@ bool StartsWith(const std::string& text, const std::string_view prefix)
          std::equal(prefix.begin(), prefix.end(), text.begin());
 }
 
+bool IsVersionToken(const std::string_view value)
+{
+  return !value.empty() &&
+         std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
+           return std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.';
+         });
+}
+
+std::optional<ReceiverIdentityMetadata> FindUnicoreVersionAMetadata(
+    const std::vector<std::uint8_t>& bytes)
+{
+  const std::string_view text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  constexpr std::string_view kPrefix = "#VERSIONA,";
+  std::size_t line_start = 0u;
+  while (line_start < text.size())
+  {
+    const std::size_t line_end = text.find_first_of("\r\n", line_start);
+    const std::string_view line = text.substr(
+        line_start, line_end == std::string_view::npos ? text.size() - line_start
+                                                        : line_end - line_start);
+    if (line.substr(0u, kPrefix.size()) == kPrefix)
+    {
+      const std::size_t header_end = line.find(';', kPrefix.size());
+      if (header_end != std::string_view::npos)
+      {
+        const std::string_view fields = line.substr(header_end + 1u);
+        if (fields.size() >= 5u && fields.front() == '"')
+        {
+          const std::size_t model_end = fields.find('"', 1u);
+          if (model_end != std::string_view::npos && model_end + 2u < fields.size() &&
+              fields[model_end + 1u] == ',' && fields[model_end + 2u] == '"')
+          {
+            const std::size_t firmware_start = model_end + 2u;
+            const std::size_t firmware_end = fields.find('"', firmware_start + 1u);
+            if (firmware_end != std::string_view::npos)
+            {
+              const std::string_view model = fields.substr(1u, model_end - 1u);
+              const std::string_view firmware =
+                  fields.substr(firmware_start + 1u, firmware_end - firmware_start - 1u);
+              if (IsVersionToken(model) && IsVersionToken(firmware))
+              {
+                ReceiverIdentityMetadata metadata;
+                metadata.model = std::string(model);
+                metadata.firmware_version = std::string(firmware);
+                return metadata;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (line_end == std::string_view::npos)
+    {
+      break;
+    }
+    line_start = line_end + 1u;
+  }
+  return std::nullopt;
+}
+
+void PopulateObservedUnicoreIdentity(ReceiverProbeResult& result,
+                                     const std::vector<std::uint8_t>& bytes)
+{
+  if (const auto metadata = FindUnicoreVersionAMetadata(bytes); metadata.has_value())
+  {
+    result.identity = *metadata;
+  }
+}
+
 std::string CanonicalKey(const std::string& path)
 {
   try
@@ -857,6 +927,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   {
     result.detected_family = ReceiverDetectedFamily::kUnicore;
     result.confidence = ConfidenceFromScore(result.discovery_score);
+    PopulateObservedUnicoreIdentity(result, bytes);
     return result;
   }
 
@@ -870,6 +941,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     else
     {
       result.detected_family = ReceiverDetectedFamily::kUnicore;
+      PopulateObservedUnicoreIdentity(result, bytes);
     }
     result.confidence = ConfidenceFromScore(result.discovery_score);
     result.note = "mixed_vendor_evidence_selected_earliest";

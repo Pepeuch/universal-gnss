@@ -78,6 +78,15 @@ struct ReceiverProbeEvidence
   std::size_t bytes_read{0u};
 };
 
+// Receiver-incarnation metadata observed during one probe. These values are
+// intentionally separate from GNSS runtime state and may be unavailable.
+struct ReceiverIdentityMetadata
+{
+  std::optional<std::string> receiver_identity{};
+  std::optional<std::string> model{};
+  std::optional<std::string> firmware_version{};
+};
+
 struct ReceiverProbeResult
 {
   std::string path{};
@@ -89,6 +98,7 @@ struct ReceiverProbeResult
   ReceiverProbeConfidence confidence{ReceiverProbeConfidence::kNone};
   int discovery_score{0};
   ReceiverProbeEvidence evidence{};
+  ReceiverIdentityMetadata identity{};
   std::string reason{};
   std::string note{};
 };
