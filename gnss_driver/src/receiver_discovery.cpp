@@ -80,6 +80,37 @@ bool IsVersionToken(const std::string_view value)
          });
 }
 
+bool IsReceiverIdentityValue(const std::string_view value)
+{
+  return value != "-" && !value.empty() &&
+         std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
+           return ch >= 0x20u && ch <= 0x7Eu;
+         });
+}
+
+std::optional<std::string_view> ReadQuotedCsvField(const std::string_view fields,
+                                                    std::size_t& offset)
+{
+  if (offset >= fields.size() || fields[offset] != '"')
+  {
+    return std::nullopt;
+  }
+
+  const std::size_t end = fields.find('"', offset + 1u);
+  if (end == std::string_view::npos)
+  {
+    return std::nullopt;
+  }
+
+  const std::string_view value = fields.substr(offset + 1u, end - offset - 1u);
+  offset = end + 1u;
+  if (offset < fields.size() && fields[offset] == ',')
+  {
+    ++offset;
+  }
+  return value;
+}
+
 std::optional<std::string_view> ReadNulTerminatedAsciiField(
     const std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::size_t size)
 {
@@ -116,6 +147,7 @@ std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(
   constexpr std::size_t kExtensionSize = 30u;
   constexpr std::string_view kModulePrefix = "MOD=";
   constexpr std::string_view kFirmwarePrefix = "FWVER=";
+  constexpr std::string_view kChipIdPrefix = "CHIPID=";
 
   UbxFrameFramer framer;
   for (const auto byte : bytes)
@@ -170,9 +202,19 @@ std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(
           metadata.firmware_version = std::string(firmware);
         }
       }
+      else if (extension->size() >= kChipIdPrefix.size() &&
+               extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
+      {
+        const std::string_view chip_id = extension->substr(kChipIdPrefix.size());
+        if (IsReceiverIdentityValue(chip_id))
+        {
+          metadata.receiver_identity = std::string(chip_id);
+        }
+      }
     }
 
-    if (valid_extensions && (metadata.model.has_value() || metadata.firmware_version.has_value()))
+    if (valid_extensions && (metadata.receiver_identity.has_value() || metadata.model.has_value() ||
+                             metadata.firmware_version.has_value()))
     {
       return metadata;
     }
@@ -193,52 +235,56 @@ void PopulateObservedUbloxIdentity(ReceiverProbeResult& result,
 std::optional<ReceiverIdentityMetadata> FindUnicoreVersionAMetadata(
     const std::vector<std::uint8_t>& bytes)
 {
-  const std::string_view text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-  constexpr std::string_view kPrefix = "#VERSIONA,";
-  std::size_t line_start = 0u;
-  while (line_start < text.size())
+  constexpr std::string_view kPrefix = "VERSIONA,";
+  UnicoreFrameFramer framer;
+  for (const auto byte : bytes)
   {
-    const std::size_t line_end = text.find_first_of("\r\n", line_start);
-    const std::string_view line = text.substr(
-        line_start, line_end == std::string_view::npos ? text.size() - line_start
-                                                        : line_end - line_start);
-    if (line.substr(0u, kPrefix.size()) == kPrefix)
+    const auto result = framer.PushByte(byte);
+    if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
     {
-      const std::size_t header_end = line.find(';', kPrefix.size());
-      if (header_end != std::string_view::npos)
-      {
-        const std::string_view fields = line.substr(header_end + 1u);
-        if (fields.size() >= 5u && fields.front() == '"')
-        {
-          const std::size_t model_end = fields.find('"', 1u);
-          if (model_end != std::string_view::npos && model_end + 2u < fields.size() &&
-              fields[model_end + 1u] == ',' && fields[model_end + 2u] == '"')
-          {
-            const std::size_t firmware_start = model_end + 2u;
-            const std::size_t firmware_end = fields.find('"', firmware_start + 1u);
-            if (firmware_end != std::string_view::npos)
-            {
-              const std::string_view model = fields.substr(1u, model_end - 1u);
-              const std::string_view firmware =
-                  fields.substr(firmware_start + 1u, firmware_end - firmware_start - 1u);
-              if (IsVersionToken(model) && IsVersionToken(firmware))
-              {
-                ReceiverIdentityMetadata metadata;
-                metadata.model = std::string(model);
-                metadata.firmware_version = std::string(firmware);
-                return metadata;
-              }
-            }
-          }
-        }
-      }
+      continue;
     }
 
-    if (line_end == std::string_view::npos)
+    const UnicoreFrame& frame = *result.record;
+    if (frame.checksum_status != ChecksumStatus::kValid || frame.message_name != "VERSIONA")
     {
-      break;
+      continue;
     }
-    line_start = line_end + 1u;
+
+    const std::string_view response(
+        reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
+    if (response.substr(0u, kPrefix.size()) != kPrefix)
+    {
+      continue;
+    }
+
+    const std::size_t header_end = response.find(';', kPrefix.size());
+    if (header_end == std::string_view::npos)
+    {
+      continue;
+    }
+
+    const std::string_view fields = response.substr(header_end + 1u);
+    std::size_t field_offset = 0u;
+    const auto model = ReadQuotedCsvField(fields, field_offset);
+    const auto firmware = ReadQuotedCsvField(fields, field_offset);
+    if (model.has_value() && firmware.has_value() && IsVersionToken(*model) &&
+        IsVersionToken(*firmware))
+    {
+      ReceiverIdentityMetadata metadata;
+      metadata.model = std::string(*model);
+      metadata.firmware_version = std::string(*firmware);
+
+      const auto authorization = ReadQuotedCsvField(fields, field_offset);
+      const auto product_serial = ReadQuotedCsvField(fields, field_offset);
+      if (authorization.has_value() && product_serial.has_value() &&
+          IsReceiverIdentityValue(*product_serial))
+      {
+        metadata.receiver_identity = std::string(*product_serial);
+      }
+
+      return metadata;
+    }
   }
   return std::nullopt;
 }

@@ -335,17 +335,28 @@ void TestUbloxMonVerMetadata(TestContext& ctx)
   candidate.path = "/dev/ttyACM0";
 
   const auto metadata_bytes = BuildUbxFrame(
-      0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32"}));
+      0x0Au,
+      0x04u,
+      BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32", "CHIPID=000000D0D69D0F7A54"}));
   const auto result = Analyze(candidate, metadata_bytes);
+  const auto identity_only = Analyze(
+      candidate, BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"CHIPID=000000D0D69D0F7A54"})));
   const auto replacement = Analyze(
       candidate, BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u)));
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
                  result.identity.model == std::optional<std::string>{"ZED-F9P-00B"} &&
                  result.identity.firmware_version == std::optional<std::string>{"HPG 1.32"} &&
-                 !result.identity.receiver_identity.has_value(),
-             "valid MON-VER extensions should provide observed u-blox model and firmware only");
-  ctx.Expect(!replacement.identity.model.has_value() &&
+                 result.identity.receiver_identity ==
+                     std::optional<std::string>{"000000D0D69D0F7A54"},
+             "valid MON-VER extensions should provide documented u-blox model, firmware, and chip identity");
+  ctx.Expect(identity_only.identity.receiver_identity ==
+                     std::optional<std::string>{"000000D0D69D0F7A54"} &&
+                 !identity_only.identity.model.has_value() &&
+                 !identity_only.identity.firmware_version.has_value(),
+             "a documented CHIPID-only MON-VER reply should retain only observed receiver identity");
+  ctx.Expect(!replacement.identity.receiver_identity.has_value() &&
+                 !replacement.identity.model.has_value() &&
                  !replacement.identity.firmware_version.has_value(),
              "a replacement probe without MON-VER must not retain prior u-blox metadata");
 }
@@ -355,8 +366,9 @@ void TestUbloxMonVerRejectsMalformedPayload(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyACM0";
 
-  auto malformed_payload = BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32"});
-  for (std::size_t index = 70u; index < 100u; ++index)
+  auto malformed_payload = BuildMonVerPayload(
+      {"MOD=ZED-F9P-00B", "CHIPID=000000D0D69D0F7A54", "FWVER=HPG 1.32"});
+  for (std::size_t index = 100u; index < 130u; ++index)
   {
     malformed_payload[index] = static_cast<std::uint8_t>('X');
   }
@@ -365,6 +377,7 @@ void TestUbloxMonVerRejectsMalformedPayload(TestContext& ctx)
   const auto result = Analyze(candidate, bytes);
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
+                 !result.identity.receiver_identity.has_value() &&
                  !result.identity.model.has_value() &&
                  !result.identity.firmware_version.has_value(),
              "malformed MON-VER payloads must not become authoritative receiver metadata");
@@ -381,8 +394,10 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
       "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
       "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
       "0.0194,0.0123") +
-      "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",\"R4.10Build5251\","
-      "\"HRPT00-S10C-P\",\"-\",\"ffff48ffff0fffff\",\"2021/11/26\"*e195b254\r\n";
+      BuildUnicoreAsciiFrame(
+          "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",\"R4.10Build5251\","
+          "\"HRPT00-S10C-P\",\"2310415000012-LR23A2225208904\",\"ffff48ffff0fffff\","
+          "\"2021/11/26\"");
   const auto result = Analyze(
       candidate, std::vector<std::uint8_t>(line.begin(), line.end()));
 
@@ -391,10 +406,11 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
                  result.discovery_score == 100 &&
                  result.evidence.unicore_ascii_seen == 1u &&
                  result.identity.model == std::optional<std::string>{"UM982"} &&
-                 !result.identity.receiver_identity.has_value() &&
+                 result.identity.receiver_identity ==
+                     std::optional<std::string>{"2310415000012-LR23A2225208904"} &&
                  result.identity.firmware_version ==
                      std::optional<std::string>{"R4.10Build5251"},
-             "verified Unicore probe data should retain documented VERSIONA model and firmware without inventing identity");
+             "verified Unicore probe data should retain documented VERSIONA model, firmware, and product serial identity");
 }
 
 void TestUnicoreVersionARequiresDocumentedFields(TestContext& ctx)
@@ -408,10 +424,12 @@ void TestUnicoreVersionARequiresDocumentedFields(TestContext& ctx)
       "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
       "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
       "0.0194,0.0123") +
-      "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",R4.10Build5251*00\r\n";
+      BuildUnicoreAsciiFrame(
+          "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",R4.10Build5251");
   const auto result = Analyze(candidate, std::vector<std::uint8_t>(bytes.begin(), bytes.end()));
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 !result.identity.receiver_identity.has_value() &&
                  !result.identity.model.has_value() &&
                  !result.identity.firmware_version.has_value(),
              "malformed VERSIONA fields must not become authoritative receiver metadata");

@@ -258,7 +258,7 @@ BlueOS validation:
 
 - [ ] runtime arbitration between streaming traffic and config traffic
 - [ ] production-safe failure handling and rollback expectations
-- [ ] live receiver identity / model / firmware metadata in discovery and planning output
+- [x] live receiver identity / model / firmware metadata in discovery and planning output
 
 ## Universal GNSS core tasks
 
