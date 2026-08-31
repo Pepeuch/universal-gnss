@@ -298,7 +298,6 @@ and `Connect()` calls to the outer application.
 - valid RTCM frames received
 - invalid RTCM frames
 - last RTCM message type
-- optional correction age field
 - connected / disconnected state
 - reconnect count for scheduled retry attempts
 - last error enum
@@ -310,6 +309,21 @@ The current model is compatible with the existing RTCM parser/tooling:
 - `rtcm_inspect` and `gnss_inspect` already expose RTCM stream summaries
 - future NTRIP clients can update these same counters while feeding the RTCM
   stream into runtime or tool adapters
+
+### Local correction-arrival age
+
+`NtripClient::EstimatedCorrectionArrivalAgeS()` is a portable local estimate of
+elapsed `steady_clock` time since the client accepted its last decoded,
+station-owned RTCM MSM observation. It is unavailable before that observation
+and after disconnect, failure, reconnect, source change, or RTCM station
+replacement. It is independent for each NTRIP client/stream; silence makes the
+value grow rather than making it a health verdict.
+
+This is not `GnssRuntimeState::correction_age_s`, which remains a
+receiver-reported differential age when a receiver protocol documents one.
+Local NTRIP arrival age is not projected into that runtime field, does not use
+public/GNSS timestamps, and does not claim RTK usability or receiver correction
+age.
 
 ## Live TCP Client
 

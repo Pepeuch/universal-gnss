@@ -13,6 +13,7 @@
 #include "universal_gnss_ntrip/gga_injector.hpp"
 #include "universal_gnss_ntrip/gga_injection_policy.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
+#include "universal_gnss_ntrip/ntrip_correction_arrival_age.hpp"
 #include "universal_gnss_ntrip/ntrip_metrics.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
@@ -122,6 +123,9 @@ public:
   bool IsConnected() const;
   const NtripCorrectionFlowState& correction_flow_state() const;
   bool IsCorrectionFlowing() const;
+  std::optional<float> EstimatedCorrectionArrivalAgeS() const;
+  std::optional<float> EstimatedCorrectionArrivalAgeS(
+      NtripCorrectionArrivalAgeEstimator::TimePoint now) const;
   const NtripSourceIdentity& source_identity() const;
   const NtripReconnectState& reconnect_state() const;
   const GgaInjectionPolicy& gga_injection_policy() const;
@@ -179,6 +183,7 @@ private:
       response_accepted_steady_time_{};
   std::optional<std::chrono::steady_clock::time_point>
       last_valid_rtcm_frame_steady_time_{};
+  NtripCorrectionArrivalAgeEstimator correction_arrival_age_estimator_{};
   GgaInjectionPolicy gga_injection_policy_{};
   GgaInjector gga_injector_{};
 

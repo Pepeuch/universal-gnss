@@ -1067,6 +1067,27 @@ void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
              "explicit caster host change must close the session and clear source-owned metadata");
 }
 
+void TestCorrectionArrivalAgeRequiresAcceptedMsm(TestContext& ctx)
+{
+  NtripClient client(MakeConfig());
+  const auto base = BuildRtcm1005Frame(23u);
+  const auto valid_msm = BuildRtcmMsmFrame(1077u, 23u, {1u}, {1u}, {true});
+  const auto malformed_msm = BuildRtcmFrame(1077u);
+
+  client.FeedRtcmMonitor(base.data(), base.size());
+  client.FeedRtcmMonitor(malformed_msm.data(), malformed_msm.size());
+  ctx.Expect(!client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "static or malformed RTCM frames must not invent correction arrival age");
+
+  client.FeedRtcmMonitor(valid_msm.data(), valid_msm.size());
+  ctx.Expect(client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "a decoded station-owned MSM should establish correction arrival age");
+
+  client.Disconnect();
+  ctx.Expect(!client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "disconnect must invalidate correction arrival age from the prior stream incarnation");
+}
+
 void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
 {
   {
@@ -1398,6 +1419,7 @@ int main()
   TestInvalidResponsesAndConnectFailure(ctx);
   TestCorrectionFlowLivenessUsesCompleteValidFrames(ctx);
   TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(ctx);
+  TestCorrectionArrivalAgeRequiresAcceptedMsm(ctx);
   TestExplicitAndPolicyDrivenGgaSending(ctx);
   TestExplicitStreamingOnlyGgaInjection(ctx);
 

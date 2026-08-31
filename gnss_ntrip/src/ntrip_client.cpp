@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "universal_gnss_protocols/parser_status.hpp"
+#include "universal_gnss_protocols/rtcm_parser.hpp"
 
 namespace universal_gnss_ntrip
 {
@@ -396,6 +397,7 @@ void NtripClient::Disconnect(const NtripClientError error)
 {
   transport_.Close();
   state_ = NtripClientState::kDisconnected;
+  correction_arrival_age_estimator_.Reset();
   MarkDisconnected(metrics_, error);
 }
 
@@ -712,7 +714,25 @@ std::size_t NtripClient::FeedRtcmMonitor(
         const bool valid_frame =
             parsed.record->checksum_status == universal_gnss_protocols::ChecksumStatus::kValid;
         NoteRtcmFrame(metrics_, parsed.record->message_type, valid_frame);
+        const auto station_before = correction_monitor_.station_id();
+        const std::uint64_t decoded_msm_before = correction_monitor_.MsmDecodeSuccessCount();
         correction_monitor_.ObserveFrame(*parsed.record);
+        const auto station_after = correction_monitor_.station_id();
+        const bool station_changed = station_before.has_value() && station_after.has_value() &&
+                                     *station_before != *station_after;
+        if (station_changed)
+        {
+          correction_arrival_age_estimator_.Reset();
+        }
+
+        if (valid_frame &&
+            universal_gnss_protocols::IsRtcmMsmMessage(parsed.record->message_type) &&
+            (correction_monitor_.MsmDecodeSuccessCount() > decoded_msm_before ||
+             (station_changed && correction_monitor_.last_msm_summary().has_value() &&
+              correction_monitor_.last_msm_summary()->station_id == *station_after)))
+        {
+          correction_arrival_age_estimator_.ObserveAcceptedMsm(std::chrono::steady_clock::now());
+        }
         if (valid_frame && observed_frames != nullptr)
         {
           observed_frames->push_back(*parsed.record);
@@ -766,6 +786,17 @@ bool NtripClient::IsCorrectionFlowing() const
          !HasSteadyElapsed(last_valid_rtcm_frame_steady_time_, config_.rtcm_frame_timeout_ms);
 }
 
+std::optional<float> NtripClient::EstimatedCorrectionArrivalAgeS() const
+{
+  return EstimatedCorrectionArrivalAgeS(std::chrono::steady_clock::now());
+}
+
+std::optional<float> NtripClient::EstimatedCorrectionArrivalAgeS(
+    const NtripCorrectionArrivalAgeEstimator::TimePoint now) const
+{
+  return correction_arrival_age_estimator_.EstimateSeconds(now);
+}
+
 const NtripSourceIdentity& NtripClient::source_identity() const
 {
   return source_identity_;
@@ -817,6 +848,7 @@ NtripClientError NtripClient::FailWith(
 
   transport_.Close();
   state_ = NtripClientState::kFailed;
+  correction_arrival_age_estimator_.Reset();
   MarkDisconnected(metrics_, error);
   return error;
 }
@@ -830,6 +862,7 @@ void NtripClient::ResetSessionState()
   correction_flow_state_.Reset();
   response_accepted_steady_time_.reset();
   last_valid_rtcm_frame_steady_time_.reset();
+  correction_arrival_age_estimator_.Reset();
   correction_monitor_.ResetDynamicState();
 }
 
@@ -842,6 +875,7 @@ void NtripClient::ResetSourceState()
   correction_flow_state_.Reset();
   response_accepted_steady_time_.reset();
   last_valid_rtcm_frame_steady_time_.reset();
+  correction_arrival_age_estimator_.Reset();
   correction_monitor_.Reset();
 }
 

@@ -4,6 +4,7 @@
 
 #include "universal_gnss_ntrip/gga_injection_policy.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
+#include "universal_gnss_ntrip/ntrip_correction_arrival_age.hpp"
 #include "universal_gnss_ntrip/ntrip_metrics.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 
@@ -213,6 +214,25 @@ void TestMetricsModel(TestContext& ctx)
              "metrics should allow clearing the last GGA error");
 }
 
+void TestCorrectionArrivalAgeEstimator(TestContext& ctx)
+{
+  using Estimator = universal_gnss_ntrip::NtripCorrectionArrivalAgeEstimator;
+  const Estimator::TimePoint start{};
+  Estimator estimator;
+
+  ctx.Expect(!estimator.EstimateSeconds(start).has_value(),
+             "correction arrival age should be unavailable before a decoded MSM");
+  estimator.ObserveAcceptedMsm(start + std::chrono::seconds(3));
+  ctx.Expect(estimator.EstimateSeconds(start + std::chrono::milliseconds(3500)) ==
+                 std::optional<float>(0.5f),
+             "correction arrival age should use the supplied steady-clock duration");
+  ctx.Expect(!estimator.EstimateSeconds(start + std::chrono::seconds(2)).has_value(),
+             "correction arrival age should reject backwards steady-clock input");
+  estimator.Reset();
+  ctx.Expect(!estimator.EstimateSeconds(start + std::chrono::seconds(4)).has_value(),
+             "correction arrival age reset should invalidate the prior stream observation");
+}
+
 }  // namespace
 
 int main()
@@ -225,6 +245,7 @@ int main()
   TestNtripV2RequestFormatting(ctx);
   TestGgaPolicyDefaults(ctx);
   TestMetricsModel(ctx);
+  TestCorrectionArrivalAgeEstimator(ctx);
 
   if (ctx.failures != 0)
   {
