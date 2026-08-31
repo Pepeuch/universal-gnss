@@ -80,6 +80,116 @@ bool IsVersionToken(const std::string_view value)
          });
 }
 
+std::optional<std::string_view> ReadNulTerminatedAsciiField(
+    const std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::size_t size)
+{
+  if (offset + size > bytes.size())
+  {
+    return std::nullopt;
+  }
+
+  const auto begin = bytes.begin() + static_cast<std::ptrdiff_t>(offset);
+  const auto end = begin + static_cast<std::ptrdiff_t>(size);
+  const auto nul = std::find(begin, end, 0u);
+  if (nul == end || nul == begin)
+  {
+    return std::nullopt;
+  }
+
+  if (!std::all_of(begin, nul, [](const std::uint8_t byte) {
+        return byte >= 0x20u && byte <= 0x7Eu;
+      }))
+  {
+    return std::nullopt;
+  }
+
+  return std::string_view(reinterpret_cast<const char*>(bytes.data() + offset),
+                          static_cast<std::size_t>(nul - begin));
+}
+
+std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(
+    const std::vector<std::uint8_t>& bytes)
+{
+  constexpr std::uint8_t kMonClass = 0x0Au;
+  constexpr std::uint8_t kMonVerId = 0x04u;
+  constexpr std::size_t kFixedPayloadSize = 40u;
+  constexpr std::size_t kExtensionSize = 30u;
+  constexpr std::string_view kModulePrefix = "MOD=";
+  constexpr std::string_view kFirmwarePrefix = "FWVER=";
+
+  UbxFrameFramer framer;
+  for (const auto byte : bytes)
+  {
+    const auto result = framer.PushByte(byte);
+    if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
+    {
+      continue;
+    }
+
+    const UbxFrame& frame = *result.record;
+    if (frame.checksum_status != ChecksumStatus::kValid || frame.class_id != kMonClass ||
+        frame.message_id != kMonVerId || frame.payload.size() < kFixedPayloadSize ||
+        (frame.payload.size() - kFixedPayloadSize) % kExtensionSize != 0u)
+    {
+      continue;
+    }
+
+    if (!ReadNulTerminatedAsciiField(frame.payload, 0u, 30u).has_value() ||
+        !ReadNulTerminatedAsciiField(frame.payload, 30u, 10u).has_value())
+    {
+      continue;
+    }
+
+    ReceiverIdentityMetadata metadata;
+    bool valid_extensions = true;
+    for (std::size_t offset = kFixedPayloadSize; offset < frame.payload.size();
+         offset += kExtensionSize)
+    {
+      const auto extension = ReadNulTerminatedAsciiField(frame.payload, offset, kExtensionSize);
+      if (!extension.has_value())
+      {
+        valid_extensions = false;
+        break;
+      }
+
+      if (extension->size() >= kModulePrefix.size() &&
+          extension->substr(0u, kModulePrefix.size()) == kModulePrefix)
+      {
+        const std::string_view model = extension->substr(kModulePrefix.size());
+        if (IsVersionToken(model))
+        {
+          metadata.model = std::string(model);
+        }
+      }
+      else if (extension->size() >= kFirmwarePrefix.size() &&
+               extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
+      {
+        const std::string_view firmware = extension->substr(kFirmwarePrefix.size());
+        if (!firmware.empty())
+        {
+          metadata.firmware_version = std::string(firmware);
+        }
+      }
+    }
+
+    if (valid_extensions && (metadata.model.has_value() || metadata.firmware_version.has_value()))
+    {
+      return metadata;
+    }
+  }
+
+  return std::nullopt;
+}
+
+void PopulateObservedUbloxIdentity(ReceiverProbeResult& result,
+                                   const std::vector<std::uint8_t>& bytes)
+{
+  if (const auto metadata = FindUbloxMonVerMetadata(bytes); metadata.has_value())
+  {
+    result.identity = *metadata;
+  }
+}
+
 std::optional<ReceiverIdentityMetadata> FindUnicoreVersionAMetadata(
     const std::vector<std::uint8_t>& bytes)
 {
@@ -919,6 +1029,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   {
     result.detected_family = ReceiverDetectedFamily::kUblox;
     result.confidence = ConfidenceFromScore(result.discovery_score);
+    PopulateObservedUbloxIdentity(result, bytes);
     return result;
   }
 
@@ -937,6 +1048,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     if (earliest_detection.protocol == DetectedStreamProtocol::kUbx)
     {
       result.detected_family = ReceiverDetectedFamily::kUblox;
+      PopulateObservedUbloxIdentity(result, bytes);
     }
     else
     {

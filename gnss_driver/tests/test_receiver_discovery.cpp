@@ -67,6 +67,31 @@ std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildMonVerPayload(const std::vector<std::string>& extensions)
+{
+  constexpr std::size_t kFixedPayloadSize = 40u;
+  constexpr std::size_t kExtensionSize = 30u;
+  std::vector<std::uint8_t> payload(kFixedPayloadSize + extensions.size() * kExtensionSize, 0u);
+
+  const auto write_field = [&](const std::size_t offset,
+                               const std::size_t size,
+                               const std::string& text) {
+    for (std::size_t index = 0u; index < text.size() && index + 1u < size; ++index)
+    {
+      payload[offset + index] = static_cast<std::uint8_t>(text[index]);
+    }
+  };
+
+  write_field(0u, 30u, "EXT HPG 1.32");
+  write_field(30u, 10u, "00080000");
+  for (std::size_t index = 0u; index < extensions.size(); ++index)
+  {
+    write_field(kFixedPayloadSize + index * kExtensionSize, kExtensionSize, extensions[index]);
+  }
+
+  return payload;
+}
+
 std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
 {
   const std::vector<std::uint8_t> payload = {
@@ -298,9 +323,51 @@ void TestUbxDetection(TestContext& ctx)
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
                  result.discovery_score == 100 &&
-                 result.evidence.ubx_frames_seen == 1u &&
+                 result.evidence.ubx_frames_seen == 1u && !result.identity.model.has_value() &&
+                 !result.identity.firmware_version.has_value() &&
                  result.reason.find("valid_ubx_frame:+100") != std::string::npos,
-             "valid UBX frames should detect a high-confidence scored u-blox receiver");
+             "UBX traffic without MON-VER should detect u-blox without inventing metadata");
+}
+
+void TestUbloxMonVerMetadata(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyACM0";
+
+  const auto metadata_bytes = BuildUbxFrame(
+      0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32"}));
+  const auto result = Analyze(candidate, metadata_bytes);
+  const auto replacement = Analyze(
+      candidate, BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u)));
+
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
+                 result.identity.model == std::optional<std::string>{"ZED-F9P-00B"} &&
+                 result.identity.firmware_version == std::optional<std::string>{"HPG 1.32"} &&
+                 !result.identity.receiver_identity.has_value(),
+             "valid MON-VER extensions should provide observed u-blox model and firmware only");
+  ctx.Expect(!replacement.identity.model.has_value() &&
+                 !replacement.identity.firmware_version.has_value(),
+             "a replacement probe without MON-VER must not retain prior u-blox metadata");
+}
+
+void TestUbloxMonVerRejectsMalformedPayload(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyACM0";
+
+  auto malformed_payload = BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32"});
+  for (std::size_t index = 70u; index < 100u; ++index)
+  {
+    malformed_payload[index] = static_cast<std::uint8_t>('X');
+  }
+  std::vector<std::uint8_t> bytes = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
+  Append(bytes, BuildUbxFrame(0x0Au, 0x04u, malformed_payload));
+  const auto result = Analyze(candidate, bytes);
+
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
+                 !result.identity.model.has_value() &&
+                 !result.identity.firmware_version.has_value(),
+             "malformed MON-VER payloads must not become authoritative receiver metadata");
 }
 
 void TestUnicoreAsciiDetection(TestContext& ctx)
@@ -590,6 +657,8 @@ int main()
   TestPlatformUartsIncludedAndDeduplicated(ctx);
   TestExplicitPathCandidate(ctx);
   TestUbxDetection(ctx);
+  TestUbloxMonVerMetadata(ctx);
+  TestUbloxMonVerRejectsMalformedPayload(ctx);
   TestUnicoreAsciiDetection(ctx);
   TestUnicoreVersionARequiresDocumentedFields(ctx);
   TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence(ctx);
