@@ -1,5 +1,7 @@
 # Universal GNSS - Agent Rules
 
+Version: 1.2
+
 Repository-local working rules for code agents contributing to Universal GNSS.
 
 These rules apply to all automated or AI-assisted work unless a more specific
@@ -912,6 +914,41 @@ Use each layer for its intended purpose:
 Thinking deeply once and preserving the conclusion is preferred over repeatedly
 reconstructing the same reasoning.
 
+### 5.17 Hardware-validation boundary
+
+Evidence freshness applies to reusable repository and documentation evidence;
+it does **not** describe missing physical proof. Do not label a hardware
+requirement `CURRENT`, `PARTIALLY_STALE`, or `SUPERSEDED`.
+
+When correctness depends on real receiver/device, electrical, timing,
+firmware, USB/serial, reconnect, hotplug, RF, kernel-driver, physical-link, or
+other hardware behaviour that source, deterministic tests, and authoritative
+specifications cannot establish, stop speculative software investigation.
+
+At that boundary:
+
+1. preserve all established software conclusions;
+2. classify the remaining proof as hardware validation and record the exact
+   physical dependency;
+3. record the required hardware, firmware, host/OS/kernel, driver/interface,
+   and physical-topology baseline;
+4. define a deterministic acceptance matrix, including observations that pass
+   and fail the requirement and changes that would invalidate the result;
+5. do not substitute arbitrary timing, simulation, assumptions, sleeps, queue
+   flushing, or theoretical reasoning for physical proof.
+
+Once the next unresolved proof is genuinely hardware-dependent, additional
+repository archaeology or model reasoning without new physical evidence is
+avoidable compute and must stop. If the hardware is unavailable, update the
+task checkpoint with the exact physical test matrix and stop that branch
+cleanly. Continue only independent software work that does not rely on the
+missing proof.
+
+Hardware evidence is scoped to the exact validated hardware, firmware,
+host/kernel, driver/interface, and topology combination. Do not generalize one
+successful combination to other supported devices or environments without
+corresponding evidence.
+
 ---
 
 ## 6. Evidence and regression discipline
@@ -947,6 +984,27 @@ Always distinguish explicitly between:
 - untested assumptions.
 
 Do not claim validation that was not actually executed.
+
+### 6.1 Hardware validation evidence
+
+When hardware validation is required, record concise results in the checkpoint
+or durable test artifact using the following shape:
+
+```text
+Hardware:
+Firmware:
+Host/OS/kernel:
+Driver/interface:
+Physical topology:
+Test procedure:
+Result:
+Acceptance criterion:
+What would invalidate this result:
+```
+
+Reference durable captures, scripts, or test artifacts when available. Do not
+copy large hardware logs into checkpoints. A result is valid only for the
+recorded baseline and acceptance criterion.
 
 ---
 
@@ -1239,6 +1297,23 @@ DOWNSTREAM
 Additional repository-specific scope values may be used when they improve
 clarity, but they must not replace the status field.
 
+Use an orthogonal `VALIDATION` property when acceptance depends on hardware.
+It is neither evidence freshness nor a replacement for `Status` or `Scope`.
+`Scope: VALIDATION`, when used, remains a task category rather than this
+property.
+
+Recommended values are:
+
+```text
+VALIDATION: HARDWARE_REQUIRED
+VALIDATION: HARDWARE_PENDING
+```
+
+Use `HARDWARE_REQUIRED` when physical validation is still needed to establish
+the requested acceptance contract. Use `HARDWARE_PENDING` when implementation
+exists but its actual acceptance still depends on that validation. Do not force
+`IMPLEMENTED` when hardware validation is part of the requested contract.
+
 Examples:
 
 ```text
@@ -1249,6 +1324,26 @@ Scope: DOCUMENTATION
 ```text
 Status: BLOCKED
 Scope: DOWNSTREAM
+```
+
+```text
+STATUS: BLOCKED
+SCOPE: DRIVER
+VALIDATION: HARDWARE_REQUIRED
+Blocked by: <exact physical validation>
+Unblocks when: <observable hardware acceptance condition>
+```
+
+```text
+STATUS: PARTIAL
+SCOPE: DRIVER
+VALIDATION: HARDWARE_REQUIRED
+```
+
+```text
+STATUS: IMPLEMENTED
+SCOPE: DRIVER
+VALIDATION: HARDWARE_PENDING
 ```
 
 A documentation task is not complete merely because its type is
@@ -1328,6 +1423,13 @@ Every `BLOCKED` classification should record:
 Blocked by: <stable item/finding ID or explicit external dependency>
 Unblocks when: <observable completion condition>
 ```
+
+When the blocker is missing physical proof, use `VALIDATION:
+HARDWARE_REQUIRED`, make `Blocked by` name the exact physical validation, and
+make `Unblocks when` the observable hardware acceptance condition. If the
+hardware is unavailable, preserve the software evidence and the compact
+hardware matrix in the task checkpoint; do not continue that dependent branch
+speculatively.
 
 If work can proceed independently but should simply happen later, classify it
 `OPEN` and record the ordering recommendation separately.
