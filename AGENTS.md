@@ -430,6 +430,21 @@ audit ledger, issue, or shared handoff, reference it instead of duplicating it.
 A checkpoint should make resumption cheap, not become another large document
 that must be reprocessed.
 
+For long audits or backlog reviews, keep checkpoints summary-first:
+
+- store the repository baseline once;
+- store classification counts and the current audit phase;
+- store only the contradictions, decisions, invalidators, and next action needed
+  to resume safely;
+- keep line-by-line item evidence in a separate local ledger or durable audit
+  rather than duplicating it into the checkpoint;
+- do not enumerate every successful read-only command when a compact preflight
+  summary preserves the same recovery information.
+
+A detailed ledger may be large when the task requires exhaustive traceability.
+The checkpoint should reference that ledger instead of becoming a second copy of
+it.
+
 ### 4.5 Git ignore contract for agent state
 
 The repository `.gitignore` is expected to keep local `.agent` state ignored
@@ -518,6 +533,32 @@ current task or preserved in a valid shared/durable record.
 Once a fact is established and recorded in a local checkpoint, shared handoff,
 or durable repository document, treat it as an input unless later repository
 changes could invalidate it.
+
+When a versioned audit, analysis, architecture document, roadmap, or other
+repository document is reused as an evidence cache, classify its freshness when
+that matters to the task:
+
+```text
+CURRENT
+PARTIALLY_STALE
+SUPERSEDED
+```
+
+Use these meanings:
+
+- `CURRENT`: no known contradiction affects the conclusions being reused;
+- `PARTIALLY_STALE`: some sections or conclusions are known to be outdated, but
+  explicitly identified unaffected conclusions may still be reused;
+- `SUPERSEDED`: the source must not be used as current authority except for
+  historical context.
+
+For a `PARTIALLY_STALE` source, record the known stale section or conclusion and
+its replacement evidence. Do not discard the entire source when only a bounded
+part is stale, and do not trust an entire document merely because it was once a
+validated audit.
+
+Source code, tests, and current Git state remain authoritative when they
+contradict stale descriptive documentation.
 
 Examples include:
 
@@ -1159,7 +1200,191 @@ A contributor or agent receiving a subtask should be able to determine:
 - which tests establish completion;
 - what exact next action is expected.
 
-### Sharing unfinished work
+### 14.1 Audit and backlog classification model
+
+For substantial repository audits, TODO reviews, remediation matrices, and
+backlog reconciliation, classify **task status** separately from **task type or
+scope**.
+
+Do not mix lifecycle state with ownership/category.
+
+Recommended status values are:
+
+```text
+IMPLEMENTED
+PARTIAL
+OPEN
+BLOCKED
+SUPERSEDED
+OBSOLETE
+DUPLICATE
+```
+
+Recommended type/scope values include, as applicable:
+
+```text
+CORE
+PROTOCOL
+DRIVER
+NTRIP
+TOOLS
+ROS2
+DEPLOYMENT
+RECEIVER
+DOCUMENTATION
+VALIDATION
+DOWNSTREAM
+```
+
+Additional repository-specific scope values may be used when they improve
+clarity, but they must not replace the status field.
+
+Examples:
+
+```text
+Status: OPEN
+Scope: DOCUMENTATION
+```
+
+```text
+Status: BLOCKED
+Scope: DOWNSTREAM
+```
+
+A documentation task is not complete merely because its type is
+`DOCUMENTATION`. A downstream task is not necessarily blocked merely because it
+belongs downstream.
+
+### 14.2 Audit conservation and duplicate invariants
+
+Before editing a backlog after classification, freeze the classification and
+verify mechanical conservation.
+
+At minimum:
+
+```text
+original item count = sum(all classified items)
+```
+
+After cleanup:
+
+```text
+original item count = remaining items + intentionally removed items
+```
+
+Every intentionally removed item must retain enough traceability in the audit
+ledger to identify:
+
+- its original item identity or text;
+- its status;
+- the evidence supporting removal;
+- its final disposition.
+
+`DUPLICATE` is directional. Every duplicate item must reference exactly one
+canonical item that is itself not classified `DUPLICATE`.
+
+Invalid:
+
+```text
+A -> DUPLICATE of B
+B -> DUPLICATE of A
+```
+
+Valid:
+
+```text
+A -> OPEN / PARTIAL / IMPLEMENTED / ...
+B -> DUPLICATE of A
+```
+
+Before applying backlog edits, validate both:
+
+1. the numeric count invariant;
+2. the canonical-reference invariant for duplicates and dependencies.
+
+After applying cleanup, recount the resulting backlog and confirm that the
+expected number of retained and removed items matches the frozen ledger.
+
+### 14.3 Strict PARTIAL and BLOCKED semantics
+
+Use `PARTIAL` only when part of the **same requested contract** already exists.
+Neighbouring infrastructure, reusable groundwork, or a conceptually related
+feature does not by itself make an item `PARTIAL`.
+
+Every `PARTIAL` classification should record:
+
+```text
+Existing:
+Missing:
+Completion criterion:
+```
+
+Use `BLOCKED` only when a real dependency prevents safe or meaningful progress.
+Do not use `BLOCKED` merely to express preferred ordering or lower priority.
+
+Every `BLOCKED` classification should record:
+
+```text
+Blocked by: <stable item/finding ID or explicit external dependency>
+Unblocks when: <observable completion condition>
+```
+
+If work can proceed independently but should simply happen later, classify it
+`OPEN` and record the ordering recommendation separately.
+
+### 14.4 Stable audit and backlog identifiers
+
+For substantial audits or large backlogs, give meaningful findings/items stable
+identifiers before they are used as dependency targets or shared across
+contributors.
+
+Examples:
+
+```text
+UG-DEPLOY-001
+UG-API-003
+UG-NTRIP-006
+UG-ROS2-012
+UG-UNICORE-004
+```
+
+Line numbers and current Markdown positions may be recorded as secondary
+baseline information, but must not be the primary identity because backlog edits
+move them.
+
+When an item is renamed, moved, or deduplicated, preserve its stable identity or
+record an explicit canonical replacement.
+
+A dependency graph, remediation matrix, or shared handoff should reference
+stable IDs rather than mutable line numbers whenever practical.
+
+### 14.5 Audit freeze and contradiction review
+
+For large backlog audits, prefer this sequence:
+
+```text
+baseline
+    -> targeted evidence collection
+    -> item classification
+    -> classification freeze
+    -> canonical duplicate/dependency validation
+    -> mechanical count validation
+    -> contradiction review
+    -> exact cleanup plan
+    -> apply authorized backlog/documentation edits
+    -> post-cleanup conservation check
+```
+
+Do not edit the authoritative backlog while classifications are still changing
+unless the task explicitly requires an incremental live ledger.
+
+When the audit discovers stale durable documentation, record the contradiction
+and classify the affected evidence source as `PARTIALLY_STALE` or `SUPERSEDED`
+as appropriate. Either repair it within authorized scope or leave an explicit
+follow-up finding so future agents do not reuse known-stale text as current
+truth.
+
+### 14.6 Sharing unfinished work
 
 If another contributor must resume work before the analysis is mature enough
 for permanent documentation, create or update a concise handoff under:
@@ -1176,7 +1401,7 @@ The receiving contributor should:
 4. investigate only missing, ambiguous, stale, or invalidated conclusions;
 5. update, retire, or promote the handoff as ownership changes.
 
-### Sharing a large audit
+### 14.7 Sharing a large audit
 
 For a large audit shared between contributors:
 
@@ -1280,6 +1505,10 @@ unknown.
 For substantial audits or architecture studies, also verify whether validated
 reusable knowledge should be promoted into durable shared documentation before
 closing the task.
+
+For backlog reconciliation audits, completion also requires the applicable
+classification-count, duplicate-canonicalization, and post-cleanup conservation
+checks from Section 14 to pass or to be explicitly reported as unresolved.
 
 ---
 

@@ -44,7 +44,30 @@ Every shared handoff should identify, as applicable:
 - validation still required;
 - exact next step.
 
-Keep shared handoffs concise. Do not copy conversation transcripts, large logs,
-generated artifacts, secrets, credentials, or unnecessary source content.
+When a handoff transfers audit, backlog, or remediation state:
 
-Remove or promote a handoff once its collaboration purpose is complete.
+- preserve the stable finding/item identifiers used by the authoritative ledger;
+- use line numbers only as secondary baseline information, not as the primary
+  identity of a finding or task;
+- identify relevant durable evidence sources as `CURRENT`, `PARTIALLY_STALE`, or
+  `SUPERSEDED` when freshness matters;
+- for `PARTIALLY_STALE` evidence, state the known stale conclusion/section and
+  the replacement evidence;
+- preserve canonical duplicate/dependency relationships rather than creating a
+  second incompatible classification graph;
+- reference the authoritative audit/ledger instead of copying the full ledger
+  into the handoff;
+- include only the minimum state needed for another contributor or agent to
+  resume safely.
+
+A shared handoff is not a second source of truth. If an authoritative durable
+ledger or audit already exists, reference it and record only the temporary
+execution state, unresolved delta, ownership transfer, and next action.
+
+Keep shared handoffs concise. Do not copy conversation transcripts, large logs,
+generated artifacts, secrets, credentials, unnecessary source content, or full
+copies of durable audit ledgers.
+
+Remove or promote a handoff once its collaboration purpose is complete. If its
+findings become stable and reusable, move that knowledge into durable versioned
+project documentation and retire the temporary handoff.
