@@ -35,6 +35,10 @@ RUN . /etc/os-release \
  && apt-get install -y --no-install-recommends clang-format-21 \
  && rm -rf /var/lib/apt/lists/*
 
+# Development commands and their generated artifacts must use this identity.
+RUN groupadd --gid 1000 ubuntu \
+ && useradd --uid 1000 --gid ubuntu --create-home --shell /bin/bash ubuntu
+
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc
 
 WORKDIR /workspaces/universal-gnss

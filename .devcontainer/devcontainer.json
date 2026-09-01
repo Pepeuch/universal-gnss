@@ -8,8 +8,8 @@
     }
   },
   "overrideCommand": true,
-  "remoteUser": "root",
-  "containerUser": "root",
+  "remoteUser": "ubuntu",
+  "containerUser": "ubuntu",
   "workspaceFolder": "/workspaces/universal-gnss",
  "runArgs": [
   "--init",
