@@ -10,6 +10,7 @@ constexpr double kRtcmArpCoordinateScaleM = 0.0001;
 constexpr double kRtcmGlonassCodePhaseBiasScaleM = 0.02;
 constexpr std::size_t kRtcm1005Bits = 152u;
 constexpr std::size_t kRtcm1006Bits = 168u;
+constexpr std::uint8_t kRtcmAntennaTextMaximumLength = 31u;
 constexpr std::size_t kRtcm1230HeaderBits = 32u;
 constexpr std::size_t kRtcmMsmHeaderBits = 169u;
 constexpr std::size_t kRtcmMsmMaximumCellMaskBits = 64u;
@@ -164,6 +165,11 @@ bool IsRtcmStationArpMessage(const std::uint16_t message_type)
   return message_type == 1005u || message_type == 1006u;
 }
 
+bool IsRtcmAntennaDescriptorMessage(const std::uint16_t message_type)
+{
+  return message_type == 1007u || message_type == 1008u;
+}
+
 bool IsRtcmGlonassBiasMessage(const std::uint16_t message_type)
 {
   return message_type == 1230u;
@@ -223,6 +229,7 @@ ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame)
   RtcmMessageInfo info;
   info.message_type = *message_type;
   info.is_station_arp = IsRtcmStationArpMessage(info.message_type);
+  info.is_antenna_descriptor = IsRtcmAntennaDescriptorMessage(info.message_type);
   info.is_glonass_bias = IsRtcmGlonassBiasMessage(info.message_type);
   info.msm_constellation = GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
@@ -315,6 +322,84 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
   }
 
   return ParserResult<RtcmBaseStationArpRecord>::RecordReady(record);
+}
+
+ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(
+    const RtcmFrame& frame)
+{
+  const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
+  if (!message_type.has_value() || !IsRtcmAntennaDescriptorMessage(*message_type))
+  {
+    return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
+  }
+
+  std::size_t bit_offset = 0u;
+  const auto read_u = [&](const std::size_t bit_count) {
+    const auto value = ReadRtcmUnsignedBits(frame.payload, bit_offset, bit_count);
+    if (value.has_value())
+    {
+      bit_offset += bit_count;
+    }
+    return value;
+  };
+  const auto read_text = [&](const std::uint8_t length) -> std::optional<std::string> {
+    if (length > kRtcmAntennaTextMaximumLength)
+    {
+      return std::nullopt;
+    }
+
+    std::string value;
+    value.reserve(length);
+    for (std::uint8_t index = 0u; index < length; ++index)
+    {
+      const auto character = read_u(8u);
+      if (!character.has_value())
+      {
+        return std::nullopt;
+      }
+      value.push_back(static_cast<char>(*character));
+    }
+    return value;
+  };
+
+  const auto parsed_message_type = read_u(12u);
+  const auto station_id = read_u(12u);
+  const auto descriptor_length = read_u(8u);
+  if (!parsed_message_type.has_value() || !station_id.has_value() ||
+      !descriptor_length.has_value())
+  {
+    return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
+  }
+
+  const auto antenna_descriptor = read_text(static_cast<std::uint8_t>(*descriptor_length));
+  const auto antenna_setup_id = read_u(8u);
+  if (!antenna_descriptor.has_value() || !antenna_setup_id.has_value())
+  {
+    return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
+  }
+
+  RtcmAntennaDescriptorRecord record;
+  record.message_type = static_cast<std::uint16_t>(*parsed_message_type);
+  record.station_id = static_cast<std::uint16_t>(*station_id);
+  record.antenna_descriptor = *antenna_descriptor;
+  record.antenna_setup_id = static_cast<std::uint8_t>(*antenna_setup_id);
+
+  if (*message_type == 1008u)
+  {
+    const auto serial_length = read_u(8u);
+    if (!serial_length.has_value())
+    {
+      return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
+    }
+    const auto serial = read_text(static_cast<std::uint8_t>(*serial_length));
+    if (!serial.has_value())
+    {
+      return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
+    }
+    record.antenna_serial_number = *serial;
+  }
+
+  return ParserResult<RtcmAntennaDescriptorRecord>::RecordReady(record);
 }
 
 ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(

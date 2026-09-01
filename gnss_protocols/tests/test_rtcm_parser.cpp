@@ -115,6 +115,39 @@ std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
   return payload;
 }
 
+void AppendText(std::vector<std::uint8_t>& payload,
+                std::size_t& bit_offset,
+                const std::string& value)
+{
+  for (const char character : value)
+  {
+    AppendUnsignedBits(payload, bit_offset, static_cast<std::uint8_t>(character), 8u);
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmAntennaDescriptorPayload(
+    const std::uint16_t message_type,
+    const std::uint16_t station_id,
+    const std::string& descriptor,
+    const std::uint8_t setup_id,
+    const std::optional<std::string>& serial_number = std::nullopt)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, descriptor.size(), 8u);
+  AppendText(payload, bit_offset, descriptor);
+  AppendUnsignedBits(payload, bit_offset, setup_id, 8u);
+  if (message_type == 1008u)
+  {
+    const std::string serial = serial_number.value_or("");
+    AppendUnsignedBits(payload, bit_offset, serial.size(), 8u);
+    AppendText(payload, bit_offset, serial);
+  }
+  return payload;
+}
+
 void AppendZeroBits(std::vector<std::uint8_t>& payload,
                     std::size_t& bit_offset,
                     const std::size_t bit_count)
@@ -397,6 +430,57 @@ void TestGlonassCodePhaseBiasRejectsTruncatedPayload(TestContext& ctx)
              "truncated RTCM 1230 payloads should be rejected");
 }
 
+void TestAntennaDescriptorParsing(TestContext& ctx)
+{
+  RtcmFrame descriptor = MakeValidRtcmFrame(1007u);
+  descriptor.payload = BuildRtcmAntennaDescriptorPayload(
+      1007u, 42u, "TRM59800.00", 3u);
+  const auto parsed_descriptor = universal_gnss_protocols::ParseRtcmAntennaDescriptor(descriptor);
+  ctx.Expect(parsed_descriptor.status == ParserStatus::kRecordReady &&
+                 parsed_descriptor.record.has_value(),
+             "valid RTCM 1007 payload should parse successfully");
+  if (parsed_descriptor.record.has_value())
+  {
+    ctx.Expect(parsed_descriptor.record->station_id == 42u &&
+                   parsed_descriptor.record->antenna_descriptor == "TRM59800.00" &&
+                   parsed_descriptor.record->antenna_setup_id == 3u &&
+                   !parsed_descriptor.record->antenna_serial_number.has_value(),
+               "RTCM 1007 should expose station-owned antenna descriptor metadata");
+  }
+
+  RtcmFrame serial = MakeValidRtcmFrame(1008u);
+  serial.payload = BuildRtcmAntennaDescriptorPayload(
+      1008u, 42u, "TRM59800.00", 3u, "12345");
+  const auto parsed_serial = universal_gnss_protocols::ParseRtcmAntennaDescriptor(serial);
+  ctx.Expect(parsed_serial.status == ParserStatus::kRecordReady &&
+                 parsed_serial.record.has_value() &&
+                 parsed_serial.record->antenna_serial_number == std::optional<std::string>("12345"),
+             "RTCM 1008 should preserve the optional antenna serial number");
+}
+
+void TestAntennaDescriptorRejectsInvalidPayload(TestContext& ctx)
+{
+  RtcmFrame wrong_type = MakeValidRtcmFrame(1005u);
+  ctx.Expect(universal_gnss_protocols::ParseRtcmAntennaDescriptor(wrong_type).status ==
+                 ParserStatus::kInvalidData,
+             "non-1007/1008 RTCM messages should not parse as antenna descriptors");
+
+  RtcmFrame truncated = MakeValidRtcmFrame(1008u);
+  truncated.payload = BuildRtcmAntennaDescriptorPayload(
+      1008u, 42u, "TRM59800.00", 3u, "12345");
+  truncated.payload.pop_back();
+  ctx.Expect(universal_gnss_protocols::ParseRtcmAntennaDescriptor(truncated).status ==
+                 ParserStatus::kInvalidData,
+             "truncated RTCM 1008 descriptor fields should be rejected");
+
+  RtcmFrame overlength = MakeValidRtcmFrame(1007u);
+  overlength.payload = BuildRtcmAntennaDescriptorPayload(
+      1007u, 42u, std::string(32u, 'A'), 3u);
+  ctx.Expect(universal_gnss_protocols::ParseRtcmAntennaDescriptor(overlength).status ==
+                 ParserStatus::kInvalidData,
+             "RTCM antenna descriptor lengths above 31 characters should be rejected");
+}
+
 void TestGpsMsmSummaryParsing(TestContext& ctx)
 {
   RtcmFrame frame = MakeValidRtcmFrame(1077u, 1000);
@@ -542,6 +626,8 @@ int main()
   TestFrameParsingBehavior(ctx);
   TestGlonassCodePhaseBiasParsing(ctx);
   TestGlonassCodePhaseBiasRejectsTruncatedPayload(ctx);
+  TestAntennaDescriptorParsing(ctx);
+  TestAntennaDescriptorRejectsInvalidPayload(ctx);
   TestGpsMsmSummaryParsing(ctx);
   TestGlonassMsmSummaryParsing(ctx);
   TestMsmSummaryRejectsTruncatedPayload(ctx);

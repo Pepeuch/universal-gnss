@@ -230,8 +230,8 @@ Current implemented layers:
     `HWSTATUSA`, `AGCA`
   - Unicore binary `N4` semantic parsing: `BESTNAVB`, `PVTSLNB`
   - RTCM3 framing, CRC24Q, message-type extraction/classification, and
-    semantic decode for `1005`, `1006`, `1230`, and portable MSM
-    header/summary observability
+    semantic decode for `1005` / `1006` base position, `1007` / `1008` station
+    antenna metadata, `1230`, and portable MSM header/summary observability
 - `gnss_driver`
   - receiver profile declarations
   - protocol support and feature flags

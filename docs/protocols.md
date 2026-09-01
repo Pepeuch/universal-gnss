@@ -229,12 +229,14 @@ Implemented behaviors:
 - 12-bit message type extraction from validated frames
 - lightweight classification helpers
 - base-station ARP decode for `1005` / `1006`
+- station antenna descriptor decode for `1007` / `1008`
 - GLONASS code-phase bias decode for `1230`
 - portable MSM header/summary decode for supported RTCM MSM families
 
 Current RTCM classifications:
 
 - station ARP / base position: `1005`, `1006`
+- station antenna descriptor / optional serial: `1007`, `1008`
 - GLONASS code-phase bias: `1230`
 - MSM family detection and constellation classification:
   - GPS `107x`
@@ -253,8 +255,11 @@ Current RTCM monitor support:
 - MSM constellation counts, last-seen timestamps, and simple windowed rates
 - presence tracking for base-position messages `1005` / `1006`
 - latest decoded base-station ARP ECEF position from `1005` / `1006`
+- latest decoded station-owned antenna descriptor, setup id, and optional serial
+  from `1007` / `1008`
 - semantic observations for decoded RTCM content, currently base-station ARP
-  position, GLONASS code-phase bias, and MSM correction-stream summary
+  position, station antenna descriptor, GLONASS code-phase bias, and MSM
+  correction-stream summary
 - `1230` seen / decoded / valid state, station id, age, mask, and decode
   success/failure counters through the correction monitor
 - MSM seen / decoded state, last age, constellations seen, latest station id,
@@ -266,6 +271,8 @@ Current RTCM semantic decode coverage:
 
 - `1005`: reference-station ARP ECEF position
 - `1006`: reference-station ARP ECEF position plus antenna height
+- `1007`: reference-station antenna descriptor and setup id
+- `1008`: `1007` metadata plus optional antenna serial number
 - `1230`: GLONASS code-phase bias indicator, signal mask, and optional L1/L2
   bias values
 - MSM `1071..1137`: portable header/correction-stream summary with station id,
@@ -276,6 +283,7 @@ Current RTCM decode policy:
 - decoded RTCM semantics stay in correction-stream metadata, not in
   `GnssRuntimeState`
 - ECEF coordinates are exposed only as base-station metadata
+- antenna descriptors are static station metadata, not correction-health input
 - `1230` is exposed through correction/RTCM state, not as direct-navigation
   rover runtime state
 - MSM summary stays at the correction-stream/header level for now; observation
@@ -283,9 +291,10 @@ Current RTCM decode policy:
 
 What RTCM does not do yet:
 
-- broader semantic decoding beyond `1005` / `1006` / `1230` / MSM summary
+- broader semantic decoding beyond `1005` / `1006` / `1007` / `1008` / `1230`
+  / MSM summary
 - MSM pseudorange / carrier-phase / Doppler extraction
-- broader station metadata decode beyond base-station ARP
+- broader station metadata decode beyond base-station ARP and antenna descriptor
 - correction-age estimation
 - runtime-state mapping
 - LoRa filtering

@@ -77,8 +77,9 @@ health as:
 
 That RTCM monitor now mixes stream activity with a small semantic observation
 surface for decoded RTCM metadata such as `1005` / `1006` base position,
-`1230` GLONASS code-phase bias state, and MSM header/correction-stream summary
-state. It still does not add full MSM observation decode, LoRa policy, ROS 2
+`1007` / `1008` station antenna metadata, `1230` GLONASS code-phase bias state,
+and MSM header/correction-stream summary state. It still does not add full MSM
+observation decode, LoRa policy, ROS 2
 adapters, or GUI-specific presentation concerns.
 
 The next receiver-side correction consumer is the `UBX-RXM-RTCM` helper in the
@@ -182,8 +183,8 @@ operational:
   forwarded into the portable health summary and then into
   `diagnostic_msgs/DiagnosticArray`
 - forwarded `/rtcm` traffic is also summarized through portable RTCM semantic
-  diagnostics such as `base_station_arp`, `glonass_code_phase_bias`, and
-  `msm_summary`
+diagnostics such as `base_station_arp`, `antenna_descriptor`,
+`glonass_code_phase_bias`, and `msm_summary`
 
 `universal_gnss_ros2::NtripNode` is the second runtime consumer of the same
 mapping. Its node-level diagnostics stay similarly thin:

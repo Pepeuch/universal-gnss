@@ -26,7 +26,7 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertEqual(205, data.baseline_count)
         self.assertEqual(
-            {"IMPLEMENTED": 11, "PARTIAL": 16, "OPEN": 116, "BLOCKED": 54, "DUPLICATE": 8},
+            {"IMPLEMENTED": 11, "PARTIAL": 17, "OPEN": 115, "BLOCKED": 54, "DUPLICATE": 8},
             dict(data.status_counts),
         )
         self.assertEqual("BLOCKED", data.records["UGA-126"]["status"])

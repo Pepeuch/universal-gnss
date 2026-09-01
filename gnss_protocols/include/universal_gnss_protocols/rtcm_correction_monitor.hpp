@@ -82,7 +82,7 @@ public:
   static constexpr ProtocolTimestampNs kTimestampHistoryRetentionNs = 60000000000LL;
 
   void Reset();
-  // Preserve decoded, station-owned 1005/1006 metadata while clearing
+  // Preserve decoded, station-owned static metadata while clearing
   // session/dynamic correction observations (MSM, 1230, rates, freshness).
   void ResetDynamicState();
 
@@ -113,6 +113,8 @@ public:
   bool HasBaseStationPosition() const;
   bool HasSeenBasePosition1005() const;
   bool HasSeenBasePosition1006() const;
+  bool HasSeenAntennaDescriptorMessage() const;
+  bool HasAntennaDescriptor() const;
   bool HasSeenGlonassBias1230() const;
   bool HasDecodedGlonassBias1230() const;
   bool LastGlonassBias1230Valid() const;
@@ -124,6 +126,11 @@ public:
   std::uint64_t BaseStationArpDecodeSuccessCount() const;
   std::uint64_t BaseStationArpDecodeFailureCount() const;
   std::uint64_t BaseStationArpMalformedCount() const;
+  const std::optional<RtcmAntennaDescriptorRecord>& last_antenna_descriptor() const;
+  std::optional<ProtocolTimestampNs> LastAntennaDescriptorTimestampNs() const;
+  std::uint64_t AntennaDescriptorDecodeSuccessCount() const;
+  std::uint64_t AntennaDescriptorDecodeFailureCount() const;
+  std::uint64_t AntennaDescriptorMalformedCount() const;
   const std::optional<RtcmGlonassCodePhaseBiasRecord>& last_glonass_code_phase_bias() const;
   std::optional<ProtocolTimestampNs> LastGlonassBias1230TimestampNs() const;
   std::optional<ProtocolTimestampNs> LastDecodedGlonassBias1230TimestampNs() const;
@@ -147,6 +154,8 @@ public:
       RtcmConstellation constellation,
       ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceBaseStationArpNs(
+      ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs> AgeSinceAntennaDescriptorNs(
       ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceGlonassBias1230Ns(
       ProtocolTimestampNs now_timestamp_ns) const;
@@ -186,12 +195,19 @@ private:
 
   bool seen_base_position_1005_{false};
   bool seen_base_position_1006_{false};
+  bool seen_antenna_descriptor_1007_{false};
+  bool seen_antenna_descriptor_1008_{false};
   bool seen_glonass_bias_1230_{false};
   std::optional<RtcmBaseStationArpRecord> last_base_station_arp_{};
   std::optional<ProtocolTimestampNs> last_base_station_arp_timestamp_ns_{};
   std::uint64_t base_station_arp_decode_success_count_{0};
   std::uint64_t base_station_arp_decode_failure_count_{0};
   std::uint64_t base_station_arp_malformed_count_{0};
+  std::optional<RtcmAntennaDescriptorRecord> last_antenna_descriptor_{};
+  std::optional<ProtocolTimestampNs> last_antenna_descriptor_timestamp_ns_{};
+  std::uint64_t antenna_descriptor_decode_success_count_{0};
+  std::uint64_t antenna_descriptor_decode_failure_count_{0};
+  std::uint64_t antenna_descriptor_malformed_count_{0};
   std::optional<RtcmGlonassCodePhaseBiasRecord> last_glonass_code_phase_bias_{};
   std::optional<ProtocolTimestampNs> last_glonass_bias_1230_timestamp_ns_{};
   std::optional<ProtocolTimestampNs> last_decoded_glonass_bias_1230_timestamp_ns_{};

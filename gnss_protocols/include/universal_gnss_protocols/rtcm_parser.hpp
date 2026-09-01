@@ -16,6 +16,8 @@ std::optional<std::uint16_t> ExtractRtcmMessageType(const RtcmFrame& frame);
 
 bool IsRtcmStationArpMessage(std::uint16_t message_type);
 
+bool IsRtcmAntennaDescriptorMessage(std::uint16_t message_type);
+
 bool IsRtcmGlonassBiasMessage(std::uint16_t message_type);
 
 bool IsRtcmMsmMessage(std::uint16_t message_type);
@@ -27,6 +29,8 @@ std::uint8_t GetRtcmMsmVariant(std::uint16_t message_type);
 ParserResult<RtcmMessageInfo> ParseRtcmMessageInfo(const RtcmFrame& frame);
 
 ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& frame);
+
+ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(const RtcmFrame& frame);
 
 ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
     const RtcmFrame& frame);

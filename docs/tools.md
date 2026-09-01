@@ -167,6 +167,7 @@ Typical uses:
 - confirm whether a stream contains MSM traffic
 - confirm whether a stream contains a decodable `1005` / `1006` base-station
   ARP position
+- inspect decoded `1007` / `1008` station antenna descriptor metadata
 - inspect portable MSM summary state such as station id, constellation, MSM
   variant, and satellite / signal / cell counts
 - inspect decoded `1230` GLONASS code-phase bias state without writing a
@@ -348,8 +349,8 @@ Current behavior:
 - reconstructs the final normalized runtime state
 - reports final fix / RTK state, accuracy, DOP, satellite counts, and CN0
 - reports RTCM frame counts and message-type activity
-- reports shared RTCM semantic observations, currently `1005`, `1006`, and
-  `1230`
+- reports shared RTCM semantic observations, including `1005`, `1006`, `1007`,
+  `1008`, and `1230`
 - reports receiver-side RTCM acceptance diagnostics when `UBX-RXM-RTCM` is
   present
 - reports portable receiver RF / hardware diagnostics when supported messages

@@ -27,7 +27,7 @@
     {"ids": "UGA-132..UGA-134", "status": "IMPLEMENTED"},
     {"ids": "UGA-135..UGA-138", "status": "OPEN"},
     {"ids": "UGA-139", "status": "PARTIAL"},
-    {"ids": "UGA-140", "status": "OPEN"},
+    {"ids": "UGA-140", "status": "PARTIAL"},
     {"ids": "UGA-141", "status": "IMPLEMENTED"},
     {"ids": "UGA-142..UGA-147", "status": "OPEN"},
     {"ids": "UGA-148..UGA-154", "status": "DUPLICATE"},

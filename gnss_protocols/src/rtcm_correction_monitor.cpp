@@ -295,12 +295,19 @@ void RtcmCorrectionMonitor::Reset()
   valid_frame_timestamps_.clear();
   seen_base_position_1005_ = false;
   seen_base_position_1006_ = false;
+  seen_antenna_descriptor_1007_ = false;
+  seen_antenna_descriptor_1008_ = false;
   seen_glonass_bias_1230_ = false;
   last_base_station_arp_.reset();
   last_base_station_arp_timestamp_ns_.reset();
   base_station_arp_decode_success_count_ = 0;
   base_station_arp_decode_failure_count_ = 0;
   base_station_arp_malformed_count_ = 0;
+  last_antenna_descriptor_.reset();
+  last_antenna_descriptor_timestamp_ns_.reset();
+  antenna_descriptor_decode_success_count_ = 0;
+  antenna_descriptor_decode_failure_count_ = 0;
+  antenna_descriptor_malformed_count_ = 0;
   last_glonass_code_phase_bias_.reset();
   last_glonass_bias_1230_timestamp_ns_.reset();
   last_decoded_glonass_bias_1230_timestamp_ns_.reset();
@@ -319,9 +326,10 @@ void RtcmCorrectionMonitor::Reset()
 void RtcmCorrectionMonitor::ResetDynamicState()
 {
   // Static base metadata is reusable only when it was fully decoded and is
-  // therefore owned by a known station. Merely seeing a 1005/1006 message type
-  // is not enough to carry it into another transport session.
-  if (!station_id_.has_value() || !last_base_station_arp_.has_value())
+  // therefore owned by a known station. Merely seeing a static metadata message
+  // type is not enough to carry it into another transport session.
+  if (!station_id_.has_value() ||
+      (!last_base_station_arp_.has_value() && !last_antenna_descriptor_.has_value()))
   {
     Reset();
     return;
@@ -334,6 +342,12 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   const auto retained_arp_timestamp_ns = last_base_station_arp_timestamp_ns_;
   const std::uint64_t retained_decode_success_count =
       base_station_arp_decode_success_count_;
+  const bool retained_1007 = seen_antenna_descriptor_1007_;
+  const bool retained_1008 = seen_antenna_descriptor_1008_;
+  const auto retained_antenna_descriptor = last_antenna_descriptor_;
+  const auto retained_antenna_descriptor_timestamp_ns = last_antenna_descriptor_timestamp_ns_;
+  const std::uint64_t retained_antenna_descriptor_decode_success_count =
+      antenna_descriptor_decode_success_count_;
 
   const auto activity_1005 = message_type_activity_.find(1005u);
   const std::optional<RtcmCorrectionActivityStats> retained_activity_1005 =
@@ -345,6 +359,16 @@ void RtcmCorrectionMonitor::ResetDynamicState()
       activity_1006 == message_type_activity_.end()
           ? std::nullopt
           : std::optional<RtcmCorrectionActivityStats>{activity_1006->second};
+  const auto activity_1007 = message_type_activity_.find(1007u);
+  const std::optional<RtcmCorrectionActivityStats> retained_activity_1007 =
+      activity_1007 == message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{activity_1007->second};
+  const auto activity_1008 = message_type_activity_.find(1008u);
+  const std::optional<RtcmCorrectionActivityStats> retained_activity_1008 =
+      activity_1008 == message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{activity_1008->second};
   const auto semantic_activity_1005 = semantic_message_type_activity_.find(1005u);
   const std::optional<RtcmCorrectionActivityStats> retained_semantic_activity_1005 =
       semantic_activity_1005 == semantic_message_type_activity_.end()
@@ -355,6 +379,16 @@ void RtcmCorrectionMonitor::ResetDynamicState()
       semantic_activity_1006 == semantic_message_type_activity_.end()
           ? std::nullopt
           : std::optional<RtcmCorrectionActivityStats>{semantic_activity_1006->second};
+  const auto semantic_activity_1007 = semantic_message_type_activity_.find(1007u);
+  const std::optional<RtcmCorrectionActivityStats> retained_semantic_activity_1007 =
+      semantic_activity_1007 == semantic_message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{semantic_activity_1007->second};
+  const auto semantic_activity_1008 = semantic_message_type_activity_.find(1008u);
+  const std::optional<RtcmCorrectionActivityStats> retained_semantic_activity_1008 =
+      semantic_activity_1008 == semantic_message_type_activity_.end()
+          ? std::nullopt
+          : std::optional<RtcmCorrectionActivityStats>{semantic_activity_1008->second};
   Reset();
 
   station_id_ = retained_station_id;
@@ -363,6 +397,11 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   last_base_station_arp_ = retained_arp;
   last_base_station_arp_timestamp_ns_ = retained_arp_timestamp_ns;
   base_station_arp_decode_success_count_ = retained_decode_success_count;
+  seen_antenna_descriptor_1007_ = retained_1007;
+  seen_antenna_descriptor_1008_ = retained_1008;
+  last_antenna_descriptor_ = retained_antenna_descriptor;
+  last_antenna_descriptor_timestamp_ns_ = retained_antenna_descriptor_timestamp_ns;
+  antenna_descriptor_decode_success_count_ = retained_antenna_descriptor_decode_success_count;
   if (retained_activity_1005.has_value())
   {
     message_type_activity_.emplace(1005u, *retained_activity_1005);
@@ -371,6 +410,14 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   {
     message_type_activity_.emplace(1006u, *retained_activity_1006);
   }
+  if (retained_activity_1007.has_value())
+  {
+    message_type_activity_.emplace(1007u, *retained_activity_1007);
+  }
+  if (retained_activity_1008.has_value())
+  {
+    message_type_activity_.emplace(1008u, *retained_activity_1008);
+  }
   if (retained_semantic_activity_1005.has_value())
   {
     semantic_message_type_activity_.emplace(1005u, *retained_semantic_activity_1005);
@@ -378,6 +425,14 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   if (retained_semantic_activity_1006.has_value())
   {
     semantic_message_type_activity_.emplace(1006u, *retained_semantic_activity_1006);
+  }
+  if (retained_semantic_activity_1007.has_value())
+  {
+    semantic_message_type_activity_.emplace(1007u, *retained_semantic_activity_1007);
+  }
+  if (retained_semantic_activity_1008.has_value())
+  {
+    semantic_message_type_activity_.emplace(1008u, *retained_semantic_activity_1008);
   }
 }
 
@@ -403,6 +458,7 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   }
 
   std::optional<RtcmBaseStationArpRecord> parsed_arp_record{};
+  std::optional<RtcmAntennaDescriptorRecord> parsed_antenna_descriptor_record{};
   std::optional<RtcmGlonassCodePhaseBiasRecord> parsed_bias_record{};
   std::optional<RtcmMsmSummaryRecord> parsed_msm_record{};
 
@@ -412,6 +468,16 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     if (parsed_arp.status == ParserStatus::kRecordReady && parsed_arp.record.has_value())
     {
       parsed_arp_record = *parsed_arp.record;
+    }
+  }
+
+  if (parsed_info.record->is_antenna_descriptor)
+  {
+    const auto parsed_antenna_descriptor = ParseRtcmAntennaDescriptor(frame);
+    if (parsed_antenna_descriptor.status == ParserStatus::kRecordReady &&
+        parsed_antenna_descriptor.record.has_value())
+    {
+      parsed_antenna_descriptor_record = *parsed_antenna_descriptor.record;
     }
   }
 
@@ -441,6 +507,10 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   {
     semantic_message_accepted = parsed_arp_record.has_value();
   }
+  else if (parsed_info.record->is_antenna_descriptor)
+  {
+    semantic_message_accepted = parsed_antenna_descriptor_record.has_value();
+  }
   else if (parsed_info.record->is_glonass_bias)
   {
     semantic_message_accepted = parsed_bias_record.has_value() && parsed_bias_record->valid;
@@ -454,6 +524,10 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
   if (parsed_arp_record.has_value())
   {
     decoded_station_id = parsed_arp_record->station_id;
+  }
+  else if (parsed_antenna_descriptor_record.has_value())
+  {
+    decoded_station_id = parsed_antenna_descriptor_record->station_id;
   }
   else if (parsed_bias_record.has_value() && parsed_bias_record->valid)
   {
@@ -486,6 +560,21 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
     {
       ++base_station_arp_decode_failure_count_;
       ++base_station_arp_malformed_count_;
+    }
+  }
+
+  if (parsed_info.record->is_antenna_descriptor)
+  {
+    if (parsed_antenna_descriptor_record.has_value())
+    {
+      last_antenna_descriptor_ = *parsed_antenna_descriptor_record;
+      ++antenna_descriptor_decode_success_count_;
+      UpdateLatestTimestamp(frame.timestamp_ns, last_antenna_descriptor_timestamp_ns_);
+    }
+    else
+    {
+      ++antenna_descriptor_decode_failure_count_;
+      ++antenna_descriptor_malformed_count_;
     }
   }
 
@@ -665,6 +754,16 @@ bool RtcmCorrectionMonitor::HasSeenBasePosition1006() const
   return seen_base_position_1006_;
 }
 
+bool RtcmCorrectionMonitor::HasSeenAntennaDescriptorMessage() const
+{
+  return seen_antenna_descriptor_1007_ || seen_antenna_descriptor_1008_;
+}
+
+bool RtcmCorrectionMonitor::HasAntennaDescriptor() const
+{
+  return last_antenna_descriptor_.has_value();
+}
+
 bool RtcmCorrectionMonitor::HasSeenGlonassBias1230() const
 {
   return seen_glonass_bias_1230_;
@@ -713,6 +812,32 @@ std::uint64_t RtcmCorrectionMonitor::BaseStationArpDecodeFailureCount() const
 std::uint64_t RtcmCorrectionMonitor::BaseStationArpMalformedCount() const
 {
   return base_station_arp_malformed_count_;
+}
+
+const std::optional<RtcmAntennaDescriptorRecord>&
+RtcmCorrectionMonitor::last_antenna_descriptor() const
+{
+  return last_antenna_descriptor_;
+}
+
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastAntennaDescriptorTimestampNs() const
+{
+  return last_antenna_descriptor_timestamp_ns_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::AntennaDescriptorDecodeSuccessCount() const
+{
+  return antenna_descriptor_decode_success_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::AntennaDescriptorDecodeFailureCount() const
+{
+  return antenna_descriptor_decode_failure_count_;
+}
+
+std::uint64_t RtcmCorrectionMonitor::AntennaDescriptorMalformedCount() const
+{
+  return antenna_descriptor_malformed_count_;
 }
 
 const std::optional<RtcmGlonassCodePhaseBiasRecord>&
@@ -921,6 +1046,12 @@ std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceBaseStationArp
   return ComputeAgeSince(last_base_station_arp_timestamp_ns_, now_timestamp_ns);
 }
 
+std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceAntennaDescriptorNs(
+    const ProtocolTimestampNs now_timestamp_ns) const
+{
+  return ComputeAgeSince(last_antenna_descriptor_timestamp_ns_, now_timestamp_ns);
+}
+
 std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceGlonassBias1230Ns(
     const ProtocolTimestampNs now_timestamp_ns) const
 {
@@ -998,6 +1129,14 @@ void RtcmCorrectionMonitor::RecordValidFrameMessage(
     seen_base_position_1006_ = seen_base_position_1006_ || info.message_type == 1006u;
   }
 
+  if (info.is_antenna_descriptor)
+  {
+    seen_antenna_descriptor_1007_ =
+        seen_antenna_descriptor_1007_ || info.message_type == 1007u;
+    seen_antenna_descriptor_1008_ =
+        seen_antenna_descriptor_1008_ || info.message_type == 1008u;
+  }
+
   if (info.is_glonass_bias)
   {
     seen_glonass_bias_1230_ = true;
@@ -1041,6 +1180,10 @@ void RtcmCorrectionMonitor::PrepareStationOwnership(const std::uint16_t station_
     unowned_decoded_state_from_other_station =
         last_glonass_code_phase_bias_.has_value() &&
         last_glonass_code_phase_bias_->station_id != station_id;
+    unowned_decoded_state_from_other_station =
+        unowned_decoded_state_from_other_station ||
+        (last_antenna_descriptor_.has_value() &&
+         last_antenna_descriptor_->station_id != station_id);
     for (const auto& entry : msm_summary_activity_)
     {
       if (entry.second.last_summary.has_value() &&
@@ -1237,6 +1380,44 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
     }
   }
   observations.push_back(std::move(base_station_arp));
+
+  RtcmSemanticObservation antenna_descriptor;
+  antenna_descriptor.name = "antenna_descriptor";
+  antenna_descriptor.message_type =
+      monitor.last_antenna_descriptor().has_value()
+          ? monitor.last_antenna_descriptor()->message_type
+          : (monitor.HasSeenAntennaDescriptorMessage() &&
+                     monitor.LastSeenMessageTimestampNs(1008u).has_value()
+                 ? 1008u
+                 : monitor.HasSeenAntennaDescriptorMessage() ? 1007u : 0u);
+  antenna_descriptor.seen = monitor.HasSeenAntennaDescriptorMessage();
+  antenna_descriptor.decoded = monitor.HasAntennaDescriptor();
+  antenna_descriptor.valid = antenna_descriptor.decoded;
+  antenna_descriptor.decode_success_count = monitor.AntennaDescriptorDecodeSuccessCount();
+  antenna_descriptor.decode_failure_count = monitor.AntennaDescriptorDecodeFailureCount();
+  antenna_descriptor.malformed_count = monitor.AntennaDescriptorMalformedCount();
+  antenna_descriptor.last_seen_timestamp_ns = monitor.LastSeenMessageTimestampNs(1007u);
+  UpdateLatestTimestamp(
+      monitor.LastSeenMessageTimestampNs(1008u), antenna_descriptor.last_seen_timestamp_ns);
+  antenna_descriptor.last_decoded_timestamp_ns = monitor.LastAntennaDescriptorTimestampNs();
+  if (now_timestamp_ns.has_value())
+  {
+    antenna_descriptor.age_ns = monitor.AgeSinceAntennaDescriptorNs(*now_timestamp_ns);
+  }
+  if (monitor.last_antenna_descriptor().has_value())
+  {
+    const auto& record = *monitor.last_antenna_descriptor();
+    antenna_descriptor.fields.push_back({"station_id", std::to_string(record.station_id)});
+    antenna_descriptor.fields.push_back({"antenna_descriptor", record.antenna_descriptor});
+    antenna_descriptor.fields.push_back(
+        {"antenna_setup_id", std::to_string(static_cast<unsigned int>(record.antenna_setup_id))});
+    if (record.antenna_serial_number.has_value())
+    {
+      antenna_descriptor.fields.push_back(
+          {"antenna_serial_number", *record.antenna_serial_number});
+    }
+  }
+  observations.push_back(std::move(antenna_descriptor));
 
   RtcmSemanticObservation glonass_bias;
   glonass_bias.name = "glonass_code_phase_bias";

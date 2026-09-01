@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 
 namespace universal_gnss_protocols
 {
@@ -22,6 +23,7 @@ struct RtcmMessageInfo
 {
   std::uint16_t message_type{0};
   bool is_station_arp{false};
+  bool is_antenna_descriptor{false};
   bool is_glonass_bias{false};
   bool is_msm{false};
   RtcmConstellation msm_constellation{RtcmConstellation::kUnknown};
@@ -43,6 +45,15 @@ struct RtcmBaseStationArpRecord
   std::optional<double> antenna_height_m{};
   bool single_receiver_oscillator_indicator{false};
   std::uint8_t quarter_cycle_indicator{0};
+};
+
+struct RtcmAntennaDescriptorRecord
+{
+  std::uint16_t message_type{0};
+  std::uint16_t station_id{0};
+  std::string antenna_descriptor{};
+  std::uint8_t antenna_setup_id{0};
+  std::optional<std::string> antenna_serial_number{};
 };
 
 struct RtcmGlonassCodePhaseBiasRecord

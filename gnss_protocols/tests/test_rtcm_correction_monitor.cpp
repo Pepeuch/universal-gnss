@@ -293,6 +293,55 @@ std::vector<std::uint8_t> BuildRtcm1006Payload(const std::uint16_t station_id)
   return payload;
 }
 
+void AppendText(std::vector<std::uint8_t>& payload,
+                std::size_t& bit_offset,
+                const std::string& value)
+{
+  for (const char character : value)
+  {
+    AppendUnsignedBits(payload, bit_offset, static_cast<std::uint8_t>(character), 8u);
+  }
+}
+
+std::vector<std::uint8_t> BuildRtcmAntennaDescriptorPayload(
+    const std::uint16_t message_type,
+    const std::uint16_t station_id,
+    const std::string& descriptor,
+    const std::uint8_t setup_id,
+    const std::optional<std::string>& serial_number = std::nullopt)
+{
+  std::vector<std::uint8_t> payload;
+  std::size_t bit_offset = 0u;
+  AppendUnsignedBits(payload, bit_offset, message_type, 12u);
+  AppendUnsignedBits(payload, bit_offset, station_id, 12u);
+  AppendUnsignedBits(payload, bit_offset, descriptor.size(), 8u);
+  AppendText(payload, bit_offset, descriptor);
+  AppendUnsignedBits(payload, bit_offset, setup_id, 8u);
+  if (message_type == 1008u)
+  {
+    const std::string serial = serial_number.value_or("");
+    AppendUnsignedBits(payload, bit_offset, serial.size(), 8u);
+    AppendText(payload, bit_offset, serial);
+  }
+  return payload;
+}
+
+RtcmFrame MakeDecodedAntennaDescriptorFrame(
+    const std::uint16_t message_type,
+    const std::uint16_t station_id,
+    const std::string& descriptor,
+    const std::uint8_t setup_id,
+    const std::optional<std::string>& serial_number,
+    const std::int64_t timestamp_ns)
+{
+  RtcmFrame frame;
+  frame.timestamp_ns = timestamp_ns;
+  frame.payload = BuildRtcmAntennaDescriptorPayload(
+      message_type, station_id, descriptor, setup_id, serial_number);
+  frame.checksum_status = ChecksumStatus::kValid;
+  return frame;
+}
+
 RtcmFrame MakeDecodedBaseFrame(const std::uint16_t station_id,
                                const std::int64_t timestamp_ns)
 {
@@ -1063,6 +1112,44 @@ void TestPortableRtkRequirementsDoNotRequireGlonassBias(TestContext& ctx)
              "a stream without RTCM 1230 must not raise required_messages_missing");
 }
 
+void TestAntennaDescriptorSemanticOwnership(TestContext& ctx)
+{
+  RtcmCorrectionMonitor monitor;
+  monitor.ObserveFrame(MakeDecodedAntennaDescriptorFrame(
+      1008u, 42u, "TRM59800.00", 3u, "12345", 1000));
+
+  const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 1100);
+  const auto* antenna = FindObservation(observations, "antenna_descriptor");
+  ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(42u) &&
+                 monitor.HasSeenAntennaDescriptorMessage() && monitor.HasAntennaDescriptor(),
+             "a decoded antenna descriptor should establish station-owned static metadata");
+  ctx.Expect(antenna != nullptr && antenna->message_type == 1008u && antenna->seen &&
+                 antenna->decoded && antenna->valid && antenna->age_ns == 100 &&
+                 antenna->decode_success_count == 1u,
+             "antenna descriptor should project through the portable semantic observation surface");
+
+  monitor.ResetDynamicState();
+  ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(42u) &&
+                 monitor.last_antenna_descriptor().has_value() &&
+                 monitor.last_antenna_descriptor()->antenna_serial_number ==
+                     std::optional<std::string>("12345"),
+             "a dynamic reset should retain fully decoded static antenna metadata");
+
+  monitor.ObserveFrame(MakeDecodedBaseFrame(99u, 2000));
+  ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(99u) &&
+                 !monitor.last_antenna_descriptor().has_value(),
+             "a station replacement should invalidate the prior station antenna descriptor");
+
+  std::vector<std::uint8_t> malformed_payload = BuildRtcmAntennaDescriptorPayload(
+      1007u, 77u, "TRM59800.00", 3u);
+  malformed_payload.pop_back();
+  monitor.ObserveFrame(MakeIntegrityValidFrame(malformed_payload, 3000));
+  ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(99u) &&
+                 monitor.AntennaDescriptorDecodeFailureCount() == 1u &&
+                 monitor.AntennaDescriptorMalformedCount() == 1u,
+             "a malformed foreign descriptor must not replace station ownership");
+}
+
 void TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(TestContext& ctx)
 {
   // Base + MSM present, plus a 1230 that decodes cleanly but advertises itself as
@@ -1486,6 +1573,7 @@ int main()
   TestFutureTimestampsCannotSatisfyFreshness(ctx);
   TestPortableRtkRequirementsAccept1006(ctx);
   TestPortableRtkRequirementsDoNotRequireGlonassBias(ctx);
+  TestAntennaDescriptorSemanticOwnership(ctx);
   TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(ctx);
   TestPortableRtkRequirementsUseRecentObservationWindow(ctx);
   TestStaticBaseMetadataOutlivesDynamicObservationWindow(ctx);
