@@ -199,6 +199,40 @@ Read-only inspection may run as root when necessary.
 Do not leave root-owned repository artifacts.
 Repair ownership or remove only generated root-owned artifacts before continuing.
 
+### Forced sandbox identity exception
+
+The normal project-user rule remains mandatory whenever that user is actually
+available and usable. A constrained agent/sandbox may instead set
+`SANDBOX_IDENTITY_FORCED = true` only when inspectable environment evidence shows
+that its effective identity is imposed and the project user cannot be used
+technically: for example, `setuid`/`setgroups`/`runuser` are denied, workspace
+ownership is managed by an external mount, or the relevant mount is read-only.
+
+This is an environmental constraint, not evidence of project ownership failure.
+In that case:
+
+- do not recursively repair or infer host ownership from sandbox mount metadata;
+- do not attempt `chown`/`chmod` repairs on externally managed mounts;
+- the sole executable sandbox identity may run reads, builds, tests, temporary
+  generation, and validation when those actions require no additional privilege;
+- prefer disposable or externally located generated artifacts when persistent
+  ownership would be undesirable;
+- report `SANDBOX_IDENTITY_FORCED = true` and the concrete evidence in the final
+  handoff;
+- do not classify validation as blocked or downgrade a finding solely because
+  this identity is forced.
+
+This exception never authorizes system-file changes, permission expansion,
+`chmod 777`, protection bypasses, additional privileges, or aggressive repair of
+external mounts. If the project user is usable, it remains the required identity.
+
+Examples:
+
+- Normal devcontainer: run build/test/generation as `ubuntu`.
+- Sandbox with imposed `root` and denied `setgroups`: set
+  `SANDBOX_IDENTITY_FORCED = true`; run ordinary repository validation as that
+  imposed identity, without treating mount ownership as a project defect.
+
 ### C/C++ formatting baseline
 
 The repository-authoritative C/C++ formatter is `clang-format-21`, using the

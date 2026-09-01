@@ -23,6 +23,7 @@ RUN apt-get update \
     python3-pip \
     python3-rosdep \
     python3-vcstool \
+    sudo \
  && rm -rf /var/lib/apt/lists/*
 
 # Keep formatting stable across host distributions and future ROS base images.
@@ -36,9 +37,41 @@ RUN . /etc/os-release \
  && rm -rf /var/lib/apt/lists/*
 
 # Development commands and their generated artifacts must use this identity.
-RUN groupadd --gid 1000 ubuntu \
- && useradd --uid 1000 --gid ubuntu --create-home --shell /bin/bash ubuntu
+RUN set -eux; \
+ if getent group ubuntu > /dev/null; then \
+   ubuntu_gid="$(getent group ubuntu | cut -d: -f3)"; \
+   [ "${ubuntu_gid}" = "1000" ] || { \
+     echo "group 'ubuntu' exists with unexpected gid ${ubuntu_gid}" >&2; \
+     exit 1; \
+   }; \
+ else \
+   getent group 1000 > /dev/null && { \
+     echo "gid 1000 is already assigned to another group" >&2; \
+     exit 1; \
+   }; \
+   groupadd --gid 1000 ubuntu; \
+ fi; \
+ if id -u ubuntu > /dev/null 2>&1; then \
+   ubuntu_uid="$(id -u ubuntu)"; \
+   ubuntu_primary_gid="$(id -g ubuntu)"; \
+   [ "${ubuntu_uid}" = "1000" ] || { \
+     echo "user 'ubuntu' exists with unexpected uid ${ubuntu_uid}" >&2; \
+     exit 1; \
+   }; \
+   [ "${ubuntu_primary_gid}" = "1000" ] || { \
+     echo "user 'ubuntu' exists with unexpected primary gid ${ubuntu_primary_gid}" >&2; \
+     exit 1; \
+   }; \
+ else \
+   getent passwd 1000 > /dev/null && { \
+     echo "uid 1000 is already assigned to another user" >&2; \
+     exit 1; \
+   }; \
+   useradd --uid 1000 --gid ubuntu --create-home --shell /bin/bash ubuntu; \
+ fi
 
+RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
+ && chmod 0440 /etc/sudoers.d/ubuntu
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc
 
 WORKDIR /workspaces/universal-gnss
