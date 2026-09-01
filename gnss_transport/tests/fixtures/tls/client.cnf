@@ -1,0 +1,7 @@
+[req]
+distinguished_name = dn
+prompt = no
+[dn]
+CN = universal-gnss-test-client
+[v3]
+extendedKeyUsage = clientAuth

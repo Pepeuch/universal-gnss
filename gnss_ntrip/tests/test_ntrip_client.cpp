@@ -24,6 +24,7 @@
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
+#include "tls_loopback_server.hpp"
 
 namespace
 {
@@ -433,6 +434,44 @@ NmeaSentence FrameNmeaSentence(const std::string& text)
   }
 
   return *result.record;
+}
+
+void TestTlsNtripRequestResponseFlow(TestContext& ctx)
+{
+  NtripConfig config = MakeConfig();
+  config.host = "localhost";
+  config.tls_enabled = true;
+  config.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/ca.crt";
+  std::string request;
+  std::vector<std::uint8_t> response = {
+      'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
+  const std::vector<std::uint8_t> rtcm = BuildRtcmFrame(1005u);
+  Append(response, rtcm);
+  universal_gnss_transport::test::TlsLoopbackServer server({
+      false,
+      [&request, &response](SSL* session) {
+        std::vector<std::uint8_t> received(request.size());
+        return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
+                   session, received.data(), received.size()) &&
+               std::string(received.begin(), received.end()) == request &&
+               universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
+                   session, response.data(), response.size());
+      }});
+  ctx.Expect(server.Start(), "TLS NTRIP loopback server should start on localhost");
+  config.port = server.port();
+  request = universal_gnss_ntrip::BuildNtripGetRequest(config).request_text;
+
+  NtripClient client(config);
+  ctx.Expect(client.Connect() == NtripClientError::kNone && client.SendRequest() == NtripClientError::kNone,
+             "NtripClient should establish verified TLS and send its NTRIP request");
+  std::vector<std::uint8_t> buffer(256u, 0u);
+  const auto read_result = client.Read(buffer.data(), buffer.size(), 1000000000LL);
+  ctx.Expect(read_result.client_error == NtripClientError::kNone &&
+                 client.state() == NtripClientState::kStreaming &&
+                 client.metrics().response_received && client.metrics().rtcm_frames_seen == 1u,
+             "TLS NTRIP response should enter Streaming and forward a minimal RTCM frame");
+  client.Disconnect();
+  ctx.Expect(server.Join(), "TLS NTRIP loopback session should close cleanly");
 }
 
 void TestRequestAndStreamingFlow(TestContext& ctx)
@@ -1427,6 +1466,7 @@ int main()
   TestContext ctx;
 
   TestRequestAndStreamingFlow(ctx);
+  TestTlsNtripRequestResponseFlow(ctx);
   TestSplitHttpResponseAndDisconnect(ctx);
   TestLegacyIcyResponseWithoutBlankLine(ctx);
   TestSplitLegacyIcyResponseWithoutBlankLine(ctx);

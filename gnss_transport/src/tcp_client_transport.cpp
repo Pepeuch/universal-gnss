@@ -274,6 +274,24 @@ TransportError StartTls(const int fd,
     return TransportError::kTlsHandshakeFailure;
   }
 
+  const bool has_client_certificate = !config.tls_client_certificate_file.empty();
+  const bool has_client_private_key = !config.tls_client_private_key_file.empty();
+  if (has_client_certificate != has_client_private_key)
+  {
+    SSL_CTX_free(tls_context);
+    return TransportError::kInvalidArgument;
+  }
+  if (has_client_certificate &&
+      (SSL_CTX_use_certificate_chain_file(tls_context, config.tls_client_certificate_file.c_str()) !=
+           1 ||
+       SSL_CTX_use_PrivateKey_file(tls_context, config.tls_client_private_key_file.c_str(),
+                                   SSL_FILETYPE_PEM) != 1 ||
+       SSL_CTX_check_private_key(tls_context) != 1))
+  {
+    SSL_CTX_free(tls_context);
+    return TransportError::kTlsHandshakeFailure;
+  }
+
   const std::string& server_name =
       config.tls_server_name.empty() ? config.host : config.tls_server_name;
   if (server_name.empty())
@@ -286,6 +304,12 @@ TransportError StartTls(const int fd,
   {
     SSL_CTX_set_verify(tls_context, SSL_VERIFY_PEER, nullptr);
     if (SSL_CTX_set_default_verify_paths(tls_context) != 1)
+    {
+      SSL_CTX_free(tls_context);
+      return TransportError::kTlsVerificationFailure;
+    }
+    if (!config.tls_ca_file.empty() &&
+        SSL_CTX_load_verify_locations(tls_context, config.tls_ca_file.c_str(), nullptr) != 1)
     {
       SSL_CTX_free(tls_context);
       return TransportError::kTlsVerificationFailure;

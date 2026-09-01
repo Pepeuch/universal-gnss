@@ -226,7 +226,7 @@ Current scope:
 
 Current non-goals:
 
-- nonblocking TLS handshakes, custom CA roots, and client certificates
+- nonblocking TLS handshakes
 - reconnect or backoff
 - NTRIP HTTP request logic
 - UDP transport
@@ -244,11 +244,14 @@ Current policy:
 
 On Linux, `TcpClientTransport` can establish a synchronous OpenSSL client TLS
 session when `TcpClientConfig::tls_enabled` is set. Certificate-chain and DNS
-host verification use the host system trust store by default. The
-`tls_verify_peer=false` escape hatch exists only for deterministic local test
-fixtures; production NTRIP callers must retain verification. Custom CA roots,
-client certificates, and nonblocking handshake ownership remain separate
-backlog work.
+host verification use the host system trust store by default. A non-empty
+`tls_ca_file` adds a PEM trust bundle without disabling verification.
+`tls_client_certificate_file` and `tls_client_private_key_file` optionally
+configure a matching PEM client credential pair for mTLS; supplying only one
+or invalid/mismatched material fails closed. The `tls_verify_peer=false`
+escape hatch exists only for deterministic local test fixtures; production
+NTRIP callers must retain verification. Nonblocking handshake ownership
+remains out of scope.
 
 ## Ring Buffer Helper
 

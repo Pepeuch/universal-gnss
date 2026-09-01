@@ -46,6 +46,10 @@ struct NtripConfig
   // Intended only for deterministic local TLS fixtures. Production callers
   // must retain certificate and host verification.
   bool tls_verify_peer{true};
+  // Optional PEM trust bundle for this NTRIP endpoint.
+  std::string tls_ca_file{};
+  std::string tls_client_certificate_file{};
+  std::string tls_client_private_key_file{};
   bool send_gga{false};
   std::uint32_t gga_interval_s{10u};
   // Zero disables the corresponding liveness deadline. Defaults match the

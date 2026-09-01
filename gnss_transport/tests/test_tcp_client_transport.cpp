@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "universal_gnss_transport/tcp_client_transport.hpp"
+#include "tls_loopback_server.hpp"
 
 namespace
 {
@@ -499,6 +500,52 @@ void TestClosedReadWriteBehavior(TestContext& ctx)
 
 void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
 {
+  SocketPair incomplete_credentials_sockets;
+  ctx.Expect(incomplete_credentials_sockets.Open(),
+             "socketpair fixture should open for incomplete client credentials");
+  TcpClientTransport incomplete_credentials_client;
+  TcpClientConfig incomplete_credentials_config;
+  incomplete_credentials_config.host = "localhost";
+  incomplete_credentials_config.tls_enabled = true;
+  incomplete_credentials_config.tls_verify_peer = false;
+  incomplete_credentials_config.tls_client_certificate_file = "/client-cert.pem";
+  ctx.Expect(
+      incomplete_credentials_client.AdoptConnectedSocket(
+          incomplete_credentials_sockets.ReleaseClientFd(), incomplete_credentials_config) ==
+              TransportError::kInvalidArgument &&
+          !incomplete_credentials_client.IsOpen(),
+      "a client certificate without a private key must be rejected before handshake");
+
+  SocketPair invalid_credentials_sockets;
+  ctx.Expect(invalid_credentials_sockets.Open(),
+             "socketpair fixture should open for invalid client credentials");
+  TcpClientTransport invalid_credentials_client;
+  TcpClientConfig invalid_credentials_config;
+  invalid_credentials_config.host = "localhost";
+  invalid_credentials_config.tls_enabled = true;
+  invalid_credentials_config.tls_verify_peer = false;
+  invalid_credentials_config.tls_client_certificate_file = "/missing-client-cert.pem";
+  invalid_credentials_config.tls_client_private_key_file = "/missing-client-key.pem";
+  ctx.Expect(
+      invalid_credentials_client.AdoptConnectedSocket(
+          invalid_credentials_sockets.ReleaseClientFd(), invalid_credentials_config) ==
+              TransportError::kTlsHandshakeFailure &&
+          !invalid_credentials_client.IsOpen(),
+      "invalid client certificate/key paths must fail closed before handshake");
+
+  SocketPair invalid_ca_sockets;
+  ctx.Expect(invalid_ca_sockets.Open(), "socketpair fixture should open for CA validation test");
+  TcpClientTransport invalid_ca_client;
+  TcpClientConfig invalid_ca_config;
+  invalid_ca_config.host = "localhost";
+  invalid_ca_config.tls_enabled = true;
+  invalid_ca_config.tls_ca_file = "/definitely-not-a-ca-bundle.pem";
+  ctx.Expect(
+      invalid_ca_client.AdoptConnectedSocket(invalid_ca_sockets.ReleaseClientFd(), invalid_ca_config) ==
+              TransportError::kTlsVerificationFailure &&
+          !invalid_ca_client.IsOpen(),
+      "an unreadable explicit CA bundle must fail TLS verification before the handshake");
+
   SocketPair nonblocking_sockets;
   ctx.Expect(nonblocking_sockets.Open(), "socketpair fixture should open for TLS mode test");
 
@@ -529,6 +576,100 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
       "interrupted TLS handshakes should fail and close the transport");
 }
 
+void TestVerifiedTlsLoopback(TestContext& ctx)
+{
+  const std::vector<std::uint8_t> server_bytes = {0x01u, 0x02u, 0x03u};
+  const std::vector<std::uint8_t> client_bytes = {0xa1u, 0xb2u, 0xc3u};
+  universal_gnss_transport::test::TlsLoopbackServer server({
+      false,
+      [&server_bytes, &client_bytes](SSL* session) {
+        std::vector<std::uint8_t> received(client_bytes.size());
+        return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
+                   session, received.data(), received.size()) &&
+               received == client_bytes &&
+               universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
+                   session, server_bytes.data(), server_bytes.size());
+      }});
+  ctx.Expect(server.Start(), "TLS loopback server should start on localhost");
+
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.port = server.port();
+  config.tls_enabled = true;
+  config.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/ca.crt";
+  TcpClientTransport client;
+  ctx.Expect(client.Open(config) == TransportError::kNone && client.IsOpen(),
+             "the fixture CA and localhost certificate should verify");
+  const auto write_result = client.Write(client_bytes.data(), client_bytes.size());
+  std::vector<std::uint8_t> received(server_bytes.size());
+  const auto read_result = client.Read(received.data(), received.size());
+  ctx.Expect(write_result.bytes_written == client_bytes.size() &&
+                 read_result.bytes_read == server_bytes.size() && received == server_bytes,
+             "verified TLS loopback should exchange controlled bytes in both directions");
+  client.Close();
+  ctx.Expect(server.Join(), "TLS loopback server session should close cleanly");
+
+  const auto expect_verification_failure = [&ctx](TcpClientConfig failed_config,
+                                                   const std::string& message) {
+    universal_gnss_transport::test::TlsLoopbackServer failed_server;
+    ctx.Expect(failed_server.Start(), "TLS loopback server should start for verification failure");
+    failed_config.port = failed_server.port();
+    TcpClientTransport failed_client;
+    ctx.Expect(failed_client.Open(failed_config) == TransportError::kTlsVerificationFailure &&
+                   !failed_client.IsOpen(),
+               message);
+    failed_server.Join();
+  };
+
+  TcpClientConfig no_custom_ca = config;
+  no_custom_ca.tls_ca_file.clear();
+  expect_verification_failure(no_custom_ca, "TLS without the local CA must fail verification");
+
+  TcpClientConfig wrong_hostname = config;
+  wrong_hostname.tls_server_name = "not-localhost";
+  expect_verification_failure(wrong_hostname, "TLS with the wrong hostname must fail verification");
+
+  TcpClientConfig wrong_ca = config;
+  wrong_ca.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/server.crt";
+  expect_verification_failure(wrong_ca, "TLS with an unrelated CA bundle must fail verification");
+}
+
+void TestMutualTlsLoopback(TestContext& ctx)
+{
+  universal_gnss_transport::test::TlsLoopbackServer server({true, {}});
+  ctx.Expect(server.Start(), "mTLS loopback server should start on localhost");
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.port = server.port();
+  config.tls_enabled = true;
+  config.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/ca.crt";
+  TcpClientTransport no_certificate_client;
+  (void)no_certificate_client.Open(config);
+  no_certificate_client.Close();
+  ctx.Expect(!server.Join(), "mTLS server must reject a client without a certificate");
+
+  universal_gnss_transport::test::TlsLoopbackServer verified_server({true, {}});
+  ctx.Expect(verified_server.Start(), "mTLS loopback server should restart on localhost");
+  config.port = verified_server.port();
+  config.tls_client_certificate_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/client.crt";
+  config.tls_client_private_key_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/client.key";
+  TcpClientTransport verified_client;
+  ctx.Expect(verified_client.Open(config) == TransportError::kNone && verified_client.IsOpen(),
+             "mTLS must accept the fixture client certificate and matching key");
+  verified_client.Close();
+  ctx.Expect(verified_server.Join(), "mTLS fixture session should close cleanly");
+
+  universal_gnss_transport::test::TlsLoopbackServer mismatch_server({true, {}});
+  ctx.Expect(mismatch_server.Start(), "mTLS loopback server should start for mismatch test");
+  config.port = mismatch_server.port();
+  config.tls_client_private_key_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/server.key";
+  TcpClientTransport mismatch_client;
+  ctx.Expect(mismatch_client.Open(config) == TransportError::kTlsHandshakeFailure &&
+                 !mismatch_client.IsOpen(),
+             "mismatched mTLS certificate and key must fail before handshake");
+  mismatch_server.Join();
+}
+
 }  // namespace
 
 int main()
@@ -540,6 +681,8 @@ int main()
   TestConnectFailureAndInvalidConfiguration(ctx);
   TestClosedReadWriteBehavior(ctx);
   TestTlsConfigurationAndHandshakeFailure(ctx);
+  TestVerifiedTlsLoopback(ctx);
+  TestMutualTlsLoopback(ctx);
   TestClosedPeerWritesDoNotRaiseSigpipe(ctx);
 
   if (ctx.failures != 0)

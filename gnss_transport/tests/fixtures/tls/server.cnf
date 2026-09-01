@@ -1,0 +1,8 @@
+[req]
+distinguished_name = dn
+prompt = no
+[dn]
+CN = localhost
+[v3]
+subjectAltName = DNS:localhost
+extendedKeyUsage = serverAuth

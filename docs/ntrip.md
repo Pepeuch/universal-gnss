@@ -39,7 +39,6 @@ Current responsibilities:
 
 Current non-responsibilities:
 
-- TLS client-certificate authentication and custom CA roots
 - reconnect loops
 - ROS 2-side RTCM forwarding ownership
 - serial output
@@ -357,7 +356,6 @@ Current behavior:
 Current non-goals:
 
 - nonblocking TLS handshakes
-- TLS client-certificate authentication and custom CA roots
 - reconnect loop or background timers
 - live sourcetable fetch workflow
 - chunked transfer support

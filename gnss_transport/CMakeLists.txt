@@ -66,6 +66,11 @@ if(BUILD_TESTING)
       PRIVATE
         universal_gnss_transport
     )
+    target_compile_definitions(
+      gnss_transport_test_tcp_client_transport
+      PRIVATE
+        UNIVERSAL_GNSS_TLS_FIXTURE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tls"
+    )
     add_test(
       NAME gnss_transport_test_tcp_client_transport
       COMMAND gnss_transport_test_tcp_client_transport

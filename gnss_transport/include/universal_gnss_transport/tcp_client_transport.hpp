@@ -30,6 +30,10 @@ struct TcpClientConfig
   // Empty selects host. A distinct value is useful only for a documented TLS
   // endpoint name; custom trust roots remain outside this transport contract.
   std::string tls_server_name{};
+  // Optional PEM trust bundle loaded in addition to the system trust store.
+  std::string tls_ca_file{};
+  std::string tls_client_certificate_file{};
+  std::string tls_client_private_key_file{};
 };
 
 class TcpClientTransport : public ByteDuplex

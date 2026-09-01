@@ -334,6 +334,9 @@ NtripClientError NtripClient::Connect(
   transport_config.port = config_.port;
   transport_config.tls_enabled = config_.tls_enabled;
   transport_config.tls_verify_peer = config_.tls_verify_peer;
+  transport_config.tls_ca_file = config_.tls_ca_file;
+  transport_config.tls_client_certificate_file = config_.tls_client_certificate_file;
+  transport_config.tls_client_private_key_file = config_.tls_client_private_key_file;
   transport_.Close();
   const NtripSourceIdentity configured_source_identity = BuildNtripSourceIdentity(config_);
   if (configured_source_identity != source_identity_)
