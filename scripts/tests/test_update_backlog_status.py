@@ -32,6 +32,9 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertEqual("BLOCKED", data.records["UGA-126"]["status"])
         self.assertEqual("DRIVER", data.records["UGA-126"]["scope"])
         self.assertEqual("HARDWARE_REQUIRED", data.records["UGA-126"]["validation"])
+        self.assertEqual("PARTIAL", data.records["UGA-170"]["status"])
+        self.assertEqual("RECEIVER", data.records["UGA-170"]["scope"])
+        self.assertEqual("HARDWARE_REQUIRED", data.records["UGA-170"]["validation"])
         self.assertEqual(187, data.todo_counts["unchecked"])
 
     def test_duplicate_cycle_is_rejected(self) -> None:
@@ -51,8 +54,8 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertIn("Lifecycle status", svg)
         self.assertIn("Validation dependencies (orthogonal)", svg)
-        self.assertIn("Hardware required: 1", svg)
-        self.assertNotIn(">Hardware required 1</text>", svg)
+        self.assertIn("Hardware required: 2", svg)
+        self.assertNotIn(">Hardware required 2</text>", svg)
 
 
 if __name__ == "__main__":

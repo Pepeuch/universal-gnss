@@ -76,6 +76,35 @@ Safety notes:
 - receiver factory reset may change the active baud rate
 - the current Unicore `FRESET` path returns the receiver to `115200 bps`
 
+### u-blox factory-reset boundary
+
+`factory_reset` remains unsupported for the current portable u-blox `F9/F10`
+target. This is not only a missing frame encoder: the documented F9
+`UBX-CFG-RST` command is deliberately not ACK-reliable and clears navigation
+backup data, while restoring saved configuration defaults requires
+protocol-version-specific non-volatile configuration deletion (`UBX-CFG-CFG`
+or `UBX-CFG-VALDEL`). The current family-level plan has no verified
+model/protocol-version gate or post-reset transport/probe recovery contract.
+
+`UGA-170` is therefore `PARTIAL`, `SCOPE: RECEIVER`, and
+`VALIDATION: HARDWARE_REQUIRED`: Unicore reset/recovery is implemented, but
+u-blox live reset must remain unavailable until the following physical matrix
+is accepted for each explicitly supported model/firmware/protocol combination:
+
+- record receiver model, `MON-VER` firmware/protocol, host OS/kernel, transport
+  driver/interface, and physical topology
+- change a documented persistent setting, execute the selected documented
+  clear/reset sequence, and verify the expected default after reconnect
+- prove that the transport can be reopened and that an active `MON-VER` probe
+  identifies the post-reset receiver before any further configuration command
+- verify both direct USB and every serial/USB bridge topology claimed supported
+
+The test fails if the reset sequence is not accepted as documented, the expected
+configuration is retained, the receiver cannot be rediscovered/probed through
+the declared interface, or a configuration command can run before that probe.
+This evidence is invalidated by a receiver model, firmware/protocol, host
+kernel/driver, interface topology, or reset-recovery implementation change.
+
 This surface is currently exposed through:
 
 - the module-level planner/profile API in `gnss_driver`

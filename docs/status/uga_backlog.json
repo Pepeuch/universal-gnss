@@ -70,7 +70,10 @@
       {"ids": ["UGA-129", "UGA-132", "UGA-148..UGA-154", "UGA-176", "UGA-199..UGA-200"], "state": "removed"}
     ]
   },
-  "validation": [{"id": "UGA-126", "value": "HARDWARE_REQUIRED"}],
+  "validation": [
+    {"id": "UGA-126", "value": "HARDWARE_REQUIRED"},
+    {"id": "UGA-170", "value": "HARDWARE_REQUIRED"}
+  ],
   "removed": [
     {"id": "UGA-129", "resolution": "implemented"},
     {"id": "UGA-132", "resolution": "implemented"},
