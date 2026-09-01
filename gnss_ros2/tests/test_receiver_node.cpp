@@ -31,8 +31,7 @@
 #include "universal_gnss_ros2/receiver_node.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
-namespace
-{
+namespace {
 
 std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
 {
@@ -62,10 +61,9 @@ std::vector<std::uint8_t> BuildBytes(const std::string& text)
 
 std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
 {
-  const auto crc =
-      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(reinterpret_cast<const std::uint8_t*>(
-                                                              frame_without_crc.data() + 1u),
-                                                          frame_without_crc.size() - 1u);
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
   stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
@@ -121,10 +119,8 @@ void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, cons
   ++bit_offset;
 }
 
-void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
-                        std::size_t& bit_offset,
-                        const std::uint64_t value,
-                        const std::size_t bit_count)
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
+                        const std::uint64_t value, const std::size_t bit_count)
 {
   for (std::size_t i = 0u; i < bit_count; ++i)
   {
@@ -133,17 +129,14 @@ void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
   }
 }
 
-void AppendSignedBits(std::vector<std::uint8_t>& payload,
-                      std::size_t& bit_offset,
-                      const std::int64_t value,
-                      const std::size_t bit_count)
+void AppendSignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
+                      const std::int64_t value, const std::size_t bit_count)
 {
   const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
-void AppendZeroBits(std::vector<std::uint8_t>& payload,
-                    std::size_t& bit_offset,
+void AppendZeroBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
                     const std::size_t bit_count)
 {
   for (std::size_t index = 0u; index < bit_count; ++index)
@@ -152,22 +145,21 @@ void AppendZeroBits(std::vector<std::uint8_t>& payload,
   }
 }
 
-std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
-                               const std::size_t satellite_count,
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant, const std::size_t satellite_count,
                                const std::size_t populated_cell_count)
 {
   switch (msm_variant)
   {
-    case 4u:
-      return satellite_count * 18u + populated_cell_count * 48u;
-    case 5u:
-      return satellite_count * 36u + populated_cell_count * 63u;
-    case 6u:
-      return satellite_count * 18u + populated_cell_count * 65u;
-    case 7u:
-      return satellite_count * 36u + populated_cell_count * 80u;
-    default:
-      return 0u;
+  case 4u:
+    return satellite_count * 18u + populated_cell_count * 48u;
+  case 5u:
+    return satellite_count * 36u + populated_cell_count * 63u;
+  case 6u:
+    return satellite_count * 18u + populated_cell_count * 65u;
+  case 7u:
+    return satellite_count * 36u + populated_cell_count * 80u;
+  default:
+    return 0u;
   }
 }
 
@@ -180,8 +172,7 @@ std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -215,10 +206,8 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
 
 std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
                                              const bool code_phase_bias_indicator,
-                                             const bool has_l1_ca_bias,
-                                             const bool has_l1_p_bias,
-                                             const bool has_l2_ca_bias,
-                                             const bool has_l2_p_bias,
+                                             const bool has_l1_ca_bias, const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias, const bool has_l2_p_bias,
                                              const std::optional<std::int16_t> l1_ca_bias_raw,
                                              const std::optional<std::int16_t> l1_p_bias_raw,
                                              const std::optional<std::int16_t> l2_ca_bias_raw,
@@ -311,11 +300,9 @@ std::vector<std::uint8_t> BuildRtcmMsmPayload(const std::uint16_t message_type,
     }
   }
 
-  AppendZeroBits(payload,
-                 bit_offset,
+  AppendZeroBits(payload, bit_offset,
                  GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
-                                    satellite_ids.size(),
-                                    populated_cell_count));
+                                    satellite_ids.size(), populated_cell_count));
   return payload;
 }
 
@@ -329,16 +316,14 @@ std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
       BuildRtcmMsmPayload(message_type, station_id, satellite_ids, signal_ids, cell_mask));
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload,
-               const std::size_t offset,
+void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset,
                const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
-                                        const std::uint8_t message_id,
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id, const std::uint8_t message_id,
                                         const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> bytes = {
@@ -414,20 +399,18 @@ public:
 
     if (!open_)
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kClosed,
+      return {0u, universal_gnss_transport::TransportStatus::kClosed,
               universal_gnss_transport::TransportError::kClosed};
     }
 
     if (next_index_ >= actions_.size() && !repeated_action_.has_value())
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kOk,
+      return {0u, universal_gnss_transport::TransportStatus::kOk,
               universal_gnss_transport::TransportError::kNone};
     }
 
-    const Action action = next_index_ < actions_.size() ? actions_[next_index_++]
-                                                        : *repeated_action_;
+    const Action action =
+        next_index_ < actions_.size() ? actions_[next_index_++] : *repeated_action_;
     open_ = action.keep_open;
 
     if (before_return_)
@@ -442,46 +425,29 @@ public:
 
     if (destination == nullptr || capacity < action.payload.size())
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kError,
+      return {0u, universal_gnss_transport::TransportStatus::kError,
               universal_gnss_transport::TransportError::kInvalidArgument};
     }
 
     std::copy(action.payload.begin(), action.payload.end(), destination);
-    return {action.payload.size(),
-            universal_gnss_transport::TransportStatus::kOk,
+    return {action.payload.size(), universal_gnss_transport::TransportStatus::kOk,
             universal_gnss_transport::TransportError::kNone};
   }
 
-  bool IsOpen() const override
-  {
-    return open_;
-  }
+  bool IsOpen() const override { return open_; }
 
-  void Close() override
-  {
-    open_ = false;
-  }
+  void Close() override { open_ = false; }
 
-  void SetRepeatedAction(Action action)
-  {
-    repeated_action_ = std::move(action);
-  }
+  void SetRepeatedAction(Action action) { repeated_action_ = std::move(action); }
 
   void SetBeforeReturn(std::function<void(std::size_t, std::size_t)> callback)
   {
     before_return_ = std::move(callback);
   }
 
-  std::size_t read_call_count() const
-  {
-    return read_call_count_;
-  }
+  std::size_t read_call_count() const { return read_call_count_; }
 
-  std::size_t remaining_action_count() const
-  {
-    return actions_.size() - next_index_;
-  }
+  std::size_t remaining_action_count() const { return actions_.size() - next_index_; }
 
 private:
   std::vector<Action> actions_{};
@@ -501,12 +467,10 @@ public:
     std::size_t maximum_bytes{std::numeric_limits<std::size_t>::max()};
     universal_gnss_transport::TransportStatus status{
         universal_gnss_transport::TransportStatus::kOk};
-    universal_gnss_transport::TransportError error{
-        universal_gnss_transport::TransportError::kNone};
+    universal_gnss_transport::TransportError error{universal_gnss_transport::TransportError::kNone};
   };
 
-  explicit ScriptedWriteByteDuplex(std::vector<WriteAction> actions)
-      : actions_(std::move(actions))
+  explicit ScriptedWriteByteDuplex(std::vector<WriteAction> actions) : actions_(std::move(actions))
   {
     session_bytes_.emplace_back();
   }
@@ -517,8 +481,7 @@ public:
     ++read_call_count_;
     if (!open_)
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kClosed,
+      return {0u, universal_gnss_transport::TransportStatus::kClosed,
               universal_gnss_transport::TransportError::kClosed};
     }
     if (!repeated_read_action_.has_value())
@@ -534,50 +497,39 @@ public:
     }
     if (destination == nullptr || capacity < action.payload.size())
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kError,
+      return {0u, universal_gnss_transport::TransportStatus::kError,
               universal_gnss_transport::TransportError::kInvalidArgument};
     }
     std::copy(action.payload.begin(), action.payload.end(), destination);
-    return {action.payload.size(),
-            universal_gnss_transport::TransportStatus::kOk,
+    return {action.payload.size(), universal_gnss_transport::TransportStatus::kOk,
             universal_gnss_transport::TransportError::kNone};
   }
 
   universal_gnss_transport::WriteResult Write(const std::uint8_t* data,
-                                               const std::size_t size) override
+                                              const std::size_t size) override
   {
     ++write_call_count_;
     if (!open_)
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kClosed,
+      return {0u, universal_gnss_transport::TransportStatus::kClosed,
               universal_gnss_transport::TransportError::kClosed};
     }
     if (size != 0u && data == nullptr)
     {
-      return {0u,
-              universal_gnss_transport::TransportStatus::kError,
+      return {0u, universal_gnss_transport::TransportStatus::kError,
               universal_gnss_transport::TransportError::kInvalidArgument};
     }
 
-    const WriteAction action = next_action_ < actions_.size()
-                                   ? actions_[next_action_++]
-                                   : default_write_action_;
+    const WriteAction action =
+        next_action_ < actions_.size() ? actions_[next_action_++] : default_write_action_;
     const std::size_t accepted = std::min(size, action.maximum_bytes);
     session_bytes_.back().insert(session_bytes_.back().end(), data, data + accepted);
     return {accepted, action.status, action.error};
   }
 
-  bool IsOpen() const override
-  {
-    return open_;
-  }
+  bool IsOpen() const override { return open_; }
 
-  void Close() override
-  {
-    open_ = false;
-  }
+  void Close() override { open_ = false; }
 
   void OpenNewSession()
   {
@@ -585,25 +537,16 @@ public:
     session_bytes_.emplace_back();
   }
 
-  std::size_t write_call_count() const
-  {
-    return write_call_count_;
-  }
+  std::size_t write_call_count() const { return write_call_count_; }
 
-  std::size_t read_call_count() const
-  {
-    return read_call_count_;
-  }
+  std::size_t read_call_count() const { return read_call_count_; }
 
   void SetRepeatedReadAction(ScriptedByteSource::Action action)
   {
     repeated_read_action_ = std::move(action);
   }
 
-  void SetDefaultWriteAction(WriteAction action)
-  {
-    default_write_action_ = std::move(action);
-  }
+  void SetDefaultWriteAction(WriteAction action) { default_write_action_ = std::move(action); }
 
   const std::vector<std::uint8_t>& session_bytes(const std::size_t index) const
   {
@@ -624,28 +567,24 @@ private:
 class RtcmForwardingHarness
 {
 public:
-  explicit RtcmForwardingHarness(
-      std::vector<ScriptedWriteByteDuplex::WriteAction> actions)
+  explicit RtcmForwardingHarness(std::vector<ScriptedWriteByteDuplex::WriteAction> actions)
   {
     rclcpp::NodeOptions options;
-    options.parameter_overrides(
-        std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
-                                       rclcpp::Parameter("publish_rate_hz", 0.01)});
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("receiver_family", "ublox"), rclcpp::Parameter("publish_rate_hz", 0.01)});
 
     auto duplex = std::make_unique<ScriptedWriteByteDuplex>(std::move(actions));
     duplex_ = duplex.get();
     receiver_ = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(duplex), options);
     publisher_node_ = std::make_shared<rclcpp::Node>("receiver_rtcm_scripted_writer");
-    publisher_ =
-        publisher_node_->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
+    publisher_ = publisher_node_->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
     executor_.add_node(receiver_->get_node_base_interface());
     executor_.add_node(publisher_node_->get_node_base_interface());
   }
 
   bool WaitForSubscription()
   {
-    for (std::size_t attempt = 0u;
-         attempt < 100u && publisher_->get_subscription_count() == 0u;
+    for (std::size_t attempt = 0u; attempt < 100u && publisher_->get_subscription_count() == 0u;
          ++attempt)
     {
       executor_.spin_some();
@@ -665,8 +604,7 @@ public:
       const std::size_t reads_before = duplex_->read_call_count();
       const std::size_t writes_before = duplex_->write_call_count();
       executor_.spin_once(std::chrono::milliseconds(1));
-      if (duplex_->read_call_count() == reads_before &&
-          duplex_->write_call_count() > writes_before)
+      if (duplex_->read_call_count() == reads_before && duplex_->write_call_count() > writes_before)
       {
         return;
       }
@@ -674,20 +612,11 @@ public:
     }
   }
 
-  void SpinOnce(const std::chrono::milliseconds timeout)
-  {
-    executor_.spin_once(timeout);
-  }
+  void SpinOnce(const std::chrono::milliseconds timeout) { executor_.spin_once(timeout); }
 
-  ScriptedWriteByteDuplex& duplex()
-  {
-    return *duplex_;
-  }
+  ScriptedWriteByteDuplex& duplex() { return *duplex_; }
 
-  universal_gnss_ros2::ReceiverNode& receiver()
-  {
-    return *receiver_;
-  }
+  universal_gnss_ros2::ReceiverNode& receiver() { return *receiver_; }
 
 private:
   ScriptedWriteByteDuplex* duplex_{nullptr};
@@ -697,8 +626,9 @@ private:
   rclcpp::executors::SingleThreadedExecutor executor_{};
 };
 
-const diagnostic_msgs::msg::DiagnosticStatus* FindDiagnosticStatusByName(
-    const diagnostic_msgs::msg::DiagnosticArray& array, const std::string& name)
+const diagnostic_msgs::msg::DiagnosticStatus*
+FindDiagnosticStatusByName(const diagnostic_msgs::msg::DiagnosticArray& array,
+                           const std::string& name)
 {
   for (const auto& status : array.status)
   {
@@ -750,8 +680,7 @@ protected:
 };
 
 template <typename Predicate>
-void SpinExecutorUntil(rclcpp::executors::SingleThreadedExecutor& executor,
-                       Predicate predicate)
+void SpinExecutorUntil(rclcpp::executors::SingleThreadedExecutor& executor, Predicate predicate)
 {
   for (std::size_t attempt = 0u; attempt < 10u && !predicate(); ++attempt)
   {
@@ -759,11 +688,10 @@ void SpinExecutorUntil(rclcpp::executors::SingleThreadedExecutor& executor,
   }
 }
 
-universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
-    const std::string& path,
-    const std::uint32_t baud,
-    const universal_gnss_driver::ReceiverDetectedFamily family,
-    const universal_gnss_driver::ReceiverProbeConfidence confidence)
+universal_gnss_driver::ReceiverProbeResult
+MakeDiscoveryResult(const std::string& path, const std::uint32_t baud,
+                    const universal_gnss_driver::ReceiverDetectedFamily family,
+                    const universal_gnss_driver::ReceiverProbeConfidence confidence)
 {
   universal_gnss_driver::ReceiverProbeResult result;
   result.path = path;
@@ -782,13 +710,11 @@ universal_gnss_driver::ReceiverProbeResult MakeDiscoveryResult(
   {
     result.evidence.ubx_frames_seen = 1u;
     result.reason = "valid_ubx_frame:+100";
-  }
-  else if (family == universal_gnss_driver::ReceiverDetectedFamily::kUnicore)
+  } else if (family == universal_gnss_driver::ReceiverDetectedFamily::kUnicore)
   {
     result.evidence.unicore_binary_seen = 1u;
     result.reason = "unicore_binary:+100";
-  }
-  else if (family == universal_gnss_driver::ReceiverDetectedFamily::kNmea)
+  } else if (family == universal_gnss_driver::ReceiverDetectedFamily::kNmea)
   {
     result.evidence.nmea_sentences_seen = 1u;
     result.reason = "valid_GGA:+20";
@@ -826,8 +752,7 @@ TEST_F(ReceiverNodeTest, ExplicitSerialConfigDoesNotRunDiscovery)
   bool discovery_called = false;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
     discovery_called = true;
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
   };
@@ -851,15 +776,16 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
   bool captured_include_platform = false;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
     captured_path = explicit_path;
     captured_include_platform = config.include_platform_uarts;
-    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/serial/by-id/f9p",
-                            921600u,
-                            universal_gnss_driver::ReceiverDetectedFamily::kUblox,
-                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+    auto result = MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u,
+                                      universal_gnss_driver::ReceiverDetectedFamily::kUblox,
+                                      universal_gnss_driver::ReceiverProbeConfidence::kHigh);
+    result.identity.receiver_identity = "f9p-serial-001";
+    result.identity.model = "ZED-F9P";
+    result.identity.firmware_version = "1.32";
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{std::move(result)};
   };
 
   rclcpp::NodeOptions options;
@@ -900,6 +826,11 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
             std::optional<std::string>{"100"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "discovery_reason"),
             std::optional<std::string>{"valid_ubx_frame:+100"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "receiver_identity"),
+            std::optional<std::string>{"f9p-serial-001"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "model"), std::optional<std::string>{"ZED-F9P"});
+  EXPECT_EQ(FindDiagnosticValue(*discovery_status, "firmware_version"),
+            std::optional<std::string>{"1.32"});
 }
 
 TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
@@ -908,15 +839,12 @@ TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
   std::vector<std::uint32_t> captured_bauds;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
     captured_path = explicit_path;
     captured_bauds = config.baud_candidates;
-    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyAMA2",
-                            921600u,
-                            universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
-                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{MakeDiscoveryResult(
+        "/dev/ttyAMA2", 921600u, universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
+        universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
   };
 
   rclcpp::NodeOptions options;
@@ -938,8 +866,7 @@ TEST_F(ReceiverNodeTest, DiscoveryFailureIsReportedClearly)
 {
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
     return std::vector<universal_gnss_driver::ReceiverProbeResult>{};
   };
 
@@ -969,13 +896,10 @@ TEST_F(ReceiverNodeTest, LowConfidenceDiscoveryIsRejected)
 {
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig&,
                        const std::optional<std::string>&,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
-    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyS1",
-                            921600u,
-                            universal_gnss_driver::ReceiverDetectedFamily::kUnknown,
-                            universal_gnss_driver::ReceiverProbeConfidence::kLow)};
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{MakeDiscoveryResult(
+        "/dev/ttyS1", 921600u, universal_gnss_driver::ReceiverDetectedFamily::kUnknown,
+        universal_gnss_driver::ReceiverProbeConfidence::kLow)};
   };
 
   rclcpp::NodeOptions options;
@@ -992,17 +916,12 @@ TEST_F(ReceiverNodeTest, LowConfidenceDiscoveryIsRejected)
 
 TEST_F(ReceiverNodeTest, GenericNmeaDiscoveryRequiresExplicitOptIn)
 {
-  auto make_discovery = []()
-  {
-    return [](const universal_gnss_driver::ReceiverProbeConfig&,
-              const std::optional<std::string>&,
-              const universal_gnss_driver::ReceiverDiscoveryPaths&)
-    {
-      return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-          MakeDiscoveryResult("/dev/ttyAMA2",
-                              921600u,
-                              universal_gnss_driver::ReceiverDetectedFamily::kNmea,
-                              universal_gnss_driver::ReceiverProbeConfidence::kMedium)};
+  auto make_discovery = []() {
+    return [](const universal_gnss_driver::ReceiverProbeConfig&, const std::optional<std::string>&,
+              const universal_gnss_driver::ReceiverDiscoveryPaths&) {
+      return std::vector<universal_gnss_driver::ReceiverProbeResult>{MakeDiscoveryResult(
+          "/dev/ttyAMA2", 921600u, universal_gnss_driver::ReceiverDetectedFamily::kNmea,
+          universal_gnss_driver::ReceiverProbeConfidence::kMedium)};
     };
   };
 
@@ -1053,16 +972,13 @@ TEST_F(ReceiverNodeTest, DiscoveryReceivesPlatformUartOptInAndKnownBaud)
   std::vector<std::uint32_t> captured_bauds;
   auto discovery = [&](const universal_gnss_driver::ReceiverProbeConfig& config,
                        const std::optional<std::string>& explicit_path,
-                       const universal_gnss_driver::ReceiverDiscoveryPaths&)
-  {
+                       const universal_gnss_driver::ReceiverDiscoveryPaths&) {
     include_platform_uarts = config.include_platform_uarts;
     captured_bauds = config.baud_candidates;
     EXPECT_EQ(explicit_path, std::optional<std::string>{"/dev/ttyAMA2"});
-    return std::vector<universal_gnss_driver::ReceiverProbeResult>{
-        MakeDiscoveryResult("/dev/ttyAMA2",
-                            921600u,
-                            universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
-                            universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
+    return std::vector<universal_gnss_driver::ReceiverProbeResult>{MakeDiscoveryResult(
+        "/dev/ttyAMA2", 921600u, universal_gnss_driver::ReceiverDetectedFamily::kUnicore,
+        universal_gnss_driver::ReceiverProbeConfidence::kHigh)};
   };
 
   rclcpp::NodeOptions options;
@@ -1151,9 +1067,8 @@ TEST_F(ReceiverNodeTest, ReceiverConsumesRtcmPublishedByNtripNode)
       std::size_t offset = 0u;
       while (offset < data.size())
       {
-        const ssize_t bytes_written = ::write(peer_fd_,
-                                              data.data() + static_cast<std::ptrdiff_t>(offset),
-                                              data.size() - offset);
+        const ssize_t bytes_written = ::write(
+            peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
         if (bytes_written < 0)
         {
           if (errno == EINTR)
@@ -1258,9 +1173,8 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   AppendBytes(stream,
               BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
   AppendBytes(stream, BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"));
-  AppendBytes(stream,
-              BuildNmeaSentence(
-                  "GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
+  AppendBytes(stream, BuildNmeaSentence(
+                          "GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
   AppendBytes(stream, BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"));
 
   rclcpp::NodeOptions options;
@@ -1309,13 +1223,9 @@ TEST_F(ReceiverNodeTest, PublishesStableReceiptProvenanceInsteadOfPublicationTim
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
   });
 
   rclcpp::NodeOptions options;
@@ -1335,10 +1245,8 @@ TEST_F(ReceiverNodeTest, PublishesStableReceiptProvenanceInsteadOfPublicationTim
   std::this_thread::sleep_for(std::chrono::milliseconds(50));
   node.PublishNow();
   ASSERT_TRUE(node.last_status_message().has_value());
-  const auto first_published_stamp_ns =
-      RosTimeToNanoseconds(node.last_status_message()->stamp);
-  const auto first_position_sequence =
-      node.last_status_message()->position_observation_sequence;
+  const auto first_published_stamp_ns = RosTimeToNanoseconds(node.last_status_message()->stamp);
+  const auto first_position_sequence = node.last_status_message()->position_observation_sequence;
   EXPECT_GE(first_published_stamp_ns, first_receipt_lower_ns);
   EXPECT_LE(first_published_stamp_ns, first_receipt_upper_ns);
   EXPECT_EQ(first_position_sequence, 1u);
@@ -1346,21 +1254,17 @@ TEST_F(ReceiverNodeTest, PublishesStableReceiptProvenanceInsteadOfPublicationTim
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
   node.PublishNow();
   ASSERT_TRUE(node.last_status_message().has_value());
-  EXPECT_EQ(RosTimeToNanoseconds(node.last_status_message()->stamp),
-            first_published_stamp_ns)
+  EXPECT_EQ(RosTimeToNanoseconds(node.last_status_message()->stamp), first_published_stamp_ns)
       << "republishing cached state must preserve its original receipt provenance";
-  EXPECT_EQ(node.last_status_message()->position_observation_sequence,
-            first_position_sequence)
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence, first_position_sequence)
       << "republishing cached state must not invent a position observation";
 
   ASSERT_TRUE(node.StepOnce());
   node.PublishNow();
   ASSERT_TRUE(node.last_status_message().has_value());
-  EXPECT_GT(RosTimeToNanoseconds(node.last_status_message()->stamp),
-            first_published_stamp_ns)
+  EXPECT_GT(RosTimeToNanoseconds(node.last_status_message()->stamp), first_published_stamp_ns)
       << "a genuinely new observation must carry new receipt provenance";
-  EXPECT_EQ(node.last_status_message()->position_observation_sequence,
-            first_position_sequence + 1u)
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence, first_position_sequence + 1u)
       << "an identical newly received fix must advance position provenance";
 }
 
@@ -1373,8 +1277,7 @@ TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"),
-       true},
+       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"), true},
   });
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
@@ -1525,9 +1428,7 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionDrainsMultiChunkBacklogAtLowPublishRat
   for (std::size_t index = 0u; index < 3u; ++index)
   {
     actions.push_back({universal_gnss_transport::TransportStatus::kOk,
-                       universal_gnss_transport::TransportError::kNone,
-                       gga,
-                       true});
+                       universal_gnss_transport::TransportError::kNone, gga, true});
   }
 
   auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
@@ -1537,8 +1438,7 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionDrainsMultiChunkBacklogAtLowPublishRat
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1558,25 +1458,19 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionIsIndependentOfPublicationRate)
 
   for (const double publish_rate_hz : {1.0, 5.0, 10.0, 20.0})
   {
-    auto source = std::make_unique<ScriptedByteSource>(
-        std::vector<ScriptedByteSource::Action>{
-            {universal_gnss_transport::TransportStatus::kOk,
-             universal_gnss_transport::TransportError::kNone,
-             gga,
-             true},
-            {universal_gnss_transport::TransportStatus::kOk,
-             universal_gnss_transport::TransportError::kNone,
-             gga,
-             true},
-        });
+    auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+        {universal_gnss_transport::TransportStatus::kOk,
+         universal_gnss_transport::TransportError::kNone, gga, true},
+        {universal_gnss_transport::TransportStatus::kOk,
+         universal_gnss_transport::TransportError::kNone, gga, true},
+    });
     auto* source_ptr = source.get();
     rclcpp::NodeOptions options;
     options.parameter_overrides(std::vector<rclcpp::Parameter>{
         rclcpp::Parameter("receiver_family", "nmea"),
         rclcpp::Parameter("publish_rate_hz", publish_rate_hz),
     });
-    auto node =
-        std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+    auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node->get_node_base_interface());
 
@@ -1596,12 +1490,10 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionBoundsBurstByByteBudget)
   std::vector<ScriptedByteSource::Action> actions;
   actions.push_back({universal_gnss_transport::TransportStatus::kOk,
                      universal_gnss_transport::TransportError::kNone,
-                     std::vector<std::uint8_t>(kChunkSize, 0u),
-                     true});
+                     std::vector<std::uint8_t>(kChunkSize, 0u), true});
   actions.push_back({universal_gnss_transport::TransportStatus::kOk,
                      universal_gnss_transport::TransportError::kNone,
-                     std::vector<std::uint8_t>(kChunkSize, 0u),
-                     true});
+                     std::vector<std::uint8_t>(kChunkSize, 0u), true});
   auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
   auto* source_ptr = source.get();
   rclcpp::NodeOptions options;
@@ -1610,8 +1502,7 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionBoundsBurstByByteBudget)
       rclcpp::Parameter("publish_rate_hz", 0.1),
       rclcpp::Parameter("read_chunk_size", static_cast<std::int64_t>(kChunkSize)),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1627,12 +1518,10 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionBoundsBurstByByteBudget)
 
 TEST_F(ReceiverNodeTest, Uga003AcquisitionContinuousSourceYieldsAndResumes)
 {
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{});
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{});
   source->SetRepeatedAction({universal_gnss_transport::TransportStatus::kOk,
                              universal_gnss_transport::TransportError::kNone,
-                             std::vector<std::uint8_t>(64u, 0u),
-                             true});
+                             std::vector<std::uint8_t>(64u, 0u), true});
   auto* source_ptr = source.get();
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
@@ -1640,8 +1529,7 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionContinuousSourceYieldsAndResumes)
       rclcpp::Parameter("publish_rate_hz", 0.1),
       rclcpp::Parameter("read_chunk_size", 64),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1652,24 +1540,22 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionContinuousSourceYieldsAndResumes)
       << "the byte budget must bound even an always-readable source";
   node->PublishNow();
 
-  SpinExecutorUntil(
-      executor, [&]() { return source_ptr->read_call_count() > first_callback_reads; });
+  SpinExecutorUntil(executor,
+                    [&]() { return source_ptr->read_call_count() > first_callback_reads; });
   EXPECT_GT(source_ptr->read_call_count(), first_callback_reads)
       << "budget exhaustion must yield, not cancel later acquisition";
 }
 
 TEST_F(ReceiverNodeTest, Uga003AcquisitionIdleStopsWithoutBusyLoopOrCancellation)
 {
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{});
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{});
   auto* source_ptr = source.get();
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1677,8 +1563,7 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionIdleStopsWithoutBusyLoopOrCancellation
   EXPECT_EQ(source_ptr->read_call_count(), 1u)
       << "kOk + 0 must end the current callback immediately";
   SpinExecutorUntil(executor, [&]() { return source_ptr->read_call_count() > 1u; });
-  EXPECT_EQ(source_ptr->read_call_count(), 2u)
-      << "idle must leave the acquisition timer active";
+  EXPECT_EQ(source_ptr->read_call_count(), 2u) << "idle must leave the acquisition timer active";
 }
 
 TEST_F(ReceiverNodeTest, Uga003AcquisitionParsesFragmentedFrameWithLeaderReceipt)
@@ -1688,41 +1573,35 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionParsesFragmentedFrameWithLeaderReceipt
   std::vector<ScriptedByteSource::Action> actions{
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       std::vector<std::uint8_t>(gga.begin(), gga.begin() + 1),
-       true},
+       std::vector<std::uint8_t>(gga.begin(), gga.begin() + 1), true},
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       std::vector<std::uint8_t>(gga.begin() + 1, gga.begin() + 20),
-       true},
+       std::vector<std::uint8_t>(gga.begin() + 1, gga.begin() + 20), true},
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       std::vector<std::uint8_t>(gga.begin() + 20, gga.end()),
-       true},
+       std::vector<std::uint8_t>(gga.begin() + 20, gga.end()), true},
   };
   auto source = std::make_unique<ScriptedByteSource>(std::move(actions));
   auto* source_ptr = source.get();
   universal_gnss_ros2::ReceiverNode* node_ptr = nullptr;
   std::vector<std::int64_t> read_return_times;
-  source_ptr->SetBeforeReturn(
-      [&](const std::size_t read_index, const std::size_t payload_size)
-      {
-        if (payload_size == 0u)
-        {
-          return;
-        }
-        if (read_index > 1u)
-        {
-          std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-        read_return_times.push_back(node_ptr->now().nanoseconds());
-      });
+  source_ptr->SetBeforeReturn([&](const std::size_t read_index, const std::size_t payload_size) {
+    if (payload_size == 0u)
+    {
+      return;
+    }
+    if (read_index > 1u)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    read_return_times.push_back(node_ptr->now().nanoseconds());
+  });
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   node_ptr = node.get();
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
@@ -1743,25 +1622,19 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionCountsIdenticalObservationsButNotRepub
 {
   const auto gga =
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{
-          {universal_gnss_transport::TransportStatus::kOk,
-           universal_gnss_transport::TransportError::kNone,
-           gga,
-           true},
-          {universal_gnss_transport::TransportStatus::kOk,
-           universal_gnss_transport::TransportError::kNone,
-           gga,
-           true},
-      });
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone, gga, true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone, gga, true},
+  });
   auto* source_ptr = source.get();
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1789,17 +1662,14 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionFlushesPendingRtcmAtMostOnceWhileDrain
   ASSERT_TRUE(harness.WaitForSubscription());
   harness.Publish(1077u, BuildRtcmFrame(1077u));
 
-  harness.duplex().SetRepeatedReadAction(
-      {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       std::vector<std::uint8_t>(64u, 0u),
-       true});
+  harness.duplex().SetRepeatedReadAction({universal_gnss_transport::TransportStatus::kOk,
+                                          universal_gnss_transport::TransportError::kNone,
+                                          std::vector<std::uint8_t>(64u, 0u), true});
   const std::size_t reads_before = harness.duplex().read_call_count();
   const std::size_t writes_before = harness.duplex().write_call_count();
 
   for (std::size_t attempt = 0u;
-       attempt < 10u && harness.duplex().read_call_count() == reads_before;
-       ++attempt)
+       attempt < 10u && harness.duplex().read_call_count() == reads_before; ++attempt)
   {
     harness.SpinOnce(std::chrono::milliseconds(20));
   }
@@ -1814,25 +1684,21 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionTerminalErrorCancelsOnlyAcquisitionTim
 {
   const auto gga =
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{
-          {universal_gnss_transport::TransportStatus::kOk,
-           universal_gnss_transport::TransportError::kNone,
-           gga,
-           true},
-          {universal_gnss_transport::TransportStatus::kError,
-           universal_gnss_transport::TransportError::kReadFailure,
-           {},
-           false},
-      });
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone, gga, true},
+      {universal_gnss_transport::TransportStatus::kError,
+       universal_gnss_transport::TransportError::kReadFailure,
+       {},
+       false},
+  });
   auto* source_ptr = source.get();
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
 
@@ -1849,22 +1715,20 @@ TEST_F(ReceiverNodeTest, Uga003AcquisitionTerminalErrorCancelsOnlyAcquisitionTim
   {
     executor.spin_once(std::chrono::milliseconds(20));
   }
-  EXPECT_EQ(source_ptr->read_call_count(), 2u)
-      << "terminal input must cancel acquisition polling";
+  EXPECT_EQ(source_ptr->read_call_count(), 2u) << "terminal input must cancel acquisition polling";
 }
 
 TEST_F(ReceiverNodeTest, Uga003AcquisitionTimerIsDestroyedWithNode)
 {
   auto counters = std::make_shared<ScriptedByteSource::Counters>();
-  auto source = std::make_unique<ScriptedByteSource>(
-      std::vector<ScriptedByteSource::Action>{}, counters);
+  auto source =
+      std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{}, counters);
   rclcpp::NodeOptions options;
   options.parameter_overrides(std::vector<rclcpp::Parameter>{
       rclcpp::Parameter("receiver_family", "nmea"),
       rclcpp::Parameter("publish_rate_hz", 0.1),
   });
-  auto node =
-      std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto node = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node->get_node_base_interface());
   SpinExecutorUntil(executor, [&]() { return counters->reads > 0u; });
@@ -1912,17 +1776,11 @@ TEST_F(ReceiverNodeTest, WindowsParserHealthInsteadOfLatchingLifetimeMalformedCo
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(malformed_line),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(malformed_line), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(malformed_line),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(malformed_line), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(malformed_line),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(malformed_line), true},
       {universal_gnss_transport::TransportStatus::kEndOfStream,
        universal_gnss_transport::TransportError::kNone,
        {},
@@ -1983,9 +1841,7 @@ TEST_F(ReceiverNodeTest, IgnoresUnknownButValidUnicoreRecordsForParserHealth)
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(unknown_line),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(unknown_line), true},
       {universal_gnss_transport::TransportStatus::kEndOfStream,
        universal_gnss_transport::TransportError::kNone,
        {},
@@ -2025,25 +1881,21 @@ TEST_F(ReceiverNodeTest, PublishesRuntimeStaleRecoveryStatusWhenFreshObservation
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
       "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
       "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
-  const std::string unknown_rtk_status = BuildUnicoreAsciiFrame(
-      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0");
+  const std::string unknown_rtk_status =
+      BuildUnicoreAsciiFrame("#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+                             "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0");
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(best_nav),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(best_nav), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(unknown_rtk_status),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(unknown_rtk_status), true},
   });
 
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
-                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "unicore"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -2084,13 +1936,9 @@ TEST_F(ReceiverNodeTest, KeepsQuarterHertzRuntimeFreshAcrossFourSecondCadence)
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
   });
 
   rclcpp::NodeOptions options;
@@ -2109,12 +1957,12 @@ TEST_F(ReceiverNodeTest, KeepsQuarterHertzRuntimeFreshAcrossFourSecondCadence)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto& before_next_observation = *node.last_diagnostics_message();
-  EXPECT_EQ(FindDiagnosticStatusByName(before_next_observation,
-                                       "universal_gnss/runtime_state_stale"),
-            nullptr);
-  EXPECT_EQ(FindDiagnosticStatusByName(before_next_observation,
-                                       "universal_gnss/transport_data_stale"),
-            nullptr);
+  EXPECT_EQ(
+      FindDiagnosticStatusByName(before_next_observation, "universal_gnss/runtime_state_stale"),
+      nullptr);
+  EXPECT_EQ(
+      FindDiagnosticStatusByName(before_next_observation, "universal_gnss/transport_data_stale"),
+      nullptr);
   EXPECT_TRUE(node.last_fix_message().has_value());
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -2129,13 +1977,9 @@ TEST_F(ReceiverNodeTest, UsesExpectedOneHertzCadenceWithJitter)
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
   });
 
   rclcpp::NodeOptions options;
@@ -2163,13 +2007,9 @@ TEST_F(ReceiverNodeTest, DetectsHighRateSilenceAndRecoversAtDerivedTimeout)
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
   });
 
   rclcpp::NodeOptions options;
@@ -2215,9 +2055,7 @@ TEST_F(ReceiverNodeTest, UsesConservativeFallbackWithoutExpectedCadence)
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       gga,
-       true},
+       universal_gnss_transport::TransportError::kNone, gga, true},
   });
 
   rclcpp::NodeOptions options;
@@ -2245,29 +2083,23 @@ TEST_F(ReceiverNodeTest, RefreshesRuntimeFreshnessOnRuntimeObservationsWithoutSt
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
       "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
       "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
-  const std::string unknown_rtk_status = BuildUnicoreAsciiFrame(
-      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0");
+  const std::string unknown_rtk_status =
+      BuildUnicoreAsciiFrame("#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+                             "0,0,0,0,0,0,0,0,0,0,0,UNKNOWN,5,0,99,12,0");
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(best_nav),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(best_nav), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(unknown_rtk_status),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(unknown_rtk_status), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(unknown_rtk_status),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(unknown_rtk_status), true},
   });
 
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
-                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "unicore"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -2304,25 +2136,21 @@ TEST_F(ReceiverNodeTest, KeepsRuntimeStaleWhenOnlySemanticTrafficContinues)
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
       "1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
       "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
-  const std::string rtcm_status = BuildUnicoreAsciiFrame(
-      "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
-      "1124,21186,0,21,0,6,11,0,0,21");
+  const std::string rtcm_status =
+      BuildUnicoreAsciiFrame("#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+                             "1124,21186,0,21,0,6,11,0,0,21");
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(best_nav),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(best_nav), true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(rtcm_status),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(rtcm_status), true},
   });
 
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
-                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "unicore"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -2361,15 +2189,13 @@ TEST_F(ReceiverNodeTest, ForwardedRtcmSemanticTrafficDoesNotRefreshRuntimeFreshn
 
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       BuildBytes(best_nav),
-       true},
+       universal_gnss_transport::TransportError::kNone, BuildBytes(best_nav), true},
   });
 
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore"),
-                                     rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "unicore"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 1.0)});
 
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -2428,8 +2254,7 @@ TEST_F(ReceiverNodeTest, ReportsTransportReadErrorAndSuppressesStaleFix)
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
        universal_gnss_transport::TransportError::kNone,
-       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-       true},
+       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), true},
       {universal_gnss_transport::TransportStatus::kError,
        universal_gnss_transport::TransportError::kReadFailure,
        {},
@@ -2527,21 +2352,16 @@ TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmAcceptanceFromUbloxStream)
 TEST_F(ReceiverNodeTest, ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers)
 {
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
-                                     rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "ublox"),
+      rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
 
-  const auto accepted_rtcm =
-      BuildUbxFrame(0x02u, 0x32u, MakeUbxRxmRtcmPayload(1077u, 42u, 0x04u));
+  const auto accepted_rtcm = BuildUbxFrame(0x02u, 0x32u, MakeUbxRxmRtcmPayload(1077u, 42u, 0x04u));
   auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       accepted_rtcm,
-       true},
+       universal_gnss_transport::TransportError::kNone, accepted_rtcm, true},
       {universal_gnss_transport::TransportStatus::kOk,
-       universal_gnss_transport::TransportError::kNone,
-       accepted_rtcm,
-       true},
+       universal_gnss_transport::TransportError::kNone, accepted_rtcm, true},
   });
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
 
@@ -2549,7 +2369,7 @@ TEST_F(ReceiverNodeTest, ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto* active = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
-                                                   "universal_gnss/receiver_rtcm_active");
+                                                  "universal_gnss/receiver_rtcm_active");
   ASSERT_NE(active, nullptr);
   EXPECT_EQ(active->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(active->message, "Receiver reported accepted RTCM corrections");
@@ -2558,8 +2378,8 @@ TEST_F(ReceiverNodeTest, ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto& silent_diagnostics = *node.last_diagnostics_message();
-  const auto* stale = FindDiagnosticStatusByName(silent_diagnostics,
-                                                 "universal_gnss/receiver_rtcm_stale");
+  const auto* stale =
+      FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss/receiver_rtcm_stale");
   const auto* forwarding =
       FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss/rtcm_forwarding");
   ASSERT_NE(stale, nullptr);
@@ -2572,8 +2392,8 @@ TEST_F(ReceiverNodeTest, ReportsReceiverRtcmUseStaleAfterSilenceAndRecovers)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto& recovered_diagnostics = *node.last_diagnostics_message();
-  const auto* recovered = FindDiagnosticStatusByName(recovered_diagnostics,
-                                                      "universal_gnss/receiver_rtcm_active");
+  const auto* recovered =
+      FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/receiver_rtcm_active");
   const auto* recovered_forwarding =
       FindDiagnosticStatusByName(recovered_diagnostics, "universal_gnss/rtcm_forwarding");
   ASSERT_NE(recovered, nullptr);
@@ -2592,9 +2412,8 @@ TEST_F(ReceiverNodeTest, ReportsReceiverSideRtcmStatusFromUnicoreStream)
   options.parameter_overrides(
       std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "unicore")});
 
-  const std::string rtcm_status =
-      "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
-      "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
+  const std::string rtcm_status = "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+                                  "1124,21186,0,21,0,6,11,0,0,21*601a7581\r\n";
   auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>(
       std::vector<std::uint8_t>(rtcm_status.begin(), rtcm_status.end()));
   universal_gnss_ros2::ReceiverNode node(std::move(source), options);
@@ -2691,8 +2510,7 @@ TEST_F(ReceiverNodeTest, PreservesWouldBlockSuffixBeforeFollowingRtcmFrame)
             std::optional<std::string>{"2"});
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
             std::optional<std::string>{std::to_string(expected.size())});
-  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
-            std::optional<std::string>{"0"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"), std::optional<std::string>{"0"});
 }
 
 TEST_F(ReceiverNodeTest, RetriesZeroProgressRtcmWriteWithoutBusyLoop)
@@ -2717,8 +2535,7 @@ TEST_F(ReceiverNodeTest, RetriesZeroProgressRtcmWriteWithoutBusyLoop)
   ASSERT_NE(forwarding, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
             std::optional<std::string>{"1"});
-  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
-            std::optional<std::string>{"0"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"), std::optional<std::string>{"0"});
 }
 
 TEST_F(ReceiverNodeTest, RetainsRtcmOffsetAcrossMultiplePartialFlushes)
@@ -2748,12 +2565,9 @@ TEST_F(ReceiverNodeTest, HardRtcmWriteErrorAbandonsOldSessionSuffix)
   const auto frame_a = BuildRtcmFrame(1077u);
   const auto frame_b = BuildRtcmFrame(1087u);
   const std::vector<std::uint8_t> prefix(frame_a.begin(), frame_a.begin() + 3);
-  RtcmForwardingHarness harness(
-      {Action{3u},
-       Action{0u},
-       Action{0u,
-              universal_gnss_transport::TransportStatus::kError,
-              universal_gnss_transport::TransportError::kWriteFailure}});
+  RtcmForwardingHarness harness({Action{3u}, Action{0u},
+                                 Action{0u, universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure}});
   ASSERT_TRUE(harness.WaitForSubscription());
 
   harness.Publish(1077u, frame_a);
@@ -2777,8 +2591,7 @@ TEST_F(ReceiverNodeTest, HardRtcmWriteErrorAbandonsOldSessionSuffix)
             std::optional<std::string>{"1"});
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_bytes"),
             std::optional<std::string>{std::to_string(prefix.size() + frame_b.size())});
-  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"), std::optional<std::string>{"1"});
 }
 
 TEST_F(ReceiverNodeTest, DisconnectClearsPendingRtcmBeforeNewSession)
@@ -2840,16 +2653,15 @@ TEST_F(ReceiverNodeTest, BoundsPendingRtcmQueueAndDropsOnlyWholeNewFrame)
   ASSERT_NE(forwarding, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
             std::optional<std::string>{std::to_string(kExpectedQueueCapacity)});
-  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"), std::optional<std::string>{"1"});
 }
 
 TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
 {
   rclcpp::NodeOptions options;
-  options.parameter_overrides(
-      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox"),
-                                     rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "ublox"),
+      rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 0.05)});
 
   auto duplex = std::make_unique<universal_gnss_transport::MemoryByteDuplex>();
   auto* duplex_ptr = duplex.get();
@@ -2888,17 +2700,15 @@ TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto* stale = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
-                                                  "universal_gnss/rtcm_forwarding");
+                                                 "universal_gnss/rtcm_forwarding");
   ASSERT_NE(stale, nullptr);
   EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(stale->message, "RTCM forwarding stale");
-  EXPECT_EQ(FindDiagnosticValue(*stale, "forwarded_frame_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*stale, "forwarded_frame_count"), std::optional<std::string>{"1"});
 
   publisher->publish(message);
   for (std::size_t attempt = 0u;
-       attempt < 8u && duplex_ptr->written_bytes().size() < bytes.size() * 2u;
-       ++attempt)
+       attempt < 8u && duplex_ptr->written_bytes().size() < bytes.size() * 2u; ++attempt)
   {
     executor.spin_some();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -2908,7 +2718,7 @@ TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto* recovered = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
-                                                      "universal_gnss/rtcm_forwarding");
+                                                     "universal_gnss/rtcm_forwarding");
   ASSERT_NE(recovered, nullptr);
   EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(recovered->message, "RTCM forwarding active");
@@ -2936,8 +2746,8 @@ TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostic
   executor.spin_some();
 
   const auto rtcm_1006 = BuildRtcm1006Frame(88u, 1000LL, -2000LL, 3000LL, 2500u);
-  const auto rtcm_1230 = BuildRtcm1230Frame(
-      88u, true, true, false, true, false, 10, std::nullopt, -15, std::nullopt);
+  const auto rtcm_1230 =
+      BuildRtcm1230Frame(88u, true, true, false, true, false, 10, std::nullopt, -15, std::nullopt);
   auto malformed_1230_payload = std::vector<std::uint8_t>{
       static_cast<std::uint8_t>((1230u >> 4u) & 0xFFu),
       static_cast<std::uint8_t>((1230u & 0x0Fu) << 4u),
@@ -2994,21 +2804,17 @@ TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostic
             std::optional<std::string>{"1"});
   EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "decode_failure_count"),
             std::optional<std::string>{"1"});
-  EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "malformed_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*glonass_bias, "malformed_count"), std::optional<std::string>{"1"});
 
   const auto* msm_summary =
       FindDiagnosticStatusByName(diagnostics, "universal_gnss/rtcm_semantic/msm_summary");
   ASSERT_NE(msm_summary, nullptr);
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "message_type"),
-            std::optional<std::string>{"1077"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "message_type"), std::optional<std::string>{"1077"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "station_id"), std::optional<std::string>{"88"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "constellations_seen"),
             std::optional<std::string>{"gps"});
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "satellite_count"),
-            std::optional<std::string>{"1"});
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "satellite_count"), std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"), std::optional<std::string>{"1"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "cell_count"), std::optional<std::string>{"1"});
   const auto msm_age_ns = FindDiagnosticValue(*msm_summary, "age_ns");
   ASSERT_NE(msm_age_ns, std::nullopt);
@@ -3037,4 +2843,4 @@ TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostic
       << "a ROS-stamp jump must not prevent monotonic RTCM freshness recovery";
 }
 
-}  // namespace
+} // namespace

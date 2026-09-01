@@ -464,7 +464,8 @@ Diagnostic states surfaced by the node include:
 
 - startup parameter validation failure
 - receiver discovery attempted / succeeded / failed
-- discovered path / baud / family / confidence
+- discovered path / baud / family / confidence, plus optional receiver identity,
+  model, and firmware version when the read-only probe observed them
 - serial/TCP transport open failure
 - no data received after startup grace period
 - stale transport activity
