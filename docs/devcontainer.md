@@ -10,6 +10,21 @@ The container is:
 - prepared for future `lyrical` validation without duplicating Dockerfiles
 - suitable for both the normal CMake/CTest workflow and the ROS 2 `colcon`
   workflow
+- provisioned with the repository-authoritative `clang-format-21`
+
+## C/C++ formatting
+
+The repository-root [`.clang-format`](../.clang-format) is the authoritative style.
+Use only `clang-format-21` for authoritative formatting or validation; an unversioned
+`clang-format` executable is not an accepted substitute. The devcontainer installs the
+required binary from the LLVM 21 repository.
+
+For explicitly touched C/C++ files:
+
+```bash
+bash scripts/clang_format_21.sh --apply path/to/file.cpp path/to/file.hpp
+bash scripts/clang_format_21.sh --check path/to/file.cpp path/to/file.hpp
+```
 
 `MowgliNext` is no longer required for day-to-day ROS 2 builds of
 `universal_gnss_ros2`.

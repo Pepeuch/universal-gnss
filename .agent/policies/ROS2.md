@@ -9,19 +9,19 @@ than redefining them for a downstream robot.
 For touched C++ files under `ros2/`, format with:
 
 ```bash
-clang-format -i -style=file:ros2/.clang-format <touched-files>
+clang-format-21 -i -style=file <touched-files>
 ```
 
 Before concluding, verify formatting with:
 
 ```bash
-git clang-format --diff origin/main -- <touched-files>
+clang-format-21 --dry-run --Werror -style=file <touched-files>
 ```
 
 If `origin/main` is unavailable locally, at minimum run:
 
 ```bash
-clang-format --dry-run --Werror -style=file:ros2/.clang-format <touched-files>
+clang-format-21 --dry-run --Werror -style=file <touched-files>
 ```
 
 Also run the affected ROS2/package/integration validation appropriate to the changed

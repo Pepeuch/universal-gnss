@@ -5,6 +5,7 @@ add_library(
   src/gga_sentence_builder.cpp
   src/ntrip_request.cpp
   src/ntrip_client.cpp
+  src/ntrip_caster_orchestrator.cpp
   src/ntrip_reconnect_policy.cpp
   src/ntrip_sourcetable.cpp
 )
@@ -46,6 +47,20 @@ if(BUILD_TESTING)
       universal_gnss_ntrip
   )
   add_test(NAME gnss_ntrip_test_ntrip_client COMMAND gnss_ntrip_test_ntrip_client)
+
+  add_executable(
+    gnss_ntrip_test_ntrip_caster_orchestrator
+    tests/test_ntrip_caster_orchestrator.cpp
+  )
+  target_link_libraries(
+    gnss_ntrip_test_ntrip_caster_orchestrator
+    PRIVATE
+      universal_gnss_ntrip
+  )
+  add_test(
+    NAME gnss_ntrip_test_ntrip_caster_orchestrator
+    COMMAND gnss_ntrip_test_ntrip_caster_orchestrator
+  )
 
   add_executable(
     gnss_ntrip_test_ntrip_reconnect_policy

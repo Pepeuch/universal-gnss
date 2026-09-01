@@ -185,7 +185,7 @@ This includes at least:
 - `ninja`
 - `make`
 - `colcon`
-- `clang-format`
+- `clang-format-21`
 - `npm`
 - `yarn`
 - `pnpm`
@@ -198,6 +198,14 @@ Read-only inspection may run as root when necessary.
 
 Do not leave root-owned repository artifacts.
 Repair ownership or remove only generated root-owned artifacts before continuing.
+
+### C/C++ formatting baseline
+
+The repository-authoritative C/C++ formatter is `clang-format-21`, using the
+repository-root `.clang-format`. Do not use an arbitrary unversioned
+`clang-format` binary as authoritative validation. For an explicit set of touched
+files, use `bash scripts/clang_format_21.sh --apply <files>` or
+`bash scripts/clang_format_21.sh --check <files>`.
 
 ---
 
@@ -276,9 +284,17 @@ merely to fit the requested scope.
 
 Budget policy is always active and does **not** require `LONGTASK.md`.
 
+Apply numeric thresholds only when the execution environment explicitly exposes
+a reliable remaining-budget or remaining-capacity value applicable to the task.
+Never infer a budget percentage from context length, tool-call count, elapsed
+time, compaction, task complexity, output length, or model intuition. If no
+such metric is available, do not enter low-budget or hard-stop mode. An explicit
+environment report that capacity is exhausted or critically unsafe remains a
+hard-stop signal.
+
 ### Low-budget mode: below 20%
 
-When visible remaining budget is below 20%:
+When an explicitly available applicable remaining-budget metric is below 20%:
 
 - stop broad exploration;
 - stop optional refactoring/cleanup;
@@ -289,11 +305,12 @@ When visible remaining budget is below 20%:
 - finish only the smallest safe operation already in progress;
 - preserve a precise next step.
 
-Do not load `LONGTASK.md` solely because budget dropped below 20%.
+Do not load `LONGTASK.md` solely because the applicable budget metric dropped below 20%.
 
 ### Critical hard stop: at or below 10%
 
-At or below 10%, recoverability has absolute priority.
+When an explicitly available applicable remaining-budget metric is at or below
+10%, recoverability has absolute priority.
 
 Do **not** start any new:
 

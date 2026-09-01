@@ -10,12 +10,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     PRIVATE
       src/posix_serial_transport.cpp
       src/tcp_client_transport.cpp
+      src/udp_client_transport.cpp
   )
   target_compile_definitions(
     universal_gnss_transport
     PUBLIC
       UNIVERSAL_GNSS_TRANSPORT_HAS_POSIX_SERIAL=1
       UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT=1
+      UNIVERSAL_GNSS_TRANSPORT_HAS_UDP_CLIENT=1
   )
   target_link_libraries(universal_gnss_transport PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
@@ -67,6 +69,20 @@ if(BUILD_TESTING)
     add_test(
       NAME gnss_transport_test_tcp_client_transport
       COMMAND gnss_transport_test_tcp_client_transport
+    )
+
+    add_executable(
+      gnss_transport_test_udp_client_transport
+      tests/test_udp_client_transport.cpp
+    )
+    target_link_libraries(
+      gnss_transport_test_udp_client_transport
+      PRIVATE
+        universal_gnss_transport
+    )
+    add_test(
+      NAME gnss_transport_test_udp_client_transport
+      COMMAND gnss_transport_test_udp_client_transport
     )
   endif()
 endif()

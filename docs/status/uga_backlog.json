@@ -32,7 +32,10 @@
     {"ids": "UGA-139", "status": "PARTIAL"},
     {"ids": "UGA-140", "status": "PARTIAL"},
     {"ids": "UGA-141", "status": "IMPLEMENTED"},
-    {"ids": "UGA-142..UGA-147", "status": "OPEN"},
+    {"ids": "UGA-142", "status": "PARTIAL"},
+    {"ids": "UGA-143..UGA-145", "status": "OPEN"},
+    {"ids": "UGA-146", "status": "IMPLEMENTED"},
+    {"ids": "UGA-147", "status": "OPEN"},
     {"ids": "UGA-148..UGA-154", "status": "DUPLICATE"},
     {"ids": "UGA-155..UGA-159", "status": "OPEN"},
     {"ids": "UGA-160", "status": "IMPLEMENTED"},
@@ -69,7 +72,7 @@
   "todo": {
     "default_state": "unchecked",
     "overrides": [
-      {"ids": ["UGA-128", "UGA-130..UGA-131", "UGA-133..UGA-138", "UGA-141", "UGA-160"], "state": "checked"},
+      {"ids": ["UGA-128", "UGA-130..UGA-131", "UGA-133..UGA-138", "UGA-141", "UGA-146", "UGA-160"], "state": "checked"},
       {"ids": ["UGA-129", "UGA-132", "UGA-148..UGA-154", "UGA-176", "UGA-199..UGA-200"], "state": "removed"}
     ]
   },

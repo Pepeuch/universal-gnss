@@ -312,7 +312,6 @@ PosixSerialTransport
 Still intentionally deferred:
 
 - UDP sockets
-- TLS
 - async I/O
 - reconnect loops
 - ROS 2 transport adapters
