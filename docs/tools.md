@@ -386,6 +386,36 @@ The current quality levels are intentionally simple:
 They are based conservatively on the final normalized runtime state plus any
 portable diagnostics already available from the parsed log.
 
+### `gnss_compare`
+
+`gnss_compare` compares two offline GNSS logs through the existing portable
+quality-report and normalized-runtime contracts.
+
+```text
+gnss_compare receiver-a.bin receiver-b.bin
+gnss_compare --json receiver-a.bin receiver-b.bin
+```
+
+It requires exactly two readable files; stdin is intentionally unsupported
+because a single stream cannot represent two independent captures.
+
+The comparison reports each log's processing and final quality summary, then
+reports whether final fix type and RTK mode match. When both final normalized
+states provide the needed values, it also reports:
+
+- final horizontal position separation in metres, using a mean-earth
+  great-circle calculation;
+- `right_minus_left` deltas for altitude, reported horizontal accuracy,
+  satellites used, mean CN0, and receiver-reported correction age.
+
+Missing values remain unavailable rather than becoming zero. JSON output is a
+versioned v1 report with explicit `null` values for unavailable comparisons.
+
+This is a descriptive offline comparison, not timeline alignment, capture-time
+reconstruction, a receiver quality ranking, a position-accuracy verdict, or
+hardware certification. It does not compare raw protocol bytes and does not
+change parser or normalized runtime-state semantics.
+
 ### `gnss_export`
 
 `gnss_export` is the structured offline runtime timeline exporter.

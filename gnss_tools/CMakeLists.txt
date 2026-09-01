@@ -6,6 +6,7 @@ add_library(
   src/gnss_stream_inspector.cpp
   src/gnss_replay.cpp
   src/gnss_quality_report.cpp
+  src/gnss_log_comparison.cpp
   src/ntrip_monitor.cpp
   src/profile_preview.cpp
   src/receiver_discovery_format.cpp
@@ -35,6 +36,7 @@ set(
   gnss_inspect
   gnss_replay
   gnss_quality_report
+  gnss_compare
   gnss_export
   gnss_profile_preview
   gnss_config_plan
@@ -80,6 +82,17 @@ add_executable(
 
 target_link_libraries(
   gnss_quality_report
+  PRIVATE
+    universal_gnss_tools
+)
+
+add_executable(
+  gnss_compare
+  src/gnss_compare.cpp
+)
+
+target_link_libraries(
+  gnss_compare
   PRIVATE
     universal_gnss_tools
 )
@@ -279,6 +292,22 @@ if(BUILD_TESTING)
       TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
   )
   add_test(NAME gnss_tools_test_gnss_quality_report COMMAND gnss_tools_test_gnss_quality_report)
+
+  add_executable(
+    gnss_tools_test_gnss_log_comparison
+    tests/test_gnss_log_comparison.cpp
+  )
+  target_link_libraries(
+    gnss_tools_test_gnss_log_comparison
+    PRIVATE
+      universal_gnss_tools
+  )
+  target_compile_definitions(
+    gnss_tools_test_gnss_log_comparison
+    PRIVATE
+      TESTDATA_DIR="${PROJECT_SOURCE_DIR}/testdata"
+  )
+  add_test(NAME gnss_tools_test_gnss_log_comparison COMMAND gnss_tools_test_gnss_log_comparison)
 
   add_executable(
     gnss_tools_test_runtime_export

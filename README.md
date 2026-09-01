@@ -43,7 +43,7 @@ Current phase: post-`v0.6.x` stabilization.
 
 ![Generated UGA backlog status](docs/status/uga_backlog.svg)
 
-Baseline: **205** audited items. Remaining unchecked TODO work: **186**. Closed or intentionally resolved: **19**.
+Baseline: **205** audited items. Remaining unchecked TODO work: **185**. Closed or intentionally resolved: **20**.
 
 Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
 <!-- UGA_STATUS_END -->
@@ -252,6 +252,7 @@ Current implemented layers:
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
   - `gnss_replay` CLI for semantic offline runtime replay
+  - `gnss_compare` CLI for deterministic comparison of two offline GNSS logs
   - `gnss_profile_preview` CLI for offline receiver command/profile review
   - `gnss_config_plan` CLI for dry-run receiver config application planning
   - `gnss_config_apply` CLI for operator-driven receiver config application
