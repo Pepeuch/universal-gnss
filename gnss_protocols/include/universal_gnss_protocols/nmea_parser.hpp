@@ -42,6 +42,8 @@ universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& reco
 
 universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& record);
 
+universal_gnss::GnssRuntimeState NmeaVtgToRuntimeState(const NmeaVtgRecord& record);
+
 universal_gnss::GnssRuntimeState NmeaGsaToRuntimeState(const NmeaGsaRecord& record);
 
 universal_gnss::GnssRuntimeState NmeaGstToRuntimeState(const NmeaGstRecord& record);

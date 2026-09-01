@@ -166,6 +166,8 @@ std::vector<std::uint8_t> MakeNavPvtPayload()
   WriteLeI4(payload, 36u, 120000);
   WriteLeU4(payload, 40u, 250u);
   WriteLeU4(payload, 44u, 500u);
+  WriteLeI4(payload, 60u, 12500);
+  WriteLeI4(payload, 64u, 27123456);
   WriteLeI4(payload, 84u, 12345678);
   return payload;
 }
@@ -306,6 +308,11 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
                  state.heading_deg.has_value() &&
                  NearlyEqual(*state.heading_deg, 123.45678),
              "NAV-PVT should update heading when valid");
+  ctx.Expect(HasValueAvailable(state, GnssCapability::kSpeedOverGround) &&
+                 state.speed_over_ground_m_s == std::optional<float>(12.5f) &&
+                 HasValueAvailable(state, GnssCapability::kCourseOverGround) &&
+                 NearlyEqual(*state.course_over_ground_deg, 271.23456, 1e-4),
+             "NAV-PVT should update ground speed and course independently from vehicle heading");
 }
 
 void TestNavSatCn0AndSatelliteUpdates(TestContext& ctx)

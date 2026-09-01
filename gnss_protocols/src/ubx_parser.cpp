@@ -920,6 +920,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSpeedOverGround);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCourseOverGround);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeadingAccuracy);
 
@@ -973,6 +975,34 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   else
   {
     ClearPositionSolutionValues(state);
+  }
+
+  if (position_valid && record.ground_speed_mm_s >= 0)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSpeedOverGround,
+                                     state.speed_over_ground_m_s,
+                                     static_cast<float>(record.ground_speed_mm_s) / 1000.0f);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kSpeedOverGround,
+                                       state.speed_over_ground_m_s);
+  }
+  if (position_valid && record.course_over_ground_deg >= 0.0f &&
+      record.course_over_ground_deg < 360.0f)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kCourseOverGround,
+                                     state.course_over_ground_deg,
+                                     record.course_over_ground_deg);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kCourseOverGround,
+                                       state.course_over_ground_deg);
   }
 
   if (record.heading_vehicle_valid && position_valid)

@@ -68,6 +68,7 @@ portable runtime fields:
 - satellites used / tracked / visible
 - mean / max CN0
 - correction age
+- speed-over-ground in metres per second / true course-over-ground in degrees
 - heading compatibility
 - dual-antenna heading compatibility state
 - dual-antenna baseline validity
@@ -77,8 +78,6 @@ portable runtime fields:
 
 Current intentional model limits:
 
-- no generic speed / course field contract yet
-  - `NMEA VTG` remains semantic-only
 - no GNSS wall-clock / calendar-time contract yet
   - `NMEA ZDA` remains semantic-only
 - runtime state does not map directly to ROS diagnostics
@@ -87,8 +86,9 @@ Current intentional model limits:
 
 Current export / adapter notes:
 
-- `gnss_export` now covers every currently mapped runtime field except the raw
-  capability / value-flag bitmasks, which remain internal metadata.
+- `gnss_export` CSV v1 / JSONL v1 retain their stabilized field schemas; the
+  additive speed/course runtime fields are currently visible through direct
+  runtime formatting rather than silently changing those versioned exports.
 - `gnss_quality_report` exposes the final normalized runtime state plus
   correction / diagnostic summaries, but does not try to mirror every runtime
   field into the top-level summary structure.
@@ -101,8 +101,8 @@ Current export / adapter notes:
 ## Session Notes
 
 - `NmeaSession` is now the generic live NMEA carrier.
-  - `GGA`, `RMC`, `GSA`, `GSV`, and `GST` flow through it as runtime updates.
-  - `VTG` and `ZDA` are parsed there as semantic-only records.
+  - `GGA`, `RMC`, `GSA`, `GSV`, `GST`, and `VTG` flow through it as runtime updates.
+  - `ZDA` remains semantic-only.
 - `UbloxSession` still accepts `NMEA` as a mixed-stream companion path.
   - `GGA`, `RMC`, `GSA`, `GSV`, and `GST` flow through it.
 - `ReceiverSession` auto-detect is still conservative.
@@ -133,7 +133,7 @@ Legend:
 | `GSA` | yes | yes | yes | yes | yes | yes | status | contributes DOP and active-satellite counts |
 | `GSV` | yes | yes | yes | yes | yes | yes | status | contributes visible satellites and CN0 summaries |
 | `GST` | yes | yes | yes | yes | yes | yes | status + navsat | conservative accuracy only |
-| `VTG` | yes | no | yes | no | no | no | no | semantic-only in `NmeaSession` until generic speed/course fields exist |
+| `VTG` | yes | yes | yes | yes | yes | no | no | maps true course-over-ground and speed-over-ground; versioned export/ROS projection remain deferred |
 | `ZDA` | yes | no | yes | no | no | no | no | semantic-only in `NmeaSession` until GNSS wall-clock/date contract exists |
 
 ### UBX
@@ -178,7 +178,6 @@ Legend:
 These remain intentionally deferred after the audit:
 
 - ROS 2 receiver node work
-- generic speed / course runtime contract for `VTG`
 - GNSS wall-clock / date runtime contract for `ZDA`
 - broader Unicore binary `N4` semantic decoding beyond `BESTNAVB` / `PVTSLNB`
 - AGC threshold interpretation

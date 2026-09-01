@@ -66,7 +66,7 @@ flowchart LR
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| NMEA | ready | `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA` implemented; `VTG` and `ZDA` remain semantic-only because the portable core does not yet define speed/course or GNSS wall-clock runtime contracts |
+| NMEA | ready | `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA` implemented; `VTG` maps portable speed/course while `ZDA` remains semantic-only pending a GNSS wall-clock runtime contract |
 | UBX / u-blox | ready | `NAV-PVT`, `NAV-DOP`, `NAV-SAT`, `NAV-STATUS`, `MON-HW`, `MON-HW2`, `MON-RF`, `RXM-RTCM`, `ACK/NAK`, and `CFG` payload builders are in place; `MON-HW` classic payload is mapped conservatively, `MON-HW2` is parsed but remains semantic-only |
 | Unicore ASCII | ready | runtime, correction-status, satellite, and RF / hardware coverage is present for the current planned low-level stack |
 | Unicore binary `N4` | ready for current scope | framing exists, plus `BESTNAVB` and `PVTSLNB`; binary support is intentionally limited to the documented runtime-critical messages already implemented |
@@ -201,7 +201,6 @@ These remain intentionally deferred and do not block the ROS2 phase:
 - Unicore raw observations
 - TLS transport / NTRIP support
 - UDP transport
-- generic speed/course runtime contract for `VTG`
 - generic GNSS wall-clock/date runtime contract for `ZDA`
 
 ## Historical Release Recommendation

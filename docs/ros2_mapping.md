@@ -199,11 +199,12 @@ Still deferred:
 
 ## Semantic-Only Inputs
 
-The ROS 2 layer intentionally does not project these semantic-only inputs into
-runtime messages yet:
+The ROS 2 layer intentionally does not project these inputs into runtime
+messages yet:
 
 - `NMEA VTG`
-  - deferred until the core grows a generic speed / course contract
+  - core now exposes generic speed-over-ground and true course-over-ground;
+    ROS 2 message projection remains a separate downstream/API decision
 - `NMEA ZDA`
   - deferred until the core grows a GNSS wall-clock / date contract
 

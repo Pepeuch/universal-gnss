@@ -143,6 +143,20 @@ public:
               applied;
     applied = MergeCapabilityField(update.timestamp_ns,
                                    effective_value_flags,
+                                   GnssCapability::kSpeedOverGround,
+                                   FieldSlot::kSpeedOverGround,
+                                   update.speed_over_ground_m_s,
+                                   state_.speed_over_ground_m_s) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
+                                   GnssCapability::kCourseOverGround,
+                                   FieldSlot::kCourseOverGround,
+                                   update.course_over_ground_deg,
+                                   state_.course_over_ground_deg) ||
+              applied;
+    applied = MergeCapabilityField(update.timestamp_ns,
+                                   effective_value_flags,
                                    GnssCapability::kHeading,
                                    FieldSlot::kHeading,
                                    update.heading_deg,
@@ -254,6 +268,8 @@ private:
     kMeanCn0,
     kMaxCn0,
     kCorrectionAge,
+    kSpeedOverGround,
+    kCourseOverGround,
     kHeading,
     kHeadingAccuracy,
     kDifferentialCorrections,

@@ -268,7 +268,7 @@ BlueOS validation:
 - [x] JSON schema stabilization/versioning
 - [x] compare two receivers/logs
 - [x] generate additional sanitized test logs
-- [ ] generic speed/course runtime contract for VTG
+- [x] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
 - [ ] finalize the deprecation/removal plan for compatibility fields
   `heading_deg`, `heading_accuracy_deg`, and `dual_antenna_heading` after

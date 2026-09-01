@@ -363,8 +363,11 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
              "RMC runtime mapping should preserve the sample timestamp");
   ctx.Expect(rmc_state.fix_valid && rmc_state.fix_type == GnssFixType::kFix,
              "RMC runtime mapping should conservatively produce a generic fix");
-  ctx.Expect(rmc_state.capability_flags == 0u && rmc_state.value_flags == 0u,
-             "RMC runtime mapping should not invent optional capability/value flags");
+  ctx.Expect(universal_gnss::HasValueAvailable(rmc_state, GnssCapability::kSpeedOverGround) &&
+                 universal_gnss::HasValueAvailable(rmc_state, GnssCapability::kCourseOverGround) &&
+                 NearlyEqual(*rmc_state.speed_over_ground_m_s, 22.4 * 0.514444) &&
+                 rmc_state.course_over_ground_deg == std::optional<float>(84.4f),
+             "RMC runtime mapping should expose independent ground speed and course flags");
   ctx.Expect(!rmc_state.altitude_m.has_value(),
              "RMC runtime mapping should not invent altitude");
   ctx.Expect(!rmc_state.heading_deg.has_value(),
@@ -605,6 +608,36 @@ void TestVtgMissingOptionalFields(TestContext& ctx)
              "VTG should still decode km/h when mode is absent");
   ctx.Expect(!result.record->mode_indicator.has_value(),
              "missing VTG mode indicator should stay unset");
+}
+
+void TestVtgRuntimeMapping(TestContext& ctx)
+{
+  const auto parsed = universal_gnss_protocols::ParseNmeaVtg(
+      FrameSentence(MakeSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"), 891));
+  ctx.Expect(parsed.record.has_value(), "VTG runtime mapping test requires a parsed record");
+  if (!parsed.record.has_value())
+  {
+    return;
+  }
+
+  const auto state = universal_gnss_protocols::NmeaVtgToRuntimeState(*parsed.record);
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(891) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kSpeedOverGround) &&
+                 NearlyEqual(*state.speed_over_ground_m_s, 5.5 * 0.514444) &&
+                 universal_gnss::HasValueAvailable(state, GnssCapability::kCourseOverGround) &&
+                 state.course_over_ground_deg == std::optional<float>(54.7f),
+             "VTG runtime mapping should expose SI ground speed and true course");
+  ctx.Expect(!state.heading_deg.has_value(),
+             "VTG runtime mapping must not reinterpret course as heading");
+
+  universal_gnss_protocols::NmeaVtgRecord kmh_only;
+  kmh_only.speed_kmh = 36.0f;
+  const auto kmh_state = universal_gnss_protocols::NmeaVtgToRuntimeState(kmh_only);
+  ctx.Expect(kmh_state.speed_over_ground_m_s == std::optional<float>(10.0f) &&
+                 !kmh_state.course_over_ground_deg.has_value() &&
+                 universal_gnss::HasValueAvailable(kmh_state, GnssCapability::kSpeedOverGround) &&
+                 !universal_gnss::HasValueAvailable(kmh_state, GnssCapability::kCourseOverGround),
+             "VTG should fall back to km/h and clear unavailable true course independently");
 }
 
 void TestMalformedVtgRejected(TestContext& ctx)
@@ -920,6 +953,7 @@ int main()
   TestGsvMissingOptionalFields(ctx);
   TestGstMissingOptionalFields(ctx);
   TestVtgMissingOptionalFields(ctx);
+  TestVtgRuntimeMapping(ctx);
   TestZdaMissingLocalZoneIsTolerated(ctx);
   TestMalformedGstRejected(ctx);
   TestMalformedVtgRejected(ctx);

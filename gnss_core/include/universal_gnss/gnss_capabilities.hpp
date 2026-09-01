@@ -33,6 +33,8 @@ enum class GnssCapability : GnssCapabilityFlags
   kBaselinePitch = 1u << 20,
   kBaselineLength = 1u << 21,
   kBaselineSolutionStatus = 1u << 22,
+  kSpeedOverGround = 1u << 23,
+  kCourseOverGround = 1u << 24,
 };
 
 static_assert(std::is_same<std::underlying_type<GnssCapability>::type, GnssCapabilityFlags>::value,

@@ -42,6 +42,8 @@ void TestCompactFormatting(TestContext& ctx)
   state.horizontal_accuracy_m = 0.25f;
   state.satellites_used = 18u;
   state.mean_cn0_db_hz = 35.5f;
+  state.speed_over_ground_m_s = 2.5f;
+  state.course_over_ground_deg = 54.7f;
   state.dual_antenna_heading = true;
   state.dual_antenna_baseline = true;
   state.baseline_azimuth_deg = 182.25f;
@@ -61,6 +63,9 @@ void TestCompactFormatting(TestContext& ctx)
              "compact formatting should preserve nine decimal places for coordinates");
   ctx.Expect(formatted.find("interference=false") != std::string::npos,
              "compact formatting should include optional booleans when available");
+  ctx.Expect(formatted.find("speed_over_ground_m_s=2.500") != std::string::npos &&
+                 formatted.find("course_over_ground_deg=54.70") != std::string::npos,
+             "compact formatting should expose distinct ground speed and course");
   ctx.Expect(formatted.find("dual_antenna_heading=true") != std::string::npos &&
                  formatted.find("dual_antenna_baseline=true") != std::string::npos &&
                  formatted.find("baseline_azimuth_deg=182.25") != std::string::npos &&
@@ -76,6 +81,8 @@ void TestJsonFormatting(TestContext& ctx)
   state.latitude_deg = 40.0789588272;
   state.longitude_deg = 116.2365102982;
   state.satellites_visible = 24u;
+  state.speed_over_ground_m_s = 0.0f;
+  state.course_over_ground_deg = 0.0f;
   state.dual_antenna_baseline = true;
   state.baseline_azimuth_deg = 182.25f;
   state.baseline_solution_status = universal_gnss::GnssBaselineSolutionStatus::kComputed;
@@ -91,6 +98,9 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should preserve at least nine decimal places for coordinates");
   ctx.Expect(formatted.find("\"satellites_visible\":24") != std::string::npos,
              "json formatting should include available satellite counters");
+  ctx.Expect(formatted.find("\"speed_over_ground_m_s\":0") != std::string::npos &&
+                 formatted.find("\"course_over_ground_deg\":0") != std::string::npos,
+             "json formatting should preserve valid zero speed and course values");
   ctx.Expect(formatted.find("\"dual_antenna_baseline\":true") != std::string::npos &&
                  formatted.find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
                  formatted.find("\"baseline_solution_status\":\"computed\"") !=

@@ -131,20 +131,20 @@ Current NMEA notes:
   - `0/1/2/3/6/7/8` -> `kNone`
   - `4` -> `kFixed`
   - `5` -> `kFloat`
-- `RMC` currently contributes fix validity and coordinates
+- `RMC` contributes fix validity, coordinates, speed-over-ground (metres per
+  second), and true course-over-ground (degrees)
 - `GSA` contributes DOP and active-satellite information
 - `GSV` contributes satellites-in-view and per-sentence CN0 summaries
 - `GST` contributes conservative horizontal/vertical accuracy only
-- `VTG` currently contributes semantic course/speed parsing only
+- `VTG` contributes speed-over-ground in metres per second and true
+  course-over-ground in degrees; magnetic course is retained only in the
+  protocol record and is never projected as true course or heading
 - `ZDA` currently contributes semantic UTC date/time and local-zone parsing only
 - `GST` accuracy now flows through the NMEA session/replay routing paths that
   already consume `GGA` / `RMC` / `GSA` / `GSV`
 - the generic NMEA live-session path now routes `GGA` / `RMC` / `GSA` / `GSV`
-  / `GST` into normalized runtime state too
-- `VTG` and `ZDA` are parsed by the generic NMEA session for semantic/metrics
-  purposes only
-- `VTG` is not projected into `GnssRuntimeState` yet because the core does not
-  yet define a generic speed/course field contract
+  / `GST` / `VTG` into normalized runtime state
+- `ZDA` remains semantic-only in the generic NMEA session
 - `ZDA` is not projected into `GnssRuntimeState` yet because the core does not
   yet define a GNSS wall-clock or calendar-time contract beyond sample timestamps
 
@@ -152,7 +152,6 @@ What NMEA does not do yet:
 
 - `GSA` / `GSV` multi-sentence aggregation
 - persistent satellite tracking across epochs
-- `VTG` runtime projection
 - `ZDA` runtime projection or timestamp synthesis
 - proprietary vendor sentences, or NMEA state fusion
 

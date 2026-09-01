@@ -243,7 +243,13 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
 
   if (universal_gnss_protocols::IsNmeaVtg(sentence))
   {
-    ParseSemanticOnlySentence(sentence, universal_gnss_protocols::ParseNmeaVtg, metrics_);
+    ParseAndMergeSentence(sentence,
+                          universal_gnss_protocols::ParseNmeaVtg,
+                          universal_gnss_protocols::NmeaVtgToRuntimeState,
+                          false,
+                          config_.enable_runtime_updates,
+                          aggregator_,
+                          metrics_);
     return;
   }
 

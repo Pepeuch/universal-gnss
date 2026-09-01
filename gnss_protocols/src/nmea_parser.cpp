@@ -1193,6 +1193,79 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   {
     universal_gnss::ClearPositionValues(state);
   }
+
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSpeedOverGround);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCourseOverGround);
+  if (record.fix_valid && record.speed_over_ground_knots.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSpeedOverGround,
+                                     state.speed_over_ground_m_s,
+                                     *record.speed_over_ground_knots * 0.514444f);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kSpeedOverGround,
+                                       state.speed_over_ground_m_s);
+  }
+  if (record.fix_valid && record.course_over_ground_deg.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kCourseOverGround,
+                                     state.course_over_ground_deg,
+                                     *record.course_over_ground_deg);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kCourseOverGround,
+                                       state.course_over_ground_deg);
+  }
+  return state;
+}
+
+universal_gnss::GnssRuntimeState NmeaVtgToRuntimeState(const NmeaVtgRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSpeedOverGround);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCourseOverGround);
+
+  if (record.speed_knots.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSpeedOverGround,
+                                     state.speed_over_ground_m_s,
+                                     *record.speed_knots * 0.514444f);
+  }
+  else if (record.speed_kmh.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSpeedOverGround,
+                                     state.speed_over_ground_m_s,
+                                     *record.speed_kmh / 3.6f);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kSpeedOverGround,
+                                       state.speed_over_ground_m_s);
+  }
+
+  if (record.true_course_deg.has_value())
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kCourseOverGround,
+                                     state.course_over_ground_deg,
+                                     *record.true_course_deg);
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(state,
+                                       universal_gnss::GnssCapability::kCourseOverGround,
+                                       state.course_over_ground_deg);
+  }
   return state;
 }
 

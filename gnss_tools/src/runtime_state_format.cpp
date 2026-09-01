@@ -255,6 +255,8 @@ std::string FormatRuntimeStateCompact(
   AppendOptionalFloat(stream, "cn0_mean_db_hz", state.mean_cn0_db_hz, 1);
   AppendOptionalFloat(stream, "cn0_max_db_hz", state.max_cn0_db_hz, 1);
   AppendOptionalFloat(stream, "corr_age_s", state.correction_age_s, 2);
+  AppendOptionalFloat(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s, 3);
+  AppendOptionalFloat(stream, "course_over_ground_deg", state.course_over_ground_deg, 2);
   AppendOptionalFloat(stream, "heading_deg", state.heading_deg, 2);
   AppendOptionalBool(stream, "dual_antenna_heading", state.dual_antenna_heading);
   AppendOptionalBool(stream, "dual_antenna_baseline", state.dual_antenna_baseline);
@@ -329,6 +331,10 @@ std::string FormatRuntimeStateJson(
   AppendJsonOptionalNumber(stream, "max_cn0_db_hz", state.max_cn0_db_hz);
   stream << ',';
   AppendJsonOptionalNumber(stream, "correction_age_s", state.correction_age_s);
+  stream << ',';
+  AppendJsonOptionalNumber(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s);
+  stream << ',';
+  AppendJsonOptionalNumber(stream, "course_over_ground_deg", state.course_over_ground_deg);
   stream << ',';
   AppendJsonOptionalNumber(stream, "heading_deg", state.heading_deg);
   stream << ',';
