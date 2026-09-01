@@ -26,7 +26,7 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertEqual(205, data.baseline_count)
         self.assertEqual(
-            {"IMPLEMENTED": 10, "PARTIAL": 17, "OPEN": 116, "BLOCKED": 54, "DUPLICATE": 8},
+            {"IMPLEMENTED": 11, "PARTIAL": 16, "OPEN": 116, "BLOCKED": 54, "DUPLICATE": 8},
             dict(data.status_counts),
         )
         self.assertEqual("BLOCKED", data.records["UGA-126"]["status"])
@@ -35,7 +35,7 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertEqual("PARTIAL", data.records["UGA-170"]["status"])
         self.assertEqual("RECEIVER", data.records["UGA-170"]["scope"])
         self.assertEqual("HARDWARE_REQUIRED", data.records["UGA-170"]["validation"])
-        self.assertEqual(187, data.todo_counts["unchecked"])
+        self.assertEqual(186, data.todo_counts["unchecked"])
 
     def test_duplicate_cycle_is_rejected(self) -> None:
         manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))

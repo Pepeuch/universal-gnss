@@ -263,7 +263,7 @@ BlueOS validation:
 ## Universal GNSS core tasks
 
 - [x] continue capability/profile consistency cleanup between built-in receiver profiles and driver support beyond the current Unicore model-aware signal-group gating
-- [ ] correction age estimation
+- [x] correction age estimation
 - [x] runtime state CSV export
 - [x] JSON schema stabilization/versioning
 - [ ] compare two receivers/logs

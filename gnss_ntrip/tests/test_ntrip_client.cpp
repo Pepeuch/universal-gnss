@@ -1073,6 +1073,8 @@ void TestCorrectionArrivalAgeRequiresAcceptedMsm(TestContext& ctx)
   const auto base = BuildRtcm1005Frame(23u);
   const auto valid_msm = BuildRtcmMsmFrame(1077u, 23u, {1u}, {1u}, {true});
   const auto malformed_msm = BuildRtcmFrame(1077u);
+  const auto replacement_base = BuildRtcm1005Frame(24u);
+  const auto replacement_msm = BuildRtcmMsmFrame(1077u, 24u, {1u}, {1u}, {true});
 
   client.FeedRtcmMonitor(base.data(), base.size());
   client.FeedRtcmMonitor(malformed_msm.data(), malformed_msm.size());
@@ -1082,6 +1084,20 @@ void TestCorrectionArrivalAgeRequiresAcceptedMsm(TestContext& ctx)
   client.FeedRtcmMonitor(valid_msm.data(), valid_msm.size());
   ctx.Expect(client.EstimatedCorrectionArrivalAgeS().has_value(),
              "a decoded station-owned MSM should establish correction arrival age");
+
+  client.FeedRtcmMonitor(replacement_base.data(), replacement_base.size());
+  ctx.Expect(!client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "station replacement must invalidate correction arrival age from the prior station");
+
+  client.FeedRtcmMonitor(replacement_msm.data(), replacement_msm.size());
+  ctx.Expect(client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "an accepted MSM from the replacement station should establish a new arrival age");
+
+  NtripConfig changed_source = MakeConfig();
+  changed_source.mountpoint = "OTHER";
+  client.set_config(changed_source);
+  ctx.Expect(!client.EstimatedCorrectionArrivalAgeS().has_value(),
+             "source change must invalidate correction arrival age from the prior source");
 
   client.Disconnect();
   ctx.Expect(!client.EstimatedCorrectionArrivalAgeS().has_value(),
