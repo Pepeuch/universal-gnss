@@ -53,5 +53,7 @@ exemple/
 # Local checkpoints/caches remain private, while short-lived shared handoffs
 # may be versioned intentionally.
 .agent/*
+!.agent/policies/
+!.agent/policies/**
 !.agent/shared/
 !.agent/shared/**
