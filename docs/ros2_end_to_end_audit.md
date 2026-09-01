@@ -921,5 +921,5 @@ console, Bluetooth, or unrelated peripherals.
 - generic-NMEA ROS2 hardware smoke test is still pending
 - no ROS2 replay node yet
 - no Humble / Jazzy package validation yet
-- no ROS2 CI matrix yet
+- the Kilted build/test guard is continuous CI; no broader ROS2 distribution matrix exists yet
 - Kilted linkage modernization is still deferred
