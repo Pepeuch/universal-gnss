@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 326" role="img" aria-labelledby="title desc">
 <title id="title">Universal GNSS development status</title>
-<desc id="desc">189 of 205 baseline backlog items remain unchecked.</desc>
+<desc id="desc">188 of 205 baseline backlog items remain unchecked.</desc>
 <rect width="760" height="326" fill="#f8fafc" rx="12"/>
 <text x="28" y="38" font-family="sans-serif" font-size="22" font-weight="700" fill="#0f172a">Universal GNSS Development Status</text>
-<text x="28" y="66" font-family="sans-serif" font-size="15" fill="#334155">Baseline 205 · Remaining 189 · Closed/resolved 16</text>
+<text x="28" y="66" font-family="sans-serif" font-size="15" fill="#334155">Baseline 205 · Remaining 188 · Closed/resolved 17</text>
 <rect x="28" y="82" width="704" height="14" rx="7" fill="#dbe4ef"/>
-<rect x="28" y="82" width="54.95" height="14" rx="7" fill="#1f8a70"/>
+<rect x="28" y="82" width="58.38" height="14" rx="7" fill="#1f8a70"/>
 <text x="28" y="126" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f172a">Lifecycle status</text>
-<text x="28" y="162" font-family="sans-serif" font-size="13" fill="#334155">Implemented 8</text>
+<text x="28" y="162" font-family="sans-serif" font-size="13" fill="#334155">Implemented 9</text>
 <rect x="188" y="150" width="430" height="14" rx="7" fill="#dbe4ef"/>
-<rect x="188" y="150" width="16.78" height="14" rx="7" fill="#1f8a70"/>
-<text x="28" y="187" font-family="sans-serif" font-size="13" fill="#334155">Partial 19</text>
+<rect x="188" y="150" width="18.88" height="14" rx="7" fill="#1f8a70"/>
+<text x="28" y="187" font-family="sans-serif" font-size="13" fill="#334155">Partial 18</text>
 <rect x="188" y="175" width="430" height="14" rx="7" fill="#dbe4ef"/>
-<rect x="188" y="175" width="39.85" height="14" rx="7" fill="#d97706"/>
+<rect x="188" y="175" width="37.76" height="14" rx="7" fill="#d97706"/>
 <text x="28" y="212" font-family="sans-serif" font-size="13" fill="#334155">Open 116</text>
 <rect x="188" y="200" width="430" height="14" rx="7" fill="#dbe4ef"/>
 <rect x="188" y="200" width="243.32" height="14" rx="7" fill="#3b82f6"/>

@@ -12,6 +12,7 @@
 #include "universal_gnss_driver/nmea_driver.hpp"
 #include "universal_gnss_driver/receiver_capabilities.hpp"
 #include "universal_gnss_driver/receiver_driver.hpp"
+#include "universal_gnss_driver/receiver_profiles.hpp"
 #include "universal_gnss_driver/ublox_driver.hpp"
 #include "universal_gnss_driver/unicore_driver.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
@@ -29,6 +30,7 @@ using universal_gnss_driver::ReceiverConfigProfileKind;
 using universal_gnss_driver::ReceiverDriver;
 using universal_gnss_driver::ReceiverDriverProfileBuildStatus;
 using universal_gnss_driver::ReceiverFeature;
+using universal_gnss_driver::ReceiverProfile;
 using universal_gnss_driver::ReceiverProtocol;
 using universal_gnss_driver::ReceiverVendor;
 using universal_gnss_driver::UbloxDriver;
@@ -47,6 +49,41 @@ struct TestContext
     }
   }
 };
+
+bool CapabilitiesAreSubset(const universal_gnss_driver::ReceiverCapabilities& declared,
+                           const universal_gnss_driver::ReceiverCapabilities& driver)
+{
+  return (declared.supported_input_protocols & ~driver.supported_input_protocols) == 0u &&
+         (declared.supported_output_protocols & ~driver.supported_output_protocols) == 0u &&
+         (declared.features & ~driver.features) == 0u;
+}
+
+void ExpectProfileMatchesDriver(TestContext& ctx,
+                                const ReceiverProfile& profile,
+                                const ReceiverDriver& driver)
+{
+  ctx.Expect(profile.vendor == driver.vendor() && profile.family == driver.family(),
+             "built-in profile should identify the same vendor/family as its concrete driver: " +
+                 std::string(profile.profile_id));
+  ctx.Expect(CapabilitiesAreSubset(profile.capabilities, driver.capabilities()),
+             "built-in profile should not claim protocols or features absent from its driver: " +
+                 std::string(profile.profile_id));
+
+  const std::vector<ReceiverConfigProfileKind> kinds{
+      ReceiverConfigProfileKind::kRover,
+      ReceiverConfigProfileKind::kBase,
+      ReceiverConfigProfileKind::kSurveyIn,
+      ReceiverConfigProfileKind::kNmeaOutput,
+      ReceiverConfigProfileKind::kRtcmOutput,
+      ReceiverConfigProfileKind::kDiagnosticsOutput,
+  };
+  for (const auto kind : kinds)
+  {
+    ctx.Expect(profile.SupportsConfigProfile(kind) == driver.SupportsProfile(kind),
+               "built-in profile config support should exactly match its driver: " +
+                   std::string(profile.profile_id));
+  }
+}
 
 std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
 {
@@ -331,6 +368,62 @@ void TestSupportedProfilesAndGeneration(TestContext& ctx)
              "generic NMEA drivers should reject configuration profile generation cleanly");
 }
 
+void TestBuiltInProfileDriverConsistency(TestContext& ctx)
+{
+  const ReceiverProfile* generic =
+      universal_gnss_driver::FindBuiltInReceiverProfile("generic_nmea");
+  const ReceiverProfile* ublox =
+      universal_gnss_driver::FindBuiltInReceiverProfile("ublox_f9_f10");
+  const ReceiverProfile* unicore =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um98x_placeholder");
+  const ReceiverProfile* unicore_um960 =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um960");
+  const ReceiverProfile* unicore_um980 =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um980");
+  const ReceiverProfile* unicore_um981 =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um981");
+  const ReceiverProfile* unicore_um982 =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um982");
+  const ReceiverProfile* unicore_ub9a0 =
+      universal_gnss_driver::FindBuiltInReceiverProfile("unicore_ub9a0");
+
+  ctx.Expect(generic != nullptr && ublox != nullptr && unicore != nullptr &&
+                 unicore_um960 != nullptr && unicore_um980 != nullptr &&
+                 unicore_um981 != nullptr && unicore_um982 != nullptr &&
+                 unicore_ub9a0 != nullptr,
+             "every concrete built-in profile should remain available for driver consistency checks");
+  if (generic == nullptr || ublox == nullptr || unicore == nullptr || unicore_um960 == nullptr ||
+      unicore_um980 == nullptr || unicore_um981 == nullptr || unicore_um982 == nullptr ||
+      unicore_ub9a0 == nullptr)
+  {
+    return;
+  }
+
+  NmeaDriver nmea_driver;
+  UbloxDriver ublox_driver;
+  UnicoreDriver unicore_driver;
+  UnicoreDriver unicore_um960_driver("UM960");
+  UnicoreDriver unicore_um980_driver("UM980");
+  UnicoreDriver unicore_um981_driver("UM981");
+  UnicoreDriver unicore_um982_driver("UM982");
+  UnicoreDriver unicore_ub9a0_driver("UB9A0");
+
+  ExpectProfileMatchesDriver(ctx, *generic, nmea_driver);
+  ExpectProfileMatchesDriver(ctx, *ublox, ublox_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore, unicore_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore_um960, unicore_um960_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore_um980, unicore_um980_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore_um981, unicore_um981_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore_um982, unicore_um982_driver);
+  ExpectProfileMatchesDriver(ctx, *unicore_ub9a0, unicore_ub9a0_driver);
+
+  const ReceiverProfile* quectel =
+      universal_gnss_driver::FindBuiltInReceiverProfile("quectel_placeholder");
+  ctx.Expect(quectel != nullptr && quectel->placeholder &&
+                 quectel->supported_config_profiles == 0u,
+             "placeholder profiles without a concrete driver must declare no generated config support");
+}
+
 void TestRuntimeStateAccess(TestContext& ctx)
 {
   UbloxDriver ublox;
@@ -397,6 +490,7 @@ int main()
 
   TestDriverFamilyAndCapabilities(ctx);
   TestSupportedProfilesAndGeneration(ctx);
+  TestBuiltInProfileDriverConsistency(ctx);
   TestRuntimeStateAccess(ctx);
 
   if (ctx.failures != 0)

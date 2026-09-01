@@ -109,6 +109,8 @@ They are useful for:
 
 - declaring likely protocol families
 - documenting expected high-level capabilities
+- declaring the configuration intents that the matching built-in driver can
+  currently generate
 - seeding future driver selection and configuration paths
 
 They are not yet:
@@ -116,6 +118,14 @@ They are not yet:
 - full SKU databases
 - hardware probes
 - guarantees about every model in a vendor family
+
+`ReceiverProfile::supported_config_profiles` is deliberately separate from
+`ReceiverCapabilities`. Capabilities express declared receiver prerequisites;
+they can make a generic intent applicable without proving that Universal GNSS
+currently has a vendor command generator for it. The supported-profile list
+expresses the latter and must exactly match the concrete driver for every
+non-placeholder built-in profile. Placeholders without a concrete driver
+declare no generated configuration support.
 
 For Unicore, the built-in profile table is now paired with
 `unicore_model_profile.*`, a small model-aware seam that answers four driver

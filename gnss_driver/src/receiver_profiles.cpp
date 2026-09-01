@@ -1,5 +1,6 @@
 #include "universal_gnss_driver/receiver_profiles.hpp"
 
+#include "universal_gnss_driver/receiver_config_profile.hpp"
 #include "universal_gnss_driver/unicore_model_profile.hpp"
 
 namespace universal_gnss_driver
@@ -26,6 +27,8 @@ ReceiverProfile BuildUnicoreProfile(const UnicoreModelProfile& model_profile,
       model_profile.model,
       model_profile.placeholder,
       model_profile.capabilities,
+      ToConfigProfileFlag(ReceiverConfigProfileKind::kRover) |
+          ToConfigProfileFlag(ReceiverConfigProfileKind::kDiagnosticsOutput),
   };
 }
 
@@ -38,13 +41,14 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
           "generic_nmea",
           "Generic NMEA Receiver",
           ReceiverVendor::kGeneric,
-          "Generic",
+          "NMEA",
           "NMEA",
           false,
           MakeCapabilities(0u,
                            ToFlag(ReceiverProtocol::kNmea),
                            ToFlag(ReceiverFeature::kRtk) |
                                ToFlag(ReceiverFeature::kRoverMode)),
+          {},
       },
       ReceiverProfile{
           "ublox_f9_f10",
@@ -60,6 +64,9 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
                            ToFlag(ReceiverFeature::kRfMonitoring) |
                                ToFlag(ReceiverFeature::kPps) |
                                ToFlag(ReceiverFeature::kRoverMode)),
+          ToConfigProfileFlag(ReceiverConfigProfileKind::kRover) |
+              ToConfigProfileFlag(ReceiverConfigProfileKind::kDiagnosticsOutput) |
+              ToConfigProfileFlag(ReceiverConfigProfileKind::kBase),
       },
       BuildUnicoreProfile(ResolveUnicoreModelProfile(), "Unicore N4 Generic"),
       BuildUnicoreProfile(ResolveUnicoreModelProfile("UM960"), "Unicore UM960"),
@@ -79,6 +86,7 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
                            ToFlag(ReceiverFeature::kRtk) |
                                ToFlag(ReceiverFeature::kPps) |
                                ToFlag(ReceiverFeature::kRoverMode)),
+          {},
       },
   };
   return profiles;
