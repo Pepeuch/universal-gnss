@@ -267,7 +267,7 @@ BlueOS validation:
 - [x] runtime state CSV export
 - [x] JSON schema stabilization/versioning
 - [x] compare two receivers/logs
-- [ ] generate additional sanitized test logs
+- [x] generate additional sanitized test logs
 - [ ] generic speed/course runtime contract for VTG
 - [ ] generic GNSS wall-clock/date runtime contract for ZDA
 - [ ] finalize the deprecation/removal plan for compatibility fields

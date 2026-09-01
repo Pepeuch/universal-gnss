@@ -130,6 +130,35 @@ void TestSameReplayHasZeroSeparation(TestContext& ctx)
              "comparison text should use the stable v1 report and deterministic numeric format");
 }
 
+void TestSanitizedReceiverPair(TestContext& ctx)
+{
+  const auto left = universal_gnss_tools::test::ReadBinaryFile("comparison/receiver_a.nmea");
+  const auto right = universal_gnss_tools::test::ReadBinaryFile("comparison/receiver_b.nmea");
+  const auto comparison = universal_gnss_tools::BuildGnssLogComparisonBytes(left, right);
+
+  ctx.Expect(comparison.summary.final_horizontal_separation_m.has_value(),
+             "the sanitized receiver pair should provide two final positions");
+  if (comparison.summary.final_horizontal_separation_m.has_value())
+  {
+    ctx.ExpectNear(*comparison.summary.final_horizontal_separation_m,
+                   111.19508,
+                   0.01,
+                   "the sanitized receiver pair should preserve its documented separation");
+  }
+  ctx.Expect(comparison.summary.final_altitude_delta_m == std::optional<double>(3.5) &&
+                 comparison.summary.satellites_used_delta == std::optional<std::int32_t>(2),
+             "the sanitized receiver pair should preserve its documented scalar deltas");
+  ctx.Expect(comparison.summary.horizontal_accuracy_delta_m.has_value(),
+             "the sanitized receiver pair should provide a horizontal accuracy delta");
+  if (comparison.summary.horizontal_accuracy_delta_m.has_value())
+  {
+    ctx.ExpectNear(*comparison.summary.horizontal_accuracy_delta_m,
+                   -0.2,
+                   0.000001,
+                   "the sanitized receiver pair should preserve its GST accuracy delta");
+  }
+}
+
 }  // namespace
 
 int main()
@@ -138,6 +167,7 @@ int main()
   TestComparisonUsesFinalNormalizedState(ctx);
   TestMissingValuesRemainUnavailable(ctx);
   TestSameReplayHasZeroSeparation(ctx);
+  TestSanitizedReceiverPair(ctx);
 
   if (ctx.failures != 0)
   {

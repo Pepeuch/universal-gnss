@@ -15,11 +15,19 @@ The files are intentionally tiny:
 - `mixed/nmea_ubx_rtcm_unicore.bin`: mixed stream with noise, NMEA, UBX,
   Unicore ASCII, RTCM3, one checksum-invalid UBX frame, and one truncated RTCM
   tail.
+- `comparison/receiver_a.nmea` and `comparison/receiver_b.nmea`: synthetic
+  paired NMEA receiver logs for deterministic offline comparison. Their final
+  positions differ by 0.001 degrees of latitude (about 111.195 m); receiver B
+  has 3.5 additional metres of altitude, two additional satellites used, and
+  lower GST-reported accuracy values.
 
 Guidelines:
 - No private field logs are stored here.
 - Coordinates and payloads are synthetic or sanitized test fixtures.
 - The mixed and binary files are sized for unit tests, not performance tests.
+- The comparison pair is intentionally synthetic rather than a simultaneous
+  field recording. It validates replay/quality/comparison plumbing only; it is
+  not an accuracy, time-alignment, or receiver-performance reference.
 - `unicore/basic_ascii.log` intentionally keeps `CRLF` line endings to mirror a
   real serial text log. Regenerate it with the same `\r\n` framing used by the
   canonical Unicore ASCII test helpers rather than normalizing it to bare `LF`.
