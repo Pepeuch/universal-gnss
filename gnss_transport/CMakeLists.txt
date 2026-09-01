@@ -4,6 +4,7 @@ add_library(
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(OpenSSL REQUIRED)
   target_sources(
     universal_gnss_transport
     PRIVATE
@@ -16,6 +17,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       UNIVERSAL_GNSS_TRANSPORT_HAS_POSIX_SERIAL=1
       UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT=1
   )
+  target_link_libraries(universal_gnss_transport PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 target_include_directories(

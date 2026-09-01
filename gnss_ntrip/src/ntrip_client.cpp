@@ -332,6 +332,8 @@ NtripClientError NtripClient::Connect(
   universal_gnss_transport::TcpClientConfig transport_config = tcp_config_;
   transport_config.host = config_.host;
   transport_config.port = config_.port;
+  transport_config.tls_enabled = config_.tls_enabled;
+  transport_config.tls_verify_peer = config_.tls_verify_peer;
   transport_.Close();
   const NtripSourceIdentity configured_source_identity = BuildNtripSourceIdentity(config_);
   if (configured_source_identity != source_identity_)

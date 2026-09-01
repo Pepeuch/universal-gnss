@@ -497,6 +497,38 @@ void TestClosedReadWriteBehavior(TestContext& ctx)
              "closed-direction calls should update transport metrics");
 }
 
+void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
+{
+  SocketPair nonblocking_sockets;
+  ctx.Expect(nonblocking_sockets.Open(), "socketpair fixture should open for TLS mode test");
+
+  TcpClientTransport nonblocking_client;
+  TcpClientConfig nonblocking_config;
+  nonblocking_config.host = "localhost";
+  nonblocking_config.tls_enabled = true;
+  nonblocking_config.nonblocking = true;
+  ctx.Expect(
+      nonblocking_client.AdoptConnectedSocket(
+          nonblocking_sockets.ReleaseClientFd(), nonblocking_config) == TransportError::kUnsupported &&
+          !nonblocking_client.IsOpen(),
+      "TLS transport should reject unsupported nonblocking handshakes without retaining the socket");
+
+  SocketPair closed_peer_sockets;
+  ctx.Expect(closed_peer_sockets.Open(), "socketpair fixture should open for TLS handshake failure test");
+  closed_peer_sockets.ClosePeer();
+
+  TcpClientTransport client;
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.tls_enabled = true;
+  config.tls_verify_peer = false;
+  ctx.Expect(
+      client.AdoptConnectedSocket(closed_peer_sockets.ReleaseClientFd(), config) ==
+              TransportError::kTlsHandshakeFailure &&
+          !client.IsOpen(),
+      "interrupted TLS handshakes should fail and close the transport");
+}
+
 }  // namespace
 
 int main()
@@ -507,6 +539,7 @@ int main()
   TestReadTimeoutAndNonblockingBehavior(ctx);
   TestConnectFailureAndInvalidConfiguration(ctx);
   TestClosedReadWriteBehavior(ctx);
+  TestTlsConfigurationAndHandshakeFailure(ctx);
   TestClosedPeerWritesDoNotRaiseSigpipe(ctx);
 
   if (ctx.failures != 0)

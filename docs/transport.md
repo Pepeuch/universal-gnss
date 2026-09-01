@@ -226,7 +226,7 @@ Current scope:
 
 Current non-goals:
 
-- TLS
+- nonblocking TLS handshakes, custom CA roots, and client certificates
 - reconnect or backoff
 - NTRIP HTTP request logic
 - UDP transport
@@ -239,6 +239,16 @@ Current policy:
 - use local adopted connected sockets in tests so validation stays
   hardware-independent and internet-independent
 - keep reconnect, session policy, and higher-level diagnostics above transport
+
+### TLS client mode
+
+On Linux, `TcpClientTransport` can establish a synchronous OpenSSL client TLS
+session when `TcpClientConfig::tls_enabled` is set. Certificate-chain and DNS
+host verification use the host system trust store by default. The
+`tls_verify_peer=false` escape hatch exists only for deterministic local test
+fixtures; production NTRIP callers must retain verification. Custom CA roots,
+client certificates, and nonblocking handshake ownership remain separate
+backlog work.
 
 ## Ring Buffer Helper
 

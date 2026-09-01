@@ -39,7 +39,7 @@ Current responsibilities:
 
 Current non-responsibilities:
 
-- TLS
+- TLS client-certificate authentication and custom CA roots
 - reconnect loops
 - ROS 2-side RTCM forwarding ownership
 - serial output
@@ -340,6 +340,7 @@ Current state model:
 Current behavior:
 
 - connect through `TcpClientTransport`
+- optionally establish a synchronous TLS session through the same transport
 - build and send one NTRIP GET request with `BuildNtripGetRequest(...)`
 - accept `ICY 200 OK`, `HTTP/1.0 200`, and `HTTP/1.1 200`
 - reject non-200 responses as HTTP failures
@@ -355,7 +356,8 @@ Current behavior:
 
 Current non-goals:
 
-- TLS
+- nonblocking TLS handshakes
+- TLS client-certificate authentication and custom CA roots
 - reconnect loop or background timers
 - live sourcetable fetch workflow
 - chunked transfer support

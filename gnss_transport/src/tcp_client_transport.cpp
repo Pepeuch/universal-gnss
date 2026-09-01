@@ -13,8 +13,13 @@
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 namespace universal_gnss_transport
 {
@@ -239,6 +244,100 @@ WriteResult MakeInvalidWriteResult(TransportMetrics& metrics)
   return WriteResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
 }
 
+void ReleaseTls(::ssl_ctx_st*& context, ::ssl_st*& session)
+{
+  if (session != nullptr)
+  {
+    SSL_free(reinterpret_cast<SSL*>(session));
+    session = nullptr;
+  }
+  if (context != nullptr)
+  {
+    SSL_CTX_free(reinterpret_cast<SSL_CTX*>(context));
+    context = nullptr;
+  }
+}
+
+TransportError StartTls(const int fd,
+                        const TcpClientConfig& config,
+                        ::ssl_ctx_st*& context,
+                        ::ssl_st*& session)
+{
+  if (config.nonblocking)
+  {
+    return TransportError::kUnsupported;
+  }
+
+  SSL_CTX* tls_context = SSL_CTX_new(TLS_client_method());
+  if (tls_context == nullptr)
+  {
+    return TransportError::kTlsHandshakeFailure;
+  }
+
+  const std::string& server_name =
+      config.tls_server_name.empty() ? config.host : config.tls_server_name;
+  if (server_name.empty())
+  {
+    SSL_CTX_free(tls_context);
+    return TransportError::kInvalidArgument;
+  }
+
+  if (config.tls_verify_peer)
+  {
+    SSL_CTX_set_verify(tls_context, SSL_VERIFY_PEER, nullptr);
+    if (SSL_CTX_set_default_verify_paths(tls_context) != 1)
+    {
+      SSL_CTX_free(tls_context);
+      return TransportError::kTlsVerificationFailure;
+    }
+  }
+
+  SSL* tls_session = SSL_new(tls_context);
+  if (tls_session == nullptr || SSL_set_fd(tls_session, fd) != 1)
+  {
+    SSL_free(tls_session);
+    SSL_CTX_free(tls_context);
+    return TransportError::kTlsHandshakeFailure;
+  }
+
+  if (SSL_set_tlsext_host_name(tls_session, server_name.c_str()) != 1 ||
+      (config.tls_verify_peer && SSL_set1_host(tls_session, server_name.c_str()) != 1))
+  {
+    SSL_free(tls_session);
+    SSL_CTX_free(tls_context);
+    return TransportError::kTlsVerificationFailure;
+  }
+
+  sigset_t sigpipe_set{};
+  sigset_t previous_signal_mask{};
+  sigemptyset(&sigpipe_set);
+  sigaddset(&sigpipe_set, SIGPIPE);
+  const bool sigpipe_blocked = pthread_sigmask(SIG_BLOCK, &sigpipe_set, &previous_signal_mask) == 0;
+  const int handshake_result = SSL_connect(tls_session);
+  if (sigpipe_blocked)
+  {
+    // Consume a handshake write's SIGPIPE before restoring this thread's mask.
+    timespec no_wait{};
+    (void)sigtimedwait(&sigpipe_set, nullptr, &no_wait);
+    (void)pthread_sigmask(SIG_SETMASK, &previous_signal_mask, nullptr);
+  }
+
+  if (handshake_result != 1)
+  {
+    const TransportError error = config.tls_verify_peer &&
+                                         SSL_get_verify_result(tls_session) != X509_V_OK
+                                     ? TransportError::kTlsVerificationFailure
+                                     : TransportError::kTlsHandshakeFailure;
+    SSL_free(tls_session);
+    SSL_CTX_free(tls_context);
+    return error;
+  }
+
+  context = reinterpret_cast<::ssl_ctx_st*>(tls_context);
+  session = reinterpret_cast<::ssl_st*>(tls_session);
+  return TransportError::kNone;
+}
+
 }  // namespace
 
 TcpClientTransport::TcpClientTransport(const TcpClientConfig& config)
@@ -308,6 +407,16 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
 
     fd_ = fd;
     use_generic_fd_io_ = false;
+    if (config.tls_enabled)
+    {
+      const TransportError tls_error = StartTls(fd_, config, tls_context_, tls_session_);
+      if (tls_error != TransportError::kNone)
+      {
+        Close();
+        last_error = tls_error;
+        continue;
+      }
+    }
     metrics_.last_error = TransportError::kNone;
     ::freeaddrinfo(results);
     return TransportError::kNone;
@@ -339,6 +448,16 @@ TransportError TcpClientTransport::AdoptConnectedSocket(const int fd, const TcpC
   fd_ = fd;
   use_generic_fd_io_ = false;
   config_ = config;
+  if (config.tls_enabled)
+  {
+    const TransportError tls_error = StartTls(fd_, config, tls_context_, tls_session_);
+    if (tls_error != TransportError::kNone)
+    {
+      Close();
+      metrics_.last_error = tls_error;
+      return tls_error;
+    }
+  }
   metrics_.last_error = TransportError::kNone;
   return TransportError::kNone;
 }
@@ -377,8 +496,11 @@ ReadResult TcpClientTransport::Read(std::uint8_t* destination, const std::size_t
 
   for (;;)
   {
-    const ssize_t bytes_read =
-        use_generic_fd_io_ ? ::read(fd_, destination, capacity) : ::recv(fd_, destination, capacity, 0);
+    const ssize_t bytes_read = tls_session_ != nullptr
+                                   ? SSL_read(reinterpret_cast<SSL*>(tls_session_), destination,
+                                              static_cast<int>(capacity))
+                                   : (use_generic_fd_io_ ? ::read(fd_, destination, capacity)
+                                                         : ::recv(fd_, destination, capacity, 0));
     if (bytes_read > 0)
     {
       NoteReadBytes(metrics_, static_cast<std::size_t>(bytes_read));
@@ -387,9 +509,18 @@ ReadResult TcpClientTransport::Read(std::uint8_t* destination, const std::size_t
                         TransportError::kNone};
     }
 
-    if (bytes_read == 0)
+    if (bytes_read == 0 ||
+        (tls_session_ != nullptr &&
+         SSL_get_error(reinterpret_cast<SSL*>(tls_session_), static_cast<int>(bytes_read)) ==
+             SSL_ERROR_ZERO_RETURN))
     {
       return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
+    }
+
+    if (tls_session_ != nullptr)
+    {
+      NoteReadError(metrics_, TransportError::kReadFailure);
+      return ReadResult{0u, TransportStatus::kError, TransportError::kReadFailure};
     }
 
     if (errno == EINTR)
@@ -442,7 +573,12 @@ WriteResult TcpClientTransport::Write(const std::uint8_t* data, const std::size_
   for (;;)
   {
     ssize_t bytes_written = -1;
-    if (use_generic_fd_io_)
+    if (tls_session_ != nullptr)
+    {
+      bytes_written = SSL_write(reinterpret_cast<SSL*>(tls_session_), data,
+                                static_cast<int>(size));
+    }
+    else if (use_generic_fd_io_)
     {
       bytes_written = ::write(fd_, data, size);
     }
@@ -461,6 +597,12 @@ WriteResult TcpClientTransport::Write(const std::uint8_t* data, const std::size_
       return WriteResult{static_cast<std::size_t>(bytes_written),
                          TransportStatus::kOk,
                          TransportError::kNone};
+    }
+
+    if (tls_session_ != nullptr)
+    {
+      NoteWriteError(metrics_, TransportError::kWriteFailure);
+      return WriteResult{0u, TransportStatus::kError, TransportError::kWriteFailure};
     }
 
     if (errno == EINTR)
@@ -485,6 +627,7 @@ bool TcpClientTransport::IsOpen() const
 
 void TcpClientTransport::Close()
 {
+  ReleaseTls(tls_context_, tls_session_);
   if (fd_ >= 0)
   {
     ::close(fd_);

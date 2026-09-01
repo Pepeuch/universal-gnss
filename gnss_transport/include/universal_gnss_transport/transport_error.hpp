@@ -17,6 +17,8 @@ enum class TransportError : std::uint8_t
   kWriteFailure = 7,
   kUnsupported = 8,
   kUnknown = 9,
+  kTlsHandshakeFailure = 10,
+  kTlsVerificationFailure = 11,
 };
 
 }  // namespace universal_gnss_transport

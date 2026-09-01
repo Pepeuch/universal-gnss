@@ -42,6 +42,10 @@ struct NtripConfig
   std::string password{};
   std::string user_agent{kDefaultNtripUserAgent};
   NtripVersion version{NtripVersion::kV2};
+  bool tls_enabled{false};
+  // Intended only for deterministic local TLS fixtures. Production callers
+  // must retain certificate and host verification.
+  bool tls_verify_peer{true};
   bool send_gga{false};
   std::uint32_t gga_interval_s{10u};
   // Zero disables the corresponding liveness deadline. Defaults match the
