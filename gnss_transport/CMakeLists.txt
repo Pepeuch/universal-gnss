@@ -89,5 +89,6 @@ if(BUILD_TESTING)
       NAME gnss_transport_test_udp_client_transport
       COMMAND gnss_transport_test_udp_client_transport
     )
+    set_tests_properties(gnss_transport_test_udp_client_transport PROPERTIES TIMEOUT 5)
   endif()
 endif()

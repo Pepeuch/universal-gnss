@@ -278,7 +278,7 @@ BlueOS validation:
 - [x] TLS support
 - [x] client certificate authentication
 - [x] custom CA certificate support
-- [ ] UDP transport
+- [x] UDP transport
 - [x] multi-caster support
 - [ ] local caster / base mode support
 

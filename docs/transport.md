@@ -229,7 +229,6 @@ Current non-goals:
 - nonblocking TLS handshakes
 - reconnect or backoff
 - NTRIP HTTP request logic
-- UDP transport
 - async I/O
 
 Current policy:
@@ -252,6 +251,21 @@ or invalid/mismatched material fails closed. The `tls_verify_peer=false`
 escape hatch exists only for deterministic local test fixtures; production
 NTRIP callers must retain verification. Nonblocking handshake ownership
 remains out of scope.
+
+## UDP Client Transport
+
+On Linux, `UdpClientTransport` provides a synchronous connected UDP
+`ByteDuplex` for one-peer datagram exchange. Each `Write` emits exactly one
+datagram and each successful `Read` delivers exactly one complete datagram;
+the transport never performs application-level fragmentation.
+
+If the next datagram exceeds the caller buffer, the transport consumes and
+discards the entire datagram, returns `kOverflow` with zero bytes, and records
+a read error. A subsequent `Read` therefore begins at the next datagram
+boundary. Zero-capacity reads are safe no-ops and do not consume a datagram.
+The transport supports explicit read timeouts, nonblocking reads, explicit
+close, and transport metrics. UDP server/listener, multicast, async, retry,
+and NTRIP integration remain out of scope.
 
 ## Ring Buffer Helper
 
