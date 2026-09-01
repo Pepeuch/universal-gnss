@@ -5,6 +5,7 @@ add_library(
   src/gga_sentence_builder.cpp
   src/ntrip_request.cpp
   src/ntrip_client.cpp
+  src/local_rtcm_caster.cpp
   src/ntrip_caster_orchestrator.cpp
   src/ntrip_reconnect_policy.cpp
   src/ntrip_sourcetable.cpp
@@ -71,6 +72,19 @@ if(BUILD_TESTING)
     NAME gnss_ntrip_test_ntrip_caster_orchestrator
     COMMAND gnss_ntrip_test_ntrip_caster_orchestrator
   )
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(
+      gnss_ntrip_test_local_rtcm_caster
+      tests/test_local_rtcm_caster.cpp
+    )
+    target_link_libraries(
+      gnss_ntrip_test_local_rtcm_caster
+      PRIVATE
+        universal_gnss_ntrip
+    )
+    add_test(NAME gnss_ntrip_test_local_rtcm_caster COMMAND gnss_ntrip_test_local_rtcm_caster)
+  endif()
 
   add_executable(
     gnss_ntrip_test_ntrip_reconnect_policy

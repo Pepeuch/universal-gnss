@@ -70,6 +70,30 @@ future ROS 2 / ESP32 / tools integrations
 `gnss_ntrip` stays above raw socket mechanics and below application-specific
 runtime orchestration.
 
+## Local Caster / Base Mode Boundary
+
+UGA-147 is `IMPLEMENTED`: the Linux MVP provides a synchronous local TCP/NTRIP
+caster. It accepts exactly one active RTCM source at a time, identified by an
+explicit `source_id` and non-zero incarnation. Activating or ending a source
+clears all caches; restarting a source requires a new incarnation.
+
+- `LocalRtcmCaster::Start()` binds one configurable local TCP endpoint and
+  mountpoint; `Poll()` accepts a minimal `GET /mountpoint` request and replies
+  `ICY 200 OK` before raw RTCM bytes.
+- Multiple clients are supported. Each has a fixed output buffer; a full buffer
+  disconnects only that client, never stalls `PublishFrame()` or another client.
+- Only CRC-valid input frames are served. `1005`/`1006` are cached exclusively
+  for clients joining the active incarnation. MSM and `1230` are live only;
+  they are never replayed from cache. `EndSource()` immediately clears static
+  caches and invalidates the dynamic stream.
+- Authentication, server TLS, sourcetable serving, multiple mountpoints,
+  external-caster proxying, UDP, multicast, asynchronous frameworks, and cache
+  or client persistence remain outside the MVP.
+
+The existing RTCM semantics remain the boundary: `1005`/`1006` are static,
+MSM is dynamic/fresh, `1230` is optional, and a source/incarnation transition
+cannot mix retained state with a new source.
+
 `gnss_ros2` now provides that first orchestration wrapper through
 `universal_gnss_ros2::NtripNode`, but the ownership split stays deliberate:
 

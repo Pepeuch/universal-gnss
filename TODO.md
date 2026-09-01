@@ -280,7 +280,7 @@ BlueOS validation:
 - [x] custom CA certificate support
 - [x] UDP transport
 - [x] multi-caster support
-- [ ] local caster / base mode support
+- [x] local caster / base mode support
 
 ## ROS2 package tasks
 
