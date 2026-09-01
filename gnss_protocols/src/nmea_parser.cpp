@@ -1194,6 +1194,40 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
     universal_gnss::ClearPositionValues(state);
   }
 
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcDate);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcTime);
+  if (record.date.has_value())
+  {
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kUtcDate,
+        state.utc_date,
+        universal_gnss::GnssUtcDate{record.date->year_two_digits, record.date->month, record.date->day});
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kUtcDate, state.utc_date);
+  }
+  if (record.utc_time.has_value())
+  {
+    const double whole_seconds = std::floor(record.utc_time->second);
+    const std::int32_t nanoseconds = static_cast<std::int32_t>(
+        std::llround((record.utc_time->second - whole_seconds) * 1000000000.0));
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kUtcTime,
+                                     state.utc_time,
+                                     universal_gnss::GnssUtcTime{record.utc_time->hour,
+                                                                 record.utc_time->minute,
+                                                                 static_cast<std::uint8_t>(whole_seconds),
+                                                                 nanoseconds});
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kUtcTime, state.utc_time);
+  }
+
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSpeedOverGround);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCourseOverGround);
   if (record.fix_valid && record.speed_over_ground_knots.has_value())
@@ -1222,6 +1256,29 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
                                        universal_gnss::GnssCapability::kCourseOverGround,
                                        state.course_over_ground_deg);
   }
+  return state;
+}
+
+universal_gnss::GnssRuntimeState NmeaZdaToRuntimeState(const NmeaZdaRecord& record)
+{
+  universal_gnss::GnssRuntimeState state;
+  state.timestamp_ns = record.timestamp_ns;
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcDate);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcTime);
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kUtcDate,
+                                   state.utc_date,
+                                   universal_gnss::GnssUtcDate{record.year, record.month, record.day});
+  const double whole_seconds = std::floor(record.utc_time->second);
+  const std::int32_t nanoseconds = static_cast<std::int32_t>(
+      std::llround((record.utc_time->second - whole_seconds) * 1000000000.0));
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kUtcTime,
+                                   state.utc_time,
+                                   universal_gnss::GnssUtcTime{record.utc_time->hour,
+                                                               record.utc_time->minute,
+                                                               static_cast<std::uint8_t>(whole_seconds),
+                                                               nanoseconds});
   return state;
 }
 

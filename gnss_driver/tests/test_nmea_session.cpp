@@ -165,9 +165,9 @@ void TestVtgProducesSpeedAndCourseRuntimeState(TestContext& ctx)
                  state.course_over_ground_deg == std::optional<float>(54.7f) &&
                  !state.heading_deg.has_value(),
              "VTG should update portable ground speed and course without inventing heading");
-  ctx.Expect(metrics.records_parsed == 2u && metrics.runtime_updates == 1u &&
-                 metrics.semantic_only_records == 1u,
-             "VTG should become a runtime producer while ZDA remains semantic-only");
+  ctx.Expect(metrics.records_parsed == 2u && metrics.runtime_updates == 2u &&
+                 metrics.semantic_only_records == 0u,
+             "VTG and ZDA should both become independent runtime producers");
 
   session.FeedBytes(BuildNmeaSentence("GPVTG,,T,034.4,M,,N,,K,A"), 3002);
   ctx.Expect(!session.current_state().speed_over_ground_m_s.has_value() &&

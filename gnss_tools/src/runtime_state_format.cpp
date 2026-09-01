@@ -255,6 +255,17 @@ std::string FormatRuntimeStateCompact(
   AppendOptionalFloat(stream, "cn0_mean_db_hz", state.mean_cn0_db_hz, 1);
   AppendOptionalFloat(stream, "cn0_max_db_hz", state.max_cn0_db_hz, 1);
   AppendOptionalFloat(stream, "corr_age_s", state.correction_age_s, 2);
+  if (state.utc_date.has_value())
+  {
+    stream << " utc_date=" << state.utc_date->year << '-' << static_cast<unsigned int>(state.utc_date->month)
+           << '-' << static_cast<unsigned int>(state.utc_date->day);
+  }
+  if (state.utc_time.has_value())
+  {
+    stream << " utc_time=" << static_cast<unsigned int>(state.utc_time->hour) << ':'
+           << static_cast<unsigned int>(state.utc_time->minute) << ':'
+           << static_cast<unsigned int>(state.utc_time->second) << '.' << state.utc_time->nanosecond;
+  }
   AppendOptionalFloat(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s, 3);
   AppendOptionalFloat(stream, "course_over_ground_deg", state.course_over_ground_deg, 2);
   AppendOptionalFloat(stream, "heading_deg", state.heading_deg, 2);
@@ -331,6 +342,25 @@ std::string FormatRuntimeStateJson(
   AppendJsonOptionalNumber(stream, "max_cn0_db_hz", state.max_cn0_db_hz);
   stream << ',';
   AppendJsonOptionalNumber(stream, "correction_age_s", state.correction_age_s);
+  stream << ',';
+  stream << "\"utc_date\":";
+  if (state.utc_date.has_value())
+  {
+    stream << "{\"year\":" << state.utc_date->year << ",\"month\":"
+           << static_cast<unsigned int>(state.utc_date->month) << ",\"day\":"
+           << static_cast<unsigned int>(state.utc_date->day) << '}';
+  }
+  else { stream << "null"; }
+  stream << ',';
+  stream << "\"utc_time\":";
+  if (state.utc_time.has_value())
+  {
+    stream << "{\"hour\":" << static_cast<unsigned int>(state.utc_time->hour)
+           << ",\"minute\":" << static_cast<unsigned int>(state.utc_time->minute)
+           << ",\"second\":" << static_cast<unsigned int>(state.utc_time->second)
+           << ",\"nanosecond\":" << state.utc_time->nanosecond << '}';
+  }
+  else { stream << "null"; }
   stream << ',';
   AppendJsonOptionalNumber(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s);
   stream << ',';

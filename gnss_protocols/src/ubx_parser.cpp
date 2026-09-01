@@ -920,6 +920,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcDate);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcTime);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSpeedOverGround);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCourseOverGround);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
@@ -956,6 +958,32 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
                                    state.satellites_used,
                                    record.num_sv);
   SetCorrectionState(state, record.differential_solution);
+
+  if (record.valid_date)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kUtcDate,
+                                     state.utc_date,
+                                     universal_gnss::GnssUtcDate{record.year, record.month, record.day});
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kUtcDate, state.utc_date);
+  }
+  if (record.valid_time)
+  {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kUtcTime,
+                                     state.utc_time,
+                                     universal_gnss::GnssUtcTime{
+                                         record.hour, record.minute, record.second, record.nano_ns});
+  }
+  else
+  {
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kUtcTime, state.utc_time);
+  }
 
   if (position_valid)
   {

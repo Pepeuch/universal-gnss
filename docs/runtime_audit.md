@@ -68,6 +68,7 @@ portable runtime fields:
 - satellites used / tracked / visible
 - mean / max CN0
 - correction age
+- receiver-observed UTC date / time (`GnssUtcDate` / `GnssUtcTime`)
 - speed-over-ground in metres per second / true course-over-ground in degrees
 - heading compatibility
 - dual-antenna heading compatibility state
@@ -79,7 +80,6 @@ portable runtime fields:
 Current intentional model limits:
 
 - no GNSS wall-clock / calendar-time contract yet
-  - `NMEA ZDA` remains semantic-only
 - runtime state does not map directly to ROS diagnostics
   - correction and hardware diagnostics flow through the portable
     `GnssHealthSummary` / `GnssDiagnosticEvent` model instead
@@ -89,6 +89,12 @@ Current export / adapter notes:
 - `gnss_export` CSV v1 / JSONL v1 retain their stabilized field schemas; the
   additive speed/course runtime fields are currently visible through direct
   runtime formatting rather than silently changing those versioned exports.
+- `timestamp_ns` remains the local monotonic receipt timestamp. It is never
+  GNSS UTC, system wall clock, steady-clock arithmetic, or ROS time; unavailable
+  receiver UTC is never substituted from a host clock.
+- ZDA maps validated date/time; RMC maps its independently present components;
+  NAV-PVT maps date and time independently from `valid_date` / `valid_time`.
+  NAV-PVT `fully_resolved_time` is not a gate for either component.
 - `gnss_quality_report` exposes the final normalized runtime state plus
   correction / diagnostic summaries, but does not try to mirror every runtime
   field into the top-level summary structure.
@@ -102,7 +108,7 @@ Current export / adapter notes:
 
 - `NmeaSession` is now the generic live NMEA carrier.
   - `GGA`, `RMC`, `GSA`, `GSV`, `GST`, and `VTG` flow through it as runtime updates.
-  - `ZDA` remains semantic-only.
+  - `ZDA` supplies receiver UTC date/time as a runtime update.
 - `UbloxSession` still accepts `NMEA` as a mixed-stream companion path.
   - `GGA`, `RMC`, `GSA`, `GSV`, and `GST` flow through it.
 - `ReceiverSession` auto-detect is still conservative.
@@ -134,7 +140,7 @@ Legend:
 | `GSV` | yes | yes | yes | yes | yes | yes | status | contributes visible satellites and CN0 summaries |
 | `GST` | yes | yes | yes | yes | yes | yes | status + navsat | conservative accuracy only |
 | `VTG` | yes | yes | yes | yes | yes | no | no | maps true course-over-ground and speed-over-ground; versioned export/ROS projection remain deferred |
-| `ZDA` | yes | no | yes | no | no | no | no | semantic-only in `NmeaSession` until GNSS wall-clock/date contract exists |
+| `ZDA` | yes | yes | yes | yes | yes | no | no | maps receiver-observed UTC date/time; no timestamp synthesis |
 
 ### UBX
 
@@ -178,7 +184,6 @@ Legend:
 These remain intentionally deferred after the audit:
 
 - ROS 2 receiver node work
-- GNSS wall-clock / date runtime contract for `ZDA`
 - broader Unicore binary `N4` semantic decoding beyond `BESTNAVB` / `PVTSLNB`
 - AGC threshold interpretation
 - GUI / dashboard work

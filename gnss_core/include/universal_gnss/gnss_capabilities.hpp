@@ -35,6 +35,8 @@ enum class GnssCapability : GnssCapabilityFlags
   kBaselineSolutionStatus = 1u << 22,
   kSpeedOverGround = 1u << 23,
   kCourseOverGround = 1u << 24,
+  kUtcDate = 1u << 25,
+  kUtcTime = 1u << 26,
 };
 
 static_assert(std::is_same<std::underlying_type<GnssCapability>::type, GnssCapabilityFlags>::value,

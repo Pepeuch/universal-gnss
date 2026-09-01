@@ -315,6 +315,33 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
              "NAV-PVT should update ground speed and course independently from vehicle heading");
 }
 
+void TestNavPvtUtcValidityBitsRemainIndependent(TestContext& ctx)
+{
+  auto date_only = MakeNavPvtPayload();
+  date_only[11u] = 0x01u;
+  UbloxSession date_session;
+  date_session.FeedBytes(BuildUbxFrame(0x01u, 0x07u, date_only), 1112);
+  ctx.Expect(date_session.current_state().utc_date.has_value() &&
+                 !date_session.current_state().utc_time.has_value(),
+             "NAV-PVT valid_date must publish only date");
+
+  auto time_only = MakeNavPvtPayload();
+  time_only[11u] = 0x02u;
+  UbloxSession time_session;
+  time_session.FeedBytes(BuildUbxFrame(0x01u, 0x07u, time_only), 1113);
+  ctx.Expect(!time_session.current_state().utc_date.has_value() &&
+                 time_session.current_state().utc_time.has_value(),
+             "NAV-PVT valid_time must publish only time");
+
+  auto resolved_only = MakeNavPvtPayload();
+  resolved_only[11u] = 0x04u;
+  UbloxSession resolved_session;
+  resolved_session.FeedBytes(BuildUbxFrame(0x01u, 0x07u, resolved_only), 1114);
+  ctx.Expect(!resolved_session.current_state().utc_date.has_value() &&
+                 !resolved_session.current_state().utc_time.has_value(),
+             "NAV-PVT fully-resolved flag must not replace date/time validity bits");
+}
+
 void TestNavSatCn0AndSatelliteUpdates(TestContext& ctx)
 {
   UbloxSession session;
@@ -544,6 +571,7 @@ int main()
   TestContext ctx;
 
   TestNavPvtRuntimeUpdates(ctx);
+  TestNavPvtUtcValidityBitsRemainIndependent(ctx);
   TestNavSatCn0AndSatelliteUpdates(ctx);
   TestNavStatusRtkUpdates(ctx);
   TestMonRfInterferenceAndJammingUpdates(ctx);

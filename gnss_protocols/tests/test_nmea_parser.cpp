@@ -682,6 +682,29 @@ void TestValidZdaParsing(TestContext& ctx)
              "ZDA should decode the local zone offset");
 }
 
+void TestUtcRuntimeMappings(TestContext& ctx)
+{
+  const auto zda = universal_gnss_protocols::ParseNmeaZda(
+      FrameSentence(MakeSentence("GPZDA,201530.25,04,07,2002,00,00"), 901));
+  ctx.Expect(zda.record.has_value(), "UTC runtime mapping requires valid ZDA");
+  if (!zda.record.has_value()) return;
+  const auto zda_state = universal_gnss_protocols::NmeaZdaToRuntimeState(*zda.record);
+  ctx.Expect(zda_state.timestamp_ns == std::optional<std::int64_t>(901) &&
+                 zda_state.utc_date.has_value() && zda_state.utc_date->year == 2002u &&
+                 zda_state.utc_date->month == 7u && zda_state.utc_date->day == 4u &&
+                 zda_state.utc_time.has_value() && zda_state.utc_time->hour == 20u &&
+                 zda_state.utc_time->minute == 15u && zda_state.utc_time->second == 30u &&
+                 zda_state.utc_time->nanosecond == 250000000,
+             "ZDA must map receiver UTC independently from receipt timestamp");
+
+  universal_gnss_protocols::NmeaRmcRecord rmc;
+  rmc.utc_time = universal_gnss_protocols::NmeaUtcTime{0, 0, 0.0};
+  const auto time_only = universal_gnss_protocols::NmeaRmcToRuntimeState(rmc);
+  ctx.Expect(!time_only.utc_date.has_value() && time_only.utc_time.has_value() &&
+                 time_only.utc_time->hour == 0u,
+             "RMC time-only observation must not invent a date and zero time is valid");
+}
+
 void TestZdaMissingLocalZoneIsTolerated(TestContext& ctx)
 {
   const NmeaSentence sentence = FrameSentence(
@@ -947,6 +970,7 @@ int main()
   TestValidGstParsing(ctx);
   TestValidVtgParsing(ctx);
   TestValidZdaParsing(ctx);
+  TestUtcRuntimeMappings(ctx);
   TestPartialGsvSatelliteBlockHandling(ctx);
   TestMalformedDopRejected(ctx);
   TestMissingOptionalGsaFields(ctx);

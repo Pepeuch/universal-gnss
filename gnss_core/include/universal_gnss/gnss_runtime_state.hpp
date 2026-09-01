@@ -61,6 +61,9 @@ struct GnssRuntimeState
   std::optional<float> max_cn0_db_hz{};
   std::optional<float> correction_age_s{};
 
+  std::optional<GnssUtcDate> utc_date{};
+  std::optional<GnssUtcTime> utc_time{};
+
   // Ground-referenced motion. Course is true-north track, not vehicle/antenna heading.
   std::optional<float> speed_over_ground_m_s{};
   std::optional<float> course_over_ground_deg{};
@@ -246,6 +249,14 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
       state.correction_age_s.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kCorrectionAge);
+  }
+  if (HasCapability(state, GnssCapability::kUtcDate) && state.utc_date.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kUtcDate);
+  }
+  if (HasCapability(state, GnssCapability::kUtcTime) && state.utc_time.has_value())
+  {
+    flags = SetCapabilityFlag(flags, GnssCapability::kUtcTime);
   }
   if (HasCapability(state, GnssCapability::kSpeedOverGround) &&
       state.speed_over_ground_m_s.has_value())

@@ -454,6 +454,36 @@ void TestDirectPositionClearUsesFieldProvenance(TestContext& ctx)
              "a later direct SET must restore only the genuinely supplied field");
 }
 
+void TestUtcFieldsOrderClearAndReset(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+  GnssRuntimeState newer;
+  newer.timestamp_ns = 20;
+  SetCapability(newer, GnssCapability::kUtcDate);
+  SetCapability(newer, GnssCapability::kUtcTime);
+  SetOptionalValue(newer, GnssCapability::kUtcDate, newer.utc_date, universal_gnss::GnssUtcDate{2025, 1, 2});
+  SetOptionalValue(newer, GnssCapability::kUtcTime, newer.utc_time, universal_gnss::GnssUtcTime{3, 4, 5, 0});
+  aggregator.Merge(newer);
+
+  GnssRuntimeState older = newer;
+  older.timestamp_ns = 10;
+  older.utc_date = universal_gnss::GnssUtcDate{2000, 1, 1};
+  aggregator.Merge(older);
+  ctx.Expect(aggregator.state().utc_date.has_value() && aggregator.state().utc_date->year == 2025u,
+             "older receipt timestamp must not replace UTC date");
+
+  GnssRuntimeState clear_time;
+  clear_time.timestamp_ns = 30;
+  SetCapability(clear_time, GnssCapability::kUtcTime);
+  ClearOptionalValue(clear_time, GnssCapability::kUtcTime, clear_time.utc_time);
+  aggregator.Merge(clear_time);
+  ctx.Expect(aggregator.state().utc_date.has_value() && !aggregator.state().utc_time.has_value(),
+             "UTC time clear must not clear independent UTC date");
+  aggregator.Reset();
+  ctx.Expect(!aggregator.state().utc_date.has_value() && !aggregator.state().utc_time.has_value(),
+             "reset must invalidate receiver UTC observations");
+}
+
 }  // namespace
 
 int main()
@@ -472,6 +502,7 @@ int main()
   TestAggregateTimestampTracksNewestKnownSample(ctx);
   TestExplicitClearIsDistinctFromOmission(ctx);
   TestDirectPositionClearUsesFieldProvenance(ctx);
+  TestUtcFieldsOrderClearAndReset(ctx);
 
   if (ctx.failures != 0)
   {

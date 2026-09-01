@@ -253,7 +253,13 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
     return;
   }
 
-  ParseSemanticOnlySentence(sentence, universal_gnss_protocols::ParseNmeaZda, metrics_);
+  ParseAndMergeSentence(sentence,
+                        universal_gnss_protocols::ParseNmeaZda,
+                        universal_gnss_protocols::NmeaZdaToRuntimeState,
+                        false,
+                        config_.enable_runtime_updates,
+                        aggregator_,
+                        metrics_);
 }
 
 }  // namespace universal_gnss_driver

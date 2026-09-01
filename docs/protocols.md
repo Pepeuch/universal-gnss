@@ -139,20 +139,18 @@ Current NMEA notes:
 - `VTG` contributes speed-over-ground in metres per second and true
   course-over-ground in degrees; magnetic course is retained only in the
   protocol record and is never projected as true course or heading
-- `ZDA` currently contributes semantic UTC date/time and local-zone parsing only
+- `ZDA` contributes receiver-observed UTC date and time to runtime state
 - `GST` accuracy now flows through the NMEA session/replay routing paths that
   already consume `GGA` / `RMC` / `GSA` / `GSV`
 - the generic NMEA live-session path now routes `GGA` / `RMC` / `GSA` / `GSV`
   / `GST` / `VTG` into normalized runtime state
-- `ZDA` remains semantic-only in the generic NMEA session
-- `ZDA` is not projected into `GnssRuntimeState` yet because the core does not
-  yet define a GNSS wall-clock or calendar-time contract beyond sample timestamps
+- `ZDA` contributes validated UTC date/time in the generic NMEA session
 
 What NMEA does not do yet:
 
 - `GSA` / `GSV` multi-sentence aggregation
 - persistent satellite tracking across epochs
-- `ZDA` runtime projection or timestamp synthesis
+- timestamp synthesis from NMEA date/time
 - proprietary vendor sentences, or NMEA state fusion
 
 ### UBX
@@ -412,6 +410,7 @@ by protocol-specific mapping helpers.
 Runtime field            Current protocol sources
 ---------------------------------------------------------------
 fix_valid                NMEA GGA, NMEA RMC, NMEA GSA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
+utc_date / utc_time      NMEA ZDA, NMEA RMC, UBX NAV-PVT
 fix_type                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
 rtk_mode                 NMEA GGA, UBX NAV-STATUS, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB, Unicore RTKSTATUSA
 latitude / longitude     NMEA GGA, NMEA RMC, UBX NAV-PVT, Unicore PVTSLNA, Unicore PVTSLNB, Unicore BESTNAVA, Unicore BESTNAVB

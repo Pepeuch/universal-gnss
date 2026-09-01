@@ -87,6 +87,8 @@ void TestJsonFormatting(TestContext& ctx)
   state.baseline_azimuth_deg = 182.25f;
   state.baseline_solution_status = universal_gnss::GnssBaselineSolutionStatus::kComputed;
   state.jamming_detected = true;
+  state.utc_date = universal_gnss::GnssUtcDate{2002u, 7u, 4u};
+  state.utc_time = universal_gnss::GnssUtcTime{20u, 15u, 30u, 0};
 
   const std::string formatted = universal_gnss_tools::FormatRuntimeStateJson(state, std::nullopt);
   ctx.Expect(formatted.find("\"selected_session\":null") != std::string::npos,
@@ -108,6 +110,9 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should include additive baseline fields");
   ctx.Expect(formatted.find("\"jamming_detected\":true") != std::string::npos,
              "json formatting should include available boolean fields");
+  ctx.Expect(formatted.find("\"utc_date\":{\"year\":2002,\"month\":7,\"day\":4}") != std::string::npos &&
+                 formatted.find("\"utc_time\":{\"hour\":20,\"minute\":15,\"second\":30,\"nanosecond\":0}") != std::string::npos,
+             "json formatting should expose receiver UTC components independently");
 }
 
 }  // namespace
