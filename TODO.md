@@ -288,7 +288,7 @@ BlueOS validation:
 - [x] extend planner/report layer into ROS2
 - [x] operator observability review
 - [x] snapshot/export surface
-- [ ] ROS2 CI coverage
+- [x] ROS2 CI coverage
 - [x] keep Kilted green
 - [ ] validate Lyrical
 - [ ] validate Humble/Jazzy

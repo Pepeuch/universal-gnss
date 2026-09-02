@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:noble
+    env:
+      ROS_LOCALHOST_ONLY: "1"
+      ROS_LOG_DIR: /tmp/universal_gnss_ros_log
 
     steps:
       - name: Check out repository
@@ -22,6 +25,7 @@ jobs:
       - name: Build and test universal_gnss_ros2
         run: |
           source /opt/ros/kilted/setup.bash
+          mkdir -p "$ROS_LOG_DIR"
           mkdir -p "$GITHUB_WORKSPACE/ros2_ws/src"
           ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws/src/gnss_ros2"
           ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws/src/gnss_core"
