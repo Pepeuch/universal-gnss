@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
+#include <future>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -22,6 +23,7 @@
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
+#include "universal_gnss_ros2/srv/get_receiver_snapshot.hpp"
 #include <gtest/gtest.h>
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 #include "universal_gnss_ros2/ntrip_node.hpp"
@@ -653,6 +655,34 @@ std::optional<std::string> FindDiagnosticValue(const diagnostic_msgs::msg::Diagn
   return std::nullopt;
 }
 
+std::shared_ptr<universal_gnss_ros2::srv::GetReceiverSnapshot::Response>
+CallReceiverSnapshotService(
+    rclcpp::executors::SingleThreadedExecutor& executor,
+    const rclcpp::Client<universal_gnss_ros2::srv::GetReceiverSnapshot>::SharedPtr& client)
+{
+  if (!client->wait_for_service(std::chrono::seconds(1)))
+  {
+    ADD_FAILURE() << "receiver snapshot service was not available";
+    return nullptr;
+  }
+
+  auto request = std::make_shared<universal_gnss_ros2::srv::GetReceiverSnapshot::Request>();
+  auto future = client->async_send_request(request);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  while (std::chrono::steady_clock::now() < deadline)
+  {
+    executor.spin_some();
+    if (future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+    {
+      return future.get();
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  ADD_FAILURE() << "receiver snapshot service call timed out";
+  return nullptr;
+}
+
 std::int64_t RosTimeToNanoseconds(const builtin_interfaces::msg::Time& stamp)
 {
   return static_cast<std::int64_t>(stamp.sec) * 1000000000LL +
@@ -819,6 +849,100 @@ TEST_F(ReceiverNodeTest, AutoConfigDryRunReportsWhenNoConfigurationIsRequested)
   EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_available"),
             std::optional<std::string>{"false"});
   EXPECT_EQ(FindDiagnosticValue(*auto_config, "applied"), std::optional<std::string>{"false"});
+}
+
+TEST_F(ReceiverNodeTest, SnapshotServiceProjectsCurrentRuntimeAndDiagnosticsWithoutWriting)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto duplex = std::make_unique<ScriptedWriteByteDuplex>(
+      std::vector<ScriptedWriteByteDuplex::WriteAction>{});
+  duplex->SetRepeatedReadAction({universal_gnss_transport::TransportStatus::kOk,
+                                 universal_gnss_transport::TransportError::kNone, gga, true});
+  auto* const duplex_observer = duplex.get();
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "nmea")});
+  auto receiver = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(duplex), options);
+  auto client_node = std::make_shared<rclcpp::Node>("receiver_snapshot_client");
+  auto client = client_node->create_client<universal_gnss_ros2::srv::GetReceiverSnapshot>(
+      "/universal_gnss_receiver/get_snapshot");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(receiver);
+  executor.add_node(client_node);
+
+  ASSERT_TRUE(receiver->StepOnce());
+  const auto writes_before = duplex_observer->write_call_count();
+  const auto response = CallReceiverSnapshotService(executor, client);
+
+  ASSERT_NE(response, nullptr);
+  EXPECT_TRUE(response->status.fix_valid);
+  EXPECT_NEAR(response->status.latitude_deg, 48.1173, 1e-6);
+  EXPECT_NEAR(response->status.longitude_deg, 11.516666667, 1e-6);
+  EXPECT_EQ(RosTimeToNanoseconds(response->status.stamp),
+            receiver->current_state().timestamp_ns.value_or(0));
+  EXPECT_NE(FindDiagnosticStatusByName(response->diagnostics, "universal_gnss/summary"), nullptr);
+  EXPECT_EQ(duplex_observer->write_call_count(), writes_before);
+}
+
+TEST_F(ReceiverNodeTest, SnapshotServicePreservesAbsentValues)
+{
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+  auto receiver = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source));
+  auto client_node = std::make_shared<rclcpp::Node>("receiver_snapshot_absent_client");
+  auto client = client_node->create_client<universal_gnss_ros2::srv::GetReceiverSnapshot>(
+      "/universal_gnss_receiver/get_snapshot");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(receiver);
+  executor.add_node(client_node);
+
+  const auto response = CallReceiverSnapshotService(executor, client);
+
+  ASSERT_NE(response, nullptr);
+  EXPECT_FALSE(response->status.fix_valid);
+  EXPECT_EQ(response->status.capability_flags, 0u);
+  EXPECT_EQ(response->status.value_flags, 0u);
+  EXPECT_TRUE(std::isnan(response->status.latitude_deg));
+  EXPECT_TRUE(std::isnan(response->status.correction_age_s));
+  EXPECT_EQ(RosTimeToNanoseconds(response->status.stamp), 0);
+}
+
+TEST_F(ReceiverNodeTest, SnapshotServiceReportsStaleRuntimeWithoutChangingProvenance)
+{
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone, gga, true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       {},
+       true},
+  });
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "nmea"),
+      rclcpp::Parameter("expected_runtime_observation_rate_hz", 100.0),
+  });
+  auto receiver = std::make_shared<universal_gnss_ros2::ReceiverNode>(std::move(source), options);
+  auto client_node = std::make_shared<rclcpp::Node>("receiver_snapshot_stale_client");
+  auto client = client_node->create_client<universal_gnss_ros2::srv::GetReceiverSnapshot>(
+      "/universal_gnss_receiver/get_snapshot");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(receiver);
+  executor.add_node(client_node);
+
+  ASSERT_TRUE(receiver->StepOnce());
+  const auto timestamp_ns = receiver->current_state().timestamp_ns;
+  ASSERT_TRUE(timestamp_ns.has_value());
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  const auto response = CallReceiverSnapshotService(executor, client);
+
+  ASSERT_NE(response, nullptr);
+  EXPECT_EQ(RosTimeToNanoseconds(response->status.stamp), *timestamp_ns);
+  EXPECT_NE(FindDiagnosticStatusByName(response->diagnostics, "universal_gnss/runtime_state_stale"),
+            nullptr);
 }
 
 TEST_F(ReceiverNodeTest, ExplicitSerialConfigDoesNotRunDiscovery)

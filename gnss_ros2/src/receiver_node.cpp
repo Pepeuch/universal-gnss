@@ -35,6 +35,7 @@
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include "universal_gnss_ros2/navsat_fix_adapter.hpp"
+#include "universal_gnss_ros2/srv/get_receiver_snapshot.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
@@ -796,6 +797,14 @@ struct ReceiverNode::Impl
     kTerminal = 2,
   };
 
+  struct Snapshot
+  {
+    universal_gnss::GnssRuntimeState runtime_state{};
+    universal_gnss_ros2::msg::GnssStatus status{};
+    diagnostic_msgs::msg::DiagnosticArray diagnostics{};
+    universal_gnss::GnssDiagnosticEvents active_events{};
+  };
+
   explicit Impl(ReceiverNode& owner,
                 std::unique_ptr<universal_gnss_transport::ByteSource> injected_source,
                 ReceiverNode::DiscoveryFunction discovery_function)
@@ -835,6 +844,14 @@ struct ReceiverNode::Impl
     status_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
+    snapshot_service_ = owner_.create_service<universal_gnss_ros2::srv::GetReceiverSnapshot>(
+        "~/get_snapshot",
+        [this](const std::shared_ptr<universal_gnss_ros2::srv::GetReceiverSnapshot::Request>,
+               std::shared_ptr<universal_gnss_ros2::srv::GetReceiverSnapshot::Response> response) {
+          const auto snapshot = this->BuildSnapshot();
+          response->status = snapshot.status;
+          response->diagnostics = snapshot.diagnostics;
+        });
     rtcm_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
         "rtcm", rclcpp::QoS(rclcpp::KeepLast(kRtcmForwardQueueCapacity)).reliable(),
         [this](const universal_gnss_ros2::msg::RtcmFrame& message) {
@@ -1736,41 +1753,53 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
-  void PublishNow()
+  Snapshot BuildSnapshot() const
   {
-    auto state = session_->current_state();
+    Snapshot snapshot;
+    snapshot.runtime_state = session_->current_state();
 
-    last_status_message_ = ToGnssStatusMessage(state);
-    last_status_message_->position_observation_sequence =
+    snapshot.status = ToGnssStatusMessage(snapshot.runtime_state);
+    snapshot.status.position_observation_sequence =
         static_cast<std::uint64_t>(session_->metrics().position_observations);
 
     auto summary = BuildHealthSummary();
-    last_diagnostics_message_ = ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
-    AppendResolvedDiagnosticEvents(*last_diagnostics_message_, summary, state.timestamp_ns);
-    last_active_events_ = summary.events;
-    if (last_diagnostics_message_->header.stamp.sec == 0 &&
-        last_diagnostics_message_->header.stamp.nanosec == 0u)
+    snapshot.diagnostics = ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
+    AppendResolvedDiagnosticEvents(snapshot.diagnostics, summary,
+                                   snapshot.runtime_state.timestamp_ns);
+    snapshot.active_events = std::move(summary.events);
+    if (snapshot.diagnostics.header.stamp.sec == 0 &&
+        snapshot.diagnostics.header.stamp.nanosec == 0u)
     {
       // DiagnosticArray.header is publication metadata, not observation
       // provenance. Keep it useful before the first receiver observation.
-      last_diagnostics_message_->header.stamp =
+      snapshot.diagnostics.header.stamp =
           ToRosTime(std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
     }
-    last_diagnostics_message_->header.frame_id = config_.frame_id;
-    AppendDiscoveryStatus(*last_diagnostics_message_);
-    AppendAutoConfigDryRunStatus(*last_diagnostics_message_);
-    AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
+    snapshot.diagnostics.header.frame_id = config_.frame_id;
+    AppendDiscoveryStatus(snapshot.diagnostics);
+    AppendAutoConfigDryRunStatus(snapshot.diagnostics);
+    AppendRtcmForwardingStatus(snapshot.diagnostics, snapshot.runtime_state);
     AppendRtcmSemanticObservationStatuses(
-        *last_diagnostics_message_,
+        snapshot.diagnostics,
         universal_gnss_protocols::BuildRtcmSemanticObservations(
             rtcm_forward_correction_monitor_,
             static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs())),
         "universal_gnss", hardware_id_);
-    AppendParserStatus(*last_diagnostics_message_);
+    AppendParserStatus(snapshot.diagnostics);
 
-    if (CanPublishFixMessage(state))
+    return snapshot;
+  }
+
+  void PublishNow()
+  {
+    auto snapshot = BuildSnapshot();
+    last_status_message_ = std::move(snapshot.status);
+    last_diagnostics_message_ = std::move(snapshot.diagnostics);
+    last_active_events_ = std::move(snapshot.active_events);
+
+    if (CanPublishFixMessage(snapshot.runtime_state))
     {
-      last_fix_message_ = ToNavSatFixMessage(state);
+      last_fix_message_ = ToNavSatFixMessage(snapshot.runtime_state);
       last_fix_message_->header.frame_id = config_.frame_id;
       fix_publisher_->publish(*last_fix_message_);
     } else
@@ -2035,6 +2064,7 @@ struct ReceiverNode::Impl
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr fix_publisher_{};
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_publisher_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
+  rclcpp::Service<universal_gnss_ros2::srv::GetReceiverSnapshot>::SharedPtr snapshot_service_{};
   rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
   rclcpp::TimerBase::SharedPtr acquisition_timer_{};
   rclcpp::TimerBase::SharedPtr publication_timer_{};

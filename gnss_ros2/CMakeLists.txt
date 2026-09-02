@@ -69,7 +69,8 @@ rosidl_generate_interfaces(
   ${PROJECT_NAME}
   "msg/GnssStatus.msg"
   "msg/RtcmFrame.msg"
-  DEPENDENCIES builtin_interfaces
+  "srv/GetReceiverSnapshot.srv"
+  DEPENDENCIES builtin_interfaces diagnostic_msgs
 )
 
 add_library(${PROJECT_NAME}_gnss_status_adapter src/gnss_status_adapter.cpp)

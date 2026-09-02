@@ -445,6 +445,17 @@ Topics published by the skeleton node:
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
 
+Services:
+
+- `~/get_snapshot`
+  - type: `universal_gnss_ros2/srv/GetReceiverSnapshot`
+  - returns one bounded, current pair of the canonical `GnssStatus` and
+    `DiagnosticArray` projections
+  - preserves the existing status and diagnostic timestamp/provenance rules,
+    including absent values and stale-state reporting
+  - is read-only: it neither replays history nor dumps raw frames, and never
+    applies receiver configuration or writes to the receiver
+
 The minimal launch examples now installed with the package are:
 
 - `receiver_serial.launch.py`

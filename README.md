@@ -43,7 +43,7 @@ Current phase: post-`v0.6.x` stabilization.
 
 ![Generated UGA backlog status](docs/status/uga_backlog.svg)
 
-Baseline: **205** audited items. Remaining unchecked TODO work: **173**. Closed or intentionally resolved: **32**.
+Baseline: **205** audited items. Remaining unchecked TODO work: **172**. Closed or intentionally resolved: **33**.
 
 Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
 <!-- UGA_STATUS_END -->

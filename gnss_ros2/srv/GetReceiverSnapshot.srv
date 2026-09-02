@@ -1,0 +1,8 @@
+# Return one bounded, current ReceiverNode snapshot. This is not a replay,
+# timeline, raw-frame dump, or receiver configuration operation.
+---
+# Existing canonical live-state projection. Its capability/value flags preserve
+# supported-but-absent values without synthesising them.
+universal_gnss_ros2/GnssStatus status
+# Existing diagnostic projection at the time of the snapshot request.
+diagnostic_msgs/DiagnosticArray diagnostics
