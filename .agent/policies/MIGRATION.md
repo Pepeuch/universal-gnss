@@ -35,3 +35,8 @@ because it once worked.
 
 When MIGRATION and LONGTASK are both active, use this vocabulary inside checkpoint
 semantic decisions.
+
+
+## Durable migration evidence
+
+When a migration finding is completed but its historical comparison is likely to guide later ports/adaptations, classify its shared checkpoint as `RETAINED` rather than keeping a full working checkpoint indefinitely. Retain only the behavioural contract, exact historical/current references, PORT/ADAPT/ALREADY PRESENT/SUPERSEDED/REJECT decisions, invalidation conditions, and remaining dependent work. Promote mature project-level conclusions to normal versioned migration/architecture documentation when appropriate.

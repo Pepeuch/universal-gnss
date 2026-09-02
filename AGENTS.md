@@ -17,9 +17,10 @@ Use each layer for its intended role:
 
 - `AGENTS.md` → stable always-on agent execution policy;
 - `.agent/policies/*.md` → conditional detailed execution policy;
-- `.agent/checkpoints/` → local current-task operational state, never versioned;
-- `.agent/shared/` → intentional short-lived contributor/agent handoff state;
-- versioned audits/analysis/architecture/vendor docs → durable shared knowledge;
+- `.agent/checkpoints/` → local working checkpoints and session scratch, never versioned;
+- `.agent/shared/checkpoints/` → intentionally versioned resumable finding memory, classified by lifecycle;
+- other `.agent/shared/` content → intentional short-lived contributor/agent handoff state;
+- versioned audits/analysis/architecture/vendor docs → durable project knowledge;
 - source code → authoritative current implementation;
 - tests → executable behavioural evidence;
 - Git → exact repository and implementation state.
@@ -42,7 +43,8 @@ A context compaction, model switch, or new agent session is **not new evidence**
 Before substantial work:
 
 1. read this `AGENTS.md` completely;
-2. inspect only checkpoints/handoffs whose scope may overlap the current task;
+2. read `.agent/shared/checkpoints/INDEX.md` when present, then inspect only the local/shared
+   checkpoint(s) whose scope may overlap the current task;
 3. establish repository path, branch, `HEAD`, dirty state, remotes, and relevant
    submodule state;
 4. compare any applicable checkpoint/handoff baseline with actual repository state;
@@ -245,13 +247,40 @@ files, use `bash scripts/clang_format_21.sh --apply <files>` or
 
 ## 7. Agent-state persistence and Git boundary
 
-Agent state has exactly three classes:
+Agent state has four distinct roles:
 
-1. `.agent/checkpoints/` → local operational state, never versioned;
-2. `.agent/shared/` → short-lived shared state, versioned only intentionally;
-3. durable project docs → validated reusable knowledge, versioned normally.
+1. `.agent/checkpoints/` → local working checkpoint/session state, never versioned;
+2. `.agent/shared/checkpoints/` → intentionally versioned resumable finding memory;
+3. other `.agent/shared/` content → short-lived shared contributor/agent handoff state;
+4. durable project docs → validated reusable project knowledge, versioned normally.
 
 Do not mix their roles.
+
+### Shared checkpoint lifecycle
+
+Versioned checkpoints under `.agent/shared/checkpoints/` use these lifecycle classes:
+
+```text
+active/    OPEN or PARTIAL finding that another session/agent may need to resume
+blocked/   finding stopped by a real blocker; exact unblock condition must be recorded
+retained/  IMPLEMENTED finding whose detailed reasoning/evidence is expected to be reused
+closed/    IMPLEMENTED finding requiring only a compact anti-rediscovery closure record
+```
+
+A local working checkpoint is not automatically promoted. Before ending or closing a substantial finding, classify its durable disposition explicitly:
+
+```text
+LOCAL_ONLY | ACTIVE | BLOCKED | RETAINED | CLOSED | DELETE
+```
+
+- `ACTIVE` and `BLOCKED` preserve enough verified state for direct continuation.
+- `BLOCKED` records the blocker, exact unblock condition, completed evidence, and exact next action.
+- `RETAINED` is for completed work whose detailed semantic decisions, migration evidence, hardware plan, or future dependency would otherwise be expensive to reconstruct.
+- `CLOSED` is a compact closure record: contract, decision, evidence, validation, durable references, and invalidation conditions.
+- `DELETE` is allowed only when no durable value remains and any needed project evidence has already been promoted elsewhere.
+- Never preserve narrative investigation history, large logs, transcripts, or copied diffs merely for completeness.
+
+When present, `.agent/shared/checkpoints/INDEX.md` is the navigation surface. Read it first and load only checkpoint(s) relevant to the current finding. The index is not a backlog source of truth and must not override TODO/manifest/ledger status.
 
 Repository ignore rules must preserve the equivalent of:
 
@@ -265,19 +294,11 @@ Repository ignore rules must preserve the equivalent of:
 
 Never stage `.agent/checkpoints/`.
 
-Before staging `.agent/shared/`, review it explicitly for:
+Before staging `.agent/shared/`, review it explicitly for secrets/credentials, stale session noise, large logs, generated content, transcripts, and accidental local-only state.
 
-- secrets/credentials;
-- stale session noise;
-- large logs;
-- generated content;
-- transcripts;
-- accidental local-only state.
+A local checkpoint expected to survive compaction/restart within the same workspace must be repository-local under `.agent/checkpoints/`; do not use `/tmp`.
 
-A checkpoint expected to survive compaction/restart must be repository-local under
-`.agent/checkpoints/`; do not use `/tmp`.
-
----
+A finding expected to survive machine/workspace loss or be reusable by another contributor must instead have an intentionally reviewed shared checkpoint or durable project record.
 
 ## 8. Scope control
 
@@ -413,7 +434,7 @@ A task is complete only when:
 6. `git diff --check` passes;
 7. required documentation/audit status is updated;
 8. remaining limitations/open findings are explicit;
-9. local/shared agent-state disposition is explicit when relevant;
+9. local/shared agent-state disposition is explicit when relevant, including lifecycle class for substantial findings;
 10. commit and push status are explicit.
 
 ---
@@ -484,6 +505,7 @@ If work is incomplete, also report:
 
 - what remains and why;
 - latest local checkpoint;
-- whether a shared handoff was created/updated;
+- whether a shared checkpoint/handoff was created, updated, retained, reduced, or deleted;
+- its lifecycle class when applicable;
 - validation pending/blocked;
 - exact next step.

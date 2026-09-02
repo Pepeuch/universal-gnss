@@ -7,7 +7,7 @@ where this module is silent or more permissive.
 
 ## 1. Checkpoint lifecycle
 
-Use `.agent/checkpoints/` for compact resumable current-task state.
+Use `.agent/checkpoints/` for compact resumable **local working state**.
 
 Create the first checkpoint early on a task likely to be long, normally before roughly
 one third of the expected investigation effort.
@@ -15,6 +15,8 @@ one third of the expected investigation effort.
 Update it before substantial edits, after meaningful milestones, before large
 builds/test suites/repo-wide searches, before migrations/refactors, before changing
 repository/submodule context, and before ending an unfinished session.
+
+Local checkpoints are scratch/restart memory, not the durable archive. Before a substantial finding is closed or intentionally paused for future work, decide whether any of that state must be promoted into `.agent/shared/checkpoints/`.
 
 Recommended structure:
 
@@ -52,6 +54,57 @@ PASS/FAIL, and exact next action. Do not copy large logs, diffs, source files, P
 discussions, or narrative reasoning. Reference existing durable evidence instead.
 
 Root `AGENTS.md` owns the `.agent` Git-ignore contract; do not duplicate it here.
+
+### 1.1 Durable checkpoint disposition
+
+Use exactly one disposition at a handoff/closure boundary:
+
+```text
+LOCAL_ONLY
+ACTIVE
+BLOCKED
+RETAINED
+CLOSED
+DELETE
+```
+
+- `LOCAL_ONLY` → local working checkpoint only; no cross-workspace reuse justified yet.
+- `ACTIVE` → OPEN/PARTIAL and resumable from versioned shared state.
+- `BLOCKED` → real blocker with exact unblock condition and completed evidence.
+- `RETAINED` → IMPLEMENTED but detailed evidence is expected to support future work.
+- `CLOSED` → IMPLEMENTED with only a compact anti-rediscovery record.
+- `DELETE` → no checkpoint value remains after durable evidence promotion.
+
+Recommended shared layout:
+
+```text
+.agent/shared/checkpoints/
+├── INDEX.md
+├── active/
+├── blocked/
+├── retained/
+└── closed/
+```
+
+### 1.2 Shared checkpoint content
+
+For `ACTIVE`, `BLOCKED`, and `RETAINED`, preserve only: contract, current state, proven evidence, remaining delta, dependencies/invalidation conditions, validation, do-not-redo, exact next step, and blocker/unblock condition where applicable.
+
+For `CLOSED`, reduce aggressively to: decision, evidence, validation, durable references, and invalidation conditions. Do not preserve chronology.
+
+### 1.3 Promotion and cleanup
+
+```text
+working checkpoint
+    -> classify lifecycle
+    -> remove transient/session noise
+    -> promote only reusable evidence
+    -> update shared checkpoint INDEX
+    -> verify durable manifest/TODO remains authoritative
+    -> delete/reduce local checkpoint when appropriate
+```
+
+Never delete the only copy of evidence required for future continuation. Do not automatically keep every completed checkpoint, and do not automatically version every working checkpoint. Shared state must earn its place by future reuse value. `INDEX.md` is navigation only, never the backlog source of truth.
 
 ## 2. Resumption and evidence reuse
 
@@ -158,23 +211,21 @@ reinterpret them.
 
 ## 7. Durable knowledge
 
-Validated reusable knowledge belongs in versioned project documentation, commonly
-`docs/audits/`, `docs/analysis/`, `docs/architecture/`, or established durable ledgers.
+Validated reusable project knowledge belongs in versioned project documentation, commonly `docs/audits/`, `docs/analysis/`, `docs/architecture/`, vendor docs, or established durable ledgers.
 
-Lifecycle:
+Shared checkpoints are **agent memory**, not a replacement for project documentation or the authoritative backlog manifest.
 
 ```text
 local investigation
-    -> local checkpoint
-    -> shared handoff only if collaboration requires it
-    -> validated reusable conclusion
-    -> durable versioned documentation
+    -> local working checkpoint
+    -> shared checkpoint when resumability/reuse justifies it
+    -> durable project documentation when the conclusion becomes project knowledge
+    -> reduce/reclassify/delete redundant checkpoint state
 ```
 
-Durable records should preserve baseline/date/scope, verified facts versus assumptions,
-evidence, contracts, open questions, status, and invalidation conditions. Remove
-transient noise during promotion. Do not discard the source checkpoint before the
-durable record has been reviewed.
+A shared checkpoint may remain `RETAINED` after project documentation exists only when it contains concise operational resumption information that would still be costly to reconstruct.
+
+Durable records should preserve baseline/date/scope, verified facts versus assumptions, evidence, contracts, open questions, status, and invalidation conditions. Remove transient noise during promotion. Do not discard the only source checkpoint before the promoted record has been reviewed.
 
 ## 8. Collaboration
 
@@ -191,6 +242,4 @@ A receiving contributor should be able to determine: what is known, what is vali
 what must not change, baseline, fixed dependencies, open findings, tests establishing
 completion, and exact next action.
 
-Use `.agent/shared/` only for minimum short-lived handoff state. Do not duplicate
-repository-wide analysis when a validated shared baseline exists. Promote mature reusable
-knowledge to durable docs.
+Use `.agent/shared/` intentionally. Generic handoffs should remain minimal and short-lived; `.agent/shared/checkpoints/` may persist according to the lifecycle above. Do not duplicate repository-wide analysis when a validated shared baseline exists. Promote mature project knowledge to durable docs and reduce/delete redundant checkpoint material afterward.

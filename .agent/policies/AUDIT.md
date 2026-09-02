@@ -148,6 +148,12 @@ public source of truth for generated status/dashboard artifacts.
 Generated dashboard/status views must derive from that versioned source, never from
 ignored `.agent/checkpoints/`.
 
+Shared checkpoints under `.agent/shared/checkpoints/` are resumable evidence caches, not a second classification ledger. Their directory (`active`, `blocked`, `retained`, `closed`) must agree with the canonical finding status, but status changes are made in the durable manifest/TODO first.
+
+When a finding changes status, evaluate checkpoint disposition: OPEN/PARTIAL → `active` when resumable state is useful; BLOCKED → `blocked`; IMPLEMENTED with future reusable detail → `retained`; IMPLEMENTED with only anti-rediscovery value → compact `closed`; no reusable value → delete checkpoint after durable promotion.
+
+Do not derive backlog counts from checkpoint directories.
+
 When a generator provides `--check`, CI/check mode must verify consistency rather than
 silently regenerate stale artifacts.
 

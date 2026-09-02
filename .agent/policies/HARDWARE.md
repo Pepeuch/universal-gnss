@@ -74,7 +74,8 @@ If hardware is unavailable:
 3. record the acceptance criterion;
 4. classify the finding correctly (`HARDWARE_REQUIRED` where applicable);
 5. checkpoint the exact next physical action;
-6. stop the dependent branch.
+6. if the hardware dependency must survive the local workspace/session, promote the compact state to `.agent/shared/checkpoints/blocked/` with the exact hardware matrix and unblock condition;
+7. stop the dependent branch.
 
 Do not continue spending model/context budget on a branch that cannot be resolved without
 new physical evidence.
@@ -92,3 +93,8 @@ a receiver-side prior-byte cutoff.
 
 Only a validated recovery mechanism may establish a new trusted transport-incarnation
 boundary for such semantics.
+
+
+## 6. Hardware checkpoint retention
+
+A hardware-gated finding is a strong candidate for a versioned `BLOCKED` checkpoint because the missing physical matrix may be executed much later or by another contributor. Preserve only the exact hardware/firmware/interface/topology matrix required, deterministic software evidence already completed, acceptance criterion, blocker/unblock condition, next physical procedure, and invalidation conditions. Do not preserve speculative protocol archaeology once the physical boundary is established.
