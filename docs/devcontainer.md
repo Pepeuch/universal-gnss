@@ -46,8 +46,8 @@ FROM ros:${ROS_DISTRO}-ros-base
 Current defaults:
 
 - `kilted` is the default in `devcontainer.json`
-- `lyrical` is prepared as the next target when `ros:lyrical-ros-base` is
-  available in your environment
+- `lyrical` is covered by the ROS 2 CI matrix; a local devcontainer can use it
+  when `ros:lyrical-ros-base` is available in your environment
 
 The same devcontainer structure should work for both distros by changing only
 the build arg.
@@ -102,8 +102,8 @@ docker build \
 Notes:
 
 - `kilted` is the currently validated target for `universal_gnss_ros2`
-- `lyrical` is build-ready in the container definition but should be treated as
-  a future validation target until that image is actually available and tested
+- `lyrical` is covered by the CI matrix; local devcontainer validation remains
+  optional when its image is available
 
 ## Normal CMake / CTest validation
 
@@ -217,8 +217,8 @@ The devcontainer does not run hardware tests automatically.
 ## Current validation posture
 
 - Kilted: validated target for the ROS 2 package flow
-- Lyrical: prepared in the Dockerfile and docs, pending real-image availability
-  and explicit validation
+- Lyrical: CI-configured validation target; local devcontainer availability is
+  environment-dependent
 
 See [ros2.md](ros2.md)
 for the current ROS 2 node surfaces and launch examples.

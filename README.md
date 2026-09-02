@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
   <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
   <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
-  <img src="https://img.shields.io/badge/Lyrical-Validation%20Pending-blue">
+  <img src="https://img.shields.io/badge/Lyrical-CI%20Configured-blue">
     <a href="https://mowgli.garden/">
     <img src="https://img.shields.io/badge/MowgliNext-Downstream%20Field%20Validation-orange">
   </a>
@@ -43,7 +43,7 @@ Current phase: post-`v0.6.x` stabilization.
 
 ![Generated UGA backlog status](docs/status/uga_backlog.svg)
 
-Baseline: **205** audited items. Remaining unchecked TODO work: **171**. Closed or intentionally resolved: **34**.
+Baseline: **205** audited items. Remaining unchecked TODO work: **170**. Closed or intentionally resolved: **35**.
 
 Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
 <!-- UGA_STATUS_END -->

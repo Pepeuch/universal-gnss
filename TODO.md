@@ -290,7 +290,7 @@ BlueOS validation:
 - [x] snapshot/export surface
 - [x] ROS2 CI coverage
 - [x] keep Kilted green
-- [ ] validate Lyrical
+- [x] validate Lyrical
 - [ ] validate Humble/Jazzy
 - [ ] arm64 validation
 - [ ] long-run validation
