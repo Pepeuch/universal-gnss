@@ -1,4 +1,4 @@
-# Universal GNSS — Agent Rules v1.3
+# Universal GNSS — Agent Rules v1.4
 
 Repository-local execution policy for automated or AI-assisted contributors.
 
@@ -509,3 +509,22 @@ If work is incomplete, also report:
 - its lifecycle class when applicable;
 - validation pending/blocked;
 - exact next step.
+
+---
+
+## Repository maintenance assistance
+
+When asked to help manage the repository:
+
+1. establish Git state first;
+2. read `.agent/shared/checkpoints/INDEX.md`;
+3. use repository maintenance scripts when available rather than reconstructing
+   status manually;
+4. never derive backlog state from checkpoints;
+5. keep TODO/manifest as canonical finding state;
+6. reconcile shared checkpoint lifecycle after a finding changes status;
+7. report stale/missing checkpoint entries rather than silently repairing them;
+8. never commit or push without explicit authorization.
+
+For routine repository maintenance, prefer deterministic scripts and mechanical
+checks over broad repository analysis.

@@ -1,4 +1,4 @@
-# Universal GNSS — Migration Policy v1.3
+# Universal GNSS — Migration Policy v1.4
 
 Load when work uses historical PRs, forks, branches, patches, or legacy implementations
 as guidance.

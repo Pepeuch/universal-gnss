@@ -1,4 +1,4 @@
-# Universal GNSS — Long-Task Policy v1.3
+# Universal GNSS — Long-Task Policy v1.4
 
 Load this module only through the trigger in root `AGENTS.md`.
 

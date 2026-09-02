@@ -1,4 +1,4 @@
-# Universal GNSS — Hardware Validation Policy v1.3
+# Universal GNSS — Hardware Validation Policy v1.4
 
 Load when correctness depends on behaviour that source code, deterministic tests, and
 documentation cannot prove without physical hardware.

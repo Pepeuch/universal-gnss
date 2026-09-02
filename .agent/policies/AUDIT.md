@@ -1,4 +1,4 @@
-# Universal GNSS — Audit and Backlog Policy v1.3
+# Universal GNSS — Audit and Backlog Policy v1.4
 
 Load this module for repository audits, backlog reconciliation, stable finding IDs,
 classification, duplicate handling, evidence freshness, or durable audit ledgers.

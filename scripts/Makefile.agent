@@ -1,0 +1,22 @@
+.PHONY: agent-bootstrap agent-status agent-checkpoints agent-next agent-ci agent-maintenance
+
+agent-bootstrap:
+	python3 scripts/agent/bootstrap_checkpoints.py
+
+agent-status:
+	bash scripts/agent/repo_status.sh
+
+agent-checkpoints:
+	python3 scripts/agent/checkpoint_audit.py --check
+
+agent-next:
+	python3 scripts/agent/finding_next.py
+
+agent-ci:
+	bash scripts/agent/ci_status.sh
+
+agent-maintenance:
+	bash scripts/agent/repo_status.sh
+	python3 scripts/update_backlog_status.py --check
+	python3 scripts/agent/checkpoint_audit.py --check
+	git diff --check

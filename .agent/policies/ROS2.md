@@ -1,4 +1,4 @@
-# Universal GNSS — ROS2 Policy v1.3
+# Universal GNSS — ROS2 Policy v1.4
 
 Load when modifying `.cpp`, `.cc`, `.hpp`, or `.hh` under `ros2/`, or when ROS2-specific
 validation/formatting applies.
