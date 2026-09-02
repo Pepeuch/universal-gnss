@@ -295,7 +295,7 @@ BlueOS validation:
 - [ ] arm64 validation
 - [ ] long-run validation
 - [ ] receiver restart validation
-- [ ] GNSS reconnect validation
+- [x] GNSS reconnect validation
 - [ ] NTRIP reconnect validation
 - [ ] USB serial renumbering validation
 - [ ] F9P ↔ UM982 swap validation
