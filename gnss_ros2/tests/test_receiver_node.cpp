@@ -747,6 +747,80 @@ TEST_F(ReceiverNodeTest, ConstructsWithParametersAndPublishersReady)
   EXPECT_EQ(node.get_parameter("frame_id").as_string(), "base_link");
 }
 
+TEST_F(ReceiverNodeTest, AutoConfigDryRunProjectsSupportedPlanWithoutWriting)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "ublox"),
+      rclcpp::Parameter("auto_config_dry_run_enabled", true),
+      rclcpp::Parameter("auto_config_profile", "rover_high_precision"),
+  });
+
+  auto duplex = std::make_unique<ScriptedWriteByteDuplex>(
+      std::vector<ScriptedWriteByteDuplex::WriteAction>{});
+  auto* const duplex_observer = duplex.get();
+  universal_gnss_ros2::ReceiverNode node(std::move(duplex), options);
+
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* auto_config =
+      FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/auto_config");
+  ASSERT_NE(auto_config, nullptr);
+  EXPECT_EQ(auto_config->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "state"), std::optional<std::string>{"available"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_available"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_supported"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "apply_mode"), std::optional<std::string>{"dry_run"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "applied"), std::optional<std::string>{"false"});
+  EXPECT_EQ(duplex_observer->write_call_count(), 0u);
+}
+
+TEST_F(ReceiverNodeTest, AutoConfigDryRunReportsUnknownReceiverAsUnsupported)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("receiver_family", "auto"),
+      rclcpp::Parameter("auto_config_dry_run_enabled", true),
+  });
+
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* auto_config =
+      FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/auto_config");
+  ASSERT_NE(auto_config, nullptr);
+  EXPECT_EQ(auto_config->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "state"), std::optional<std::string>{"unsupported"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_status"),
+            std::optional<std::string>{"unsupported_receiver"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_available"),
+            std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "applied"), std::optional<std::string>{"false"});
+}
+
+TEST_F(ReceiverNodeTest, AutoConfigDryRunReportsWhenNoConfigurationIsRequested)
+{
+  auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+  universal_gnss_ros2::ReceiverNode node(std::move(source));
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* auto_config =
+      FindDiagnosticStatusByName(*node.last_diagnostics_message(), "universal_gnss/auto_config");
+  ASSERT_NE(auto_config, nullptr);
+  EXPECT_EQ(auto_config->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "state"),
+            std::optional<std::string>{"not_requested"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "plan_available"),
+            std::optional<std::string>{"false"});
+  EXPECT_EQ(FindDiagnosticValue(*auto_config, "applied"), std::optional<std::string>{"false"});
+}
+
 TEST_F(ReceiverNodeTest, ExplicitSerialConfigDoesNotRunDiscovery)
 {
   bool discovery_called = false;

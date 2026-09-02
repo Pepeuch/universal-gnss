@@ -26,6 +26,7 @@
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss/gnss_types.hpp"
+#include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_driver/receiver_session.hpp"
 #include "universal_gnss_driver/receiver_session_runner.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
@@ -72,6 +73,9 @@ struct ReceiverNodeConfig
   bool discovery_allow_generic_nmea{false};
   std::uint32_t discovery_timeout_ms{250u};
   std::size_t discovery_max_probe_bytes{4096u};
+  bool auto_config_dry_run_enabled{false};
+  universal_gnss_driver::ReceiverAutoConfigProfile auto_config_profile{
+      universal_gnss_driver::ReceiverAutoConfigProfile::kRoverHighPrecision};
   std::string tcp_host{};
   std::uint16_t tcp_port{0u};
   double publish_rate_hz{10.0};
@@ -97,6 +101,12 @@ struct ReceiverDiscoveryStatus
   bool succeeded{false};
   std::optional<universal_gnss_driver::ReceiverProbeResult> result{};
   std::optional<std::string> failure_reason{};
+};
+
+struct ReceiverAutoConfigDryRunStatus
+{
+  bool requested{false};
+  std::optional<universal_gnss_driver::ReceiverAutoConfigPlan> plan{};
 };
 
 using SteadyClock = std::chrono::steady_clock;
@@ -129,6 +139,24 @@ bool ParseUnsigned32Text(const std::string& text, std::uint32_t& value)
 }
 
 bool IsAutoToken(const std::string& value) { return ToLowerCopy(value) == "auto"; }
+
+universal_gnss_driver::ReceiverDetectedFamily
+ReceiverFamilyFromConfig(const ReceiverNodeConfig& config)
+{
+  if (config.receiver_family_name == "ublox")
+  {
+    return universal_gnss_driver::ReceiverDetectedFamily::kUblox;
+  }
+  if (config.receiver_family_name == "unicore")
+  {
+    return universal_gnss_driver::ReceiverDetectedFamily::kUnicore;
+  }
+  if (config.receiver_family_name == "nmea")
+  {
+    return universal_gnss_driver::ReceiverDetectedFamily::kNmea;
+  }
+  return universal_gnss_driver::ReceiverDetectedFamily::kUnknown;
+}
 
 bool IsDiscoveryFamilyAccepted(const ReceiverNodeConfig& config,
                                const universal_gnss_driver::ReceiverProbeResult& result)
@@ -498,12 +526,29 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
       node.declare_parameter<std::int64_t>("discovery_timeout_ms", 250);
   const auto discovery_max_probe_bytes =
       node.declare_parameter<std::int64_t>("discovery_max_probe_bytes", 4096);
+  config.auto_config_dry_run_enabled =
+      node.declare_parameter<bool>("auto_config_dry_run_enabled", false);
+  const auto auto_config_profile =
+      node.declare_parameter<std::string>("auto_config_profile", "rover_high_precision");
 
   ApplyReceiverFamily(config, config.receiver_family_name);
   if (config.receiver_family_name != "auto" && config.receiver_family_name != "ublox" &&
       config.receiver_family_name != "unicore" && config.receiver_family_name != "nmea")
   {
     ThrowInvalidParameter(node, "receiver_family", "expected one of: auto, nmea, ublox, unicore");
+  }
+
+  if (config.auto_config_dry_run_enabled)
+  {
+    const auto parsed_profile =
+        universal_gnss_driver::ParseReceiverAutoConfigProfile(auto_config_profile);
+    if (!parsed_profile.has_value())
+    {
+      ThrowInvalidParameter(node, "auto_config_profile",
+                            "expected one of: runtime_only, rover_high_precision, "
+                            "rover_high_precision_debug, factory_reset");
+    }
+    config.auto_config_profile = *parsed_profile;
   }
 
   if (config.transport_name == "serial")
@@ -768,6 +813,18 @@ struct ReceiverNode::Impl
       }
       MaybeRunSerialDiscovery(owner_, config_, discovery_function, startup_events_,
                               discovery_status_);
+    }
+
+    if (config_.auto_config_dry_run_enabled)
+    {
+      universal_gnss_driver::ReceiverAutoConfigRequest request;
+      request.receiver_family = ReceiverFamilyFromConfig(config_);
+      request.discovery_result = discovery_status_.result;
+      request.requested_profile = config_.auto_config_profile;
+      request.apply_mode = universal_gnss_driver::ReceiverAutoConfigApplyMode::kDryRun;
+      auto_config_dry_run_status_.requested = true;
+      auto_config_dry_run_status_.plan =
+          universal_gnss_driver::BuildReceiverAutoConfigPlan(request);
     }
 
     hardware_id_ = BuildHardwareId(config_, injected_source != nullptr);
@@ -1519,6 +1576,87 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
+  void AppendAutoConfigDryRunStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/auto_config";
+    status.hardware_id = hardware_id_;
+    status.values.push_back(
+        MakeKeyValue("dry_run_enabled", config_.auto_config_dry_run_enabled ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("requested", auto_config_dry_run_status_.requested ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("applied", "false"));
+    status.values.push_back(MakeKeyValue("apply_mode", "dry_run"));
+    status.values.push_back(
+        MakeKeyValue("profile", universal_gnss_driver::ToString(config_.auto_config_profile)));
+
+    if (!auto_config_dry_run_status_.plan.has_value())
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+      status.message = "No auto-configuration dry-run requested";
+      status.values.push_back(MakeKeyValue("state", "not_requested"));
+      status.values.push_back(MakeKeyValue("plan_available", "false"));
+      diagnostics.status.push_back(std::move(status));
+      return;
+    }
+
+    const auto& plan = *auto_config_dry_run_status_.plan;
+    status.values.push_back(
+        MakeKeyValue("plan_status", universal_gnss_driver::ToString(plan.status)));
+    status.values.push_back(MakeKeyValue("receiver_recognized",
+                                         plan.validation.receiver_recognized ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("config_supported", plan.validation.config_supported ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("profile_supported", plan.validation.profile_supported ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("command_count", std::to_string(plan.validation.generated_command_count)));
+    status.values.push_back(
+        MakeKeyValue("ready_to_execute", plan.validation.ready_to_execute ? "true" : "false"));
+
+    if (plan.status == universal_gnss_driver::ReceiverAutoConfigPlanStatus::kOk)
+    {
+      const bool supported = plan.validation.receiver_recognized &&
+                             plan.validation.config_supported && plan.validation.profile_supported;
+      status.level = supported ? diagnostic_msgs::msg::DiagnosticStatus::OK
+                               : diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = supported ? "Dry-run auto-configuration plan available; not applied"
+                                 : "Dry-run auto-configuration plan available but not supported";
+      status.values.push_back(MakeKeyValue("state", "available"));
+      status.values.push_back(MakeKeyValue("plan_available", "true"));
+      status.values.push_back(MakeKeyValue("plan_supported", supported ? "true" : "false"));
+    } else if (plan.status ==
+                   universal_gnss_driver::ReceiverAutoConfigPlanStatus::kUnsupportedReceiver ||
+               plan.status ==
+                   universal_gnss_driver::ReceiverAutoConfigPlanStatus::kUnsupportedProfile ||
+               plan.status ==
+                   universal_gnss_driver::ReceiverAutoConfigPlanStatus::kUnsupportedApplyMode)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "Dry-run auto-configuration is unsupported for this receiver or profile";
+      status.values.push_back(MakeKeyValue("state", "unsupported"));
+      status.values.push_back(MakeKeyValue("plan_available", "false"));
+      status.values.push_back(MakeKeyValue("plan_supported", "false"));
+      if (!plan.unsupported_reason.empty())
+      {
+        status.values.push_back(MakeKeyValue("reason", plan.unsupported_reason));
+      }
+    } else
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
+      status.message = "Failed to build dry-run auto-configuration plan";
+      status.values.push_back(MakeKeyValue("state", "build_error"));
+      status.values.push_back(MakeKeyValue("plan_available", "false"));
+      status.values.push_back(MakeKeyValue("plan_supported", "false"));
+    }
+
+    if (!plan.error_message.empty())
+    {
+      status.values.push_back(MakeKeyValue("error_message", plan.error_message));
+    }
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void AppendParserStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
   {
     diagnostic_msgs::msg::DiagnosticStatus status;
@@ -1620,6 +1758,7 @@ struct ReceiverNode::Impl
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;
     AppendDiscoveryStatus(*last_diagnostics_message_);
+    AppendAutoConfigDryRunStatus(*last_diagnostics_message_);
     AppendRtcmForwardingStatus(*last_diagnostics_message_, state);
     AppendRtcmSemanticObservationStatuses(
         *last_diagnostics_message_,
@@ -1887,6 +2026,7 @@ struct ReceiverNode::Impl
   ReceiverNode& owner_;
   ReceiverNodeConfig config_{};
   ReceiverDiscoveryStatus discovery_status_{};
+  ReceiverAutoConfigDryRunStatus auto_config_dry_run_status_{};
   std::string hardware_id_{};
   std::unique_ptr<universal_gnss_driver::ReceiverSession> session_{};
   std::unique_ptr<universal_gnss_transport::ByteSource> transport_source_{};

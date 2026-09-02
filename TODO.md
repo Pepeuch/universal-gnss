@@ -285,7 +285,7 @@ BlueOS validation:
 ## ROS2 package tasks
 
 - [x] expose receiver identity / firmware / model metadata
-- [ ] extend planner/report layer into ROS2
+- [x] extend planner/report layer into ROS2
 - [ ] operator observability review
 - [ ] snapshot/export surface
 - [ ] ROS2 CI coverage

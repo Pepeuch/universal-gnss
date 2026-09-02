@@ -394,6 +394,8 @@ Correction subscription:
 - `discovery_allow_generic_nmea`
 - `discovery_timeout_ms`
 - `discovery_max_probe_bytes`
+- `auto_config_dry_run_enabled` (default `false`)
+- `auto_config_profile` (default `rover_high_precision`)
 - `tcp_host`
 - `tcp_port`
 - `publish_rate_hz`
@@ -405,6 +407,10 @@ Validation policy:
 - required transport-specific parameters must be present
 - startup configuration errors do not silently fall back to another mode
 - `serial_baud` accepts either an explicit integer baud or the string `auto`
+- Auto Configuration is opt-in and dry-run only: setting
+  `auto_config_dry_run_enabled=true` builds a driver-owned plan for
+  `auto_config_profile`; no ROS2 parameter can select apply, persistence,
+  reset, or vendor-specific override behavior.
 
 Discovery policy:
 
@@ -466,6 +472,10 @@ Diagnostic states surfaced by the node include:
 - receiver discovery attempted / succeeded / failed
 - discovered path / baud / family / confidence, plus optional receiver identity,
   model, and firmware version when the read-only probe observed them
+- auto-configuration dry-run planning under `universal_gnss/auto_config`, with
+  explicit `not_requested`, `available`, `unsupported`, or `build_error` state;
+  every report carries `applied=false` and never claims a planned change is a
+  receiver state change
 - serial/TCP transport open failure
 - no data received after startup grace period
 - stale transport activity
