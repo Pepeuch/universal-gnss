@@ -296,7 +296,7 @@ BlueOS validation:
 - [ ] long-run validation
 - [ ] receiver restart validation
 - [x] GNSS reconnect validation
-- [ ] NTRIP reconnect validation
+- [x] NTRIP reconnect validation
 - [ ] USB serial renumbering validation
 - [ ] F9P ↔ UM982 swap validation
 
