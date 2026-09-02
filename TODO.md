@@ -286,7 +286,7 @@ BlueOS validation:
 
 - [x] expose receiver identity / firmware / model metadata
 - [x] extend planner/report layer into ROS2
-- [ ] operator observability review
+- [x] operator observability review
 - [ ] snapshot/export surface
 - [ ] ROS2 CI coverage
 - [x] keep Kilted green

@@ -687,6 +687,24 @@ Current diagnostic states include:
 - `rtcm_semantic/msm_<constellation>_msm<variant>` when a specific MSM message
   type has been observed
 
+Operator interpretation intentionally keeps each correction boundary distinct:
+
+- `ntrip_connected` means the TCP connection is open; `ntrip_waiting_response`
+  means the request has not yet received a caster response; `ntrip_streaming`
+  means the response stream is open.
+- `correction_stream_waiting` means a stream is open but no valid RTCM frame
+  has arrived; `correction_flowing` means integrity-valid RTCM frames are
+  arriving. Correction-health events report invalid, stale, or incomplete flow
+  separately.
+- `universal_gnss_ntrip/rtcm_forwarding` means a valid RTCM frame was published
+  for forwarding; `universal_gnss/rtcm_forwarding` reports the receiver-side
+  transport write. Neither asserts receiver use. Receiver-backed acceptance,
+  where supplied by the protocol, is reported separately through
+  `receiver_rtcm_active` / `receiver_rtcm_stale` and the receiver RTCM counters.
+- `rtcm_semantic/*` carries decoded station identity such as `station_id` only
+  when the RTCM payload provides it. It does not invent a caster/source
+  incarnation identifier.
+
 Each `rtcm_semantic/*` status carries stable key/value fields such as:
 
 - `seen`
