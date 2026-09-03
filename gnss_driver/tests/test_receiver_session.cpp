@@ -331,11 +331,14 @@ void TestExplicitNmeaMode(TestContext& ctx)
                  state.vdop == std::optional<float>(1.5f) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u) &&
                  state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+                 state.speed_over_ground_m_s.has_value() &&
+                 state.course_over_ground_deg == std::optional<float>(54.7f) &&
                  !state.heading_deg.has_value(),
-             "explicit NMEA mode should route runtime-mapped NMEA sentences, including GGA-derived RTK fixed, without inventing VTG heading");
-  ctx.Expect(session.nmea_metrics().semantic_only_records == 1u &&
+             "explicit NMEA mode should route VTG speed/course without interpreting "
+             "course-over-ground as heading");
+  ctx.Expect(session.nmea_metrics().semantic_only_records == 0u &&
                  session.nmea_metrics().records_parsed == 5u,
-             "explicit NMEA mode should still parse VTG semantically");
+             "explicit NMEA mode should parse all five sentences as runtime observations");
 }
 
 void TestAutoModeSelectsUblox(TestContext& ctx)

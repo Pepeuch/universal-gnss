@@ -163,8 +163,10 @@ void TestVtgProducesSpeedAndCourseRuntimeState(TestContext& ctx)
   ctx.Expect(state.speed_over_ground_m_s.has_value() &&
                  NearlyEqual(*state.speed_over_ground_m_s, 5.5 * 0.514444) &&
                  state.course_over_ground_deg == std::optional<float>(54.7f) &&
-                 !state.heading_deg.has_value(),
-             "VTG should update portable ground speed and course without inventing heading");
+                 !state.heading_deg.has_value() && state.utc_date.has_value() &&
+                 state.utc_time.has_value(),
+             "VTG should update portable ground speed and course without inventing heading, and "
+             "ZDA should update UTC");
   ctx.Expect(metrics.records_parsed == 2u && metrics.runtime_updates == 2u &&
                  metrics.semantic_only_records == 0u,
              "VTG and ZDA should both become independent runtime producers");
