@@ -89,16 +89,51 @@ Validation boundary:
 - continue Unicore semantic/config growth only where it remains portable
 - keep future Quectel work as a dedicated backend, not as generic-NMEA scope
 
-## v0.7 — Operator Experience
+## v0.7 — Portable runtime, API, web, and standalone deployment
 
-- keep Universal GNSS itself scoped to the module API, CLIs, portable runtime,
-  and ROS2 package
-- define stable hooks for downstream dashboards, onboarding flows, and field
-  tools
-- treat MowgliNext as the first practical downstream testbed rather than as a
-  built-in GUI commitment
+The deployment work was investigated slightly ahead of schedule because the
+BlueOS study exposed generic Universal GNSS needs. Priority remains current
+Universal GNSS/MowgliNext downstream validation, then the portable runtime—not
+BlueOS-specific implementation.
 
-## v0.8 — Embedded / Gateway Layer
+- `universal_gnss_supervisor` Phase 1 is implemented for one explicitly chosen
+  serial receiver: lifecycle/session ownership, bounded reconnect, incarnation
+  boundaries, snapshots, fake-transport tests, and a native CLI. Real USB/UART
+  lifecycle validation and configuration loading/projection remain.
+- Phase 2 composes the existing NTRIP, GGA, RTCM, and correction-health paths
+  through that supervisor, including receiver-write recovery.
+- add a lightweight generic HTTP API above the supervisor, without GNSS logic
+  in handlers; expose health, runtime, diagnostics, correction state, redacted
+  configuration, and incarnation information before considering live streaming.
+- add a generic responsive Tailwind web GUI, using the existing project logo,
+  as a presentation/configuration surface for native Linux, Docker, and BlueOS.
+- only then create the standalone non-ROS Docker image: portable runtime,
+  supervisor, API, and GUI; minimal multi-stage build; explicit serial mapping;
+  `/data` persistence; bounded logs; graceful shutdown; and `arm/v7`, `arm64`,
+  and development `amd64` coverage.
+
+## v0.8 — BlueOS deployment integration
+
+BlueOS reuses the generic runtime/API/GUI/Docker layers and never owns an
+independent parser, receiver, runtime, correction, or configuration model.
+The compatibility study, architecture proposal, Bazaar metadata template,
+receiver permission template, and device/hotplug risk analysis are complete
+evidence; see [`blueos/README.md`](blueos/README.md).
+
+- Phase 0: validate device permissions, `HostConfig.Devices`, persistent userdata,
+  and supported target architectures on real BlueOS.
+- Phase 1: package the generic supervisor/runtime, configure one selected receiver,
+  expose generic status, integrate the generic GUI, and connect lifecycle/restart.
+- Phase 2: use the generic supervisor's NTRIP/RTCM orchestration.
+- Phase 3: add BlueOS `register_service`, relative-path-safe GUI exposure, and
+  settings/apply/restart integration.
+- Phase 4: publish multi-architecture SemVer images with logos and Bazaar metadata,
+  then validate install/update/rollback on real hardware.
+
+USB hotplug/re-enumeration plus Docker device grants are a hardware-required
+boundary: reopening a tty does not prove a valid new BlueOS device grant.
+
+## Later embedded / gateway layer
 
 - define the embedded/gateway cut for ESP32 or similar targets
 - preserve a lightweight protocol/session subset for constrained builds

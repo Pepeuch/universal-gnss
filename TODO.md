@@ -46,6 +46,32 @@ Recently completed:
 - additive public dual-antenna baseline capability/runtime/ROS2 surface with
   `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`
 
+## Native runtime, API, web, and deployment planning
+
+This register is the authoritative planning state for deployment work identified
+slightly ahead of schedule by the BlueOS compatibility study. It is intentionally
+separate from the frozen UGA audit checklist/dashboard baseline. The generic
+Universal GNSS runtime, API, GUI, and Docker layers are reusable components;
+BlueOS is a deployment/integration adapter, not a separate GNSS implementation.
+See [`blueos/README.md`](blueos/README.md) for the current BlueOS boundary and
+hardware-risk analysis.
+
+| ID | Status | Scope | Validation | Dependency | Current state / remaining work |
+| --- | --- | --- | --- | --- | --- |
+| `UG-PLAN-001` | PARTIAL | DEPLOYMENT | HARDWARE_PENDING | Complete current downstream/MowgliNext validation first | Native `universal_gnss_supervisor` Phase 1 is implemented: one explicit serial receiver, `ReceiverSession` / `ReceiverSessionRunner` orchestration, bounded reconnect/backoff, incarnation boundary, clean stop, runtime/metrics snapshot, fake-transport regression coverage, and native CLI. Remaining: real serial/USB/UART lifecycle validation and configuration loading/projection. It must remain non-ROS and non-BlueOS, use steady-clock liveness/backoff, and preserve timestamp/provenance semantics without carrying state across incarnations. |
+| `UG-PLAN-002` | OPEN | NTRIP / DEPLOYMENT | — | `UG-PLAN-001` | Native supervisor Phase 2: compose existing `NtripClient`; forward RTCM to the selected receiver; apply existing GGA and correction-health/reconnect policies; and recover from receiver write failure without duplicating NTRIP/RTCM semantics. |
+| `UG-PLAN-003` | OPEN | DEPLOYMENT | — | `UG-PLAN-001` | Lightweight generic HTTP API above the supervisor: lifecycle/health, receiver identity and transport, normalized `GnssRuntimeState`, parser/session diagnostics, correction/RTK/NTRIP health, redacted configuration, and reconnect/incarnation data. Later endpoints validate and deliberately apply/restart configuration with existing receiver-configuration safeguards. HTTP handlers must not own GNSS logic; defer SSE/WebSocket selection until evidence justifies it. |
+| `UG-PLAN-004` | OPEN | DEPLOYMENT | — | `UG-PLAN-003` | Generic Universal GNSS web GUI, served by or alongside the native API and usable from native Linux, standalone Docker, and BlueOS. Use responsive Tailwind CSS and the existing logo under `docs/`; keep it presentation/configuration-only. Plan Basic (connection/fix/RTK/position/accuracy/correction/NTRIP health), Advanced (satellites, C/N0, motion, UTC, RTCM, metrics, reconnect/configuration summary), and Expert (AGC, interference, raw diagnostics, transport, auto-configuration, logs, incarnation, advanced controls) views. |
+| `UG-PLAN-005` | OPEN | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-001`, `UG-PLAN-003`, `UG-PLAN-004` | Standalone Docker package for the portable runtime, supervisor, HTTP API, and GUI; explicitly exclude ROS2 unless a separate ROS image is approved. Require a minimal multi-stage build, `arm/v7`/`arm64` plus `amd64` development coverage, persisted `/data`, bounded logs, credentials outside image layers, explicit serial mapping, no privileged default, healthcheck, graceful SIGTERM, and SemVer images. Do not create a Dockerfile until the native runtime is production-capable. |
+| `UG-PLAN-006` | PARTIAL | BLUEOS | HARDWARE_REQUIRED | `UG-PLAN-001` through `UG-PLAN-005` as applicable | Completed evidence: compatibility study, architecture proposal, Bazaar metadata and minimal receiver-permission templates, packaging/architecture research, and identified device/hotplug risks. Remaining BlueOS work packages the generic runtime/API/GUI rather than reimplementing it: Phase 0 physical device-grant/userdata/architecture validation; Phase 1 packaging, selected-receiver configuration, and lifecycle/restart integration; Phase 2 generic supervisor NTRIP/RTCM; Phase 3 `register_service`, relative-path-safe GUI, and settings/apply/restart; Phase 4 multi-arch publication, SemVer labels/logos, Bazaar submission, and install/update/rollback validation. USB hotplug/re-enumeration and Docker grants require real BlueOS proof; a reopened tty is not proof of a valid new device grant. |
+
+Priority and dependency order: finish current Universal GNSS/MowgliNext downstream
+validation; complete native supervisor Phase 1; add Phase 2 corrections; add the
+generic API and GUI; package standalone Docker; then reuse those layers for
+BlueOS, perform real BlueOS device-grant validation, and publish to Bazaar.
+Independent design work may proceed in parallel, but BlueOS must not become the
+immediate highest-priority project or drive duplicate GNSS semantics.
+
 
 ## Release roadmap / blocking milestones
 
