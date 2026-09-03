@@ -1,43 +1,40 @@
-name: ROS 2 validation
+name: ROS 2 Kilted validation
 
 on:
   push:
   pull_request:
 
 jobs:
-  build-and-test:
+  kilted-build-and-test:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - ros_distribution: kilted
-            container_image: ubuntu:noble
-          - ros_distribution: lyrical
-            container_image: ubuntu:resolute
     container:
-      image: ${{ matrix.container_image }}
+      image: ubuntu:noble
     env:
       ROS_LOCALHOST_ONLY: "1"
-      ROS_LOG_DIR: /tmp/universal_gnss_ros_log
+      ROS_LOG_DIR: /tmp/universal_gnss_ros_log_kilted
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up ROS 2 ${{ matrix.ros_distribution }}
+      - name: Set up ROS 2 Kilted
         uses: ros-tooling/setup-ros@v0.7
         with:
-          required-ros-distributions: ${{ matrix.ros_distribution }}
+          required-ros-distributions: kilted
 
-      - name: Build and test universal_gnss_ros2
+      - name: Build and test universal_gnss_ros2 on Kilted
+        shell: bash
         run: |
-          source /opt/ros/${{ matrix.ros_distribution }}/setup.bash
+          set -euo pipefail
+          source /opt/ros/kilted/setup.bash
           mkdir -p "$ROS_LOG_DIR"
-          mkdir -p "$GITHUB_WORKSPACE/ros2_ws/src"
-          ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws/src/gnss_ros2"
-          ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws/src/gnss_core"
-          cd "$GITHUB_WORKSPACE/ros2_ws"
+          mkdir -p "$GITHUB_WORKSPACE/ros2_ws_kilted/src"
+          ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_ros2"
+          ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_core"
+          cd "$GITHUB_WORKSPACE/ros2_ws_kilted"
           colcon build --packages-select universal_gnss_ros2
-          colcon test --packages-select universal_gnss_ros2
+          if ! colcon test --packages-select universal_gnss_ros2; then
+            colcon test-result --verbose
+            exit 1
+          fi
           colcon test-result --verbose
