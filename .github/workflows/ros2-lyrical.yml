@@ -25,8 +25,9 @@ jobs:
       - name: Build and test universal_gnss_ros2 on Lyrical
         shell: bash
         run: |
-          set -euo pipefail
+          set -eo pipefail
           source /opt/ros/lyrical/setup.bash
+          set -u
           mkdir -p "$ROS_LOG_DIR"
           mkdir -p "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
           ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
