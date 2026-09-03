@@ -1,0 +1,6 @@
+{
+  "name": "Universal GNSS",
+  "website": "https://github.com/Pepeuch/universal-gnss",
+  "docker": "REPLACE_WITH_DOCKERHUB_NAMESPACE/blueos-universal-gnss",
+  "description": "Portable multi-receiver GNSS runtime for BlueOS."
+}

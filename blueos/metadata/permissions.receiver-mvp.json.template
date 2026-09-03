@@ -1,0 +1,24 @@
+{
+  "ExposedPorts": {
+    "80/tcp": {}
+  },
+  "HostConfig": {
+    "Binds": [
+      "/usr/blueos/userdata/universal-gnss:/data"
+    ],
+    "Devices": [
+      {
+        "PathOnHost": "REPLACE_WITH_HOST_TTY",
+        "PathInContainer": "/dev/gnss-receiver",
+        "CgroupPermissions": "rwm"
+      }
+    ],
+    "PortBindings": {
+      "80/tcp": [
+        {
+          "HostPort": ""
+        }
+      ]
+    }
+  }
+}
