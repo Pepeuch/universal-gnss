@@ -14,6 +14,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install clang-format-21
+        shell: bash
         run: |
           . /etc/os-release
           curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/apt.llvm.org.gpg
@@ -21,12 +22,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends clang-format-21
 
-      - name: Verify changed C/C++ files
+      - name: Verify changed project-owned C/C++ files
         shell: bash
         run: |
           set -euo pipefail
           base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          mapfile -t files < <(git diff --name-only "$base" HEAD -- '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx')
-          if ((${#files[@]})); then
-            bash scripts/clang_format_21.sh --check "${files[@]}"
-          fi
+          bash scripts/clang_format_21.sh --check --changed "$base"

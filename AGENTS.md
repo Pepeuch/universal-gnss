@@ -238,9 +238,12 @@ Examples:
 ### C/C++ formatting baseline
 
 The repository-authoritative C/C++ formatter is `clang-format-21`, using the
-repository-root `.clang-format`. Do not use an arbitrary unversioned
-`clang-format` binary as authoritative validation. For an explicit set of touched
-files, use `bash scripts/clang_format_21.sh --apply <files>` or
+repository-root `.clang-format`. Apply it only to project-owned C/C++ files:
+`make format` and `make format-check` deterministically select tracked files in
+the owned component roots, excluding vendor, external, generated, and submodule
+content. Do not use an arbitrary unversioned `clang-format` binary as
+authoritative validation. For an explicit touched-file set, use
+`bash scripts/clang_format_21.sh --apply <files>` or
 `bash scripts/clang_format_21.sh --check <files>`.
 
 ---

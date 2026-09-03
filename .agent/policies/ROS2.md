@@ -1,28 +1,10 @@
 # Universal GNSS — ROS2 Policy v1.4
 
-Load when modifying `.cpp`, `.cc`, `.hpp`, or `.hh` under `ros2/`, or when ROS2-specific
-validation/formatting applies.
+Load when modifying `.cpp`, `.cc`, `.hpp`, or `.hh` under `gnss_ros2/`, or when ROS2-specific
+validation applies.
 
 Universal GNSS ROS2 integration must preserve canonical Universal GNSS semantics rather
 than redefining them for a downstream robot.
-
-For touched C++ files under `ros2/`, format with:
-
-```bash
-clang-format-21 -i -style=file <touched-files>
-```
-
-Before concluding, verify formatting with:
-
-```bash
-clang-format-21 --dry-run --Werror -style=file <touched-files>
-```
-
-If `origin/main` is unavailable locally, at minimum run:
-
-```bash
-clang-format-21 --dry-run --Werror -style=file <touched-files>
-```
 
 Also run the affected ROS2/package/integration validation appropriate to the changed
 contract.
