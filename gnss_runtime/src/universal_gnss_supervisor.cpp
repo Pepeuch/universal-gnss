@@ -1,0 +1,172 @@
+#include <chrono>
+#include <csignal>
+#include <cstdlib>
+#include <exception>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <thread>
+
+#include "universal_gnss_driver/receiver_session.hpp"
+#include "universal_gnss_runtime/posix_serial_factory.hpp"
+#include "universal_gnss_runtime/receiver_supervisor.hpp"
+
+namespace {
+
+volatile std::sig_atomic_t g_stop_requested = 0;
+
+void HandleSignal(int) { g_stop_requested = true; }
+
+struct Options
+{
+  std::string device{};
+  std::uint32_t baud{0u};
+  universal_gnss_driver::ReceiverSessionKind receiver_family{
+      universal_gnss_driver::ReceiverSessionKind::kAutoDetect};
+};
+
+void PrintUsage(const char* program)
+{
+  std::cout << "Usage: " << program
+            << " --device <path> --baud <rate> --receiver-family auto|ublox|unicore|nmea\n";
+}
+
+std::optional<std::uint32_t> ParseBaud(const std::string& value)
+{
+  try
+  {
+    std::size_t consumed = 0u;
+    const auto parsed = std::stoul(value, &consumed, 10);
+    if (consumed != value.size() || parsed == 0u || parsed > 0xFFFFFFFFul)
+    {
+      return std::nullopt;
+    }
+    return static_cast<std::uint32_t>(parsed);
+  } catch (const std::exception&)
+  {
+    return std::nullopt;
+  }
+}
+
+std::optional<universal_gnss_driver::ReceiverSessionKind>
+ParseReceiverFamily(const std::string& value)
+{
+  using universal_gnss_driver::ReceiverSessionKind;
+  if (value == "auto")
+    return ReceiverSessionKind::kAutoDetect;
+  if (value == "ublox")
+    return ReceiverSessionKind::kUblox;
+  if (value == "unicore")
+    return ReceiverSessionKind::kUnicore;
+  if (value == "nmea")
+    return ReceiverSessionKind::kNmea;
+  return std::nullopt;
+}
+
+bool ParseOptions(const int argc, char** argv, Options& options)
+{
+  for (int index = 1; index < argc; ++index)
+  {
+    const std::string argument(argv[index]);
+    if (argument == "--help")
+    {
+      PrintUsage(argv[0]);
+      return false;
+    }
+    if (argument == "--device" || argument == "--baud" || argument == "--receiver-family")
+    {
+      if (++index == argc)
+      {
+        std::cerr << "error: missing value for " << argument << '\n';
+        return false;
+      }
+      const std::string value(argv[index]);
+      if (argument == "--device")
+        options.device = value;
+      if (argument == "--baud")
+      {
+        const auto baud = ParseBaud(value);
+        if (!baud.has_value())
+        {
+          std::cerr << "error: invalid --baud\n";
+          return false;
+        }
+        options.baud = *baud;
+      }
+      if (argument == "--receiver-family")
+      {
+        const auto family = ParseReceiverFamily(value);
+        if (!family.has_value())
+        {
+          std::cerr << "error: invalid --receiver-family\n";
+          return false;
+        }
+        options.receiver_family = *family;
+      }
+      continue;
+    }
+    std::cerr << "error: unknown argument: " << argument << '\n';
+    return false;
+  }
+  return !options.device.empty() && options.baud != 0u;
+}
+
+void PrintStatus(const universal_gnss_runtime::ReceiverSupervisorSnapshot& snapshot)
+{
+  std::cout << "lifecycle=" << universal_gnss_runtime::ToString(snapshot.lifecycle)
+            << " connected=" << (snapshot.connected ? "true" : "false")
+            << " incarnation=" << snapshot.session_incarnation
+            << " reconnects=" << snapshot.reconnect_attempt_count;
+  if (snapshot.session_metrics.has_value())
+  {
+    std::cout << " runtime_updates=" << snapshot.session_metrics->runtime_updates;
+  }
+  if (!snapshot.last_terminal_error.empty())
+  {
+    std::cout << " last_error=" << snapshot.last_terminal_error;
+  }
+  std::cout << '\n';
+}
+
+} // namespace
+
+int main(const int argc, char** argv)
+{
+  if (argc == 2 && std::string(argv[1]) == "--help")
+  {
+    PrintUsage(argv[0]);
+    return EXIT_SUCCESS;
+  }
+
+  Options options;
+  if (!ParseOptions(argc, argv, options))
+  {
+    PrintUsage(argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  universal_gnss_runtime::ReceiverSupervisorConfig config;
+  config.session.kind = options.receiver_family;
+  config.transport_factory = universal_gnss_runtime::MakePosixSerialTransportFactory(
+      universal_gnss_transport::PosixSerialConfig{options.device, options.baud, false, 0u});
+  universal_gnss_runtime::ReceiverSupervisor supervisor(std::move(config));
+  if (!supervisor.Start())
+  {
+    std::cerr << "error: failed to start supervisor\n";
+    return EXIT_FAILURE;
+  }
+
+  std::signal(SIGINT, HandleSignal);
+  std::signal(SIGTERM, HandleSignal);
+  while (!g_stop_requested)
+  {
+    PrintStatus(supervisor.Snapshot());
+    for (int index = 0; index < 10 && !g_stop_requested; ++index)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }
+  supervisor.Stop();
+  PrintStatus(supervisor.Snapshot());
+  return EXIT_SUCCESS;
+}

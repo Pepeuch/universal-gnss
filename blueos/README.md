@@ -17,7 +17,7 @@ The implementation boundary should be:
 ```text
 BlueOS Extension container
   -> BlueOS-specific launcher + settings/config adapter + HTTP status API
-  -> portable Universal GNSS runtime supervisor (new, non-ROS target)
+  -> portable Universal GNSS runtime supervisor (implemented non-ROS target)
   -> receiver session / serial transport / NTRIP client / RTCM forwarding
   -> GnssRuntimeState + existing diagnostic and correction-health models
 ```
@@ -158,13 +158,15 @@ Explicitly **not** in the MVP:
 
 ## Dockerfile decision
 
-No `Dockerfile` is included yet. A Dockerfile that starts an existing CLI would be a
-misleading production skeleton because the reusable portable classes do not yet own
-the required lifecycle/reconnect/RTCM coordination. Once the non-ROS supervisor target
-exists, use a multi-stage Debian/Ubuntu Linux build that compiles the portable CMake
-targets only, copies that executable plus OpenSSL runtime libraries into a minimal
-runtime image, and declares the labels described above. Do not include `gnss_ros2` or
-source ROS packages.
+No `Dockerfile` is included yet. The portable non-ROS
+`universal_gnss_supervisor` target now owns one selected serial receiver's session
+lifecycle, reconnect backoff, incarnation boundary, and status snapshot. It does not
+yet provide BlueOS configuration persistence, HTTP status/config endpoints, hardware
+validation, or RTCM coordination, so a production container remains premature. Once
+those BlueOS-specific pieces are designed, use a multi-stage Debian/Ubuntu Linux build
+that compiles portable CMake targets only, copies that executable plus OpenSSL runtime
+libraries into a minimal runtime image, and declares the labels described above. Do not
+include `gnss_ros2` or source ROS packages.
 
 Build and publish a multi-architecture manifest at least for `linux/arm/v7` and
 `linux/arm64`/`arm/v8`; add `linux/amd64` for developer/testing convenience rather
@@ -193,9 +195,12 @@ portable supervisor target exists.
 
 ### Phase 1 — receiver + diagnostics
 
-Implement the thin non-ROS supervisor for one selected serial receiver, persisted
-configuration, reconnect lifecycle, and read-only status API. Validate on real USB and
-UART hardware, including power-cycle/hotplug behavior.
+Partial implementation: the generic non-ROS `universal_gnss_supervisor` accepts one
+explicit serial device, baud rate, and receiver family; owns receiver/session lifecycle;
+uses bounded reconnect backoff; and exposes a runtime/metrics lifecycle snapshot to its
+native CLI. It intentionally has no persisted configuration or BlueOS HTTP API. Real
+USB/UART power-cycle and hotplug validation remains required before a BlueOS adapter is
+claimed ready.
 
 ### Phase 2 — NTRIP/RTCM
 

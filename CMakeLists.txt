@@ -10,6 +10,7 @@ add_subdirectory(gnss_core)
 add_subdirectory(gnss_protocols)
 add_subdirectory(gnss_driver)
 add_subdirectory(gnss_transport)
+add_subdirectory(gnss_runtime)
 add_subdirectory(gnss_ntrip)
 add_subdirectory(gnss_tools)
 
