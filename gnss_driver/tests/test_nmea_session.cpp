@@ -12,8 +12,7 @@
 #include "universal_gnss_driver/nmea_session.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
@@ -67,21 +66,19 @@ void TestPositionAndFixUpdates(TestContext& ctx)
 {
   NmeaSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-      1000);
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 1000);
 
   const auto& state = session.current_state();
   const auto& metrics = session.metrics();
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1000) &&
-                 state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix &&
-                 HasCapability(state, universal_gnss::GnssCapability::kRtkMode) &&
-                 HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
-                 state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone) &&
-                 state.latitude_deg.has_value() &&
-                 state.longitude_deg.has_value() &&
-                 state.altitude_m == std::optional<double>(545.4),
-             "GGA should update the generic NMEA session with fix, position, and a known non-RTK mode");
+  ctx.Expect(
+      state.timestamp_ns == std::optional<std::int64_t>(1000) && state.fix_valid &&
+          state.fix_type == GnssFixType::kFix &&
+          HasCapability(state, universal_gnss::GnssCapability::kRtkMode) &&
+          HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
+          state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone) &&
+          state.latitude_deg.has_value() && state.longitude_deg.has_value() &&
+          state.altitude_m == std::optional<double>(545.4),
+      "GGA should update the generic NMEA session with fix, position, and a known non-RTK mode");
   ctx.Expect(metrics.sentences_seen == 1u && metrics.records_parsed == 1u &&
                  metrics.runtime_updates == 1u,
              "GGA should count as one parsed runtime-producing sentence");
@@ -91,60 +88,50 @@ void TestStandardGgaFixQualityDrivesPortableRtkMode(TestContext& ctx)
 {
   NmeaSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"),
-      1100);
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"), 1100);
 
-  ctx.Expect(session.current_state().fix_valid &&
-                 session.current_state().fix_type == GnssFixType::kFix &&
-                 session.current_state().rtk_mode ==
-                     std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
-             "GGA fix quality 4 should map to RTK fixed");
+  ctx.Expect(
+      session.current_state().fix_valid && session.current_state().fix_type == GnssFixType::kFix &&
+          session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
+      "GGA fix quality 4 should map to RTK fixed");
 
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
-      1101);
-  ctx.Expect(session.current_state().fix_valid &&
-                 session.current_state().fix_type == GnssFixType::kFix &&
-                 session.current_state().rtk_mode ==
-                     std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
-             "GGA fix quality 5 should map to RTK float");
+      BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"), 1101);
+  ctx.Expect(
+      session.current_state().fix_valid && session.current_state().fix_type == GnssFixType::kFix &&
+          session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
+      "GGA fix quality 5 should map to RTK float");
 
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123521,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"),
-      1102);
+      BuildNmeaSentence("GPGGA,123521,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"), 1102);
   ctx.Expect(session.current_state().fix_valid &&
                  session.current_state().fix_type == GnssFixType::kFix &&
-                 session.current_state().rtk_mode ==
-                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+                 session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
              "GGA fix quality 2 should clear RTK float/fixed back to a known non-RTK mode");
 
   session.FeedBytes(BuildNmeaSentence("GPGGA,123522,,,,,0,00,,,,,,"), 1103);
   ctx.Expect(!session.current_state().fix_valid &&
                  session.current_state().fix_type == GnssFixType::kNoFix &&
-                 session.current_state().rtk_mode ==
-                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+                 session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
              "invalid GGA should not leave stale RTK float/fixed state behind");
 }
 
 void TestDopSatelliteCn0AndAccuracyUpdates(TestContext& ctx)
 {
   NmeaSession session;
+  session.FeedBytes(BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 2000);
   session.FeedBytes(
-      BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 2000);
-  session.FeedBytes(
-      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      2001);
-  session.FeedBytes(
-      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 2002);
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 2001);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 2002);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.hdop == std::optional<float>(1.0f) &&
-                 state.vdop == std::optional<float>(1.5f) &&
+  ctx.Expect(state.hdop == std::optional<float>(1.0f) && state.vdop == std::optional<float>(1.5f) &&
                  state.satellites_used == std::optional<std::uint16_t>(8u) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u) &&
                  state.mean_cn0_db_hz.has_value() &&
                  state.max_cn0_db_hz == std::optional<float>(43.0f) &&
-                 NearlyEqual(*state.mean_cn0_db_hz, static_cast<float>((41.0 + 43.0 + 42.0 + 39.0) / 4.0)) &&
+                 NearlyEqual(*state.mean_cn0_db_hz,
+                             static_cast<float>((41.0 + 43.0 + 42.0 + 39.0) / 4.0)) &&
                  state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
                  state.vertical_accuracy_m == std::optional<float>(1.1f),
              "GSA, GSV, and GST should enrich DOP, satellites, CN0, and accuracy");
@@ -153,10 +140,8 @@ void TestDopSatelliteCn0AndAccuracyUpdates(TestContext& ctx)
 void TestVtgProducesSpeedAndCourseRuntimeState(TestContext& ctx)
 {
   NmeaSession session;
-  session.FeedBytes(
-      BuildNmeaSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"), 3000);
-  session.FeedBytes(
-      BuildNmeaSentence("GPZDA,201530.00,04,07,2002,00,00"), 3001);
+  session.FeedBytes(BuildNmeaSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"), 3000);
+  session.FeedBytes(BuildNmeaSentence("GPZDA,201530.00,04,07,2002,00,00"), 3001);
 
   const auto& state = session.current_state();
   const auto& metrics = session.metrics();
@@ -181,8 +166,7 @@ void TestMalformedAndResetBehavior(TestContext& ctx)
 {
   NmeaSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,",
-                        false),
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,", false),
       4000);
   session.FeedString("$GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5*");
   session.Finalize();
@@ -191,8 +175,7 @@ void TestMalformedAndResetBehavior(TestContext& ctx)
              "invalid checksum and truncated tail should count as malformed sentences");
 
   session.Reset();
-  ctx.Expect(session.metrics().bytes_seen == 0u &&
-                 session.metrics().records_parsed == 0u &&
+  ctx.Expect(session.metrics().bytes_seen == 0u && session.metrics().records_parsed == 0u &&
                  session.current_state().fix_type == GnssFixType::kUnknown &&
                  !session.current_state().fix_valid,
              "reset should clear NMEA session metrics and runtime state");
@@ -206,21 +189,19 @@ void TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
   {
     NmeaSession session;
     session.FeedBytes(
-        BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-        5000);
-    session.FeedBytes(
-        BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,1,08,0.9," +
-                          std::string(value) + ",M,46.9,M,,"),
-        5001);
+        BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 5000);
+    session.FeedBytes(BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,1,08,0.9," +
+                                        std::string(value) + ",M,46.9,M,,"),
+                      5001);
 
     const auto& state = session.current_state();
     const auto& metrics = session.metrics();
-    ctx.Expect(metrics.records_parsed == 1u && metrics.records_rejected == 1u &&
-                   metrics.runtime_updates == 1u &&
-                   state.altitude_m == std::optional<double>(545.4) &&
-                   state.altitude_m.has_value() && std::isfinite(*state.altitude_m),
-               "non-finite NMEA GGA altitude must be rejected before it can update runtime state: " +
-                   std::string(value));
+    ctx.Expect(
+        metrics.records_parsed == 1u && metrics.records_rejected == 1u &&
+            metrics.runtime_updates == 1u && state.altitude_m == std::optional<double>(545.4) &&
+            state.altitude_m.has_value() && std::isfinite(*state.altitude_m),
+        "non-finite NMEA GGA altitude must be rejected before it can update runtime state: " +
+            std::string(value));
   }
 }
 
@@ -228,17 +209,14 @@ void TestExplicitInvalidityClearsRuntimeValues(TestContext& ctx)
 {
   NmeaSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-      6000);
-  session.FeedBytes(
-      BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 6001);
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 6000);
+  session.FeedBytes(BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 6001);
 
   session.FeedBytes(BuildNmeaSentence("GPGGA,123520,,,,,0,00,,,,,,"), 6002);
   const auto& no_fix_state = session.current_state();
   ctx.Expect(!no_fix_state.fix_valid && no_fix_state.fix_type == GnssFixType::kNoFix,
              "an explicit no-fix GGA should update fix validity");
-  ctx.Expect(!no_fix_state.latitude_deg.has_value() &&
-                 !no_fix_state.longitude_deg.has_value() &&
+  ctx.Expect(!no_fix_state.latitude_deg.has_value() && !no_fix_state.longitude_deg.has_value() &&
                  !no_fix_state.altitude_m.has_value(),
              "an explicit no-fix GGA must clear previously valid coordinates");
   ctx.Expect(no_fix_state.hdop == std::optional<float>(1.0f) &&
@@ -252,19 +230,17 @@ void TestExplicitInvalidityClearsRuntimeValues(TestContext& ctx)
              "an explicit empty/no-fix GSA must clear its DOP and used-satellite values");
   ctx.Expect(!HasValueAvailable(cleared_state, universal_gnss::GnssCapability::kHdop) &&
                  !HasValueAvailable(cleared_state, universal_gnss::GnssCapability::kVdop) &&
-                 !HasValueAvailable(
-                     cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
+                 !HasValueAvailable(cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
              "cleared NMEA values must not remain publicly available");
   ctx.Expect(HasCapability(cleared_state, universal_gnss::GnssCapability::kHdop) &&
                  HasCapability(cleared_state, universal_gnss::GnssCapability::kVdop) &&
-                 HasCapability(
-                     cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
+                 HasCapability(cleared_state, universal_gnss::GnssCapability::kSatellitesUsed),
              "NMEA CLEAR must retain support metadata while removing current availability");
   ctx.Expect(cleared_state.timestamp_ns == std::optional<std::int64_t>(6003),
              "the clearing GSA observation must own aggregate provenance");
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {
