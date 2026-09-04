@@ -90,6 +90,25 @@ localhost-only setting is hard-coded. Validate host-to-container,
 container-to-host, and container-to-container discovery before selecting bridge
 or host networking for a robot deployment.
 
+### Initial DDS topology evidence
+
+On the validated Kilted amd64 development-host topology, Docker's default
+bridge supported bidirectional discovery and `std_msgs/msg/String` delivery
+between a host ROS 2 CLI node and one container when both used the same explicit
+`ROS_DOMAIN_ID`. Two containers on one explicit Docker bridge network likewise
+exchanged messages bidirectionally on the same domain; changing one container's
+domain prevented delivery. Host networking was not required for these tests.
+
+This is initial same-host development evidence, not external-LAN or robot
+evidence. For developer workstations and a single-host robot, start with an
+explicit domain and default/explicit bridge network, then validate the actual
+host topology. For multiple ROS containers on one host, place participating
+containers on an explicit Docker bridge network and use the same deliberate
+domain. Domain IDs provide the observed DDS isolation; they are not an access
+control mechanism. In this devcontainer/daemon topology,
+`ROS_LOCALHOST_ONLY=1` still allowed host/container delivery, so it must not be
+relied on for container or network isolation.
+
 `exec` is used for the launch process, so Docker `SIGTERM`/`SIGINT` reaches ROS
 launch directly and its managed receiver/NTRIP processes receive normal launch
 shutdown. Validate graceful shutdown against real hardware and a real caster

@@ -36,7 +36,7 @@ values, not lifecycle states. Evidence is VERIFIED unless noted otherwise.
 | `UGA-074` | PARTIAL |
 | `UGA-075`-`UGA-076` | OPEN |
 | `UGA-077`-`UGA-125` | BLOCKED |
-| `UGA-126` | BLOCKED |
+| `UGA-126` | PARTIAL |
 | `UGA-127` | PARTIAL |
 | `UGA-128` | IMPLEMENTED |
 | `UGA-129` | IMPLEMENTED (removed) |
@@ -73,10 +73,10 @@ values, not lifecycle states. Evidence is VERIFIED unless noted otherwise.
 
 | Status | Count |
 | --- | ---: |
-| IMPLEMENTED | 8 |
-| PARTIAL | 19 |
-| OPEN | 116 |
-| BLOCKED | 54 |
+| IMPLEMENTED | 29 |
+| PARTIAL | 16 |
+| OPEN | 99 |
+| BLOCKED | 53 |
 | SUPERSEDED | 0 |
 | OBSOLETE | 0 |
 | DUPLICATE | 8 |
@@ -86,7 +86,7 @@ values, not lifecycle states. Evidence is VERIFIED unless noted otherwise.
 
 | Stable ID | STATUS | SCOPE | VALIDATION | Blocked by | Unblocks when |
 | --- | --- | --- | --- | --- | --- |
-| `UGA-126` | BLOCKED | DRIVER | HARDWARE_REQUIRED | Physical transport-incarnation recovery validation after an indeterminate receiver command, on the exact supported receiver/firmware/host/kernel/driver/topology baseline. | The hardware matrix proves a qualified recovery boundary prevents A(target X)'s late response from being delivered or accepted for B(target X), and emits a new incarnation token only after that cutoff. |
+| `UGA-126` | PARTIAL | DRIVER | HARDWARE_REQUIRED | Physical transport-incarnation recovery validation after an indeterminate receiver command, on the exact supported receiver/firmware/host/kernel/driver/topology baseline. | The hardware matrix proves a qualified recovery boundary prevents A(target X)'s late response from being delivered or accepted for B(target X), and emits a new incarnation token only after that cutoff. |
 
 ## Scope/Type Classification (All 205 Baseline Items)
 

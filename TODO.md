@@ -56,13 +56,19 @@ BlueOS is a deployment/integration adapter, not a separate GNSS implementation.
 See [`blueos/README.md`](blueos/README.md) for the current BlueOS boundary and
 hardware-risk analysis.
 
+Project implementation accounting is separate from the 205-item UGA quality
+dashboard: each TODO checklist item has equal weight, and only checked items
+count as complete. `PARTIAL` and `BLOCKED` UG-PLAN phases are reported
+separately and receive no fractional credit. The generated README dashboard is
+the current numeric source of truth.
+
 | ID | Status | Scope | Validation | Dependency | Current state / remaining work |
 | --- | --- | --- | --- | --- | --- |
 | `UG-PLAN-001` | PARTIAL | DEPLOYMENT | HARDWARE_PENDING | Complete current downstream/MowgliNext validation first | Native `universal_gnss_supervisor` Phase 1 is implemented: one explicit serial receiver, `ReceiverSession` / `ReceiverSessionRunner` orchestration, bounded reconnect/backoff, incarnation boundary, clean stop, runtime/metrics snapshot, fake-transport regression coverage, and native CLI. Remaining: real serial/USB/UART lifecycle validation and configuration loading/projection. It must remain non-ROS and non-BlueOS, use steady-clock liveness/backoff, and preserve timestamp/provenance semantics without carrying state across incarnations. |
 | `UG-PLAN-002` | IMPLEMENTED | NTRIP / DEPLOYMENT | HARDWARE_PENDING | `UG-PLAN-001` | Deterministic Phase 2 is complete: shared transport-neutral `UGA009` `RtcmFrameWriter`; ROS2 `ReceiverNode` semantic-parity migration; native supervisor `NtripClient` orchestration; independent receiver/NTRIP reconnect; RTCM forwarding; GGA observation-sequence/cadence policy; stop cancellation; redacted credential/status behavior; 33/33 runtime/NTRIP/transport/driver CTests; ROS2-enabled build; `test_receiver_node`; formatting; and diff checks. Remaining physical evidence: receiver lifecycle, real caster/network reconnect, USB/hotplug/re-enumeration, and BlueOS device grants. |
 | `UG-PLAN-003` | OPEN | DEPLOYMENT | — | `UG-PLAN-005` | Lightweight generic HTTP API above the production container/runtime contract: lifecycle/health, receiver identity and transport, normalized `GnssRuntimeState`, parser/session diagnostics, correction/RTK/NTRIP health, redacted configuration, and reconnect/incarnation data. Later endpoints validate and deliberately apply/restart configuration with existing receiver-configuration safeguards. HTTP handlers must not own GNSS logic; defer SSE/WebSocket selection until evidence justifies it. |
 | `UG-PLAN-004` | OPEN | DEPLOYMENT | — | `UG-PLAN-003` | Generic Universal GNSS web GUI, served by or alongside the native API and usable from native Linux, standalone Docker, and BlueOS. Use responsive Tailwind CSS and the existing logo under `docs/`; keep it presentation/configuration-only. Plan Basic (connection/fix/RTK/position/accuracy/correction/NTRIP health), Advanced (satellites, C/N0, motion, UTC, RTCM, metrics, reconnect/configuration summary), and Expert (AGC, interference, raw diagnostics, transport, auto-configuration, logs, incarnation, advanced controls) views. |
-| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Production containerization milestone. Initial Phase A groundwork is implemented: one parameterized Kilted/Lyrical multi-stage ROS2 Dockerfile; launch-managed receiver/NTRIP container layout; non-root runtime; external parameter-file/credential and ROS-log contracts; explicit single-device mapping guidance; and a process-only healthcheck. Docker build/runtime, `amd64`/`arm64`, graceful-shutdown, DDS topology, robot/MowgliNext, receiver/NTRIP reconnect, and physical device validation remain. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
+| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, and the exact Unicore USB-loss contract. The current CH340/UM982 bench requires recreation after USB loss and runtime-profile replay after power loss; stable by-id returned unchanged in one non-renumbering trial. Remaining: serial-renumbering and other receiver/topology matrices, a qualified UGA-126 transport-incarnation cutoff, UGA-170's per-model u-blox reset matrix, native arm64/hardware, and robot/BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
 | `UG-PLAN-006` | PARTIAL | BLUEOS | HARDWARE_REQUIRED | `UG-PLAN-005` | Completed evidence: compatibility study, architecture proposal, Bazaar metadata and minimal receiver-permission templates, packaging/architecture research, and identified device/hotplug risks. BlueOS skeleton/packaging may reuse the production container/runtime contract once it exists and may initially be headless/status-oriented; it must not displace ROS2 Docker priority or reimplement GNSS semantics. Later phases add API/WebUI integration, `register_service`, relative-path-safe GUI exposure, settings/apply/restart, multi-arch publication, Bazaar submission, and install/update/rollback validation. USB hotplug/re-enumeration and Docker grants require real BlueOS proof; a reopened tty is not proof of a valid new device grant. |
 
 Priority and dependency order: complete deterministic `UG-PLAN-002`; establish
@@ -100,11 +106,11 @@ Architecture rules:
 
 Container build and release:
 
-- [ ] production `Dockerfile` / container build layout
+- [x] production `Dockerfile` / container build layout
 - [ ] reproducible versioned image tags tied to Universal GNSS releases/commits
-- [ ] multi-stage builds with a minimal runtime image
-- [ ] `amd64` image validation
-- [ ] `arm64` image validation
+- [x] multi-stage builds with a minimal runtime image
+- [x] `amd64` image validation
+- [ ] `arm64` image validation (BuildKit/QEMU packaging and smoke are green; native runtime/hardware pending)
 - [ ] define whether `arm/v7` remains a supported target
 - [ ] multi-architecture CI build/publish pipeline
 - [ ] Software Bill of Materials / image provenance strategy
@@ -112,34 +118,41 @@ Container build and release:
 
 Runtime / process lifecycle:
 
-- [ ] define single-container versus composable-service layout for Receiver,
+- [x] define single-container versus composable-service layout for Receiver,
   NTRIP, replay, and optional adapters
-- [ ] production entrypoint and deterministic startup ordering
-- [ ] graceful SIGTERM/SIGINT shutdown
+- [x] production entrypoint and deterministic startup ordering
+- [x] graceful SIGTERM/SIGINT shutdown
 - [ ] restart policy and crash-recovery behavior
 - [ ] receiver-process restart without stale state resurrection
-- [ ] NTRIP reconnect/restart without stale source metadata leakage
+- [x] NTRIP reconnect/restart without stale source metadata leakage
 - [ ] container restart with deterministic configuration reapplication
 - [ ] expose running Universal GNSS version/commit in runtime diagnostics
 
 Device access / hotplug:
 
-- [ ] serial passthrough using stable `/dev/serial/by-id/...` identities where
+- [x] serial passthrough using stable `/dev/serial/by-id/...` identities where
   available
 - [ ] document fallback behavior for platforms without `/dev/serial/by-id`
-- [ ] least-privilege serial permissions; avoid `--privileged` as the normal path
-- [ ] USB receiver disconnect/reconnect inside a running container
+- [x] least-privilege serial permissions; avoid `--privileged` as the normal path
+- [x] USB receiver disconnect/reconnect inside a running container
 - [ ] USB serial renumbering validation
 - [ ] F9P <-> UM982 physical swap/recovery validation
 - [ ] define udev/device-manager integration needed by production deployments
 
+Hardware sweep (2026-09-04): the current UM982/CH340 bench proves the exact
+stable-by-id mapping, explicit stale health on physical loss, required container
+recreation, and runtime-profile replay after USB power loss. It does not prove
+serial renumbering, a receiver-incarnation byte cutoff, automatic recovery, or
+u-blox reset recovery; those remain separately tracked rather than being
+implicitly closed by the successful replug trial.
+
 Configuration / persistence / secrets:
 
-- [ ] stable external configuration directory and mount contract
+- [x] stable external configuration directory and mount contract
 - [ ] configuration schema/version migration policy
 - [ ] persistent receiver/profile configuration state where required
-- [ ] read-only defaults plus writable operator overrides
-- [ ] NTRIP credentials supplied outside the image
+- [x] read-only defaults plus writable operator overrides
+- [x] NTRIP credentials supplied outside the image
 - [ ] secret-file / environment-variable policy with no credential leakage in
   logs or diagnostics
 - [ ] persistent diagnostic/log/export directory
@@ -149,9 +162,9 @@ Health / observability:
 
 - [ ] container healthcheck that validates service functionality rather than only
   PID/process existence
-- [ ] distinguish container/service health from receiver transport health
-- [ ] distinguish receiver observation freshness from ROS/publication activity
-- [ ] distinguish NTRIP transport, accepted response, correction flow, semantic
+- [x] distinguish container/service health from receiver transport health
+- [x] distinguish receiver observation freshness from ROS/publication activity
+- [x] distinguish NTRIP transport, accepted response, correction flow, semantic
   correction health, and RTK solution quality
 - [ ] healthcheck behavior when no receiver is intentionally configured
 - [ ] structured logs suitable for Docker/Compose/BlueOS collection
@@ -160,12 +173,12 @@ Health / observability:
 
 Networking:
 
-- [ ] NTRIP outbound networking validation
+- [x] NTRIP outbound networking validation
 - [ ] Docker DNS/reconnect behavior validation
-- [ ] host/network-mode policy
-- [ ] ROS2 DDS cross-container validation
-- [ ] ROS2 DDS host <-> container validation
-- [ ] ROS2 discovery behavior documented for common Docker deployments
+- [x] host/network-mode policy for tested same-host bridge topology
+- [x] ROS2 DDS cross-container validation
+- [x] ROS2 DDS host <-> container validation
+- [x] ROS2 discovery behavior documented for tested same-host Docker deployments
 - [ ] non-ROS status/configuration API contract for platform integrations
 - [ ] authentication/bind-address policy for any exposed HTTP/WebSocket API
 
@@ -183,17 +196,17 @@ Non-ROS control/status surface:
 
 Deployment validation gates:
 
-- [ ] PC Docker validation with u-blox F9P
-- [ ] PC Docker validation with Unicore UM98x
+- [x] PC Docker validation with u-blox F9P
+- [x] PC Docker validation with Unicore UM98x
 - [ ] robot Docker validation
 - [ ] long-run container validation
-- [ ] receiver silence and reconnect validation
-- [ ] NTRIP disconnect/reconnect validation
+- [x] receiver silence and reconnect validation (current UM982 contract requires recreation)
+- [x] NTRIP disconnect/reconnect validation
 - [ ] container crash/restart validation
 - [ ] host reboot/autostart validation
 - [ ] low receiver rate / high publication-rate validation
 - [ ] high receiver rate / low publication-rate validation
-- [ ] RTK Float/Fixed transition validation through container boundaries
+- [ ] RTK Float/Fixed transition validation through container boundaries (RTK Float is proven; RTK Fixed remains pending)
 - [ ] no stale state survives source, receiver, process, or container incarnation
   changes
 
@@ -384,6 +397,9 @@ bug in this repository.
 
 ## Documentation / Quality
 
+- [ ] repair `scripts/agent/checkpoint_audit.py` compact-manifest parsing and
+  shared-checkpoint ownership detection; its current `--check` reports zero
+  manifest findings and false duplicate UGA-126 ownership
 - [ ] contributor architecture guide
 - [ ] parser writing guide
 - [ ] sanitizer builds

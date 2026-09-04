@@ -39,14 +39,26 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 Current phase: post-`v0.6.x` stabilization.
 
 <!-- UGA_STATUS_BEGIN -->
-### Development Dashboard
+### UGA Quality / Audit Progress
 
 ![Generated UGA backlog status](docs/status/uga_backlog.svg)
 
-Baseline: **205** audited items. Remaining unchecked TODO work: **168**. Closed or intentionally resolved: **37**.
+Baseline: **205** audited items. Remaining unchecked TODO work: **172**. Closed or intentionally resolved: **33**.
 
 Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
+
+### Project Implementation Progress
+
+Current TODO worklist: **50 / 194** complete (25.77%), **144** not started.
+
+Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric above.
 <!-- UGA_STATUS_END -->
+
+Deployment progress is tracked separately from the UGA baseline above. `UG-PLAN-005`
+Phase A has proven Kilted/Lyrical amd64 runtime, arm64 BuildKit/QEMU packaging,
+same-host DDS, and live u-blox/Unicore GNSS, NTRIP, RTCM, and UM982 USB-loss
+recovery behavior. Native arm64 hardware/runtime, external-LAN/robot DDS,
+serial renumbering, MowgliNext, BlueOS, API, and WebUI remain pending.
 
 Current project state includes:
 

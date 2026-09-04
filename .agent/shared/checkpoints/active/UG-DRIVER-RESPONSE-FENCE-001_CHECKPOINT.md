@@ -8,7 +8,7 @@ Upstream: `origin/main` at the same commit
 ## Objective
 
 Define the smallest protocol-safe response fencing or recovery contract for
-`UG-DRIVER-RESPONSE-FENCE-001`, the dependency blocking `UGA-126` live runtime
+`UG-DRIVER-RESPONSE-FENCE-001`, the dependency limiting `UGA-126` live runtime
 arbitration. Analysis only; do not implement `ReceiverTrafficArbiter`.
 
 ## Evidence cache
@@ -98,7 +98,8 @@ machine.
 ### Decision
 
 No portable generic fence exists in current u-blox, Unicore, or transport
-contracts. `UGA-126` remains blocked. The minimum viable future design is an
+contracts. `UGA-126` is canonically PARTIAL with HARDWARE_REQUIRED validation;
+it does not authorize automatic recovery. The minimum viable future design is an
 explicit `Indeterminate` quarantine state plus a separately specified,
 transport- and family-qualified recovery/reincarnation capability; it must not
 silently re-enable a live session after timeout or post-write cancellation.
@@ -160,7 +161,7 @@ Required future regression matrix:
 
 ## Exact next step
 
-Keep `UGA-126` blocked. Create a separate authorized design task for a
+Keep automatic recovery blocked. Create a separate authorized design task for a
 transport-incarnation/recovery capability, beginning by defining which concrete
 transport(s) can prove a byte-source cutoff after reconnect. Only then decide
 whether a family-qualified recovery mechanism can safely release the

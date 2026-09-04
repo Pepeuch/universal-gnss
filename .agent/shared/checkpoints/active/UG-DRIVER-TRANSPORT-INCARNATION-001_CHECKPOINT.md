@@ -144,7 +144,8 @@ safe.
 ## Dependency status
 
 `UG-DRIVER-RESPONSE-FENCE-001` is **not unblocked** for automatic recovery.
-`UGA-126` cannot yet implement a reconnect that releases quarantine. It could
+UGA-126 is canonically PARTIAL with HARDWARE_REQUIRED validation, but cannot yet
+implement a reconnect that releases quarantine. It could
 proceed only under an explicitly accepted hard-quarantine scope: after any
 post-write indeterminate outcome, live configuration remains disabled for the
 current receiver session and recovery is operator/deployment managed. Do not

@@ -455,6 +455,17 @@ At minimum evaluate:
 
 Documentation must describe current behaviour, not implementation intent.
 
+### Progress indicators
+
+After every meaningful proven milestone, update every applicable progress bar,
+completion indicator, TODO, roadmap, and checkpoint from the repository's
+documented accounting model. Keep the UGA quality/audit metric and the project
+implementation metric separate, and keep each mutually consistent with its
+own formula; do not count `PARTIAL`, `BLOCKED`, or `HARDWARE_REQUIRED` work as
+complete. Context compaction, model switch, or resume is not new evidence.
+Leaving an applicable progress indicator stale after a milestone is incomplete
+bookkeeping.
+
 When a Universal GNSS change affects ROS2 surfaces, diagnostics, launch/runtime status,
 correction observability, operator visibility, or robot-side integration, evaluate
 whether downstream work belongs in `MOWGLINEXT_TODO.md`.

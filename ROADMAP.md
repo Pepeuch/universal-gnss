@@ -102,12 +102,15 @@ BlueOS-specific implementation.
   lifecycle validation and configuration loading/projection remain.
 - Phase 2 deterministic supervisor NTRIP/RTCM composition is complete; physical
   receiver/caster/reconnect/hotplug evidence remains pending.
-- Phase A has initial ROS2-first Docker groundwork: a parameterized
-  Kilted/Lyrical multi-stage image, the existing launch-managed receiver/NTRIP
-  layout, non-root execution, external configuration/credential/log contracts,
-  explicit serial mapping guidance, and process-only health checking. Docker
-  build/runtime, `amd64`/`arm64`, deterministic lifecycle, DDS, and
-  robot/MowgliNext receiver/NTRIP-reconnect validation remain.
+- Phase A ROS2-first Docker evidence is established for Kilted and Lyrical
+  amd64 build/runtime, shared runtime-library packaging, non-root 1000:1000,
+  tini-managed clean shutdown, read-only external configuration, and same-host
+  DDS over Docker bridge. Kilted and Lyrical arm64 BuildKit/QEMU packaging and
+  smoke are green, but remain emulated evidence only. Live u-blox and Unicore
+  GNSS/NTRIP/RTCM validation is green; the UM982 USB-loss contract requires
+  container recreation and replay of its volatile runtime profile. Native
+  arm64, external-LAN/robot DDS, serial renumbering, MowgliNext, and the
+  remaining receiver/topology matrices remain pending.
 - then reuse the ROS-independent portable runtime/supervisor for a native,
   headless standalone image, without a ROS2 or GUI requirement.
 - the following BlueOS integration milestone reuses that same generic

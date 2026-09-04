@@ -16,6 +16,39 @@ study without making BlueOS a second GNSS implementation.
 source of truth for `UG-PLAN-001` through `UG-PLAN-006`. `ROADMAP.md` carries
 the release/dependency view. This checkpoint is only a resumption aid.
 
+PROGRESS ACCOUNTING (2026-09-04): the repository's only numeric progress
+indicator is the generated UGA dashboard. Its documented formula is the count
+of checked/resolved entries among the fixed 205-item UGA baseline; `PARTIAL`,
+`BLOCKED`, and hardware evidence do not count as closed. UG-PLAN-005 evidence
+therefore advances the concise deployment plan/roadmap without inventing a
+second weighted percentage. Before reconciliation the dashboard reported 37
+closed/resolved and 168 unchecked (18.05%). The corrected dashboard reports 33
+closed/resolved and 172 unchecked (16.10%): four `PARTIAL` UGA entries had
+incorrectly been counted as checked and are now excluded. Its lifecycle mix
+also reflects the authoritative UGA-126 PARTIAL classification. No UG-PLAN
+item entered the fixed 205-item denominator or its resolved numerator.
+
+PROJECT IMPLEMENTATION INDICATOR (2026-09-04): this reconciliation formalizes
+a separate equal-weight count of every current TODO checklist item. It reports
+50/194 COMPLETE (25.77%) and 144 NOT_STARTED. The UG-PLAN register separately
+reports 1 COMPLETE, 3 PARTIAL, 0 BLOCKED, and 2 NOT_STARTED phases; PARTIAL and
+BLOCKED receive no fractional credit. There was no earlier formal overall
+implementation indicator, so this is an added baseline rather than a heuristic
+increase. It includes the completed UG-PLAN-005 Docker, DDS, u-blox, Unicore,
+and replug evidence through their checked TODO contracts, while keeping native
+arm64, external-LAN/robot DDS, MowgliNext, renumbering, and later phases open.
+
+TOOLING INCONSISTENCY (deferred, 2026-09-04):
+`python3 scripts/agent/checkpoint_audit.py --check` is not a valid gate for the
+current compact `docs/status/uga_backlog.json`: its `load_manifest()` searches
+for per-object `id`/`finding_id`/`uga_id` fields and consequently reports
+`manifest findings: 0`. Its fallback ownership heuristic then treats the first
+`UGA-xxx` mention in each shared checkpoint as that checkpoint's owner, yielding
+false duplicate `UGA-126` ownership errors. This does not invalidate the
+deployment checkpoint or generated UGA dashboard evidence. It is tracked as a
+separate unchecked Documentation/Quality tooling item in `TODO.md`; do not fix
+it during this bookkeeping reconciliation.
+
 ## Established evidence
 
 - CURRENT: `blueos/README.md` defines the adapter boundary and its physical
@@ -158,6 +191,325 @@ artifacts remain. `bash -n docker/entrypoint.sh` and `git diff --check` PASS.
 
 REMAINING_DELTA: arm64/buildx, DDS topology, hardware receiver/caster/reconnect,
 hotplug/device grants, long-run and robot/MowgliNext validation remain pending.
+
+CURRENT_STATE (2026-09-04, arm64/DDS continuation): Docker client 29.1.3 and
+daemon 29.7.2 are amd64. No persistent buildx plugin or arm64 binfmt existed.
+Classic `docker build --platform linux/arm64` is unusable here: it installed
+amd64 layers and then rejected its own intermediate image as platform-mismatched,
+including with `--no-cache`. Do not retry that path.
+
+DEPENDENCIES / PROVEN_EVIDENCE: temporary `tonistiigi/binfmt --install arm64`
+registered qemu-aarch64; `docker run --platform linux/arm64 alpine uname -m`
+returned `aarch64`. A temporary official buildx binary is under
+`/tmp/ug-plan-005-buildx-tTKxyC`, with disposable docker-container builder
+`ug-plan-005-arm64`; it advertises linux/arm64. The active Kilted build command
+is `DOCKER_CONFIG=/tmp/ug-plan-005-buildx-tTKxyC docker buildx build --builder
+ug-plan-005-arm64 --platform linux/arm64 --build-arg ROS_DISTRO=kilted -t
+universal-gnss:dev-kilted-arm64 --load .`. BuildKit logs prove arm64 package
+repositories/packages; it is still compiling `universal_gnss_ros2` under QEMU.
+
+EXACT NEXT STEP: let/load that Kilted build complete; inspect architecture,
+entrypoint/user, installed package and expected libraries/no source-build tree.
+Then build Lyrical arm64 with the same builder and inspect the installed dynamic
+libraries. Only afterward begin the requested DDS host/container topology tests.
+
+RESOLVED (2026-09-04, arm64 packaging): temporary buildx/QEMU is the
+authoritative cross-build path in this environment. Kilted arm64 BuildKit build
+completed (QEMU colcon: 4m53s) and loaded locally as
+`universal-gnss:dev-kilted-arm64`; inspect reports `linux/arm64`, user
+`1000:1000`, and tini group-forwarding entrypoint. QEMU smoke sourced ROS and
+the installed package successfully; expected ROS2 libraries are present and no
+source/build/log tree exists in the runtime prefix.
+
+Lyrical arm64 BuildKit build completed (QEMU colcon: 5m35s) and loaded locally
+as `universal-gnss:dev-lyrical-arm64`; inspect reports the same arm64/non-root/
+tini contract. QEMU smoke sourced `universal_gnss_ros2`; `ldd receiver_node`
+resolves `libuniversal_gnss_driver.so` from `/opt/universal_gnss/install/lib`.
+The dynamic driver, NTRIP, protocols, transport, and tools libraries are all
+present, confirming the Lyrical install-rule fix applies on arm64. These are
+cross-build plus QEMU-emulated runtime observations only: they do not prove
+native arm64 behavior, performance, receiver hardware, serial grants, hotplug,
+or real caster/network operation.
+
+DO_NOT_REDO: legacy classic cross-platform build is invalid here; do not retry
+it or use `--no-cache` as a workaround. Keep the temporary binfmt/buildx state
+host-side, reuse builder `ug-plan-005-arm64` and its cache for any continued
+cross-build, and do not alter production Dockerfiles for tooling. Remaining:
+DDS topology, native arm64 runtime, hardware/caster/serial/hotplug, and robot
+validation.
+
+RESOLVED (2026-09-04, initial DDS topology): Kilted amd64 minimal ROS CLI
+tests establish bidirectional host/container discovery and `std_msgs/String`
+flow on Docker default bridge with `ROS_DOMAIN_ID=91` and
+`ROS_LOCALHOST_ONLY=0`. Reverse direction passed independently. Two containers
+on a temporary explicit bridge network exchanged messages bidirectionally on
+domain 92; a subscriber on domain 93 received zero bytes and timed out while a
+domain-92 peer published, proving observed domain isolation. `docker stop`
+remained clean for the image baseline.
+
+PROVEN LIMITATION: on this devcontainer-to-host-daemon topology,
+`ROS_LOCALHOST_ONLY=1` still allowed a host/container message exchange; do not
+treat it as a container/network isolation or access-control mechanism. Default
+bridge was sufficient here, so host networking was neither required nor tested.
+`docs/ros2_docker.md` records the evidence-driven initial policy: explicit
+domain plus default/explicit bridge for same-host development, explicit bridge
+for cooperating multiple containers, validate each real host, and do not claim
+external-LAN or robot topology support.
+
+REMAINING_DELTA: native arm64 runtime, external-LAN DDS, real robot topology,
+receiver/caster/network reconnect, serial grants, hardware/hotplug, and
+MowgliNext validation remain pending. Do not redo the completed amd64/arm64
+packaging evidence or return to legacy cross-platform builder.
+
+CURRENT_STATE (2026-09-04, physical baseline): Docker daemon host, not the
+devcontainer, exposes distinct stable identities: `usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00`
+-> `../../ttyACM0` (character 166:0) and `usb-1a86_USB_Serial-if00-port0`
+-> `../../ttyUSB0` (character 188:0). Both are root:gid 20, mode 0660. Do not
+select by tty number alone; map one resolved selected host node at a time to
+`/dev/gnss-receiver`, adding only group 20; neither privileged mode nor a broad
+`/dev` mount was used.
+
+HARDWARE / VALIDATION: u-blox has antenna; Unicore has no antenna. Kilted amd64
+receiver-only physical test mapped only `/dev/ttyACM0`, ran as 1000:1000 plus
+group 20, and remained running. Live `/status` showed sequence 269, valid fix,
+latitude 43.9542903/longitude 2.2023881, 28 satellites used, and 40 visible;
+corrections were inactive as expected with NTRIP disabled. `docker stop
+--timeout 12` exit 0 and ROS SIGINT handler logged. This proves real u-blox
+access/observations and lifecycle only, not correction flow or reconnect.
+
+REMAINING HARDWARE_REQUIRED: external temporary config with redacted local-caster
+credentials/address must validate NTRIP connect/accept/RTCM/forwarding; then
+controlled NTRIP interruption, u-blox disconnect/re-enumeration mapping behavior,
+and Unicore-only non-root transport/protocol test. Never record the supplied
+password or bake it into image/checkpoint. Native arm64/hardware remains separate.
+
+RESOLVED (2026-09-04, live u-blox local NTRIP): default-bridge TCP reachability
+to the operator-supplied private caster endpoint was proven before use. A
+temporary read-only Docker volume held external credentials; its workspace-side
+temporary source was removed and no credential is recorded here. The combined
+Kilted container mapped only u-blox `ttyACM0` with group 20. Live status showed
+valid fix, RTK mode 3, 32 satellites used/41 visible, active differential
+corrections, and centimetre-level reported horizontal/vertical accuracy.
+
+PROVEN_EVIDENCE: diagnostics showed NTRIP response streaming, integrity-valid
+RTCM correction flow, semantic stream health, receiver forwarding, and 334
+published frames. Semantic decoding was valid for 1006, 1077, 1087, 1097,
+1127, and 1230, including GPS/GLONASS/Galileo/BeiDou MSM7; observed counts were
+consistent with the configured roughly-1 Hz stream and slower 1230. No exact
+timing claim beyond this live observation. A controlled Docker bridge disconnect
+then reconnect restored NTRIP streaming/correction flow/forwarding; the same
+receiver and NTRIP process PIDs remained alive, so no receiver restart was
+observed. Combined container stopped with exit 0, OOM false.
+
+REMAINING HARDWARE_REQUIRED: perform physical u-blox unplug/replug only with
+operator action, recording post-reenumeration stable identity/node/major-minor
+and whether the original Docker grant survives; then Unicore-only non-root
+transport/protocol validation. The temporary config volume remains external and
+must be deleted after this validation series; never print or checkpoint its
+credentials.
+
+CURRENT_STATE (2026-09-04, antenna moved / Unicore): daemon host currently
+shows only the stable Unicore identity `usb-1a86_USB_Serial-if00-port0` to
+`ttyUSB0` (188:0); u-blox is absent. This prevents a valid before/after
+live-container u-blox unplug/replug comparison because its previous container
+was already stopped. Do not infer that antenna relocation alone proves USB loss;
+reconnect the same u-blox USB receiver for that explicit test.
+
+UNICORE HARDWARE RESULT: Unicore-only Kilted container mapped only `ttyUSB0`
+to `/dev/gnss-receiver`, ran non-root 1000:1000 plus group 20, and stopped
+cleanly exit 0. At explicit 115200, the selected Unicore parser/session opened
+but received zero bytes. A non-destructive automatic-baud retry likewise
+reported discovery `no_data`; parser counters remained zero. This proves
+wrong-receiver prevention, device mapping, non-root open/lifecycle—not Unicore
+protocol byte flow, identification, or antenna-derived solution. Do not alter
+receiver configuration or factory-reset it to force evidence.
+
+CORRECTION (2026-09-04, current Unicore transport): the earlier dual-interface
+`USB_MIDI` / `ttyUSB0` + `ttyUSB1` enumeration occurred during unstable physical
+USB connectivity and is not the normal topology. Operator-provided current udev
+evidence is authoritative: CH340 (`1a86:7523`), single interface 00, stable
+`usb-1a86_USB_Serial-if00-port0` -> `../../ttyUSB0`, character 188:0,
+root:gid 20, mode 0660. The receiver now has an antenna. The Docker daemon can
+map `ttyUSB0` but does not expose the host's `/dev/serial/by-id` directory, so
+the stable identity is recorded from host udev evidence rather than inferred
+from the tty number.
+
+PASSIVE RETRY (2026-09-04, USB extension removed): a disposable container
+opened only `/dev/ttyUSB0` as non-root 1000:1000 plus group 20. Local client
+termios reads at 9600, 19200, 38400, 57600, 115200, 230400, 460800, and 921600
+all completed without device error but received zero bytes. No serial write,
+configuration, reset, or factory-reset command was issued. This proves the
+USB device remained present through the read matrix, but does not identify an
+active baud/protocol or establish a driver defect.
+
+RESOLVED (2026-09-04, likely-reset Unicore recovery): operator reported that
+the receiver was likely factory-reset, so the preceding passive silence is
+correctly interpreted as no configured periodic output, not a transport or
+driver failure. The existing installed `gnss_config_apply` path was reviewed
+before use; its initial Unicore control query is `VERSIONA`, routed through the
+existing response router, and mutating profiles require a known model. The
+established physical UM982 profile was selected explicitly. At 115200, Kilted
+mapped only `/dev/ttyUSB0` to `/dev/gnss-receiver` and ran non-root 1000:1000
+plus group 20. The existing runtime-only `rover_high_precision` profile
+received successful responses for all 13 planned commands: rover mode, NMEA
+version, RTK/DGPS policy, and the normal GPGGA/GPGSV/GPGST/PVTSLNA/BESTNAVA/
+RTKSTATUSA/RTCMSTATUSA/SATSINFOA outputs. No `FRESET`, `SAVECONFIG`, or other
+persistent write was sent.
+
+LIVE PROTOCOL / BAUD EVIDENCE: after the CLI closed, the installed read-only
+`gnss_serial_monitor` immediately parsed live Unicore fixes, position,
+accuracy, HDOP, satellite and CN0 data at 115200. The existing runtime-only
+`CONFIG COM1 921600 8 n 1` workflow then closed/reopened the port, probed old
+and target settings for three attempts, and confirmed the target with a real
+`VERSIONA` response at 921600 before replaying the remaining 13 profile
+commands successfully. A six-second read-only monitor at former 115200
+produced no parsed Unicore record; 921600 immediately produced valid fixes,
+positions and satellite data. This proves protocol-level old/new baud behavior
+and actual close/reopen, but does not measure electrical byte cutoff at the
+wrong baud. UGA126 is PARTIAL, not PROVEN.
+
+DOCKER UNICORE RESULT: the production Kilted receiver launch with explicit
+`receiver_family:=unicore`, `/dev/gnss-receiver`, and 921600 used only the
+resolved ttyUSB0 mapping, user 1000:1000, supplemental GID 20, no privilege and
+no broad `/dev` mount. `/status` reached observation sequence 77 with valid
+fix, position, HDOP, and 18 used / 24 tracked-visible satellites. Diagnostics
+selected `unicore` and showed healthy transport/parser with live Unicore ASCII
+records. The process tree was `tini -> ros2 -> receiver_node`; `docker stop
+--timeout 12` exited 0, OOM false. No COG field is currently projected by this
+Unicore status path; the single-antenna status correctly left heading
+unavailable, and no receiver-UTC field beyond normal ROS timestamps was
+established by this test.
+
+RESOLVED (2026-09-04, Unicore NTRIP): a prior external NTRIP volume selected
+`ublox`, so that run was rejected as Unicore-selection evidence and stopped
+cleanly. A separate temporary volume was copied internally and changed only to
+`receiver_family: unicore` and `serial_baud: 921600`; credentials were neither
+printed nor changed. With explicit operator authorization, the corrected
+read-only external-config test ran the Kilted container non-root with only
+ttyUSB0 -> `/dev/gnss-receiver` and GID 20. It proved NTRIP response streaming,
+integrity-valid RTCM flow, valid semantic 1006/1230 and GPS/GLONASS/Galileo/
+BeiDou MSM7 health, and receiver forwarding. Receiver diagnostics recorded
+162 forwarded frames / 46011 bytes, zero write errors, 159 Unicore receiver
+RTCM-status messages seen, and `selected_session=unicore`. `/status` showed
+valid RTK float (`fix_type=3`, `rtk_mode=2`), active differential corrections,
+and correction age 1 s. The combined `tini -> ros2 -> receiver_node,ntrip_node`
+tree stopped via `docker stop --timeout 12` with exit 0 and OOM false. This
+proves current Unicore correction acceptance and RTK float; it does not require
+or prove RTK fixed.
+
+FACTORY-RESET FINDING: UGA170 is PARTIAL. This is physical evidence that an
+already-reset/unconfigured UM982 can recover through the normal existing
+runtime profile and provide live GNSS/corrections. It is not evidence of
+executing or recovering from a reset during this session, nor of a saved-profile
+persistent recovery.
+
+ACTIVE PHYSICAL TEST (2026-09-04, pre-Unicore unplug): the running production
+container is `ug-plan-005-unicore-replug`, PID 319524, with only daemon-host
+`/dev/ttyUSB0` -> `/dev/gnss-receiver`, hex major/minor `bc:0` (188:0),
+root:gid 20, mode 0660, non-root 1000:1000 plus GID 20, and the existing
+read-only Unicore 921600 NTRIP config volume. Stable host udev identity remains
+operator-provided `usb-1a86_USB_Serial-if00-port0` -> `../../ttyUSB0`; the
+daemon does not expose `/dev/serial/by-id` for independent binding inspection.
+The process tree is `tini` 319524 -> `ros2` 319604 -> `receiver_node` 319648
+and `ntrip_node` 319649. No receiver-incarnation identifier is exposed by the
+current status/diagnostics; selected session is `unicore`. Pre-unplug status is
+healthy: valid RTK float, corrections active, 24 used/25 tracked-visible
+satellites, correction age 1 s; NTRIP streaming/RTCM semantic health and
+receiver forwarding were active. Receiver diagnostics advanced from 253 to 264
+forwarded frames (71796 to 74678 bytes) across captures, with zero write errors
+and receiver RTCM-status count advancing from 248 to 258. PAUSED awaiting only
+operator physical unplug of this Unicore USB receiver; do not restart/recreate
+or alter the device mapping before recording loss behavior.
+
+PHYSICAL UNPLUG OBSERVED (2026-09-04): operator unplugged only the Unicore.
+The existing container remained running with the same `tini`, `ros2`,
+`receiver_node`, and `ntrip_node` PIDs. Receiver logs reported `GNSS transport
+closed`. A new no-op Docker grant for exactly `/dev/ttyUSB0` failed with `no
+such file or directory`, proving host-node disappearance without touching the
+existing container. Receiver diagnostics then correctly reported
+`transport_healthy=false` and `stale_data=true`, emitted
+`rtcm_forwarding_stale` and `rtcm_forwarding_error: Receiver transport is
+closed`; forwarding stopped at 432 frames / 122408 bytes while write errors
+increased from 305 to at least 371. No new Unicore runtime observations or
+receiver RTCM-status messages appeared after the loss (both held at 1534 and
+423 respectively in the observed interval). NTRIP itself correctly remained
+streaming/healthy because the caster path was unaffected; it did not falsely
+make the receiver transport healthy. No receiver-incarnation field is exposed,
+so an incarnation change cannot be observed. PAUSED awaiting operator reconnect
+of the same Unicore; do not restart/recreate or remap the existing container
+before observing its behavior.
+
+PHYSICAL REPLUG / RECOVERY CONTRACT (2026-09-04): the operator reconnected the
+same Unicore. The stable host identity
+`/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` again resolved to
+`/dev/ttyUSB0`, major/minor 188:0 (`bc:0`), root:gid 20, mode 0660: neither the
+tty number nor major/minor changed in this trial. A fresh direct Docker grant
+using that exact stable by-id path succeeded, so only that device can remain the
+least-privilege mapping. The original container kept its original PID/process
+tree but did not reopen the receiver: receiver diagnostics remained
+`transport_closed`, `runtime_state_stale`, `rtcm_forwarding_stale`, and
+`receiver_rtcm_stale`, with runtime observations and Unicore lines held at
+1534 and 1957. Its NTRIP caster stream remained active, but its receiver
+transport did not recover. Thus an already-running Docker container's device
+grant/handle does not recover this physical unplug/replug on this host, even
+when the same tty major/minor reappears; the observed contract requires
+container recreation. No receiver-incarnation field is exposed, so only the
+new process/container incarnation is observable.
+
+The original container stopped cleanly with `docker stop --timeout 12` (exit 0,
+OOM false). A first recreated by-id-mapped container could open the transport
+and forward NTRIP without write errors, but received no Unicore observations.
+This is expected from the receiver's non-persistent runtime configuration after
+USB power loss, not a Docker grant or loader failure. The normal project-owned
+runtime-only UM982 `rover_high_precision` profile was reapplied (no reset and
+no save command): 14/14 configuration commands completed across 115200 to
+921600, with `VERSIONA@921600` confirmed. A second newly-created container,
+again using only the stable by-id mapping, non-root 1000:1000 plus GID 20 and
+the read-only external NTRIP volume, recovered live GNSS and corrections:
+runtime observations and receiver RTCM status increased, RTCM forwarding grew
+from 87 to 143 frames with zero write errors, and status reported valid fix,
+active differential corrections and a 1.4 s correction age. It also stopped
+cleanly via `docker stop --timeout 12` (exit 0, OOM false). This is physical
+replug evidence under the Qinheng CH340 single-interface transport, not serial
+renumbering evidence and not native persistence evidence.
+
+EXACT NEXT STEP: Unicore configuration, live GNSS, Docker lifecycle, NTRIP
+correction, and physical loss/replug behavior are recorded. Retain the two
+temporary credential-bearing Docker volumes only until this hardware-validation
+series is explicitly closed, then remove exactly those volumes after verifying
+no container uses them. Remaining hardware delta includes serial-renumbering
+and other receiver-family re-enumeration trials, plus a deliberate persistent
+receiver-provisioning decision if desired. Credentials remain external/redacted.
+
+FINAL HARDWARE_REQUIRED SWEEP (2026-09-04): this is a classification pass over
+the current bench evidence only; it does not repeat physical USB loss/replug or
+factory reset. The exact bench is the operator-provided UM982 over a Qinheng
+CH340 single USB interface (`1a86:7523`), daemon-host stable identity
+`usb-1a86_USB_Serial-if00-port0`, group 20, with Kilted amd64 Docker mapping
+only that device, non-root 1000:1000 plus GID 20, and the redacted external
+local-caster configuration. It does not generalize to a different receiver,
+firmware, kernel, bridge, topology, native arm64 host, or BlueOS.
+
+| Finding / contract | Receiver | Evidence | Classification | Remaining delta |
+| --- | --- | --- | --- | --- |
+| UGA-126: qualified post-indeterminate transport-incarnation cutoff for same-target command A/B | Unicore / u-blox | Physical USB disappearance, stale state, recreation, and new runtime traffic were observed; current serial abstraction still cannot prove a late A response is excluded after B. | PARTIAL | Inject/observe the prescribed A-timeout-or-cancel, qualified recovery, and same-target B matrix with an end-to-end proven byte cutoff and incarnation token. USB replug alone is insufficient. |
+| UGA-170: portable factory-reset capability | UM982 plus u-blox scope | Operator reports this UM982 was previously FRESET on robot; this session proved normal recovery from an already-unconfigured receiver and, after USB power loss, normal runtime-profile replay. No FRESET was repeated. | PARTIAL | The exact u-blox F9/F10 model/firmware/protocol, persistent-setting, reset, reconnect, active-probe, direct-USB and claimed-bridge matrix remains absent. Do not infer it from UM982 evidence. |
+| Stable identity / least-privilege device grant | UM982/CH340 | Same by-id identity returned and a fresh Docker `--device` grant using it succeeded; only group 20 and one device were used. | PROVEN | No generic cross-host/bridge claim; document/validate fallback where by-id is absent. |
+| Real Docker serial loss and reconnect behavior | UM982/CH340 | Existing container retained PIDs but transport closed and health/RTCM became stale; it did not recover after the same node returned. Recreation recovered transport. | PROVEN | Automatic in-place recovery is disproven for this bench; validate any other intended receiver/USB topology separately. |
+| USB re-enumeration / renumbering resilience | UM982/CH340 | The device disappeared then returned with the same by-id, ttyUSB0, and 188:0. | PARTIAL | Force/observe an actual tty-number or major/minor change and prove selection by stable identity; test other claimed interfaces. |
+| Wrong-receiver prevention | UM982 | Explicit `receiver_family=unicore`, sole-device mapping, selected-session diagnostics, and live Unicore protocol traffic prevented the prior mismatched u-blox-config selection from being accepted as Unicore evidence. | PROVEN | Does not prove automatic selection/replacement safety across different physical receivers. |
+| Receiver-incarnation transition / old-data exclusion | UM982/CH340 | Stale observations and forwarding were explicitly invalidated on loss; recreation created new processes. No receiver-incarnation identifier or physical old-byte cutoff is exposed. | PARTIAL | Add/qualify a real incarnation identity and satisfy UGA-126's causal old-byte exclusion contract before claiming a trusted transition. |
+| Real NTRIP reconnect and RTCM forwarding after reconnect | live u-blox local caster; UM982 recovery | Earlier controlled Docker-bridge interruption restored real caster streaming, semantic RTCM health, and receiver forwarding without process restart. UM982 after recreation/profile replay also restored live corrections and zero-error forwarding. | PROVEN | External-LAN/caster, long-duration, and native-arm64 cases remain untested. |
+| Live observation sequence and freshness | UM982 | Live observations/satellite/fix/correction state advanced before loss, held after loss with explicit stale diagnostics, then advanced again after recreated/profiled recovery. | PROVEN | No receiver-supplied incarnation field or all-topology freshness claim. |
+| Runtime-only configuration recovery after power loss | UM982 | Replugged receiver was silent until the normal 115200-to-921600 runtime-only profile was reapplied; then live GNSS, differential corrections, and RTCM forwarding resumed. | PROVEN | Persistence is intentionally not proven: decide separately whether a saved profile/provisioning workflow is required. |
+| Native standalone supervisor / BlueOS grants | not on assembled bench | Docker ROS2 evidence exists only; no native supervisor or BlueOS hardware test was authorized. | NOT_APPLICABLE | Retain their distinct HARDWARE_PENDING/HARDWARE_REQUIRED matrices; do not use Docker evidence as a substitute. |
+
+SWEEP DECISION: current Docker/UM982 physical evidence closes the stated
+bench-level operational contracts but leaves UGA-126 hardware evidence PARTIAL
+(with automatic recovery still outside the proven contract) and UGA-170 PARTIAL. No
+destructive reset, serial-renumbering attempt, BlueOS work, or new
+implementation was performed. The deployment checkpoint remains ACTIVE because
+the listed hardware matrices are still reusable open work.
 
 Decision: use one container running the existing
 `receiver_and_ntrip.launch.py`. It preserves the established ROS launch-managed
