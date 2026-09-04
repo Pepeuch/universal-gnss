@@ -251,6 +251,18 @@ scope:
   discovery/message flow on one explicit domain, then prove different-domain
   isolation while recording Fast DDS interface/discovery and firewall evidence.
   Do not use host networking unless a real failure justifies it.
+
+Hardware reconciliation (2026-09-04): the short safe opportunities are already
+proven for wrong-receiver prevention, runtime-only UM982 reprovisioning, live
+NTRIP/RTCM, and USB-loss recreation. A temporary credential-free u-blox
+container using only its stable by-id grant was running as `1000:1000`; after
+an operator-initiated `docker kill`, Docker `unless-stopped` left it stopped
+with exit 137 and restart count 0. This is **PARTIAL**, not crash recovery:
+manual kill semantics do not prove an unplanned process crash or daemon reboot.
+The crash/restart gate remains unchecked. Serial renumbering needs an actual
+renumbering; swap needs a physical receiver swap; persistence needs a deliberate
+power-cycle/persistent-profile matrix; RTK Fixed is opportunistic; UGA-126 needs
+an explicit old-byte exclusion proof. None received completion credit.
 - **MowgliNext-required:** robot and downstream deployment validation only;
   neither is exercised by this release-scope work.
 - **Deferred beyond v0.7:** the non-ROS API/control surface, generic WebUI,

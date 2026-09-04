@@ -882,6 +882,25 @@ hardware matrices are unchanged.
 
 ACCOUNTING: v0.7 is 43/65; project roadmap 69/194; UGA remains 33/205.
 
+## Short safe hardware reconciliation (2026-09-04)
+
+CLASSIFICATION: wrong-receiver prevention, runtime-only UM982 reprovisioning,
+live correction flow, and USB-loss recreation are ALREADY_PROVEN. Serial
+renumbering requires an actual changed tty/major-minor; physical swap requires
+an intentional receiver swap; persistent profile expectations require a
+power-cycle/persistence matrix; UGA-126 requires explicit stale-byte exclusion;
+RTK Fixed is opportunistic; native arm64 and external LAN remain separate.
+
+PARTIAL TEST — container crash/restart: existing cached Kilted amd64 image,
+credential-free example configuration in a disposable Docker volume, and only
+the u-blox stable by-id device were used. The container ran non-root 1000:1000
+with restart count 0. After operator-initiated `docker kill`, it was stopped
+(exit 137, OOM false, restart count 0) under `unless-stopped`; it did not
+restart. The container/config volume were removed. This establishes only the
+manual-kill behavior, not unplanned process crash/daemon reboot recovery, so
+the v0.7 crash/restart validation checkbox remains open. No receiver write,
+reset, power cycle, privilege, broad `/dev` mount, or credential use occurred.
+
 ## External-LAN DDS attempt (2026-09-04)
 
 STATUS: BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED / not tested. `feat/docker` is at
