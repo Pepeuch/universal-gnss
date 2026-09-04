@@ -63,6 +63,13 @@ class BacklogStatusTests(unittest.TestCase):
     def test_svg_keeps_validation_outside_lifecycle_status(self) -> None:
         svg = MODULE.render_svg(MODULE.load_backlog())
 
+        self.assertIn("CURRENT RELEASE", svg)
+        self.assertIn("v0.6 → v0.7", svg)
+        self.assertIn("25 / 65 complete · 38.46%", svg)
+        self.assertIn("PROJECT ROADMAP", svg)
+        self.assertIn("50 / 194 complete · 25.77%", svg)
+        self.assertIn("UGA QUALITY / AUDIT", svg)
+        self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)
         self.assertIn("Validation dependencies (orthogonal)", svg)
         self.assertIn("Hardware required: 2", svg)

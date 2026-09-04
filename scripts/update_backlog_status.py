@@ -254,22 +254,37 @@ def release_progress_counts(todo_path: Path = README_PATH.parent / "TODO.md") ->
 
 def render_svg(data: BacklogData) -> str:
     counts = dashboard_counts(data)
+    release = release_progress_counts()
+    project = project_progress_counts()
     status_counts = counts["status"]
     validation_counts = counts["validation"]
-    width = 760
+    width, height = 760, 520
+    bar_x, bar_width = 28, 704
+    def progress_section(title: str, subtitle: str, complete: int, total: int, y: int, color: str) -> list[str]:
+        percent = complete * 100 / total
+        return [
+            f'<text x="28" y="{y}" font-family="sans-serif" font-size="16" font-weight="700" fill="#0f172a">{title}</text>',
+            f'<text x="28" y="{y + 21}" font-family="sans-serif" font-size="13" fill="#334155">{subtitle}</text>',
+            f'<text x="732" y="{y + 21}" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">{complete} / {total} complete · {percent:.2f}%</text>',
+            f'<rect x="{bar_x}" y="{y + 31}" width="{bar_width}" height="14" rx="7" fill="#dbe4ef"/>',
+            f'<rect x="{bar_x}" y="{y + 31}" width="{bar_width * complete / total:.2f}" height="14" rx="7" fill="{color}"/>',
+        ]
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 326" role="img" aria-labelledby="title desc">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" role="img" aria-labelledby="title desc">',
         '<title id="title">Universal GNSS development status</title>',
         f'<desc id="desc">{counts["remaining"]} of {counts["baseline"]} baseline backlog items remain unchecked; {counts["closed"]} are checked or intentionally removed.</desc>',
-        '<rect width="760" height="326" fill="#f8fafc" rx="12"/>',
+        f'<rect width="{width}" height="{height}" fill="#f8fafc" rx="12"/>',
         '<text x="28" y="38" font-family="sans-serif" font-size="22" font-weight="700" fill="#0f172a">Universal GNSS Development Status</text>',
-        f'<text x="28" y="66" font-family="sans-serif" font-size="15" fill="#334155">Baseline {counts["baseline"]} · Unchecked {counts["remaining"]} · Checked/intentionally removed {counts["closed"]}</text>',
-        '<rect x="28" y="82" width="704" height="14" rx="7" fill="#dbe4ef"/>',
-        f'<rect x="28" y="82" width="{704 * counts["closed"] / counts["baseline"]:.2f}" height="14" rx="7" fill="#1f8a70"/>',
-        '<text x="28" y="126" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f172a">Lifecycle status</text>',
     ]
-    y = 150
+    lines.extend(progress_section("CURRENT RELEASE", "v0.6 → v0.7", release["complete"], release["total"], 68, "#2563eb"))
+    lines.extend(progress_section("PROJECT ROADMAP", "Currently identified project work completed", project["complete"], project["total"], 132, "#7c3aed"))
+    lines.extend(progress_section("UGA QUALITY / AUDIT", "Checked or intentionally removed", counts["closed"], counts["baseline"], 196, "#1f8a70"))
+    lines.extend([
+        f'<text x="28" y="270" font-family="sans-serif" font-size="13" fill="#334155">Baseline {counts["baseline"]} · Unchecked {counts["remaining"]} · Checked/intentionally removed {counts["closed"]}</text>',
+        '<text x="28" y="305" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f172a">UGA Lifecycle status</text>',
+    ])
+    y = 329
     for status in STATUS_ORDER:
         count = status_counts[status]
         if count == 0:
@@ -284,8 +299,8 @@ def render_svg(data: BacklogData) -> str:
     hardware_required = validation_counts["HARDWARE_REQUIRED"]
     hardware_pending = validation_counts["HARDWARE_PENDING"]
     lines.extend([
-        '<text x="28" y="306" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>',
-        f'<text x="320" y="306" font-family="sans-serif" font-size="13" fill="#334155">Hardware required: {hardware_required} · Hardware pending: {hardware_pending}</text>',
+        '<text x="28" y="500" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>',
+        f'<text x="320" y="500" font-family="sans-serif" font-size="13" fill="#334155">Hardware required: {hardware_required} · Hardware pending: {hardware_pending}</text>',
         '</svg>',
         '',
     ])
