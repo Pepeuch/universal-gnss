@@ -11,5 +11,7 @@
   incarnation work.
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
+- `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and
+  second-Raspberry-Pi hardware-validation plan for the remaining v0.7 gates.
 - `blocked/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — external-LAN DDS acceptance
   matrix; unblock with two physical/routed LAN peers and Docker access.
