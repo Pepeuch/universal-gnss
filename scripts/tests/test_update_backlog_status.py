@@ -26,7 +26,7 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertEqual(205, data.baseline_count)
         self.assertEqual(
-            {"IMPLEMENTED": 29, "PARTIAL": 16, "OPEN": 99, "BLOCKED": 53, "DUPLICATE": 8},
+            {"IMPLEMENTED": 25, "PARTIAL": 20, "OPEN": 99, "BLOCKED": 53, "DUPLICATE": 8},
             dict(data.status_counts),
         )
         self.assertEqual("PARTIAL", data.records["UGA-126"]["status"])
@@ -45,6 +45,7 @@ class BacklogStatusTests(unittest.TestCase):
         )
         MODULE.validate_todo(data)
         self.assertEqual({"total": 194, "complete": 50, "not_started": 144}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 65, "complete": 25, "not_started": 40}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
 
     def test_duplicate_cycle_is_rejected(self) -> None:

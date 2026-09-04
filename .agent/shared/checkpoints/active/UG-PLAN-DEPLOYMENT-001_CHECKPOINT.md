@@ -23,8 +23,11 @@ of checked/resolved entries among the fixed 205-item UGA baseline; `PARTIAL`,
 therefore advances the concise deployment plan/roadmap without inventing a
 second weighted percentage. Before reconciliation the dashboard reported 37
 closed/resolved and 168 unchecked (18.05%). The corrected dashboard reports 33
-closed/resolved and 172 unchecked (16.10%): four `PARTIAL` UGA entries had
-incorrectly been counted as checked and are now excluded. Its lifecycle mix
+checked/intentionally removed and 172 unchecked (16.10%): four findings
+(`UGA-131`, `UGA-160`, `UGA-166`, `UGA-167`) are correctly PARTIAL and excluded
+from checked progress. The 33 consists of 21 checked entries, 4 implemented
+intentional removals, and 8 duplicate removals; it is not an implementation
+count. Its lifecycle mix
 also reflects the authoritative UGA-126 PARTIAL classification. No UG-PLAN
 item entered the fixed 205-item denominator or its resolved numerator.
 
@@ -37,6 +40,13 @@ implementation indicator, so this is an added baseline rather than a heuristic
 increase. It includes the completed UG-PLAN-005 Docker, DDS, u-blox, Unicore,
 and replug evidence through their checked TODO contracts, while keeping native
 arm64, external-LAN/robot DDS, MowgliNext, renumbering, and later phases open.
+
+CURRENT RELEASE INDICATOR (2026-09-04): `v0.6 -> v0.7` is the 65 equal-weight
+checklist tasks under the v0.7 Docker/deployment sections through Documentation;
+the later non-ROS API surface, its two Networking API-policy tasks, and v0.8
+BlueOS scope are excluded by the roadmap. It reports 25/65 COMPLETE (38.46%) and 40 NOT_STARTED, with no fractional
+credit for partial/blocked work. This is a subset of the 50/194 project roadmap
+worklist, not an additive metric.
 
 TOOLING INCONSISTENCY (deferred, 2026-09-04):
 `python3 scripts/agent/checkpoint_audit.py --check` is not a valid gate for the

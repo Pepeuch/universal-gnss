@@ -85,6 +85,12 @@ GNSS semantics.
 
 ### v0.7.0 — Production containerization / deployment architecture
 
+Release-scope accounting for `v0.6 -> v0.7` is exactly the checklist sections
+below through Documentation. The later **Non-ROS control/status surface** and
+the two Networking API-policy tasks, plus the `v0.8.0` BlueOS checklist, are
+explicitly excluded: the roadmap schedules them after the ROS2-first Docker
+baseline.
+
 `v0.7.0` is a dedicated deployment release, not a minimal Docker wrapper.
 The container must become a supported production execution environment for
 Universal GNSS on development PCs, robots, embedded Linux systems, and future

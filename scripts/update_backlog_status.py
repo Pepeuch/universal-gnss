@@ -33,6 +33,13 @@ STATUS_COLORS = {
 TODO_PATTERN = re.compile(r"^\s*- \[([ xX])\]")
 ID_PATTERN = re.compile(r"UGA-(\d{3})")
 PLAN_STATUS_PATTERN = re.compile(r"^\| `UG-PLAN-\d{3}` \| (IMPLEMENTED|PARTIAL|OPEN|BLOCKED) \|")
+V07_START = "### v0.7.0 — Production containerization / deployment architecture"
+V08_START = "### v0.8.0 — BlueOS extension"
+NON_RELEASE_SECTION = "Non-ROS control/status surface:"
+NON_RELEASE_TASKS = (
+    "non-ROS status/configuration API contract for platform integrations",
+    "authentication/bind-address policy for any exposed HTTP/WebSocket API",
+)
 
 
 class ManifestError(ValueError):
@@ -230,6 +237,21 @@ def plan_status_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> Coun
     )
 
 
+def release_progress_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> dict[str, int]:
+    todo = todo_path.read_text(encoding="utf-8")
+    start, end = todo.find(V07_START), todo.find(V08_START)
+    if start == -1 or end == -1 or end <= start:
+        raise ManifestError("TODO does not contain an ordered v0.7 release scope")
+    scope = todo[start:end]
+    scope = scope.replace(NON_RELEASE_SECTION + scope.split(NON_RELEASE_SECTION, 1)[1].split("Deployment validation gates:", 1)[0], "") if NON_RELEASE_SECTION in scope else scope
+    states = [
+        match.group(1).lower()
+        for line in scope.splitlines()
+        if (match := TODO_PATTERN.match(line)) and not any(task in line for task in NON_RELEASE_TASKS)
+    ]
+    return {"total": len(states), "complete": states.count("x"), "not_started": states.count(" ")}
+
+
 def render_svg(data: BacklogData) -> str:
     counts = dashboard_counts(data)
     status_counts = counts["status"]
@@ -239,10 +261,10 @@ def render_svg(data: BacklogData) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 326" role="img" aria-labelledby="title desc">',
         '<title id="title">Universal GNSS development status</title>',
-        f'<desc id="desc">{counts["remaining"]} of {counts["baseline"]} baseline backlog items remain unchecked.</desc>',
+        f'<desc id="desc">{counts["remaining"]} of {counts["baseline"]} baseline backlog items remain unchecked; {counts["closed"]} are checked or intentionally removed.</desc>',
         '<rect width="760" height="326" fill="#f8fafc" rx="12"/>',
         '<text x="28" y="38" font-family="sans-serif" font-size="22" font-weight="700" fill="#0f172a">Universal GNSS Development Status</text>',
-        f'<text x="28" y="66" font-family="sans-serif" font-size="15" fill="#334155">Baseline {counts["baseline"]} · Remaining {counts["remaining"]} · Closed/resolved {counts["closed"]}</text>',
+        f'<text x="28" y="66" font-family="sans-serif" font-size="15" fill="#334155">Baseline {counts["baseline"]} · Unchecked {counts["remaining"]} · Checked/intentionally removed {counts["closed"]}</text>',
         '<rect x="28" y="82" width="704" height="14" rx="7" fill="#dbe4ef"/>',
         f'<rect x="28" y="82" width="{704 * counts["closed"] / counts["baseline"]:.2f}" height="14" rx="7" fill="#1f8a70"/>',
         '<text x="28" y="126" font-family="sans-serif" font-size="15" font-weight="700" fill="#0f172a">Lifecycle status</text>',
@@ -273,22 +295,32 @@ def render_svg(data: BacklogData) -> str:
 def render_readme_block(data: BacklogData) -> str:
     counts = dashboard_counts(data)
     project = project_progress_counts()
+    release = release_progress_counts()
     plans = plan_status_counts()
     return "\n".join([
         BEGIN_MARKER,
+        "### Current Release Progress — v0.6 → v0.7",
+        "",
+        f"**{release['complete']} / {release['total']}** release-scoped tasks complete ({release['complete'] * 100 / release['total']:.2f}%), **{release['not_started']}** not started.",
+        "",
+        "Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.",
+        "",
+        "### Project Roadmap Progress",
+        "",
+        f"Current identified project work: **{project['complete']} / {project['total']}** complete ({project['complete'] * 100 / project['total']:.2f}%), **{project['not_started']}** not started.",
+        "",
+        f"Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **{plans['IMPLEMENTED']} COMPLETE**, **{plans['PARTIAL']} PARTIAL**, **{plans['BLOCKED']} BLOCKED**, and **{plans['OPEN']} NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.",
+        "",
         "### UGA Quality / Audit Progress",
         "",
         "![Generated UGA backlog status](docs/status/uga_backlog.svg)",
         "",
-        f"Baseline: **{counts['baseline']}** audited items. Remaining unchecked TODO work: **{counts['remaining']}**. Closed or intentionally resolved: **{counts['closed']}**.",
+        f"Baseline: **{counts['baseline']}** audited items. Unchecked worklist entries: **{counts['remaining']}**. Checked or intentionally removed: **{counts['closed']}**.",
+        "",
+        "The 33 accounted entries are 21 checked findings, 4 implemented findings intentionally removed from the worklist, and 8 intentionally removed duplicates; they are not a claim of 33 implemented findings.",
         "",
         "Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.",
         "",
-        "### Project Implementation Progress",
-        "",
-        f"Current TODO worklist: **{project['complete']} / {project['total']}** complete ({project['complete'] * 100 / project['total']:.2f}%), **{project['not_started']}** not started.",
-        "",
-        f"Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **{plans['IMPLEMENTED']} COMPLETE**, **{plans['PARTIAL']} PARTIAL**, **{plans['BLOCKED']} BLOCKED**, and **{plans['OPEN']} NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric above.",
         END_MARKER,
     ])
 

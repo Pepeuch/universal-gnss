@@ -39,19 +39,28 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 Current phase: post-`v0.6.x` stabilization.
 
 <!-- UGA_STATUS_BEGIN -->
+### Current Release Progress — v0.6 → v0.7
+
+**25 / 65** release-scoped tasks complete (38.46%), **40** not started.
+
+Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.
+
+### Project Roadmap Progress
+
+Current identified project work: **50 / 194** complete (25.77%), **144** not started.
+
+Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
+
 ### UGA Quality / Audit Progress
 
 ![Generated UGA backlog status](docs/status/uga_backlog.svg)
 
-Baseline: **205** audited items. Remaining unchecked TODO work: **172**. Closed or intentionally resolved: **33**.
+Baseline: **205** audited items. Unchecked worklist entries: **172**. Checked or intentionally removed: **33**.
+
+The 33 accounted entries are 21 checked findings, 4 implemented findings intentionally removed from the worklist, and 8 intentionally removed duplicates; they are not a claim of 33 implemented findings.
 
 Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.
 
-### Project Implementation Progress
-
-Current TODO worklist: **50 / 194** complete (25.77%), **144** not started.
-
-Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric above.
 <!-- UGA_STATUS_END -->
 
 Deployment progress is tracked separately from the UGA baseline above. `UG-PLAN-005`
