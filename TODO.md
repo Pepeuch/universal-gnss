@@ -277,6 +277,13 @@ Remaining-gate classification after the runtime-identity milestone (20 gates):
   receiver family) without changing any public message type or health meaning.
   Omitted revision/created build inputs remain empty OCI metadata; the runtime
   diagnostic reports absent values as `unknown`, never as invented values.
+- **Completed deterministic CI increment (2026-09-04):** the same Kilted and
+  Lyrical amd64 matrix now checks non-root user, tini entrypoint, `SIGINT`, the
+  intentionally process-only receiver/NTRIP healthcheck, OCI identity, absent
+  secret-like image environment names, installed operator tools, receiver/NTRIP
+  ELF dependency resolution, no development trees, and both checked startup
+  exits (missing parameters `1`, unsupported schema `2`). This strengthens an
+  existing completed build/runtime contract and does not alter release counts.
 - **HARDWARE_REQUIRED:** serial renumbering; F9P/UM982 swap and recovery;
   long-run, crash/restart, reboot/autostart, rate-mismatch, RTK Fixed, and
   source/incarnation validation; UGA-126 transport-incarnation cutoff; and

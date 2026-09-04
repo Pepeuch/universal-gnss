@@ -50,6 +50,15 @@ Use `--build-arg ROS_DISTRO=lyrical` for the Lyrical image. Multi-architecture
 build/publish automation is a later milestone; build each validated target
 platform explicitly for now.
 
+This release contract makes project-owned inputs traceable; it does not claim
+bit-for-bit reproducibility across time. `ros:${ROS_DISTRO}-ros-base` is a
+distribution tag rather than a pinned digest, and `apt-get` resolves the then
+available Ubuntu/ROS package indexes. The checked-out Git revision, Dockerfile,
+build arguments, and `.dockerignore` are deterministic project inputs; ROS
+base-image digests and resolved package versions must be recorded with the
+release SBOM/provenance artifact. Do not substitute a wall-clock `CREATED`
+value for the source-commit timestamp.
+
 ### Release identity, upgrade, and rollback
 
 For a release candidate, use an immutable tag containing both the ROS

@@ -1012,3 +1012,26 @@ ACCOUNTING: no lifecycle/health/restart checkbox closed. The matrix is useful
 for the process-vs-application-health contract only; process crash/reboot,
 receiver incarnation, NTRIP-down-with-healthy-receiver, and Compose recovery
 remain separate acceptance evidence.
+
+## Deterministic image-contract CI increment (2026-09-04)
+
+IMPLEMENTED: the existing Kilted/Lyrical amd64 Docker CI matrix now enforces
+the same final-image contract on both distros: user `1000:1000`, tini
+entrypoint, `SIGINT` stop signal, process-only receiver/NTRIP healthcheck,
+standard OCI labels, explicit runtime version/revision environment, no
+secret-like image environment names, installed receiver/NTRIP and operator
+tools, resolved dynamic dependencies for both ROS node executables, no source/
+build/log trees, and the two entrypoint rejection exits (missing config 1,
+unsupported schema 2). It does not publish or exercise hardware/network paths.
+
+REPRODUCIBILITY LIMIT: source revision, build args, Dockerfile, and
+`.dockerignore` are project-owned deterministic inputs. The ROS distribution
+base tags and apt indexes are intentionally not snapshot-pinned; their digests/
+resolved packages belong in release SBOM/provenance capture. This is traceable
+release identity, not a byte-for-byte rebuild claim.
+
+VALIDATION: PASS local execution of the added inspection/runtime assertions
+against a production image; the expected tools/libraries were present, no
+missing `ldd` dependencies appeared, missing config exited 1, and unsupported
+schema exited 2. No metrics changed because this hardens already-complete
+build/runtime scope.
