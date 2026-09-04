@@ -112,7 +112,10 @@ BlueOS-specific implementation.
   healthcheck is intentionally process-only; receiver transport/freshness,
   NTRIP/RTCM/correction semantics, and RTK remain independent diagnostics.
   Native arm64, external-LAN/robot DDS, serial renumbering, MowgliNext, and the
-  remaining receiver/topology matrices remain pending.
+  remaining receiver/topology matrices remain pending. External-LAN DDS is
+  specifically `BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED`: the
+  current workspace has only the same-host Docker bridge, so an independent LAN
+  host is required for bidirectional Fast DDS and domain-isolation acceptance.
 - then reuse the ROS-independent portable runtime/supervisor for a native,
   headless standalone image, without a ROS2 or GUI requirement.
 - the following BlueOS integration milestone reuses that same generic

@@ -11,3 +11,5 @@
   incarnation work.
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
+- `blocked/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — external-LAN DDS acceptance
+  matrix; unblock with two physical/routed LAN peers and Docker access.

@@ -145,16 +145,22 @@ relied on for container or network isolation.
 
 ### External-LAN DDS validation still required
 
-The current environment does not expose an accessible Docker daemon or a second
-LAN host, so no external-LAN claim is made. Validate the target deployment with
-at least two physical LAN hosts: one host/container publishes and the other
-subscribes, then reverse the direction, using the intended RMW configuration,
-explicit `ROS_DOMAIN_ID`, and production firewall/multicast or discovery-server
-settings. Confirm application data delivery in both directions and confirm that
-a different domain receives none. Record the host OS, RMW/DDS configuration,
-addressing, and any required firewall rules. Same-host bridge evidence neither
-proves nor replaces this test; do not switch globally to host networking as a
-substitute.
+This acceptance task is **BLOCKED_BY_ENVIRONMENT /
+HARDWARE_OR_TOPOLOGY_REQUIRED**. The current validation workspace is in Docker
+networking at `172.17.0.6`, on the `172.17.0.0/16` bridge, with no second
+physical LAN host reachable; its normal project user also cannot access the
+Docker daemon socket. No external-LAN claim is made.
+
+The future acceptance topology is machine A running the Dockerized Universal
+GNSS ROS2 node on Docker's default bridge and independent physical-LAN machine
+B running a ROS2 node. Configure the same explicit `ROS_DOMAIN_ID`, then record
+discovery and payload delivery separately for B -> container and container ->
+B. Repeat the payload check with a different domain and require no delivery.
+Record Fast DDS/RMW version and interface/discovery settings, host OS, LAN
+addresses/prefixes, Docker network mode, and inspectable firewall, multicast,
+or discovery-server configuration. Same-host bridge evidence neither proves nor
+replaces this test; do not switch globally to host networking unless a real
+default-bridge failure establishes that need.
 
 `exec` is used for the launch process, so Docker `SIGTERM`/`SIGINT` reaches ROS
 launch directly and its managed receiver/NTRIP processes receive normal launch

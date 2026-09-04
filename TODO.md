@@ -241,9 +241,16 @@ scope:
   documented there; it requires container recreation and profile replay.
 - **Native-arm64-required:** native runtime and receiver/caster hardware; the
   existing BuildKit/QEMU package/smoke result is not native evidence.
-- **External-LAN-required:** DDS discovery/data flow, topology/firewall policy,
-  and domain isolation across physical LAN hosts. Same-host bridge evidence is
-  separate.
+- **BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED — external-LAN:**
+  DDS discovery/data flow, topology/firewall policy, and domain isolation across
+  physical LAN hosts. The current validation namespace (`172.17.0.6`) is on the
+  same Docker bridge (`172.17.0.0/16`) and has no second physical LAN peer;
+  same-host bridge evidence is separate and receives no release credit. Resume
+  only with machine A running the default-bridge Dockerized ROS2 node and an
+  independent physical-LAN machine B: prove B -> container and container -> B
+  discovery/message flow on one explicit domain, then prove different-domain
+  isolation while recording Fast DDS interface/discovery and firewall evidence.
+  Do not use host networking unless a real failure justifies it.
 - **MowgliNext-required:** robot and downstream deployment validation only;
   neither is exercised by this release-scope work.
 - **Deferred beyond v0.7:** the non-ROS API/control surface, generic WebUI,

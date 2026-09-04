@@ -844,3 +844,32 @@ the compact status manifest (`manifest findings: 0`) and assigns checkpoint
 ownership from the first incidental UGA mention, producing pre-existing
 duplicate UGA-126 reports. This reconciliation did not alter that deferred
 tooling defect.
+
+## External-LAN DDS attempt (2026-09-04)
+
+STATUS: BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED / not tested. `feat/docker` is at
+`366e3bc15443f9681572c50b81e5e19e19b9bf43`, clean before this attempt. The
+validation workspace is itself a Docker network namespace on `eth0`
+(`172.17.0.6`); it exposes no discoverable second LAN host or LAN address.
+ROS 2 Kilted reports `rmw_fastrtps_cpp` with
+`ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET`. The normal project user cannot access
+`/var/run/docker.sock`; approved read-only host-daemon inspection reports
+Docker 29.7.2 on linux/amd64 and its ordinary bridge as `172.17.0.0/16`, with
+ICC and IP masquerade enabled. That is a same-host topology only.
+
+DECISION: do not rerun same-host controls or treat a host-network container as
+an external LAN peer. No Docker test or production-network mode was changed,
+and no release checkbox was closed.
+
+UNBLOCK / REQUIRED BASELINE: provide two physical LAN hosts (or equivalent
+independent routed LAN namespaces) plus Docker access on the container host.
+Record each host OS/kernel, interface/IP/prefix, Docker network mode, RMW/DDS
+configuration, explicit domain, firewall/multicast or discovery-server setup.
+On Kilted amd64/default bridge first, with machine A as Dockerized Universal
+GNSS and independent physical-LAN machine B as ROS2 peer: prove B -> container
+and container -> B on one topic; then prove a different domain receives no
+messages. Record Fast DDS interface/discovery/firewall evidence separately from
+payload delivery. Only if bridge fails may a bounded alternative be tested;
+capture the failure and its multicast/address-advertisement cause before any
+host-network or DDS configuration recommendation. This evidence does not
+generalize to native arm64, robot, MowgliNext, or BlueOS.
