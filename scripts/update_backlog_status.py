@@ -40,6 +40,25 @@ NON_RELEASE_TASKS = (
     "non-ROS status/configuration API contract for platform integrations",
     "authentication/bind-address policy for any exposed HTTP/WebSocket API",
 )
+RELEASE_DEPENDENCY_CLASSES = (
+    "NATIVE_ARM64_REQUIRED",
+    "PUBLICATION_REQUIRED",
+    "HARDWARE_RECEIVER_REQUIRED",
+    "USB_PHYSICAL_ACTION_REQUIRED",
+    "POWER_CYCLE_REQUIRED",
+    "ALREADY_PARTIAL",
+    "DESIGN_CONTRACT_REQUIRED",
+    "ROBOT_REQUIRED",
+    "LONG_DURATION_REQUIRED",
+)
+HARDWARE_DEPENDENCY_CLASSES = frozenset({
+    "NATIVE_ARM64_REQUIRED",
+    "HARDWARE_RECEIVER_REQUIRED",
+    "USB_PHYSICAL_ACTION_REQUIRED",
+    "POWER_CYCLE_REQUIRED",
+    "ROBOT_REQUIRED",
+    "LONG_DURATION_REQUIRED",
+})
 
 
 class ManifestError(ValueError):
@@ -50,6 +69,7 @@ class ManifestError(ValueError):
 class BacklogData:
     records: dict[str, dict[str, str]]
     baseline_count: int
+    release_dependencies: dict[str, str]
 
     @property
     def status_counts(self) -> Counter[str]:
@@ -101,6 +121,28 @@ def apply_assignments(manifest: dict[str, Any], key: str, property_name: str, ex
         missing = sorted(expected_ids - set(values))
         raise ManifestError(f"{key} does not cover every stable ID; missing {', '.join(missing)}")
     return values
+
+
+def load_release_dependencies(manifest: dict[str, Any]) -> dict[str, str]:
+    section = manifest.get("release_gate_dependencies")
+    if not isinstance(section, dict) or section.get("release") != "v0.7":
+        raise ManifestError("release_gate_dependencies must identify v0.7")
+    entries = section.get("gates")
+    if not isinstance(entries, list):
+        raise ManifestError("release_gate_dependencies.gates must be a list")
+    dependencies: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ManifestError("release dependency entry must be an object")
+        task, classification = entry.get("task"), entry.get("classification")
+        if not isinstance(task, str) or not task:
+            raise ManifestError("release dependency entry has no task")
+        if classification not in RELEASE_DEPENDENCY_CLASSES:
+            raise ManifestError(f"release dependency {task!r} has an unknown classification")
+        if task in dependencies:
+            raise ManifestError(f"release dependency assigns {task!r} more than once")
+        dependencies[task] = classification
+    return dependencies
 
 
 def load_backlog(path: Path = MANIFEST_PATH) -> BacklogData:
@@ -196,7 +238,34 @@ def load_backlog(path: Path = MANIFEST_PATH) -> BacklogData:
     }
     if len(records) != baseline_count:
         raise ManifestError("baseline conservation failed")
-    return BacklogData(records=records, baseline_count=baseline_count)
+    return BacklogData(
+        records=records,
+        baseline_count=baseline_count,
+        release_dependencies=load_release_dependencies(manifest),
+    )
+
+
+def release_task_states(todo_path: Path = README_PATH.parent / "TODO.md") -> dict[str, str]:
+    todo = todo_path.read_text(encoding="utf-8")
+    start, end = todo.find(V07_START), todo.find(V08_START)
+    if start == -1 or end == -1 or end <= start:
+        raise ManifestError("TODO does not contain an ordered v0.7 release scope")
+    scope = todo[start:end]
+    if NON_RELEASE_SECTION in scope:
+        before, after = scope.split(NON_RELEASE_SECTION, 1)
+        if "Deployment validation gates:" not in after:
+            raise ManifestError("TODO has malformed non-release v0.7 section")
+        scope = before + after.split("Deployment validation gates:", 1)[1]
+    states: dict[str, str] = {}
+    for line in scope.splitlines():
+        match = TODO_PATTERN.match(line)
+        if match is None or any(task in line for task in NON_RELEASE_TASKS):
+            continue
+        task = line[match.end():].strip()
+        if task in states:
+            raise ManifestError(f"TODO repeats v0.7 checklist task {task!r}")
+        states[task] = "checked" if match.group(1).lower() == "x" else "unchecked"
+    return states
 
 
 def validate_todo(data: BacklogData, todo_path: Path = README_PATH.parent / "TODO.md") -> None:
@@ -206,6 +275,19 @@ def validate_todo(data: BacklogData, todo_path: Path = README_PATH.parent / "TOD
         raise ManifestError(f"cannot read TODO file {todo_path}: {error}") from error
     if not any(TODO_PATTERN.match(line) for line in todo.splitlines()):
         raise ManifestError("TODO contains no checklist items")
+    unchecked_release_tasks = {
+        task for task, state in release_task_states(todo_path).items() if state == "unchecked"
+    }
+    classified_tasks = set(data.release_dependencies)
+    if classified_tasks != unchecked_release_tasks:
+        missing = sorted(unchecked_release_tasks - classified_tasks)
+        extra = sorted(classified_tasks - unchecked_release_tasks)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(repr(task) for task in missing))
+        if extra:
+            details.append("not unchecked release tasks " + ", ".join(repr(task) for task in extra))
+        raise ManifestError("release dependency classification is out of sync: " + "; ".join(details))
 
 
 def dashboard_counts(data: BacklogData) -> dict[str, int | Counter[str]]:
@@ -218,6 +300,10 @@ def dashboard_counts(data: BacklogData) -> dict[str, int | Counter[str]]:
         "status": data.status_counts,
         "validation": data.validation_counts,
     }
+
+
+def release_dependency_counts(data: BacklogData) -> Counter[str]:
+    return Counter(data.release_dependencies.values())
 
 
 def project_progress_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> dict[str, int]:
@@ -238,18 +324,8 @@ def plan_status_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> Coun
 
 
 def release_progress_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> dict[str, int]:
-    todo = todo_path.read_text(encoding="utf-8")
-    start, end = todo.find(V07_START), todo.find(V08_START)
-    if start == -1 or end == -1 or end <= start:
-        raise ManifestError("TODO does not contain an ordered v0.7 release scope")
-    scope = todo[start:end]
-    scope = scope.replace(NON_RELEASE_SECTION + scope.split(NON_RELEASE_SECTION, 1)[1].split("Deployment validation gates:", 1)[0], "") if NON_RELEASE_SECTION in scope else scope
-    states = [
-        match.group(1).lower()
-        for line in scope.splitlines()
-        if (match := TODO_PATTERN.match(line)) and not any(task in line for task in NON_RELEASE_TASKS)
-    ]
-    return {"total": len(states), "complete": states.count("x"), "not_started": states.count(" ")}
+    states = list(release_task_states(todo_path).values())
+    return {"total": len(states), "complete": states.count("checked"), "not_started": states.count("unchecked")}
 
 
 def render_svg(data: BacklogData) -> str:
@@ -257,8 +333,9 @@ def render_svg(data: BacklogData) -> str:
     release = release_progress_counts()
     project = project_progress_counts()
     status_counts = counts["status"]
-    validation_counts = counts["validation"]
-    width, height = 760, 520
+    dependencies = release_dependency_counts(data)
+    hardware_dependent = sum(dependencies[classification] for classification in HARDWARE_DEPENDENCY_CLASSES)
+    width, height = 760, 570
     bar_x, bar_width = 28, 704
     def progress_section(title: str, subtitle: str, complete: int, total: int, y: int, color: str) -> list[str]:
         percent = complete * 100 / total
@@ -296,11 +373,11 @@ def render_svg(data: BacklogData) -> str:
             f'<rect x="188" y="{y}" width="{bar_width:.2f}" height="14" rx="7" fill="{STATUS_COLORS[status]}"/>',
         ])
         y += 25
-    hardware_required = validation_counts["HARDWARE_REQUIRED"]
-    hardware_pending = validation_counts["HARDWARE_PENDING"]
     lines.extend([
         '<text x="28" y="500" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>',
-        f'<text x="320" y="500" font-family="sans-serif" font-size="13" fill="#334155">Hardware required: {hardware_required} · Hardware pending: {hardware_pending}</text>',
+        f'<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware {dependencies["HARDWARE_RECEIVER_REQUIRED"]} · USB action {dependencies["USB_PHYSICAL_ACTION_REQUIRED"]} · power cycle {dependencies["POWER_CYCLE_REQUIRED"]} · robot {dependencies["ROBOT_REQUIRED"]}</text>',
+        f'<text x="28" y="545" font-family="sans-serif" font-size="13" fill="#334155">native arm64 {dependencies["NATIVE_ARM64_REQUIRED"]} · long duration {dependencies["LONG_DURATION_REQUIRED"]} · design contract {dependencies["DESIGN_CONTRACT_REQUIRED"]} · publication {dependencies["PUBLICATION_REQUIRED"]} · already partial {dependencies["ALREADY_PARTIAL"]}</text>',
+        f'<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: {hardware_dependent} (derived overlap group; do not add to the exclusive classifications). External-LAN DDS remains a separate blocked acceptance matrix outside the 65-item checklist.</text>',
         '</svg>',
         '',
     ])

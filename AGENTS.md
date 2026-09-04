@@ -466,6 +466,14 @@ complete. Context compaction, model switch, or resume is not new evidence.
 Leaving an applicable progress indicator stale after a milestone is incomplete
 bookkeeping.
 
+For generated dashboards that show orthogonal release-gate dependencies, maintain
+one versioned machine-readable classification source for every open release gate.
+Any release-gate classification change must update or validate those dependency
+indicators; they never change completion metrics. The generator and its tests
+must reject unknown classifications, mismatches with the canonical release
+checklist, and stale generated output. Never retain historical hardcoded
+dependency counts.
+
 When a Universal GNSS change affects ROS2 surfaces, diagnostics, launch/runtime status,
 correction observability, operator visibility, or robot-side integration, evaluate
 whether downstream work belongs in `MOWGLINEXT_TODO.md`.

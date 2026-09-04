@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 570" role="img" aria-labelledby="title desc">
 <title id="title">Universal GNSS development status</title>
 <desc id="desc">172 of 205 baseline backlog items remain unchecked; 33 are checked or intentionally removed.</desc>
-<rect width="760" height="520" fill="#f8fafc" rx="12"/>
+<rect width="760" height="570" fill="#f8fafc" rx="12"/>
 <text x="28" y="38" font-family="sans-serif" font-size="22" font-weight="700" fill="#0f172a">Universal GNSS Development Status</text>
 <text x="28" y="68" font-family="sans-serif" font-size="16" font-weight="700" fill="#0f172a">CURRENT RELEASE</text>
 <text x="28" y="89" font-family="sans-serif" font-size="13" fill="#334155">v0.6 → v0.7</text>
@@ -37,5 +37,7 @@
 <rect x="188" y="429" width="430" height="14" rx="7" fill="#dbe4ef"/>
 <rect x="188" y="429" width="16.78" height="14" rx="7" fill="#6b7280"/>
 <text x="28" y="500" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>
-<text x="320" y="500" font-family="sans-serif" font-size="13" fill="#334155">Hardware required: 2 · Hardware pending: 0</text>
+<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware 6 · USB action 2 · power cycle 1 · robot 4</text>
+<text x="28" y="545" font-family="sans-serif" font-size="13" fill="#334155">native arm64 1 · long duration 1 · design contract 2 · publication 1 · already partial 2</text>
+<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: 15 (derived overlap group; do not add to the exclusive classifications). External-LAN DDS remains a separate blocked acceptance matrix outside the 65-item checklist.</text>
 </svg>

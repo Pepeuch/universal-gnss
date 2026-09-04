@@ -9,7 +9,9 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "update_backlog_status.py"
@@ -47,6 +49,24 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertEqual({"total": 194, "complete": 71, "not_started": 123}, MODULE.project_progress_counts())
         self.assertEqual({"total": 65, "complete": 45, "not_started": 20}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
+        dependency_counts = MODULE.release_dependency_counts(data)
+        self.assertEqual(20, sum(dependency_counts.values()))
+        self.assertEqual(15, sum(
+            dependency_counts[classification]
+            for classification in MODULE.HARDWARE_DEPENDENCY_CLASSES
+        ))
+        self.assertEqual(20, len(data.release_dependencies))
+
+    def test_unknown_release_dependency_classification_is_rejected(self) -> None:
+        manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))
+        invalid = copy.deepcopy(manifest)
+        invalid["release_gate_dependencies"]["gates"][0]["classification"] = "UNKNOWN"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(invalid), encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.ManifestError, "unknown classification"):
+                MODULE.load_backlog(path)
 
     def test_duplicate_cycle_is_rejected(self) -> None:
         manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -61,7 +81,8 @@ class BacklogStatusTests(unittest.TestCase):
                 MODULE.load_backlog(path)
 
     def test_svg_keeps_validation_outside_lifecycle_status(self) -> None:
-        svg = MODULE.render_svg(MODULE.load_backlog())
+        data = MODULE.load_backlog()
+        svg = MODULE.render_svg(data)
 
         self.assertIn("CURRENT RELEASE", svg)
         self.assertIn("v0.6 → v0.7", svg)
@@ -72,8 +93,30 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)
         self.assertIn("Validation dependencies (orthogonal)", svg)
-        self.assertIn("Hardware required: 2", svg)
-        self.assertNotIn(">Hardware required 2</text>", svg)
+        self.assertIn("Open v0.7 gate classifications (exclusive)", svg)
+        self.assertIn("Open hardware-dependent gates: 15", svg)
+        self.assertIn("External-LAN DDS remains a separate blocked acceptance matrix", svg)
+
+        changed = replace(
+            data,
+            release_dependencies={
+                **data.release_dependencies,
+                "multi-architecture CI build/publish pipeline": "ROBOT_REQUIRED",
+            },
+        )
+        self.assertIn("Open hardware-dependent gates: 16", MODULE.render_svg(changed))
+
+    def test_check_rejects_stale_dashboard_output(self) -> None:
+        data = MODULE.load_backlog()
+        with tempfile.TemporaryDirectory(dir=MODULE.ROOT) as directory:
+            root = Path(directory)
+            readme = root / "README.md"
+            svg = root / "uga_backlog.svg"
+            readme.write_text(MODULE.README_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+            svg.write_text("stale", encoding="utf-8")
+            with mock.patch.object(MODULE, "README_PATH", readme), mock.patch.object(MODULE, "SVG_PATH", svg):
+                with self.assertRaisesRegex(MODULE.ManifestError, "generated artifacts are stale"):
+                    MODULE.write_or_check(data, check=True)
 
 
 if __name__ == "__main__":
