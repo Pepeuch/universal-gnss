@@ -128,7 +128,7 @@ Runtime / process lifecycle:
   NTRIP, replay, and optional adapters
 - [x] production entrypoint and deterministic startup ordering
 - [x] graceful SIGTERM/SIGINT shutdown
-- [ ] restart policy and crash-recovery behavior
+- [x] restart policy and crash-recovery behavior
 - [ ] receiver-process restart without stale state resurrection
 - [x] NTRIP reconnect/restart without stale source metadata leakage
 - [ ] container restart with deterministic configuration reapplication
@@ -155,7 +155,7 @@ implicitly closed by the successful replug trial.
 Configuration / persistence / secrets:
 
 - [x] stable external configuration directory and mount contract
-- [ ] configuration schema/version migration policy
+- [x] configuration schema/version migration policy
 - [ ] persistent receiver/profile configuration state where required
 - [x] read-only defaults plus writable operator overrides
 - [x] NTRIP credentials supplied outside the image

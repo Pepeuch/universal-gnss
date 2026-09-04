@@ -861,6 +861,27 @@ ACCOUNTING: proven documentation/decision tasks advance v0.7 from 30/65 to
 v0.7 work is intentionally unclosed where it depends on hardware, native arm64,
 external LAN, runtime/API implementation, or release publication.
 
+## Runtime/operations increment (2026-09-04)
+
+IMPLEMENTED: deployment configuration now has a backward-compatible
+`UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION` entrypoint boundary. Omission is
+v1 for every existing ROS2 parameter file; a non-v1 value exits 2 before ROS
+setup/launch with a credential-free stable event. The Compose template sets v1.
+This is deliberately not a generic ROS parameter migration framework. The
+documented `unless-stopped` policy remains Docker/Compose process recovery;
+entrypoint validation and ROS launch own startup, NTRIP retains its independent
+reconnect, and no second receiver/device supervisor was introduced. Entrypoint
+errors now use stable `universal_gnss_entrypoint event=...` prefixes.
+
+VALIDATION: entrypoint shell syntax and focused schema guard tests pass; Docker
+CI adds the same unsupported-schema smoke test. No hardware was used. Runtime
+version diagnostics, functional Docker health/no-receiver mode, full structured
+node logging, and automated support export remain unclosed because they require
+an explicit ROS2/public status or export contract; native arm64, LAN, and
+hardware matrices are unchanged.
+
+ACCOUNTING: v0.7 is 43/65; project roadmap 69/194; UGA remains 33/205.
+
 ## External-LAN DDS attempt (2026-09-04)
 
 STATUS: BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED / not tested. `feat/docker` is at

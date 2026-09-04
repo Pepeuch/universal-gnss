@@ -9,6 +9,7 @@ services:
     group_add:
       - "${GNSS_GROUP:?set the selected receiver device GID}"
     environment:
+      UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION: "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:-1}"
       ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
     volumes:
       - "${UNIVERSAL_GNSS_PARAMETERS_FILE:?set the external parameters file}:/etc/universal_gnss/parameters.yaml:ro"

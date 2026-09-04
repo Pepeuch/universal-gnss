@@ -4,10 +4,19 @@ set -eo pipefail
 : "${ROS_DISTRO:?ROS_DISTRO must be set}"
 : "${ROS_LOG_DIR:=/var/log/universal_gnss}"
 : "${UNIVERSAL_GNSS_PARAMETERS_FILE:=/etc/universal_gnss/parameters.yaml}"
+: "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:=1}"
+
+case "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION}" in
+  1) ;;
+  *)
+    echo "universal_gnss_entrypoint event=unsupported_configuration_schema_version" >&2
+    exit 2
+    ;;
+esac
 
 mkdir -p "${ROS_LOG_DIR}"
 if [[ ! -w "${ROS_LOG_DIR}" ]]; then
-  echo "ROS_LOG_DIR is not writable: ${ROS_LOG_DIR}" >&2
+  echo "universal_gnss_entrypoint event=log_directory_not_writable" >&2
   exit 1
 fi
 
@@ -18,7 +27,7 @@ set -u
 
 if [[ "$#" -eq 0 ]]; then
   if [[ ! -r "${UNIVERSAL_GNSS_PARAMETERS_FILE}" ]]; then
-    echo "Universal GNSS parameter file is not readable: ${UNIVERSAL_GNSS_PARAMETERS_FILE}" >&2
+    echo "universal_gnss_entrypoint event=parameters_file_not_readable" >&2
     exit 1
   fi
 

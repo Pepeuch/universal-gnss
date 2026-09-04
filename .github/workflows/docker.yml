@@ -42,3 +42,10 @@ jobs:
             test ! -e /opt/universal_gnss/build
             test ! -e /opt/universal_gnss/log
           '
+          set +e
+          docker run --rm \
+            --env UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION=2 \
+            "${IMAGE}" true
+          status=$?
+          set -e
+          test "${status}" = "2"

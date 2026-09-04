@@ -89,6 +89,13 @@ The parameter file controls the named `/universal_gnss_receiver` and
 in the mounted file are the deployment configuration. Set
 `UNIVERSAL_GNSS_PARAMETERS_FILE` only when mounting it at a different path.
 
+The Docker deployment wrapper has `UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION`
+with current value `1`. It defaults to `1` when absent, so existing ROS2
+parameter files continue unchanged. Set it explicitly in a Compose env file for
+new deployments. An unknown value exits the entrypoint with code 2 before ROS
+launch; it does not attempt an implicit migration. A future schema change must
+add a deliberate migration/rejection rule while preserving this v1 default.
+
 ROS logs default to `/var/log/universal_gnss`; mount it to external writable
 storage. The container user defaults to UID/GID `1000`; use the Dockerfile
 `APP_UID`/`APP_GID` build arguments or provision the mounted directory for that
@@ -125,6 +132,30 @@ same read-only parameter mount on every recreation. It does not make a stale
 USB device grant valid, restore a volatile UM982 runtime profile, or prove
 container-crash/reboot recovery; follow the USB-loss contract below and retain
 those validation gates as pending.
+
+### Runtime and restart contract
+
+The entrypoint is not a supervisor: it validates the deployment schema/log
+directory/default parameter-file boundary, sources the installed environments,
+and `exec`s ROS launch. Invalid schema or unreadable required configuration
+terminates the container before a receiver/NTRIP process is started; Docker's
+restart policy repeats that checked startup only after the operator fixes the
+external input. Every container recreation reads the mounted configuration
+again, but physical receiver/profile persistence is not implied.
+
+ROS launch owns `receiver_node` and `ntrip_node`; Universal GNSS does not embed
+a second process supervisor or automatic receiver-device reattachment. Receiver
+transport failure becomes receiver diagnostics/freshness state rather than a
+Docker health claim. NTRIP has its independent reconnect state and does not
+restart a healthy receiver. If either ROS process exits, the resulting launch/
+container lifecycle is Docker's responsibility under the configured restart
+policy; container crash/reboot and receiver-process restart matrices remain
+unvalidated deployment gates.
+
+Entrypoint failures emit credential-free, stable key/value prefixes such as
+`universal_gnss_entrypoint event=parameters_file_not_readable`; ROS diagnostics
+remain the authoritative structured health/status surface. No automatic support
+bundle or generic non-ROS status API is introduced by this container baseline.
 
 ### Device manager, backup, and support evidence
 
