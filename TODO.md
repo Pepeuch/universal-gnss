@@ -175,7 +175,7 @@ Health / observability:
 - [ ] healthcheck behavior when no receiver is intentionally configured
 - [ ] structured logs suitable for Docker/Compose/BlueOS collection
 - [x] bounded log retention guidance
-- [ ] snapshot/support bundle export for field diagnostics
+- [x] snapshot/support bundle export for field diagnostics
 
 Networking:
 
@@ -228,6 +228,40 @@ Documentation:
 
 v0.7 deployment reconciliation (2026-09-04), limited to the 65-task release
 scope:
+
+Remaining-gate classification after the runtime-identity milestone (20 gates):
+
+- **ACTIONABLE_NOW:** persistent diagnostic/log/export directory contract;
+  application-level no-receiver status regression/documentation; bounded,
+  structured ROS-node logging; and a deterministic Docker DNS/reconnect
+  characterization if it can be isolated from live-caster topology. The
+  non-secret support snapshot/export is now complete.
+- **ACTIONABLE_WITH_EXISTING_HARDWARE:** receiver-process restart without stale
+  state; container recreation/configuration reapplication; Docker DNS/reconnect
+  against the local caster if deterministic; and a qualified stale-state cutoff.
+  Existing live receiver/NTRIP evidence is reused and does not close those
+  distinct lifecycle criteria.
+- **REQUIRES_NATIVE_ARM64:** native arm64 image runtime/receiver/caster
+  validation. BuildKit/QEMU packaging stays separate.
+- **REQUIRES_EXTERNAL_LAN:** the recorded two-host Fast DDS discovery,
+  bidirectional delivery, and domain-isolation acceptance. It is blocked by the
+  current topology and has no separate unchecked 65-task line.
+- **REQUIRES_LONG_DURATION:** long-run container, host reboot/autostart,
+  low-receiver/high-publication-rate, high-receiver/low-publication-rate, and
+  naturally observed RTK Float/Fixed transition validation.
+- **REQUIRES_POWER_CYCLE_OR_DESTRUCTIVE_TEST:** serial renumbering, F9P/UM982
+  physical swap/recovery, and receiver/profile persistence. No reset or power
+  cycle is implied by this classification.
+- **REQUIRES_MOWGLINEXT:** robot Docker validation only.
+- **REQUIRES_PUBLIC_API_OR_DESIGN_CONTRACT:** a Docker healthcheck that claims
+  functional GNSS service rather than process liveness. The current deliberate
+  process-only healthcheck remains correct; a richer claim needs an explicit
+  consumer/false-positive contract, not a silent change.
+- **REQUIRES_IMAGE_PUBLICATION:** multi-architecture CI build/publish pipeline.
+  Publication is not authorized for this batch.
+- **ALREADY_PROVEN_BUT_UNMARKED:** none. The support snapshot/export and
+  runtime-identity gates are now checked only after focused implementation and
+  validation; all other unchecked gates retain their separate evidence need.
 
 - **Actionable now:** release tagging/provenance/CI, lifecycle and persistent
   configuration policies, operational observability/logging/support guidance,

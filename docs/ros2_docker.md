@@ -6,6 +6,9 @@ container. ROS launch remains responsible for the existing `receiver_node` and
 `ntrip_node` processes and their shutdown; this image introduces no second
 GNSS, NTRIP, or configuration implementation.
 
+Use the concise [v0.7 release checklist](v0.7_release_checklist.md) alongside
+this operational guide when reviewing a release candidate.
+
 ## Scope and support boundary
 
 - Target build distributions: ROS 2 Kilted (default) and Lyrical, selected by
@@ -168,8 +171,8 @@ unvalidated deployment gates.
 
 Entrypoint failures emit credential-free, stable key/value prefixes such as
 `universal_gnss_entrypoint event=parameters_file_not_readable`; ROS diagnostics
-remain the authoritative structured health/status surface. No automatic support
-bundle or generic non-ROS status API is introduced by this container baseline.
+remain the authoritative structured health/status surface. No generic non-ROS
+status API is introduced by this container baseline.
 
 ### Device manager, backup, and support evidence
 
@@ -187,13 +190,29 @@ files, recreating the selected immutable image/container, and applying the
 receiver-specific provisioning procedure where required. Never include NTRIP
 credentials in a support archive.
 
-v0.7 has no automatic support-bundle exporter. For a manual support collection,
-record the image tag and OCI labels, sanitized `docker inspect` lifecycle/
-health information, Compose configuration with credentials removed, selected
-stable device identity and permissions, ROS diagnostics, and bounded logs.
-Capture the actual receiver/NTRIP state separately from Docker health. Redact
-parameter values, environment values, caster addresses where sensitive, and all
-credentials before sharing.
+Use the repository-local `scripts/collect_support_snapshot.py` to create a
+deterministic, non-secret JSON support artifact without receiver access or an
+API. It records runtime identity, platform architecture, configuration schema,
+a SHA-256 plus parameter-key shape (never parameter values), bounded direct-log
+metadata, and an optional whitelist of standard OCI labels. It does not upload
+anything, read raw logs, inspect Docker environment, recurse through the file
+system, or include credentials.
+
+```bash
+python3 scripts/collect_support_snapshot.py \
+  --output /srv/universal-gnss/support-snapshot.json \
+  --parameters /srv/universal-gnss/parameters.yaml \
+  --log-directory /srv/universal-gnss/log \
+  --max-log-files 10 \
+  --image universal-gnss:ros2-kilted-v0.7.0
+```
+
+The optional `--image` uses local `docker image inspect` only to collect the
+six standard OCI labels; lack of Docker access is recorded as unavailable, not
+an error. Capture actual receiver/NTRIP state separately from Docker health
+using the ROS diagnostics/snapshot surface. Review the resulting artifact
+before sharing: it is deliberately redacted but still records deployment
+identity and parameter-key names.
 
 ## Serial and networking runtime contract
 

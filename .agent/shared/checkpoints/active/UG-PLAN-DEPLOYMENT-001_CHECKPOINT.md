@@ -966,3 +966,25 @@ ACCOUNTING: exact runtime-diagnostics release gate closed; v0.7 advances
 Native arm64, external-LAN, hardware/restart matrices, support-export,
 structured-log, functional-health/no-receiver, API/WebUI/BlueOS, and image
 publication remain unclosed.
+
+## Non-secret support snapshot increment (2026-09-04)
+
+IMPLEMENTED: `scripts/collect_support_snapshot.py` creates one deterministic,
+host-side JSON support artifact with no receiver access, API, upload, raw-log
+copy, recursive filesystem scan, Docker environment inspection, or parameter
+values. It records runtime version/revision/ROS distro/schema/platform identity;
+an optional parameter-file SHA-256 and parameter-key shape; bounded direct-log
+metadata; and, when available, only the six standard OCI labels. It omits
+credentials, all configuration values, raw logs, Docker environment, absolute
+paths, and non-whitelisted labels. Docker absence is recorded as unavailable.
+
+VALIDATION: PASS three focused redaction/OCI-whitelist/bounded-log unit tests;
+PASS manual snapshot against `docker/parameters.example.yaml` with explicit
+identity values; output contained no parameter values. Backlog CI now compiles
+and executes those tests. No receiver, Docker daemon, NTRIP, LAN, or destructive
+hardware action was used.
+
+ACCOUNTING: support snapshot/export gate closed; v0.7 44/65 -> 45/65; project
+roadmap 70/194 -> 71/194; UGA remains 33/205. The persistent diagnostic/log/
+export-directory, structured-node-log, no-receiver-health, functional
+healthcheck, and Docker-DNS gates remain independently open.
