@@ -38,6 +38,8 @@ target_link_libraries(
 
 target_compile_features(universal_gnss_driver PUBLIC cxx_std_17)
 
+install(TARGETS universal_gnss_driver ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+
 if(BUILD_TESTING)
   add_executable(
     gnss_driver_test_foundation

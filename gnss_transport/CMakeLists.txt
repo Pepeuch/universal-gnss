@@ -31,6 +31,8 @@ target_include_directories(
 
 target_compile_features(universal_gnss_transport PUBLIC cxx_std_17)
 
+install(TARGETS universal_gnss_transport ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+
 if(BUILD_TESTING)
   add_executable(
     gnss_transport_test_foundation

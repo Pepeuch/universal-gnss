@@ -266,6 +266,8 @@ install(
   PATTERN "*.pyc" EXCLUDE
 )
 
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+
 if(BUILD_TESTING)
   set(_ros2_test_library_path "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
 

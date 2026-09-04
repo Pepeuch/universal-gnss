@@ -2,7 +2,8 @@
 
 Repository: `/workspaces/universal-gnss`
 Branch: `main`
-HEAD: `84d4b34b760d150b88f5e41ce3e831a30c4f47bf`
+HEAD: `cf3765a03c83c8858480e786b738fea2eb3d276f` before uncommitted
+`UG-PLAN-005` Phase A work
 
 ## Objective
 
@@ -65,9 +66,158 @@ grant for a newly enumerated physical receiver.
 
 ## Exact next step
 
-Begin `UG-PLAN-005` Phase A, the ROS2-first production Docker baseline, when
-authorized; do not start BlueOS implementation ahead of the generic
-container/runtime contract.
+Validate the `UG-PLAN-005` image on Kilted and Lyrical (`linux/amd64` first),
+including no-hardware startup/help and graceful stop, when Docker is available;
+do not start BlueOS implementation ahead of the generic container/runtime
+contract.
+
+## UG-PLAN-005 Phase A — partial ROS2 Docker baseline
+
+CURRENT_STATE (2026-09-04, amd64 Docker): classic Docker is available through
+the host daemon (client 29.1.3, server 29.7.2, default context, amd64). Kilted
+builds locally as `universal-gnss:dev-kilted`. The initial runtime build failure
+was a real base-image UID/GID collision (`ros:kilted-ros-base` already owns
+1000 as `ubuntu`); runtime now uses the configured numeric non-root UID:GID,
+which also preserves bind-mount ownership mapping. ROS setup scripts are sourced
+before `nounset` because generated setup code reads optional unset variables.
+
+PROVEN_EVIDENCE (Kilted): package exists at
+`/opt/universal_gnss/install`; read-only external config was exercised through a
+temporary Docker volume containing `docker/parameters.example.yaml`; both
+receiver and NTRIP processes start as UID/GID 1000 and receive that file. The
+expected no-device discovery and example-caster errors occurred without a
+Docker failure. Image inspect: non-root user `1000:1000`, OCI entrypoint,
+process-only healthcheck, and no source/build/log directories below the runtime
+prefix. Image size was 937,756,283 bytes before later entrypoint-only rebuilds.
+
+SUPERSEDED SHUTDOWN BLOCKER (resolved below): the requested minimal PID-1 shim forks
+`ros2 launch`, translates TERM to INT, waits/reaps, and keeps explicit command
+overrides as `exec`; it contains no polling or supervisor. On the real Kilted
+container, `docker stop --timeout 12` instead reached SIGKILL (exit 137); no
+node shutdown logs appeared. Evidence: Bash defers its TERM trap while blocked
+in `wait` for this ROS child, so it cannot perform the translation. A previous
+polling/process-group workaround did exit 0, but was removed because it violates
+the current explicit no-polling requirement. Do not claim bounded graceful stop,
+child reaping, or Lyrical validation. Exact next step: choose/authorize a
+minimal signal-wakeup mechanism compatible with the no-polling/no-supervisor
+constraint; this was replaced by tini evidence below.
+
+CURRENT_STATE (2026-09-04, PID 1 follow-up): that blocker is resolved with
+Ubuntu's `tini` package, not a shell supervisor. Runtime installs `tini`; its
+ENTRYPOINT is `/usr/bin/tini -g -- /usr/local/bin/universal-gnss-entrypoint`.
+The entrypoint only safely sources ROS/install environments, validates the
+default external parameter file, and `exec`s either the default launch or an
+explicit user command. `STOPSIGNAL SIGINT` selects the signal ROS launch handles
+cleanly; tini still group-forwards externally supplied signals. No polling,
+job-control, or heavyweight supervisor was added.
+
+VALIDATION (Kilted amd64): rebuild PASS; `bash -n docker/entrypoint.sh` PASS.
+With read-only external config volume, PID 1 was tini, launch and receiver/NTRIP
+shared the launch process group, all ran as `1000:1000`, and `docker stop
+--timeout 12` returned before the bound with `exit=0`, `OOMKilled=false`.
+Logs show launch's SIGINT path and both C++ nodes' SIGINT/SIGTERM handlers;
+post-stop inspect confirmed the container was not running (therefore no
+container child/orphan process remained). Expected no-device/example-caster
+errors remained non-fatal.
+
+REMAINING_DELTA (Lyrical amd64): common Dockerfile build PASS, but no-hardware
+run fails before lifecycle validation. Its installed prefix contains neither
+`libuniversal_gnss_driver.so` nor `libuniversal_gnss_ntrip.so`, while
+`receiver_node`/`ntrip_node` dynamically require them (exit 127). This is not
+an `LD_LIBRARY_PATH` issue: setup supplies `/opt/universal_gnss/install/lib`,
+but the libraries are absent. Compare Kilted's static dependency result and
+Lyrical CMake/link/install configuration; fix only the proven common build
+packaging cause, then rebuild/retest Lyrical. Keep arm64, DDS topology, real
+hardware, hotplug, and robot validation pending.
+
+RESOLVED (2026-09-04, Lyrical runtime packaging): classification was E,
+incomplete CMake install rules. Builder-stage and runtime-stage inspection
+proved Docker copies the complete `/workspace/install` tree and that sourced
+`LD_LIBRARY_PATH` already includes its `lib/` directory; receiver/ntrip ELF
+`DT_NEEDED` entries on Lyrical required driver/protocol/transport/NTRIP shared
+objects, but those objects were absent even from the builder install prefix.
+Kilted's corresponding dependencies are statically linked, which hid the
+missing installs. No relevant executable has RPATH/RUNPATH, so neither loader
+configuration nor Docker COPY was the cause.
+
+CHANGE: add distro-neutral `install(TARGETS ... ARCHIVE/LIBRARY/RUNTIME)` rules
+for `universal_gnss_protocols`, `universal_gnss_transport`,
+`universal_gnss_driver`, and `universal_gnss_ntrip`. No build/source tree is
+copied to runtime and no separate Dockerfile was added.
+
+VALIDATION (both linux/amd64): classic `docker build` PASS for Kilted and
+Lyrical. Both containers started as UID/GID 1000 with tini PID 1, read-only
+external parameters, and launch-managed receiver/NTRIP child processes. On
+Lyrical, `ldd receiver_node` resolves `libuniversal_gnss_driver.so` from the
+install prefix; nodes stayed running and no exit-127/missing-library error
+appeared. On both images, `docker stop --timeout 12` exited 0 without OOM or
+SIGKILL and logs show ROS launch SIGINT and both children receiving shutdown.
+Final Kilted inspection confirms non-root tini entrypoint and no `src`, `build`,
+or `log` directories under `/opt/universal_gnss`; only installed ROS/UG runtime
+artifacts remain. `bash -n docker/entrypoint.sh` and `git diff --check` PASS.
+
+REMAINING_DELTA: arm64/buildx, DDS topology, hardware receiver/caster/reconnect,
+hotplug/device grants, long-run and robot/MowgliNext validation remain pending.
+
+Decision: use one container running the existing
+`receiver_and_ntrip.launch.py`. It preserves the established ROS launch-managed
+receiver/NTRIP process topology and shutdown path; no composition container,
+API, WebUI, BlueOS runtime, or duplicate GNSS/NTRIP semantics is introduced.
+
+Implemented:
+
+- root `Dockerfile`: one `ROS_DISTRO` build argument (Kilted default; Lyrical
+  supported), multi-stage `colcon --merge-install` build, non-root runtime,
+  `linux/amd64` and `linux/arm64` as intended targets, OCI version/revision
+  labels, and no `arm/v7` claim;
+- `docker/entrypoint.sh`: sources ROS/install environments, requires an
+  external parameter file for the default launch, creates/checks writable ROS
+  logs, and `exec`s ROS launch for direct signal delivery;
+- `docker/parameters.example.yaml`: credential-free external configuration
+  template; `gnss_ros2` combined launch now accepts `parameters_file` and ships
+  a no-op default so existing direct launch invocations remain usable;
+- `docs/ros2_docker.md`: explicit device/group, config/secret, log, DDS, and
+  health boundaries. Device mapping is one stable host `/dev/serial/by-id/...`
+  path to `/dev/gnss-receiver`, never privileged or all of `/dev`.
+
+Health contract: the Docker healthcheck proves only that `receiver_node` and
+`ntrip_node` processes exist. It does not represent receiver transport,
+observation freshness, NTRIP/RTCM/correction health, or RTK state.
+
+Validation:
+
+- PASS: Kilted `colcon` Release build of `universal_gnss_ros2` using
+  `/tmp/ug-plan-005-kilted-{build,install,log}`.
+- PASS: installed Kilted `ros2 launch ... receiver_and_ntrip.launch.py
+  --show-args`; validates the packaged launch/config path and
+  `parameters_file` argument. `ROS_LOG_DIR` had to be set under `/tmp` because
+  the sandbox makes `/home/ubuntu/.ros` read-only.
+- PASS: outside the sandbox, a three-second no-hardware Kilted combined launch
+  using `docker/parameters.example.yaml` started both nodes, accepted the
+  external parameters, and was terminated with SIGTERM. The expected missing
+  `/dev/gnss-receiver` and unreachable example caster errors occurred; both
+  child PIDs were reaped. This is a launch/shutdown check, not a receiver or
+  NTRIP health pass.
+- PASS: Kilted Dockerfile ROS apt package names resolve in the current apt
+  metadata; `bash -n docker/entrypoint.sh`, Python launch compile,
+  `python3 scripts/update_backlog_status.py --check`, and `git diff --check`.
+- BLOCKED (environment): Docker CLI/daemon is absent, so Kilted/Lyrical image
+  builds, image startup, healthcheck, and SIGTERM tests are unexecuted.
+
+Remaining delta: Docker image builds on both distros; `linux/amd64` and
+`linux/arm64` validation; no-hardware launch/help; graceful shutdown; DDS
+host/container and cross-container topology; real receiver/caster reconnect,
+USB hotplug/re-enumeration, device grants, and robot/MowgliNext validation.
+
+DO_NOT_REDO:
+
+- Do not split the first image into a composable or multiple-container layout
+  without evidence that the existing launch-managed layout is insufficient.
+- Do not make a process healthcheck claim receiver, GNSS, correction, or RTK
+  health.
+- Do not bake parameters, NTRIP credentials, receiver paths, logs, DDS domain,
+  RMW implementation, or network mode into the image.
+- Do not add API, WebUI, BlueOS runtime, or separate deployment GNSS semantics.
 
 ## UG-PLAN-002 resumption state
 

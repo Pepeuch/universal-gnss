@@ -1,0 +1,13 @@
+.git
+.agent
+build
+install
+log
+out
+cmake-build-*
+.colcon
+__pycache__
+*.pyc
+.vscode
+.idea
+exemple

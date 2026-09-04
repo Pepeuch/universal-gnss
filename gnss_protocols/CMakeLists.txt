@@ -26,6 +26,8 @@ target_link_libraries(universal_gnss_protocols PUBLIC universal_gnss_core)
 
 target_compile_features(universal_gnss_protocols PUBLIC cxx_std_17)
 
+install(TARGETS universal_gnss_protocols ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+
 if(BUILD_TESTING)
   add_executable(
     gnss_protocols_test_foundation

@@ -102,11 +102,12 @@ BlueOS-specific implementation.
   lifecycle validation and configuration loading/projection remain.
 - Phase 2 deterministic supervisor NTRIP/RTCM composition is complete; physical
   receiver/caster/reconnect/hotplug evidence remains pending.
-- first establish the production Docker baseline with ROS2 as the primary
-  deployment target: ROS2 adapter/runtime, Kilted and Lyrical compatibility,
-  `amd64` and `arm64`, deterministic lifecycle, serial mapping, external
-  configuration/secrets, NTRIP networking, health/logging, DDS validation, and
-  robot/MowgliNext receiver/NTRIP-reconnect validation.
+- Phase A has initial ROS2-first Docker groundwork: a parameterized
+  Kilted/Lyrical multi-stage image, the existing launch-managed receiver/NTRIP
+  layout, non-root execution, external configuration/credential/log contracts,
+  explicit serial mapping guidance, and process-only health checking. Docker
+  build/runtime, `amd64`/`arm64`, deterministic lifecycle, DDS, and
+  robot/MowgliNext receiver/NTRIP-reconnect validation remain.
 - then reuse the ROS-independent portable runtime/supervisor for a native,
   headless standalone image, without a ROS2 or GUI requirement.
 - the following BlueOS integration milestone reuses that same generic

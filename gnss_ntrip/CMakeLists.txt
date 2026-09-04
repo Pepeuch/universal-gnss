@@ -26,6 +26,8 @@ target_link_libraries(
     universal_gnss_transport
 )
 
+install(TARGETS universal_gnss_ntrip ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+
 if(BUILD_TESTING)
   add_executable(
     gnss_ntrip_test_foundation

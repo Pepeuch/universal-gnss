@@ -1,0 +1,23 @@
+# Mount a deployment-specific copy at /etc/universal_gnss/parameters.yaml.
+# Keep this file and its directory operator-owned; do not bake credentials into
+# an image or commit a real credential file.
+
+/universal_gnss_receiver:
+  ros__parameters:
+    receiver_family: auto
+    transport: serial
+    serial_device: /dev/gnss-receiver
+    serial_baud: 921600
+    publish_rate_hz: 5.0
+    frame_id: gnss_link
+
+/universal_gnss_ntrip:
+  ros__parameters:
+    caster_host: caster.example.com
+    caster_port: 2101
+    mountpoint: RTCM3
+    username: ""
+    password: ""
+    gga_enabled: false
+    gga_interval_s: 10
+    tls_enabled: false

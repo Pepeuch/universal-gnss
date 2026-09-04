@@ -1,7 +1,9 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterFile
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -22,6 +24,7 @@ def generate_launch_description() -> LaunchDescription:
     gga_enabled = LaunchConfiguration("gga_enabled")
     gga_interval_s = LaunchConfiguration("gga_interval_s")
     tls_enabled = LaunchConfiguration("tls_enabled")
+    parameters_file = LaunchConfiguration("parameters_file")
 
     return LaunchDescription(
         [
@@ -41,6 +44,12 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("gga_enabled", default_value="false"),
             DeclareLaunchArgument("gga_interval_s", default_value="10"),
             DeclareLaunchArgument("tls_enabled", default_value="false"),
+            DeclareLaunchArgument(
+                "parameters_file",
+                default_value=PathJoinSubstitution(
+                    [FindPackageShare("universal_gnss_ros2"), "config", "empty_parameters.yaml"]
+                ),
+            ),
             Node(
                 package="universal_gnss_ros2",
                 executable="receiver_node",
@@ -56,7 +65,8 @@ def generate_launch_description() -> LaunchDescription:
                         "tcp_port": tcp_port,
                         "publish_rate_hz": publish_rate_hz,
                         "frame_id": frame_id,
-                    }
+                    },
+                    ParameterFile(parameters_file, allow_substs=False),
                 ],
             ),
             Node(
@@ -74,7 +84,8 @@ def generate_launch_description() -> LaunchDescription:
                         "gga_enabled": gga_enabled,
                         "gga_interval_s": gga_interval_s,
                         "tls_enabled": tls_enabled,
-                    }
+                    },
+                    ParameterFile(parameters_file, allow_substs=False),
                 ],
             ),
         ]

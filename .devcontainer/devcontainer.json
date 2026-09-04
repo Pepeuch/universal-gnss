@@ -7,32 +7,43 @@
       "ROS_DISTRO": "kilted"
     }
   },
+
   "overrideCommand": true,
   "remoteUser": "ubuntu",
   "containerUser": "ubuntu",
   "workspaceFolder": "/workspaces/universal-gnss",
- "runArgs": [
-  "--init",
-  "--privileged",
-  "-v",
-  "/dev:/dev"
-],
+
+  "runArgs": [
+    "--init",
+    "--privileged",
+    "-v",
+    "/dev:/dev"
+  ],
+
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+
   "containerEnv": {
     "COLCON_HOME": "/tmp/.colcon"
   },
+
   "postCreateCommand": "bash -lc 'source /opt/ros/${ROS_DISTRO}/setup.bash && colcon --help >/dev/null && cmake --version >/dev/null'",
+
   "customizations": {
     "vscode": {
       "settings": {
         "cmake.configureOnOpen": false,
         "terminal.integrated.defaultProfile.linux": "bash"
       },
+
       "extensions": [
         "openai.chatgpt",
         "ms-vscode.cpptools",
         "ms-vscode.cmake-tools",
         "ms-python.python",
-        "ms-iot.vscode-ros"
+        "ms-iot.vscode-ros",
+        "ms-azuretools.vscode-docker"
       ]
     }
   }

@@ -17,6 +17,7 @@ RUN apt-get update \
     ca-certificates \
     cmake \
     curl \
+    docker.io \
     git \
     gpg \
     python3-colcon-common-extensions \
@@ -72,6 +73,17 @@ RUN set -eux; \
 
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
  && chmod 0440 /etc/sudoers.d/ubuntu
+
+# Allow the non-root development user to access the host Docker socket.
+RUN set -eux; \
+    if getent group 126 >/dev/null; then \
+        docker_group="$(getent group 126 | cut -d: -f1)"; \
+    else \
+        groupadd --gid 126 docker-host; \
+        docker_group=docker-host; \
+    fi; \
+    usermod -aG "${docker_group}" ubuntu
+
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /etc/bash.bashrc
 
 WORKDIR /workspaces/universal-gnss
