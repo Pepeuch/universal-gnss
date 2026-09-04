@@ -20,17 +20,26 @@ jobs:
 
       - name: Build production image
         run: |
+          created="$(git show -s --format=%cI "${GITHUB_SHA}")"
           docker build \
             --build-arg ROS_DISTRO="${{ matrix.ros_distro }}" \
             --build-arg VERSION="ci-${GITHUB_SHA}" \
             --build-arg REVISION="${GITHUB_SHA}" \
+            --build-arg CREATED="${created}" \
             --tag "${IMAGE}" \
             .
 
       - name: Verify image contract
         run: |
           test "$(docker image inspect --format '{{.Config.User}}' "${IMAGE}")" = "1000:1000"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.title"}}' "${IMAGE}")" = "Universal GNSS ROS 2"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.description"}}' "${IMAGE}")" = "Universal GNSS ROS 2 production container"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${IMAGE}")" = "ci-${GITHUB_SHA}"
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${IMAGE}")" = "${GITHUB_SHA}"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.source"}}' "${IMAGE}")" = "https://github.com/Pepeuch/universal-gnss"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.created"}}' "${IMAGE}")" = "$(git show -s --format=%cI "${GITHUB_SHA}")"
+          docker run --rm --entrypoint /usr/bin/env "${IMAGE}" | grep -Fx "UNIVERSAL_GNSS_VERSION=ci-${GITHUB_SHA}"
+          docker run --rm --entrypoint /usr/bin/env "${IMAGE}" | grep -Fx "UNIVERSAL_GNSS_REVISION=${GITHUB_SHA}"
           docker run --rm "${IMAGE}" bash -lc '
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/ntrip_node

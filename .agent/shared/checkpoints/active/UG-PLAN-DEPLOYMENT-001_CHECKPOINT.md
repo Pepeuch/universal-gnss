@@ -929,3 +929,40 @@ payload delivery. Only if bridge fails may a bounded alternative be tested;
 capture the failure and its multicast/address-advertisement cause before any
 host-network or DDS configuration recommendation. This evidence does not
 generalize to native arm64, robot, MowgliNext, or BlueOS.
+
+## Runtime identity and OCI release-quality increment (2026-09-04)
+
+IMPLEMENTED: `ReceiverNode` now appends the additive
+`universal_gnss/runtime_identity` status to its existing diagnostic array and
+`~/get_snapshot` diagnostics response. It reports image-supplied version and
+revision, ROS distro, and configured receiver family; it does not change a ROS
+message definition, introduce a new API, expose paths/secrets, or make a health
+claim. Existing discovery diagnostics remain the owner of receiver
+identity/model/firmware when known. Absent environment build metadata reports
+as `unknown` in that diagnostic.
+
+IMAGE CONTRACT: the production Dockerfile now exposes OCI `title`,
+`description`, `version`, `revision`, `source`, and `created`. `REVISION` and
+`CREATED` have no fabricated defaults; CI supplies the checked-out commit SHA
+and its `%cI` timestamp respectively. Docker CI asserts every label and exact
+runtime `UNIVERSAL_GNSS_VERSION`/`UNIVERSAL_GNSS_REVISION` values, as well as
+the earlier non-root/package/final-image/entrypoint contract. Backlog CI also
+runs checkpoint-audit and entrypoint regression tests.
+
+VALIDATION: PASS isolated ROS2-enabled build in
+`/tmp/ug-v07-identity-build`; PASS exact
+`ReceiverNodeTest.PublishesRuntimeIdentityInDiagnostics`; PASS local Kilted
+Docker build and exact six-label/runtime-environment inspection using
+`VERSION=v0.7.0-test`, revision `10424800cf4d95a680afd7a59581a391d39ec60a`,
+and source-commit timestamp `2026-09-04T21:12:40+00:00`; disposable image tag
+removed afterward. PASS entrypoint syntax, 9 focused Python tests, status
+generation/check, checkpoint audit, Python compile, clang-format check, and
+diff check. The broad `test_receiver_node` binary is PARTIAL only: the new test
+passed, while an unrelated NTRIP socket test is blocked by this sandbox's
+`Operation not permitted`; no NTRIP/network production code was changed.
+
+ACCOUNTING: exact runtime-diagnostics release gate closed; v0.7 advances
+43/65 -> 44/65, project roadmap 69/194 -> 70/194, and UGA remains 33/205.
+Native arm64, external-LAN, hardware/restart matrices, support-export,
+structured-log, functional-health/no-receiver, API/WebUI/BlueOS, and image
+publication remain unclosed.

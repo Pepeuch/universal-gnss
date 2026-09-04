@@ -38,13 +38,23 @@ FROM ros:${ROS_DISTRO}-ros-base AS runtime
 
 ARG ROS_DISTRO
 ARG VERSION=dev
-ARG REVISION=unknown
+# Supply a source revision for release/CI builds. It is deliberately empty for
+# ad-hoc builds rather than claiming an unavailable revision.
+ARG REVISION
+ARG DESCRIPTION="Universal GNSS ROS 2 production container"
+ARG SOURCE=https://github.com/Pepeuch/universal-gnss
+# Supply the source commit's RFC 3339 timestamp for release/CI builds. It is
+# deliberately empty for ad-hoc builds rather than inventing a build time.
+ARG CREATED
 ARG APP_UID=1000
 ARG APP_GID=1000
 
 LABEL org.opencontainers.image.title="Universal GNSS ROS 2" \
+      org.opencontainers.image.description="${DESCRIPTION}" \
       org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${REVISION}"
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="${SOURCE}" \
+      org.opencontainers.image.created="${CREATED}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -73,6 +83,8 @@ RUN chmod 0755 /usr/local/bin/universal-gnss-entrypoint
 ENV ROS_DISTRO=${ROS_DISTRO} \
     HOME=/tmp \
     ROS_LOG_DIR=/var/log/universal_gnss \
+    UNIVERSAL_GNSS_VERSION=${VERSION} \
+    UNIVERSAL_GNSS_REVISION=${REVISION} \
     UNIVERSAL_GNSS_PARAMETERS_FILE=/etc/universal_gnss/parameters.yaml
 
 WORKDIR /opt/universal_gnss

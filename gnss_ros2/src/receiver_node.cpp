@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <limits>
 #include <memory>
@@ -59,6 +60,12 @@ constexpr std::size_t kReceiverAcquisitionMinimumByteBudget = 4u * kDefaultReadC
 constexpr double kDefaultRtcmForwardingActivityTimeoutSeconds = 5.0;
 constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
 constexpr double kRuntimeObservationJitterPeriods = 3.0;
+
+std::string EnvironmentValueOrUnknown(const char* name)
+{
+  const char* const value = std::getenv(name);
+  return value != nullptr && value[0] != '\0' ? value : "unknown";
+}
 
 struct ReceiverNodeConfig
 {
@@ -1565,6 +1572,23 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
+  void AppendRuntimeIdentityStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/runtime_identity";
+    status.hardware_id = hardware_id_;
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+    status.message = "Runtime build identity";
+    status.values.push_back(
+        MakeKeyValue("version", EnvironmentValueOrUnknown("UNIVERSAL_GNSS_VERSION")));
+    status.values.push_back(
+        MakeKeyValue("revision", EnvironmentValueOrUnknown("UNIVERSAL_GNSS_REVISION")));
+    status.values.push_back(MakeKeyValue("ros_distro", EnvironmentValueOrUnknown("ROS_DISTRO")));
+    status.values.push_back(
+        MakeKeyValue("configured_receiver_family", config_.receiver_family_name));
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void AppendAutoConfigDryRunStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
   {
     diagnostic_msgs::msg::DiagnosticStatus status;
@@ -1748,6 +1772,7 @@ struct ReceiverNode::Impl
           ToRosTime(std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
     }
     snapshot.diagnostics.header.frame_id = config_.frame_id;
+    AppendRuntimeIdentityStatus(snapshot.diagnostics);
     AppendDiscoveryStatus(snapshot.diagnostics);
     AppendAutoConfigDryRunStatus(snapshot.diagnostics);
     AppendRtcmForwardingStatus(snapshot.diagnostics, snapshot.runtime_state);

@@ -38,6 +38,7 @@ docker build \
   --build-arg ROS_DISTRO=kilted \
   --build-arg VERSION="$(git describe --always --dirty)" \
   --build-arg REVISION="$(git rev-parse HEAD)" \
+  --build-arg CREATED="$(git show -s --format=%cI HEAD)" \
   --tag universal-gnss:ros2-kilted \
   .
 ```
@@ -51,11 +52,24 @@ platform explicitly for now.
 For a release candidate, use an immutable tag containing both the ROS
 distribution and Universal GNSS release, such as `universal-gnss:ros2-kilted-v0.7.0`.
 Pass the matching release/version as `VERSION` and the exact source revision as
-`REVISION`; the image exposes both through OCI labels. The Docker CI matrix
+`REVISION`; pass the source commit's RFC 3339 timestamp as `CREATED`. The image
+exposes standard OCI `title`, `description`, `version`, `revision`, `source`,
+and `created` labels, and exposes version/revision as runtime environment for
+the ROS diagnostic identity status. `CREATED` deliberately has no wall-clock
+default, and `REVISION` has no synthetic fallback: ad-hoc builds that omit
+either carry an empty OCI value rather than fabricated metadata. The runtime
+diagnostic renders an omitted version/revision value as `unknown`. The Docker
+CI matrix
 builds Kilted and Lyrical amd64 images from the same Dockerfile and verifies the
-revision label, non-root image contract, ROS nodes, representative operator
+full OCI label set, non-root image contract, ROS nodes, representative operator
 tools, and absence of source/build/log directories in the final stage. It does
 not publish an image or validate hardware.
+
+The `/universal_gnss_receiver/diagnostics` stream and its
+`~/get_snapshot` response contain `universal_gnss/runtime_identity` with the
+image version/revision, ROS distribution, and configured receiver family. It
+is deployment identity only, not a health verdict; discovery diagnostics retain
+the separate receiver model/firmware fields when they are actually known.
 
 `arm/v7` is not supported for v0.7. Native arm64 runtime/hardware remains a
 separate pending target despite the established BuildKit/QEMU package smoke.

@@ -132,7 +132,7 @@ Runtime / process lifecycle:
 - [ ] receiver-process restart without stale state resurrection
 - [x] NTRIP reconnect/restart without stale source metadata leakage
 - [ ] container restart with deterministic configuration reapplication
-- [ ] expose running Universal GNSS version/commit in runtime diagnostics
+- [x] expose running Universal GNSS version/commit in runtime diagnostics
 
 Device access / hotplug:
 
@@ -234,6 +234,15 @@ scope:
   Compose, and the remaining deterministic documentation work. The Docker
   quick-start, production deployment, serial/device permissions, and ROS2
   integration guidance are complete in [`docs/ros2_docker.md`](docs/ros2_docker.md).
+- **Completed release-quality increment (2026-09-04):** the production image
+  now carries the standard OCI title, description, version, revision, source,
+  and created labels. CI supplies `CREATED` from the checked-out source commit
+  timestamp and checks every label plus the runtime version/revision environment
+  values. The existing ROS diagnostics and `~/get_snapshot` response now add
+  `universal_gnss/runtime_identity` (version, revision, ROS distro, configured
+  receiver family) without changing any public message type or health meaning.
+  Omitted revision/created build inputs remain empty OCI metadata; the runtime
+  diagnostic reports absent values as `unknown`, never as invented values.
 - **HARDWARE_REQUIRED:** serial renumbering; F9P/UM982 swap and recovery;
   long-run, crash/restart, reboot/autostart, rate-mismatch, RTK Fixed, and
   source/incarnation validation; UGA-126 transport-incarnation cutoff; and

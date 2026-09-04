@@ -116,6 +116,11 @@ BlueOS-specific implementation.
   specifically `BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED`: the
   current workspace has only the same-host Docker bridge, so an independent LAN
   host is required for bidirectional Fast DDS and domain-isolation acceptance.
+- Release identity is available through standard OCI labels and the existing
+  ROS diagnostic/snapshot surface: image build inputs supply version, revision,
+  and deterministic source-commit creation time; runtime identity reports those
+  values with ROS distro and configured receiver family without redefining
+  health or introducing an API.
 - then reuse the ROS-independent portable runtime/supervisor for a native,
   headless standalone image, without a ROS2 or GUI requirement.
 - the following BlueOS integration milestone reuses that same generic

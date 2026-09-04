@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <future>
 #include <iomanip>
@@ -34,6 +35,34 @@
 #include "universal_gnss_transport/memory_stream.hpp"
 
 namespace {
+
+class ScopedEnvironmentValue
+{
+public:
+  ScopedEnvironmentValue(const char* name, const char* value) : name_(name)
+  {
+    if (const char* const previous = std::getenv(name); previous != nullptr)
+    {
+      previous_value_ = previous;
+    }
+    EXPECT_EQ(::setenv(name, value, 1), 0);
+  }
+
+  ~ScopedEnvironmentValue()
+  {
+    if (previous_value_.has_value())
+    {
+      (void)::setenv(name_.c_str(), previous_value_->c_str(), 1);
+    } else
+    {
+      (void)::unsetenv(name_.c_str());
+    }
+  }
+
+private:
+  std::string name_;
+  std::optional<std::string> previous_value_{};
+};
 
 std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
 {
@@ -1029,6 +1058,38 @@ TEST_F(ReceiverNodeTest, AutoDiscoveryChoosesHighConfidenceUbloxResult)
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "model"), std::optional<std::string>{"ZED-F9P"});
   EXPECT_EQ(FindDiagnosticValue(*discovery_status, "firmware_version"),
             std::optional<std::string>{"1.32"});
+}
+
+TEST_F(ReceiverNodeTest, PublishesRuntimeIdentityInDiagnostics)
+{
+  const ScopedEnvironmentValue version{"UNIVERSAL_GNSS_VERSION", "v0.7.0-test"};
+  const ScopedEnvironmentValue revision{"UNIVERSAL_GNSS_REVISION", "test-revision-123"};
+  const ScopedEnvironmentValue ros_distro{"ROS_DISTRO", "kilted-test"};
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "/definitely_missing_universal_gnss_device"),
+      rclcpp::Parameter("receiver_family", "unicore"),
+  });
+
+  universal_gnss_ros2::ReceiverNode node(universal_gnss_ros2::ReceiverNode::DiscoveryFunction{},
+                                         options);
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* identity = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                    "universal_gnss/runtime_identity");
+  ASSERT_NE(identity, nullptr);
+  EXPECT_EQ(identity->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(identity->message, "Runtime build identity");
+  EXPECT_EQ(FindDiagnosticValue(*identity, "configured_receiver_family"),
+            std::optional<std::string>{"unicore"});
+  EXPECT_EQ(FindDiagnosticValue(*identity, "version"), std::optional<std::string>{"v0.7.0-test"});
+  EXPECT_EQ(FindDiagnosticValue(*identity, "revision"),
+            std::optional<std::string>{"test-revision-123"});
+  EXPECT_EQ(FindDiagnosticValue(*identity, "ros_distro"),
+            std::optional<std::string>{"kilted-test"});
 }
 
 TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
