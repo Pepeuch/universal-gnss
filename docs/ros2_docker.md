@@ -174,6 +174,25 @@ Entrypoint failures emit credential-free, stable key/value prefixes such as
 remain the authoritative structured health/status surface. No generic non-ROS
 status API is introduced by this container baseline.
 
+### Bounded lifecycle evidence
+
+The following short Kilted amd64 production-image matrix was run without a
+mapped receiver and without changing receiver state. It is not an endurance,
+hotplug, reboot, or process-crash claim.
+
+| Scenario | Process / exit behavior | Application evidence | Restart / operator action |
+| --- | --- | --- | --- |
+| Valid v1 configuration, no mapped receiver | `receiver_node` and `ntrip_node` remained running; Docker process health became `healthy` | receiver discovery emitted `receiver_discovery_failed`; NTRIP independently reported disconnected | Docker health remains process-only; investigate ROS diagnostics and provide/re-resolve the selected device before recreating if needed |
+| Unreadable parameter file | entrypoint exited `1` before launch | `event=parameters_file_not_readable`; no ROS diagnostics exist because ROS never starts | fix the external mount/path, then let Docker policy recreate or recreate explicitly |
+| Unsupported configuration schema | entrypoint exited `2` before launch | `event=unsupported_configuration_schema_version`; no ROS diagnostics exist | supply a supported schema, then recreate/restart under the Docker policy |
+| Clean Docker stop (`STOPSIGNAL SIGINT`) | container exited `0`, OOM false, restart count `0` with `restart: no` | launch-managed nodes received normal shutdown | normal explicit stop; this does not prove crash/daemon-reboot recovery |
+| Receiver present then unavailable | not rerun | established USB-loss evidence requires stable by-id re-resolution, container recreation, and UM982 profile replay | hardware-required; do not infer recovery from a reused tty/major/minor |
+| NTRIP unavailable while receiver remains healthy | not rerun | requires a visible selected receiver in this validation namespace | hardware-required here; existing live NTRIP and receiver evidence remains separate |
+
+A second ROS CLI process in this constrained container did not discover the
+diagnostics topic, so this matrix records the node/process/log evidence only;
+it does not alter the established same-host DDS result or Docker networking.
+
 ### Device manager, backup, and support evidence
 
 Production hosts need a udev/device-manager rule that creates or verifies one

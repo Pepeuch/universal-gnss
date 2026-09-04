@@ -988,3 +988,27 @@ ACCOUNTING: support snapshot/export gate closed; v0.7 44/65 -> 45/65; project
 roadmap 70/194 -> 71/194; UGA remains 33/205. The persistent diagnostic/log/
 export-directory, structured-node-log, no-receiver-health, functional
 healthcheck, and Docker-DNS gates remain independently open.
+
+## Bounded Docker lifecycle/no-device matrix (2026-09-04)
+
+PARTIAL EVIDENCE: a disposable Kilted amd64 production image ran with a
+read-only volume containing the committed parameter example and no `--device`
+mapping. `receiver_node` and `ntrip_node` stayed alive; Docker process health
+became `healthy`; receiver discovery logged `receiver_discovery_failed`; and
+NTRIP independently logged disconnected. `docker stop` used the image SIGINT
+stop signal and exited `0` (OOM false, restart count 0 under `restart: no`).
+Unreadable configuration exited `1` with the stable parameter-file event;
+unsupported schema exited `2` with its stable event. The test container,
+volume, and image were removed.
+
+LIMITATION: a second ROS CLI process in the constrained container could not
+discover the diagnostic topic. The receiver-present/NTRIP-unavailable cell was
+not run because the previously known u-blox stable by-id path is not visible in
+this workspace namespace; a device-mapping attempt was safety-rejected. Do not
+work around that unresolved target. Existing USB-loss and live receiver/NTRIP
+evidence remains valid but does not close this exact concurrent-state matrix.
+
+ACCOUNTING: no lifecycle/health/restart checkbox closed. The matrix is useful
+for the process-vs-application-health contract only; process crash/reboot,
+receiver incarnation, NTRIP-down-with-healthy-receiver, and Compose recovery
+remain separate acceptance evidence.
