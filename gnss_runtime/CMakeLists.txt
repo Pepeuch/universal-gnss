@@ -2,7 +2,10 @@ find_package(Threads REQUIRED)
 
 add_library(universal_gnss_runtime src/receiver_supervisor.cpp)
 target_include_directories(universal_gnss_runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(universal_gnss_runtime PUBLIC universal_gnss_driver universal_gnss_transport Threads::Threads)
+target_link_libraries(
+  universal_gnss_runtime
+  PUBLIC universal_gnss_driver universal_gnss_ntrip universal_gnss_transport Threads::Threads
+)
 target_compile_features(universal_gnss_runtime PUBLIC cxx_std_17)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

@@ -38,6 +38,7 @@
 #include "universal_gnss_ros2/srv/get_receiver_snapshot.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
+#include "universal_gnss_transport/rtcm_frame_writer.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 
 namespace universal_gnss_ros2 {
@@ -774,22 +775,6 @@ struct ReceiverNode::Impl
 {
   static constexpr std::chrono::seconds kParserHealthWindow{3};
   static constexpr double kParserUnhealthyRateHz{1.0};
-  static constexpr std::size_t kRtcmForwardQueueCapacity{50u};
-
-  struct PendingRtcmWrite
-  {
-    std::vector<std::uint8_t> data{};
-    std::size_t offset{0u};
-    std::uint16_t message_type{0u};
-  };
-
-  enum class RtcmWriteFlushResult : std::uint8_t
-  {
-    kDrained = 0,
-    kBlocked = 1,
-    kFailed = 2,
-  };
-
   enum class InputStepResult : std::uint8_t
   {
     kProgress = 0,
@@ -853,7 +838,9 @@ struct ReceiverNode::Impl
           response->diagnostics = snapshot.diagnostics;
         });
     rtcm_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
-        "rtcm", rclcpp::QoS(rclcpp::KeepLast(kRtcmForwardQueueCapacity)).reliable(),
+        "rtcm",
+        rclcpp::QoS(rclcpp::KeepLast(universal_gnss_transport::RtcmFrameWriter::kDefaultCapacity))
+            .reliable(),
         [this](const universal_gnss_ros2::msg::RtcmFrame& message) {
           this->OnRtcmMessage(message);
         });
@@ -908,11 +895,11 @@ struct ReceiverNode::Impl
 
   void AbandonPendingRtcmWrites(const std::string& reason, const bool close_transport)
   {
-    if (!pending_rtcm_writes_.empty())
+    if (!rtcm_frame_writer_.empty())
     {
       ++rtcm_forward_write_errors_;
       last_rtcm_forward_failure_message_ = reason;
-      pending_rtcm_writes_.clear();
+      rtcm_frame_writer_.Abandon();
     }
 
     if (close_transport && transport_sink_ != nullptr)
@@ -922,66 +909,52 @@ struct ReceiverNode::Impl
     transport_ready_ = false;
   }
 
-  RtcmWriteFlushResult FlushPendingRtcmWrites()
+  universal_gnss_transport::RtcmFrameWriter::FlushResult FlushPendingRtcmWrites()
   {
-    if (pending_rtcm_writes_.empty())
+    if (rtcm_frame_writer_.empty())
     {
-      return RtcmWriteFlushResult::kDrained;
+      return universal_gnss_transport::RtcmFrameWriter::FlushResult::kDrained;
     }
     if (transport_sink_ == nullptr || !transport_sink_->IsOpen())
     {
       AbandonPendingRtcmWrites("Receiver transport closed with incomplete RTCM correction data",
                                false);
-      return RtcmWriteFlushResult::kFailed;
+      return universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed;
     }
 
-    while (!pending_rtcm_writes_.empty())
+    const auto outcome = rtcm_frame_writer_.Flush(*transport_sink_);
+    rtcm_forwarded_bytes_ += outcome.bytes_written;
+    rtcm_forwarded_frames_ += outcome.frames_written;
+    if (outcome.frames_written > 0u)
     {
-      PendingRtcmWrite& pending = pending_rtcm_writes_.front();
-      const std::size_t remaining = pending.data.size() - pending.offset;
-      const auto result = transport_sink_->Write(
-          pending.data.data() + static_cast<std::ptrdiff_t>(pending.offset), remaining);
-
-      const std::size_t accepted = std::min(result.bytes_written, remaining);
-      pending.offset += accepted;
-      rtcm_forwarded_bytes_ += accepted;
-
-      if (result.bytes_written > remaining)
-      {
-        AbandonPendingRtcmWrites(
-            "Receiver transport reported more RTCM bytes written than requested", true);
-        return RtcmWriteFlushResult::kFailed;
-      }
-      if (result.status != universal_gnss_transport::TransportStatus::kOk)
-      {
-        AbandonPendingRtcmWrites(
-            "Failed to forward RTCM corrections: " + std::string(ToString(result.error)), true);
-        return RtcmWriteFlushResult::kFailed;
-      }
-      if (pending.offset == pending.data.size())
-      {
-        const std::uint16_t message_type = pending.message_type;
-        pending_rtcm_writes_.pop_front();
-        ++rtcm_forwarded_frames_;
-        last_rtcm_forward_time_ = SteadyClock::now();
-        last_rtcm_forward_message_type_ = message_type;
-        last_rtcm_forward_failure_message_.reset();
-        continue;
-      }
-      if (accepted == 0u)
-      {
-        return RtcmWriteFlushResult::kBlocked;
-      }
+      last_rtcm_forward_time_ = SteadyClock::now();
+      last_rtcm_forward_message_type_ = outcome.last_message_type;
+      last_rtcm_forward_failure_message_.reset();
     }
-
-    return RtcmWriteFlushResult::kDrained;
+    if (outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
+    {
+      ++rtcm_forward_write_errors_;
+      if (outcome.status == universal_gnss_transport::TransportStatus::kOk &&
+          outcome.error == universal_gnss_transport::TransportError::kWriteFailure)
+      {
+        last_rtcm_forward_failure_message_ =
+            "Receiver transport reported more RTCM bytes written than requested";
+      } else
+      {
+        last_rtcm_forward_failure_message_ =
+            "Failed to forward RTCM corrections: " + std::string(ToString(outcome.error));
+      }
+      transport_sink_->Close();
+      transport_ready_ = false;
+    }
+    return outcome.result;
   }
 
   void FlushPendingRtcmWritesIfReady()
   {
     if (runner_.has_value() &&
         runner_->metrics().last_status == universal_gnss_transport::TransportStatus::kOk &&
-        transport_ready_ && !pending_rtcm_writes_.empty())
+        transport_ready_ && !rtcm_frame_writer_.empty())
     {
       FlushPendingRtcmWrites();
     }
@@ -1045,7 +1018,7 @@ struct ReceiverNode::Impl
     }
     if (!transport_sink_->IsOpen())
     {
-      if (pending_rtcm_writes_.empty())
+      if (rtcm_frame_writer_.empty())
       {
         ++rtcm_forward_write_errors_;
         last_rtcm_forward_failure_message_ = "Receiver transport is closed";
@@ -1058,17 +1031,17 @@ struct ReceiverNode::Impl
       return;
     }
 
-    RtcmWriteFlushResult prior_flush = RtcmWriteFlushResult::kDrained;
-    if (!pending_rtcm_writes_.empty())
+    auto prior_flush = universal_gnss_transport::RtcmFrameWriter::FlushResult::kDrained;
+    if (!rtcm_frame_writer_.empty())
     {
       prior_flush = FlushPendingRtcmWrites();
-      if (prior_flush == RtcmWriteFlushResult::kFailed)
+      if (prior_flush == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
       {
         return;
       }
     }
 
-    if (pending_rtcm_writes_.size() >= kRtcmForwardQueueCapacity)
+    if (!rtcm_frame_writer_.Enqueue({message.data, message.message_type}))
     {
       ++rtcm_forward_write_errors_;
       last_rtcm_forward_failure_message_ =
@@ -1076,8 +1049,7 @@ struct ReceiverNode::Impl
       return;
     }
 
-    pending_rtcm_writes_.push_back(PendingRtcmWrite{message.data, 0u, message.message_type});
-    if (prior_flush != RtcmWriteFlushResult::kBlocked)
+    if (prior_flush != universal_gnss_transport::RtcmFrameWriter::FlushResult::kBlocked)
     {
       FlushPendingRtcmWrites();
     }
@@ -2086,7 +2058,7 @@ struct ReceiverNode::Impl
       universal_gnss_transport::TransportError::kNone};
   universal_gnss_protocols::RtcmFrameFramer rtcm_forward_framer_{};
   universal_gnss_protocols::RtcmCorrectionMonitor rtcm_forward_correction_monitor_{};
-  std::deque<PendingRtcmWrite> pending_rtcm_writes_{};
+  universal_gnss_transport::RtcmFrameWriter rtcm_frame_writer_{};
   universal_gnss::GnssDiagnosticEvents last_active_events_{};
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};

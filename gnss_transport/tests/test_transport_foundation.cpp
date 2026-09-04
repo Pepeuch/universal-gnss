@@ -1,15 +1,16 @@
 #include <array>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "universal_gnss_transport/memory_stream.hpp"
 #include "universal_gnss_transport/ring_buffer.hpp"
+#include "universal_gnss_transport/rtcm_frame_writer.hpp"
 #include "universal_gnss_transport/transport_metrics.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_transport::ByteRingBuffer;
 using universal_gnss_transport::MemoryByteDuplex;
@@ -38,11 +39,10 @@ void TestMemorySourceReadsInOrder(TestContext& ctx)
   std::array<std::uint8_t, 3> buffer{};
 
   const auto first = source.Read(buffer.data(), 2u);
-  ctx.Expect(first.status == TransportStatus::kOk && first.bytes_read == 2u &&
-                 buffer[0] == 0x10u && buffer[1] == 0x20u,
+  ctx.Expect(first.status == TransportStatus::kOk && first.bytes_read == 2u && buffer[0] == 0x10u &&
+                 buffer[1] == 0x20u,
              "memory source should read the first bytes in order");
-  ctx.Expect(source.remaining_bytes() == 2u &&
-                 source.metrics().bytes_read == 2u &&
+  ctx.Expect(source.remaining_bytes() == 2u && source.metrics().bytes_read == 2u &&
                  source.metrics().read_errors == 0u,
              "memory source should update remaining bytes and read metrics");
 
@@ -52,8 +52,7 @@ void TestMemorySourceReadsInOrder(TestContext& ctx)
              "memory source should continue reading the remaining bytes in order");
 
   const auto eof = source.Read(buffer.data(), buffer.size());
-  ctx.Expect(eof.status == TransportStatus::kEndOfStream &&
-                 eof.bytes_read == 0u &&
+  ctx.Expect(eof.status == TransportStatus::kEndOfStream && eof.bytes_read == 0u &&
                  eof.error == TransportError::kNone,
              "memory source should report EOF after its input is exhausted");
 }
@@ -68,14 +67,12 @@ void TestMemorySinkWritesInOrder(TestContext& ctx)
   const auto second_write = sink.Write(second.data(), second.size());
 
   ctx.Expect(first_write.status == TransportStatus::kOk &&
-                 second_write.status == TransportStatus::kOk &&
-                 first_write.bytes_written == 2u &&
+                 second_write.status == TransportStatus::kOk && first_write.bytes_written == 2u &&
                  second_write.bytes_written == 1u,
              "memory sink should accept writes");
   ctx.Expect(sink.written_bytes() == std::vector<std::uint8_t>({0xAAu, 0xBBu, 0xCCu}),
              "memory sink should preserve write order");
-  ctx.Expect(sink.metrics().bytes_written == 3u &&
-                 sink.metrics().write_errors == 0u,
+  ctx.Expect(sink.metrics().bytes_written == 3u && sink.metrics().write_errors == 0u,
              "memory sink should update write metrics");
 }
 
@@ -124,15 +121,12 @@ void TestMemoryDuplex(TestContext& ctx)
   const std::array<std::uint8_t, 2> write_buffer = {0x33u, 0x44u};
   const auto write = duplex.Write(write_buffer.data(), write_buffer.size());
 
-  ctx.Expect(read.status == TransportStatus::kOk &&
-                 read.bytes_read == 2u &&
-                 read_buffer[0] == 0x11u &&
-                 write.status == TransportStatus::kOk &&
+  ctx.Expect(read.status == TransportStatus::kOk && read.bytes_read == 2u &&
+                 read_buffer[0] == 0x11u && write.status == TransportStatus::kOk &&
                  write.bytes_written == 2u,
              "memory duplex should support both reading and writing");
   ctx.Expect(duplex.written_bytes() == std::vector<std::uint8_t>({0x33u, 0x44u}) &&
-                 duplex.metrics().bytes_read == 2u &&
-                 duplex.metrics().bytes_written == 2u,
+                 duplex.metrics().bytes_read == 2u && duplex.metrics().bytes_written == 2u,
              "memory duplex should track both directions in one metrics object");
 }
 
@@ -146,11 +140,8 @@ void TestTransportMetricsHelpers(TestContext& ctx)
   universal_gnss_transport::NoteReconnect(metrics);
   universal_gnss_transport::ClearLastTransportError(metrics);
 
-  ctx.Expect(metrics.bytes_read == 7u &&
-                 metrics.bytes_written == 9u &&
-                 metrics.read_errors == 1u &&
-                 metrics.write_errors == 1u &&
-                 metrics.reconnect_count == 1u &&
+  ctx.Expect(metrics.bytes_read == 7u && metrics.bytes_written == 9u && metrics.read_errors == 1u &&
+                 metrics.write_errors == 1u && metrics.reconnect_count == 1u &&
                  metrics.last_error == TransportError::kNone,
              "transport metrics helpers should update counters consistently");
 }
@@ -165,8 +156,7 @@ void TestRingBuffer(TestContext& ctx)
 
   const auto first = ring.Pop();
   const auto second = ring.Pop();
-  ctx.Expect(first.has_value() && second.has_value() &&
-                 *first == 0x01u && *second == 0x02u,
+  ctx.Expect(first.has_value() && second.has_value() && *first == 0x01u && *second == 0x02u,
              "ring buffer should pop bytes in FIFO order");
 
   const std::array<std::uint8_t, 2> refill = {0x04u, 0x05u};
@@ -176,15 +166,79 @@ void TestRingBuffer(TestContext& ctx)
 
   std::array<std::uint8_t, 3> drained{};
   const std::size_t popped = ring.Pop(drained.data(), drained.size());
-  ctx.Expect(popped == 3u &&
-                 drained[0] == 0x03u &&
-                 drained[1] == 0x04u &&
-                 drained[2] == 0x05u &&
+  ctx.Expect(popped == 3u && drained[0] == 0x03u && drained[1] == 0x04u && drained[2] == 0x05u &&
                  ring.empty(),
              "ring buffer should preserve FIFO ordering across wrap-around");
 }
 
-}  // namespace
+class ScriptedRtcmSink final : public universal_gnss_transport::ByteSink
+{
+public:
+  explicit ScriptedRtcmSink(std::deque<universal_gnss_transport::WriteResult> actions)
+      : actions_(std::move(actions))
+  {
+  }
+  universal_gnss_transport::WriteResult Write(const std::uint8_t* data, std::size_t size) override
+  {
+    auto result = actions_.empty() ? universal_gnss_transport::WriteResult{} : actions_.front();
+    if (!actions_.empty())
+      actions_.pop_front();
+    bytes_.insert(bytes_.end(), data, data + std::min(size, result.bytes_written));
+    return result;
+  }
+  bool IsOpen() const override { return open_; }
+  void Close() override { open_ = false; }
+  std::vector<std::uint8_t> bytes_{};
+
+private:
+  bool open_{true};
+  std::deque<universal_gnss_transport::WriteResult> actions_{};
+};
+
+void TestRtcmFrameWriterUga009(TestContext& ctx)
+{
+  using universal_gnss_transport::RtcmFrameWriter;
+  const std::vector<std::uint8_t> a{0xD3u, 1u, 2u, 3u};
+  const std::vector<std::uint8_t> b{0xD3u, 4u, 5u};
+  std::vector<std::uint8_t> expected = a;
+  expected.insert(expected.end(), b.begin(), b.end());
+  ScriptedRtcmSink sink({{2u, TransportStatus::kOk, TransportError::kNone},
+                         {0u, TransportStatus::kOk, TransportError::kNone},
+                         {1u, TransportStatus::kOk, TransportError::kNone},
+                         {0u, TransportStatus::kOk, TransportError::kNone},
+                         {1u, TransportStatus::kOk, TransportError::kNone},
+                         {3u, TransportStatus::kOk, TransportError::kNone}});
+  RtcmFrameWriter writer;
+  ctx.Expect(writer.Enqueue({a, 1077u}) &&
+                 writer.Flush(sink).result == RtcmFrameWriter::FlushResult::kBlocked &&
+                 writer.Enqueue({b, 1087u}) &&
+                 writer.Flush(sink).result == RtcmFrameWriter::FlushResult::kBlocked &&
+                 writer.Flush(sink).result == RtcmFrameWriter::FlushResult::kDrained &&
+                 sink.bytes_ == expected,
+             "partial, would-block, and repeated partial writes retain strict frame order");
+  RtcmFrameWriter bounded(2u);
+  ctx.Expect(bounded.Enqueue({a, 1u}) && bounded.Enqueue({b, 2u}) && !bounded.Enqueue({a, 3u}),
+             "bounded queue drops only the newest complete frame");
+  writer.Abandon();
+  RtcmFrameWriter default_bound;
+  bool accepted_all = true;
+  for (std::size_t index = 0u; index < RtcmFrameWriter::kDefaultCapacity; ++index)
+  {
+    accepted_all = accepted_all && default_bound.Enqueue({a, static_cast<std::uint16_t>(index)});
+  }
+  ctx.Expect(accepted_all && default_bound.size() == 50u && !default_bound.Enqueue({b, 99u}),
+             "default capacity is exactly 50 frames with deterministic drop-newest overflow");
+  RtcmFrameWriter failed;
+  ScriptedRtcmSink failing({{1u, TransportStatus::kOk, TransportError::kNone},
+                            {0u, TransportStatus::kError, TransportError::kWriteFailure}});
+  ctx.Expect(failed.Enqueue({a, 1u}) &&
+                 failed.Flush(failing).result == RtcmFrameWriter::FlushResult::kFailed &&
+                 failed.empty(),
+             "hard write failure abandons incomplete data before reconnect");
+  ctx.Expect(writer.empty(), "explicit abandon prevents data crossing receiver incarnations");
+}
+
+} // namespace
 
 int main()
 {
@@ -196,6 +250,7 @@ int main()
   TestMemoryDuplex(ctx);
   TestTransportMetricsHelpers(ctx);
   TestRingBuffer(ctx);
+  TestRtcmFrameWriterUga009(ctx);
 
   if (ctx.failures != 0)
   {

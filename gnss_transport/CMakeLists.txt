@@ -1,6 +1,7 @@
 add_library(
   universal_gnss_transport
   src/memory_stream.cpp
+  src/rtcm_frame_writer.cpp
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
