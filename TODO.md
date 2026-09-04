@@ -439,9 +439,10 @@ bug in this repository.
 
 ## Documentation / Quality
 
-- [ ] repair `scripts/agent/checkpoint_audit.py` compact-manifest parsing and
-  shared-checkpoint ownership detection; its current `--check` reports zero
-  manifest findings and false duplicate UGA-126 ownership
+- [x] repair `scripts/agent/checkpoint_audit.py` compact-manifest parsing and
+  shared-checkpoint ownership detection; `--check` expands all 205 UGA records,
+  treats only stable IDs in checkpoint filenames as ownership, and retains real
+  duplicate detection
 - [ ] contributor architecture guide
 - [ ] parser writing guide
 - [ ] sanitizer builds

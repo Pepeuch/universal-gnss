@@ -47,7 +47,7 @@ Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle
 
 ### Project Roadmap Progress
 
-Current identified project work: **55 / 194** complete (28.35%), **139** not started.
+Current identified project work: **56 / 194** complete (28.87%), **138** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 

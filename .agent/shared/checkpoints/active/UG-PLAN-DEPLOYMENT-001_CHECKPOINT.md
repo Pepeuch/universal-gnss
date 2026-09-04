@@ -838,12 +838,10 @@ fallback guidance only. Its remaining generic work is classified in `TODO.md`;
 the non-ROS API/WebUI, BlueOS/Bazaar, and MowgliNext work remain out of scope.
 
 VALIDATION: `bash -n docker/entrypoint.sh`, generator write/check, Python
-compile, focused generator tests (3/3), and `git diff --check` PASS. The
-existing `checkpoint_audit.py --check` false-positive remains: it cannot parse
-the compact status manifest (`manifest findings: 0`) and assigns checkpoint
-ownership from the first incidental UGA mention, producing pre-existing
-duplicate UGA-126 reports. This reconciliation did not alter that deferred
-tooling defect.
+compile, focused generator tests (3/3), and `git diff --check` PASS. The former
+`checkpoint_audit.py --check` false-positive is resolved: it expands the compact
+manifest and treats only a stable ID in a checkpoint filename as ownership, so
+incidental UGA evidence references no longer create duplicate UGA-126 owners.
 
 ## External-LAN DDS attempt (2026-09-04)
 
