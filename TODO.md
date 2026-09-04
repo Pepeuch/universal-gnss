@@ -113,14 +113,14 @@ Architecture rules:
 Container build and release:
 
 - [x] production `Dockerfile` / container build layout
-- [ ] reproducible versioned image tags tied to Universal GNSS releases/commits
+- [x] reproducible versioned image tags tied to Universal GNSS releases/commits
 - [x] multi-stage builds with a minimal runtime image
 - [x] `amd64` image validation
 - [ ] `arm64` image validation (BuildKit/QEMU packaging and smoke are green; native runtime/hardware pending)
-- [ ] define whether `arm/v7` remains a supported target
+- [x] define whether `arm/v7` remains a supported target (not supported for v0.7)
 - [ ] multi-architecture CI build/publish pipeline
-- [ ] Software Bill of Materials / image provenance strategy
-- [ ] documented image upgrade and rollback policy
+- [x] Software Bill of Materials / image provenance strategy
+- [x] documented image upgrade and rollback policy
 
 Runtime / process lifecycle:
 
@@ -143,7 +143,7 @@ Device access / hotplug:
 - [x] USB receiver disconnect/reconnect inside a running container
 - [ ] USB serial renumbering validation
 - [ ] F9P <-> UM982 physical swap/recovery validation
-- [ ] define udev/device-manager integration needed by production deployments
+- [x] define udev/device-manager integration needed by production deployments
 
 Hardware sweep (2026-09-04): the current UM982/CH340 bench proves the exact
 stable-by-id mapping, explicit stale health on physical loss, required container
@@ -159,10 +159,10 @@ Configuration / persistence / secrets:
 - [ ] persistent receiver/profile configuration state where required
 - [x] read-only defaults plus writable operator overrides
 - [x] NTRIP credentials supplied outside the image
-- [ ] secret-file / environment-variable policy with no credential leakage in
+- [x] secret-file / environment-variable policy with no credential leakage in
   logs or diagnostics
 - [ ] persistent diagnostic/log/export directory
-- [ ] backup/restore expectations for deployment configuration
+- [x] backup/restore expectations for deployment configuration
 
 Health / observability:
 
@@ -174,7 +174,7 @@ Health / observability:
   correction health, and RTK solution quality
 - [ ] healthcheck behavior when no receiver is intentionally configured
 - [ ] structured logs suitable for Docker/Compose/BlueOS collection
-- [ ] bounded log retention guidance
+- [x] bounded log retention guidance
 - [ ] snapshot/support bundle export for field diagnostics
 
 Networking:
@@ -221,10 +221,10 @@ Documentation:
 - [x] Docker quick-start
 - [x] production deployment guide
 - [x] serial/device permissions guide
-- [ ] Docker Compose example
+- [x] Docker Compose example
 - [x] ROS2 + Docker integration guide
-- [ ] troubleshooting / support-bundle guide
-- [ ] security and secret-management notes
+- [x] troubleshooting / support-bundle guide
+- [x] security and secret-management notes
 
 v0.7 deployment reconciliation (2026-09-04), limited to the 65-task release
 scope:

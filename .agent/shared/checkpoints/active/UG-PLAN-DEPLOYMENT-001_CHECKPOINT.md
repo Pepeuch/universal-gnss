@@ -843,6 +843,24 @@ compile, focused generator tests (3/3), and `git diff --check` PASS. The former
 manifest and treats only a stable ID in a checkpoint filename as ownership, so
 incidental UGA evidence references no longer create duplicate UGA-126 owners.
 
+## Local release-readiness increment (2026-09-04)
+
+CURRENT_STATE: deterministic Docker CI now builds Kilted/Lyrical amd64 images
+from the production Dockerfile without secrets or hardware and smoke-checks
+OCI revision labels, non-root runtime, installed ROS nodes, representative
+operator tools, and removal of source/build/log artifacts. It neither publishes
+images nor validates native arm64. `docker/compose.yaml` is a one-receiver,
+stable-by-id, least-privilege example with an external read-only parameter file,
+bounded Docker log rotation, and `unless-stopped` policy; it does not claim USB
+grant or receiver-profile recovery. The release docs now state immutable tags,
+SBOM/provenance release artifacts, rollback, device-manager, credential,
+backup, and manual-support collection contracts.
+
+ACCOUNTING: proven documentation/decision tasks advance v0.7 from 30/65 to
+41/65 only; project roadmap from 56/194 to 67/194; UGA remains 33/205. Remaining
+v0.7 work is intentionally unclosed where it depends on hardware, native arm64,
+external LAN, runtime/API implementation, or release publication.
+
 ## External-LAN DDS attempt (2026-09-04)
 
 STATUS: BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED / not tested. `feat/docker` is at

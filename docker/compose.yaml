@@ -1,0 +1,20 @@
+# Copy docker/.env.example to an operator-controlled location and provide its
+# values through Compose's --env-file option. Do not commit credentials there.
+services:
+  universal-gnss:
+    image: "${UNIVERSAL_GNSS_IMAGE:?set a versioned Universal GNSS image tag}"
+    restart: unless-stopped
+    devices:
+      - "${GNSS_DEVICE:?set one verified stable receiver path}:/dev/gnss-receiver"
+    group_add:
+      - "${GNSS_GROUP:?set the selected receiver device GID}"
+    environment:
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
+    volumes:
+      - "${UNIVERSAL_GNSS_PARAMETERS_FILE:?set the external parameters file}:/etc/universal_gnss/parameters.yaml:ro"
+      - "${UNIVERSAL_GNSS_LOG_DIR:?set an operator-owned log directory}:/var/log/universal_gnss"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"

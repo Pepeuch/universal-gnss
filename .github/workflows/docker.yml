@@ -1,0 +1,44 @@
+name: Docker image validation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docker-build-and-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: [kilted, lyrical]
+    env:
+      IMAGE: universal-gnss:ci-${{ matrix.ros_distro }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: |
+          docker build \
+            --build-arg ROS_DISTRO="${{ matrix.ros_distro }}" \
+            --build-arg VERSION="ci-${GITHUB_SHA}" \
+            --build-arg REVISION="${GITHUB_SHA}" \
+            --tag "${IMAGE}" \
+            .
+
+      - name: Verify image contract
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' "${IMAGE}")" = "1000:1000"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${IMAGE}")" = "${GITHUB_SHA}"
+          docker run --rm "${IMAGE}" bash -lc '
+            test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node
+            test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/ntrip_node
+            command -v gnss_discover
+            command -v gnss_config_apply
+            ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 receiver_node"
+            ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 ntrip_node"
+            test ! -e /opt/universal_gnss/src
+            test ! -e /opt/universal_gnss/build
+            test ! -e /opt/universal_gnss/log
+          '

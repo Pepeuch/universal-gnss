@@ -46,6 +46,36 @@ Use `--build-arg ROS_DISTRO=lyrical` for the Lyrical image. Multi-architecture
 build/publish automation is a later milestone; build each validated target
 platform explicitly for now.
 
+### Release identity, upgrade, and rollback
+
+For a release candidate, use an immutable tag containing both the ROS
+distribution and Universal GNSS release, such as `universal-gnss:ros2-kilted-v0.7.0`.
+Pass the matching release/version as `VERSION` and the exact source revision as
+`REVISION`; the image exposes both through OCI labels. The Docker CI matrix
+builds Kilted and Lyrical amd64 images from the same Dockerfile and verifies the
+revision label, non-root image contract, ROS nodes, representative operator
+tools, and absence of source/build/log directories in the final stage. It does
+not publish an image or validate hardware.
+
+`arm/v7` is not supported for v0.7. Native arm64 runtime/hardware remains a
+separate pending target despite the established BuildKit/QEMU package smoke.
+
+For each released image, retain an SPDX or CycloneDX SBOM generated from the
+immutable image digest, its exact Dockerfile revision, and the OCI
+version/revision labels. The v0.7 CI establishes deterministic amd64 build
+inputs and identity but does not publish attestations or multi-architecture
+images; SBOM generation/provenance capture is a release artifact step before
+any later publication, not a runtime dependency.
+
+Before an upgrade, retain the prior immutable image tag and back up the
+operator-owned parameter file and log directory. Stop the old container cleanly,
+start the new immutable tag with the same reviewed external mounts and selected
+stable device identity, then verify its labels and normal ROS diagnostics. To
+roll back, stop the new container and recreate the prior immutable tag with the
+same external configuration; do not copy mutable state out of an image or
+silently change receivers. Receiver persistent/runtime-profile behavior remains
+receiver-specific, including the UM982 power-loss reprovisioning rule below.
+
 ## Configuration, credentials, and logs
 
 The default entrypoint requires a read-only ROS parameter file at
@@ -63,6 +93,62 @@ ROS logs default to `/var/log/universal_gnss`; mount it to external writable
 storage. The container user defaults to UID/GID `1000`; use the Dockerfile
 `APP_UID`/`APP_GID` build arguments or provision the mounted directory for that
 identity. `ROS_LOG_DIR` may be overridden with another writable path.
+
+Credentials belong only in the protected external parameter file. Do not pass
+NTRIP user names/passwords in image tags, Docker build arguments, a committed
+Compose env file, or ordinary shell environment variables: those values are
+often visible in history, inspection output, or diagnostics. Runtime status and
+supervisor error coverage redacts credentials, but operators must still keep
+parameter files and support captures access-controlled.
+
+Use bounded host and Docker log retention. The provided Compose example uses
+Docker's `local` logging driver with five 10 MiB files; size and retention are
+operator policy, and the mounted ROS log directory needs an equivalent host
+rotation/archival policy. Preserve relevant logs before rotation when collecting
+support evidence; there is no automatic support-bundle export in v0.7.
+
+### Docker Compose example
+
+[`docker/compose.yaml`](../docker/compose.yaml) is a single-receiver production
+example. Copy [`docker/.env.example`](../docker/.env.example) to an
+operator-controlled path, replace the placeholders with one verified stable
+receiver identity and external paths, then run:
+
+```bash
+docker compose \
+  --env-file /srv/universal-gnss/compose.env \
+  -f docker/compose.yaml up -d
+```
+
+It uses `restart: unless-stopped` for Docker process recovery and reuses the
+same read-only parameter mount on every recreation. It does not make a stale
+USB device grant valid, restore a volatile UM982 runtime profile, or prove
+container-crash/reboot recovery; follow the USB-loss contract below and retain
+those validation gates as pending.
+
+### Device manager, backup, and support evidence
+
+Production hosts need a udev/device-manager rule that creates or verifies one
+operator-selected stable identity, grants its selected group read/write access,
+and never selects a receiver by transient tty number. Resolve that identity into
+`GNSS_DEVICE` immediately before Compose creation. The rule must not broadly
+grant `/dev`, auto-attach a replacement receiver, or bypass the stale-grant
+recreation contract.
+
+Back up the external parameter file, Compose env file (where protected), image
+tag/revision, selected stable receiver identity, and log directory metadata;
+do not treat image layers as configuration storage. Restore by reviewing those
+files, recreating the selected immutable image/container, and applying the
+receiver-specific provisioning procedure where required. Never include NTRIP
+credentials in a support archive.
+
+v0.7 has no automatic support-bundle exporter. For a manual support collection,
+record the image tag and OCI labels, sanitized `docker inspect` lifecycle/
+health information, Compose configuration with credentials removed, selected
+stable device identity and permissions, ROS diagnostics, and bounded logs.
+Capture the actual receiver/NTRIP state separately from Docker health. Redact
+parameter values, environment values, caster addresses where sensitive, and all
+credentials before sharing.
 
 ## Serial and networking runtime contract
 
