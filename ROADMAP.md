@@ -108,8 +108,10 @@ BlueOS-specific implementation.
   DDS over Docker bridge. Kilted and Lyrical arm64 BuildKit/QEMU packaging and
   smoke are green, but remain emulated evidence only. Live u-blox and Unicore
   GNSS/NTRIP/RTCM validation is green; the UM982 USB-loss contract requires
-  container recreation and replay of its volatile runtime profile. Native
-  arm64, external-LAN/robot DDS, serial renumbering, MowgliNext, and the
+  container recreation and replay of its volatile runtime profile. The Docker
+  healthcheck is intentionally process-only; receiver transport/freshness,
+  NTRIP/RTCM/correction semantics, and RTK remain independent diagnostics.
+  Native arm64, external-LAN/robot DDS, serial renumbering, MowgliNext, and the
   remaining receiver/topology matrices remain pending.
 - then reuse the ROS-independent portable runtime/supervisor for a native,
   headless standalone image, without a ROS2 or GUI requirement.

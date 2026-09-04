@@ -44,8 +44,8 @@ class BacklogStatusTests(unittest.TestCase):
             ]
         )
         MODULE.validate_todo(data)
-        self.assertEqual({"total": 194, "complete": 50, "not_started": 144}, MODULE.project_progress_counts())
-        self.assertEqual({"total": 65, "complete": 25, "not_started": 40}, MODULE.release_progress_counts())
+        self.assertEqual({"total": 194, "complete": 55, "not_started": 139}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 65, "complete": 30, "not_started": 35}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
 
     def test_duplicate_cycle_is_rejected(self) -> None:
@@ -65,9 +65,9 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertIn("CURRENT RELEASE", svg)
         self.assertIn("v0.6 → v0.7", svg)
-        self.assertIn("25 / 65 complete · 38.46%", svg)
+        self.assertIn("30 / 65 complete · 46.15%", svg)
         self.assertIn("PROJECT ROADMAP", svg)
-        self.assertIn("50 / 194 complete · 25.77%", svg)
+        self.assertIn("55 / 194 complete · 28.35%", svg)
         self.assertIn("UGA QUALITY / AUDIT", svg)
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)

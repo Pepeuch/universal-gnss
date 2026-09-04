@@ -9,18 +9,22 @@ GNSS, NTRIP, or configuration implementation.
 ## Scope and support boundary
 
 - Target build distributions: ROS 2 Kilted (default) and Lyrical, selected by
-  the `ROS_DISTRO` build argument from one Dockerfile. Docker image validation
-  remains pending for both distributions.
-- Initial image architectures: `linux/amd64` and `linux/arm64`. `arm/v7` is not
-  a target of this baseline.
+  the `ROS_DISTRO` build argument from one Dockerfile. Kilted and Lyrical amd64
+  builds and container lifecycle validation are established.
+- Initial image architectures are `linux/amd64` and `linux/arm64`; `arm/v7` is
+  not a target of this baseline. BuildKit/QEMU packaging and smoke are green
+  for both arm64 images, but native arm64 runtime and receiver hardware remain
+  required evidence.
 - The image is non-root by default and does not use privileged mode or bind all
   of `/dev`.
 - The Docker healthcheck confirms only that both launch-managed processes are
   present. It does **not** assert receiver connectivity, observation freshness,
   NTRIP connection/RTCM flow, correction validity, or RTK state.
 
-Hardware, caster/network-reconnect, USB/hotplug/re-enumeration, DDS topology,
-and robot/MowgliNext validation remain required deployment evidence.
+The established scope is same-host Docker bridge DDS, amd64 receiver/caster
+hardware, and emulated arm64 packaging. External-LAN DDS, native arm64 runtime
+and hardware, serial renumbering, robot topology, and downstream platform
+validation remain separate evidence requirements.
 
 ## Build
 
@@ -84,6 +88,36 @@ The group addition is necessary on hosts where the mapped serial device is not
 world-readable (commonly `dialout`). It is not a substitute for host device
 permissions. Do not add `--privileged` or mount all of `/dev` for this baseline.
 
+### USB-loss and hotplug operational contract
+
+The host-side stable identity is the authority for receiver selection. Resolve
+one intended `/dev/serial/by-id/...` link immediately before `docker run`, map
+only that resolved identity to `/dev/gnss-receiver`, and keep the configured
+receiver identity/profile with the deployment. Do not select by `ttyACM*`,
+`ttyUSB*`, major/minor number, or discovery order when a by-id link is present.
+
+On platforms without `/dev/serial/by-id`, use a host udev/device-manager rule
+or other operator-maintained identity mechanism that selects one receiver, then
+verify the selected node and permissions before creating the container. This is
+a deployment-specific fallback, not permission to guess from a transient tty
+name or to attach every serial device.
+
+The current CH340/UM982 hardware result establishes a deliberately conservative
+contract. USB loss makes the existing Docker device grant stale. Replugging may
+return the same tty and major/minor number, yet the already-running container
+does not regain access. Its process-only Docker healthcheck can therefore stay
+healthy while receiver transport and observations are stale; use the ROS
+diagnostics/status surfaces to distinguish that state. Stop and recreate the
+container only after the chosen stable identity has been re-resolved. Never
+silently substitute a different receiver.
+
+The UM982's runtime-only configuration is volatile across USB power loss.
+After recreation, replay the intended profile using the normal guarded
+provisioning workflow before accepting operation. This image does not claim
+transparent in-place hotplug recovery, automatic device reattachment, or an
+old-byte cutoff. Serial renumbering, other receivers/adapters, and other USB
+topologies require their own validation.
+
 The image leaves DDS networking policy to deployment configuration. Docker's
 default bridge is not disabled, and no RMW implementation, domain ID, or
 localhost-only setting is hard-coded. Validate host-to-container,
@@ -108,6 +142,19 @@ domain. Domain IDs provide the observed DDS isolation; they are not an access
 control mechanism. In this devcontainer/daemon topology,
 `ROS_LOCALHOST_ONLY=1` still allowed host/container delivery, so it must not be
 relied on for container or network isolation.
+
+### External-LAN DDS validation still required
+
+The current environment does not expose an accessible Docker daemon or a second
+LAN host, so no external-LAN claim is made. Validate the target deployment with
+at least two physical LAN hosts: one host/container publishes and the other
+subscribes, then reverse the direction, using the intended RMW configuration,
+explicit `ROS_DOMAIN_ID`, and production firewall/multicast or discovery-server
+settings. Confirm application data delivery in both directions and confirm that
+a different domain receives none. Record the host OS, RMW/DDS configuration,
+addressing, and any required firewall rules. Same-host bridge evidence neither
+proves nor replaces this test; do not switch globally to host networking as a
+substitute.
 
 `exec` is used for the launch process, so Docker `SIGTERM`/`SIGINT` reaches ROS
 launch directly and its managed receiver/NTRIP processes receive normal launch

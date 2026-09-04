@@ -810,3 +810,37 @@ contracts change.
 Exact next action: begin `UG-PLAN-005` Phase A ROS2-first production Docker
 baseline when authorized. Keep `UG-PLAN-002` physical receiver/caster/hotplug
 validation as separate HARDWARE_PENDING evidence.
+
+## v0.7 reconciliation update (2026-09-04)
+
+CURRENT_STATE: `feat/docker` is based directly on current validated `main`
+`f974b565100b4f2aa3d522cd9a292f30f905e8bc`. The checked Docker evidence above
+is unchanged and was not rerun. `docs/ros2_docker.md` is now the operational
+quick-start/deployment/device-permissions/ROS2 guide: it states that Docker
+HEALTHCHECK proves only the two launch-managed processes, while receiver
+transport, fresh observations, NTRIP connection, RTCM flow/semantic health, and
+RTK are independent ROS diagnostics. It also records the proven CH340/UM982
+USB-loss response: re-resolve exactly one stable by-id identity, recreate the
+container, and replay the volatile runtime-only profile; never infer recovery
+from the same tty/major/minor or substitute another receiver.
+
+EXTERNAL-LAN STATUS: not tested. This workspace has no accessible Docker daemon
+(the normal project user receives Docker socket permission denial), no LAN
+interface, and no second LAN host. Required procedure: two physical LAN hosts,
+bidirectional host/container DDS data flow under the intended RMW/domain and
+firewall/discovery configuration, plus a different-domain isolation check. The
+same-host bridge result remains separate; host networking is not a shortcut.
+
+ARM64 STATUS: Kilted/Lyrical BuildKit/QEMU packaging and smoke remain green;
+native arm64 runtime and receiver/caster hardware remain pending. The v0.7
+release checklist now records 30/65 complete after proven documentation and
+fallback guidance only. Its remaining generic work is classified in `TODO.md`;
+the non-ROS API/WebUI, BlueOS/Bazaar, and MowgliNext work remain out of scope.
+
+VALIDATION: `bash -n docker/entrypoint.sh`, generator write/check, Python
+compile, focused generator tests (3/3), and `git diff --check` PASS. The
+existing `checkpoint_audit.py --check` false-positive remains: it cannot parse
+the compact status manifest (`manifest findings: 0`) and assigns checkpoint
+ownership from the first incidental UGA mention, producing pre-existing
+duplicate UGA-126 reports. This reconciliation did not alter that deferred
+tooling defect.

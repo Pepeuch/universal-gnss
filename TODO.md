@@ -138,7 +138,7 @@ Device access / hotplug:
 
 - [x] serial passthrough using stable `/dev/serial/by-id/...` identities where
   available
-- [ ] document fallback behavior for platforms without `/dev/serial/by-id`
+- [x] document fallback behavior for platforms without `/dev/serial/by-id`
 - [x] least-privilege serial permissions; avoid `--privileged` as the normal path
 - [x] USB receiver disconnect/reconnect inside a running container
 - [ ] USB serial renumbering validation
@@ -218,13 +218,42 @@ Deployment validation gates:
 
 Documentation:
 
-- [ ] Docker quick-start
-- [ ] production deployment guide
-- [ ] serial/device permissions guide
+- [x] Docker quick-start
+- [x] production deployment guide
+- [x] serial/device permissions guide
 - [ ] Docker Compose example
-- [ ] ROS2 + Docker integration guide
+- [x] ROS2 + Docker integration guide
 - [ ] troubleshooting / support-bundle guide
 - [ ] security and secret-management notes
+
+v0.7 deployment reconciliation (2026-09-04), limited to the 65-task release
+scope:
+
+- **Actionable now:** release tagging/provenance/CI, lifecycle and persistent
+  configuration policies, operational observability/logging/support guidance,
+  Compose, and the remaining deterministic documentation work. The Docker
+  quick-start, production deployment, serial/device permissions, and ROS2
+  integration guidance are complete in [`docs/ros2_docker.md`](docs/ros2_docker.md).
+- **HARDWARE_REQUIRED:** serial renumbering; F9P/UM982 swap and recovery;
+  long-run, crash/restart, reboot/autostart, rate-mismatch, RTK Fixed, and
+  source/incarnation validation; UGA-126 transport-incarnation cutoff; and
+  UGA-170's receiver-model reset matrix. The proven UM982 USB-loss contract is
+  documented there; it requires container recreation and profile replay.
+- **Native-arm64-required:** native runtime and receiver/caster hardware; the
+  existing BuildKit/QEMU package/smoke result is not native evidence.
+- **External-LAN-required:** DDS discovery/data flow, topology/firewall policy,
+  and domain isolation across physical LAN hosts. Same-host bridge evidence is
+  separate.
+- **MowgliNext-required:** robot and downstream deployment validation only;
+  neither is exercised by this release-scope work.
+- **Deferred beyond v0.7:** the non-ROS API/control surface, generic WebUI,
+  BlueOS runtime/Bazaar work, and `arm/v7` support decision unless explicitly
+  brought into a later release scope.
+
+The Docker healthcheck intentionally proves only that launch-managed processes
+are alive. Receiver transport, fresh observations, NTRIP connectivity, RTCM
+flow/semantic health, and RTK state remain independent diagnostics and must
+not be inferred from Docker health.
 
 
 ### v0.8.0 — BlueOS extension
