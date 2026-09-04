@@ -22,19 +22,31 @@ the release/dependency view. This checkpoint is only a resumption aid.
 - IMPLEMENTED/PARTIAL: `84d4b34` adds generic, non-ROS/non-BlueOS supervisor
   Phase 1 with one explicit serial device, session/runner lifecycle, bounded
   reconnect, incarnation clearing, snapshots, CLI, and fake-transport tests.
-- COMPLETED RESEARCH/PARTIAL: BlueOS compatibility/packaging research, Bazaar
-  metadata template, and minimal permission template exist. No Docker image,
-  API, GUI, NTRIP supervisor orchestration, or BlueOS runtime is implemented.
+- CURRENT: BlueOS compatibility/packaging research, Bazaar metadata template,
+  and minimal permission template exist. No Docker image, API, GUI, or BlueOS
+  runtime is implemented.
+- IMPLEMENTED: `8c6ac20` completes deterministic native-supervisor
+  NTRIP/RTCM orchestration and the transport-neutral/ROS2 writer migration;
+  the retained closure evidence below remains subject to physical validation.
 
-## Dependency decisions
+## Dependency and priority decision
 
-1. Finish current Universal GNSS/MowgliNext downstream validation.
-2. Complete supervisor Phase 1 physical/configuration delta (`UG-PLAN-001`).
-3. Compose supervisor NTRIP/RTCM (`UG-PLAN-002`).
-4. Build generic API then GUI (`UG-PLAN-003`, `UG-PLAN-004`).
-5. Package standalone Docker (`UG-PLAN-005`).
-6. Reuse these layers for BlueOS and perform physical device-grant validation
-   before publication (`UG-PLAN-006`).
+The authoritative dependency/priority order, recorded in `TODO.md`, is:
+
+1. Complete deterministic `UG-PLAN-002` work.
+2. Establish `UG-PLAN-005` Phase A: a ROS2-first production Docker baseline.
+3. Reuse the portable runtime/supervisor for a native/headless standalone image.
+4. Reuse the production container/runtime contract for `UG-PLAN-006` BlueOS
+   skeleton/packaging work.
+5. Add the generic HTTP API (`UG-PLAN-003`).
+6. Add the independent Tailwind WebUI (`UG-PLAN-004`).
+7. Integrate the same WebUI into standalone/BlueOS and optionally ROS2-facing
+   deployments.
+
+`UG-PLAN-002` is IMPLEMENTED with HARDWARE_PENDING physical validation; its
+deterministic closure is recorded below. BlueOS may begin preparatory/skeleton
+work only after the container/runtime contract exists, and may initially be
+headless/status-oriented.
 
 ## Hardware boundary
 
@@ -46,13 +58,16 @@ grant for a newly enumerated physical receiver.
 
 - Do not add ROS2/BlueOS dependencies or duplicate GNSS/parser/runtime/NTRIP
   semantics in the supervisor, API, GUI, Docker, or BlueOS layers.
-- Do not create a Dockerfile until the supervisor is production-capable.
-- Do not claim API, GUI, Docker, or BlueOS support is implemented.
+- Do not restore API/WebUI as prerequisites for Docker.
+- Do not make BlueOS higher priority than ROS2 Docker.
+- Do not create separate GNSS semantics for native, ROS2, and BlueOS deployments.
+- Do not claim Docker or BlueOS runtime support is implemented.
 
 ## Exact next step
 
-Resume the first authorized generic runtime/deployment item from `TODO.md`;
-do not start BlueOS implementation ahead of its generic dependencies.
+Begin `UG-PLAN-005` Phase A, the ROS2-first production Docker baseline, when
+authorized; do not start BlueOS implementation ahead of the generic
+container/runtime contract.
 
 ## UG-PLAN-002 resumption state
 
@@ -88,9 +103,9 @@ Do not redo the ROS2 migration or alter `RtcmFrameWriter` without invalidating
 the transport-neutral and ReceiverNode regression evidence above. Do not touch
 `gnss_runtime` NTRIP integration, API, WebUI, Docker, or BlueOS runtime here.
 
-Exact next action: begin the separately authorized native-supervisor NTRIP/RTCM
-composition only when requested; use the shared writer contract rather than
-reintroducing a consumer-local queue.
+Historical continuation direction (now completed by `8c6ac20`): compose
+native-supervisor NTRIP/RTCM only through the shared writer contract; do not
+reintroduce a consumer-local queue.
 
 ## Native supervisor NTRIP/RTCM state — PARTIAL
 
@@ -248,8 +263,8 @@ reintroducing a consumer-local queue.
 
 CURRENT_STATE (2026-09-04, deterministic closure): UG-PLAN-002 native
 supervisor NTRIP/RTCM orchestration is IMPLEMENTED for deterministic software
-evidence. It is coherent enough to form the requested single commit, but no
-commit or push was made.
+evidence. It was committed as `8c6ac20`; this documentation-only change does
+not create another commit or push.
 
 VALIDATION (closure):
 
@@ -270,7 +285,8 @@ VALIDATION (closure):
   C++ files; `git diff --check`.
 
 REMAINING_DELTA: physical receiver/caster operation, physical receiver
-re-enumeration/hotplug, and actual-network reconnect remain HARDWARE_REQUIRED.
+re-enumeration/hotplug, and actual-network reconnect remain HARDWARE_PENDING
+for this deterministically implemented plan.
 They are the only remaining evidence; do not represent them as deterministically
 proven. Docker/API/WebUI/BlueOS are explicitly out of scope and unstarted.
 
@@ -279,6 +295,6 @@ ROS2 migration, GGA fresh-observation, stop-cancellation, and credential
 redaction analysis above is established until its cited runtime/Ntrip/transport
 contracts change.
 
-Exact next action: if authorized, review the cohesive UG-PLAN-002 diff and make
-one commit. Otherwise retain this checkpoint and begin only separately
-authorized physical receiver/caster/hotplug validation.
+Exact next action: begin `UG-PLAN-005` Phase A ROS2-first production Docker
+baseline when authorized. Keep `UG-PLAN-002` physical receiver/caster/hotplug
+validation as separate HARDWARE_PENDING evidence.
