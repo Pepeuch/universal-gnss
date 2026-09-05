@@ -109,11 +109,10 @@ grant for a newly enumerated physical receiver.
 
 ## Exact next step
 
-Phases B and C are complete. Do not start Phase D without fresh authorization;
-resume from `active/UG-PLAN-005_EXTERNAL_LAN_DDS.md` when authorized. Preserve
-the restored robot baseline, do not expose NTRIP credentials, and do not start
-BlueOS implementation ahead of the remaining generic container/runtime
-acceptance work.
+Phases B, C, and D are complete. Do not start Phase E without fresh
+authorization. Preserve the restored robot baseline and the retained explicit
+bridge/unicast DDS contract, do not expose NTRIP credentials, and do not start
+BlueOS implementation ahead of the remaining generic container/runtime work.
 
 ## UG-PLAN-005 Phase A — partial ROS2 Docker baseline
 
@@ -1087,3 +1086,25 @@ ACCOUNTING: `robot Docker validation` closes; v0.7 advances 46/65 -> 47/65,
 Project Roadmap 72/194 -> 73/194, and UGA remains 33/205. DNS/reconnect,
 crash/restart, host reboot, external-LAN DDS, Float-to-Fixed transition,
 persistence, and incarnation gates remain open.
+
+## Physical external-LAN DDS increment (2026-09-05)
+
+PROVEN: current Kilted/Fast DDS arm64 validation containers on the robot and
+second RPi directly exchanged distinct nonce payloads in both physical-LAN
+directions and reported one remote publisher discovered at each receiver. A
+domain-117 publisher against a domain-118 subscriber produced zero remote
+discovery and zero payload on the already-proven path. Domain IDs remain a
+filter, not a security boundary.
+
+CONTRACT: unmodified Docker default-bridge multicast discovery failed in both
+directions because membership remained local to each `docker0`, and both hosts
+assigned overlapping `172.17.0.2/16` locators. The one successful minimal
+alternative kept Docker bridge mode and added temporary read-only Fast DDS
+external-unicast profiles plus only fixed UDP ports 36662/36663. Host networking
+was never used. Detailed physical evidence and invalidation conditions are in
+`retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
+
+CLEANUP / ACCOUNTING: only the validation containers and ownership-checked
+temporary profiles were removed; all Mowgli services remained running and no
+GNSS or persistent network state changed. This separate matrix has no canonical
+65-task checkbox, so v0.7 remains 47/65, Project Roadmap 73/194, and UGA 33/205.

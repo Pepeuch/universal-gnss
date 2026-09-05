@@ -28,8 +28,10 @@ fully closed canonical TODO item.
 - Native Kilted arm64 build/runtime and a least-privilege live UM982 serial
   path are proven on the second physical RPi. QEMU remains separate packaging
   evidence; Lyrical-native and caster/network coverage were not inferred.
-  Physical peers are inventoried for external-LAN DDS, but its acceptance
-  matrix has not run; see `active/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
+  External-LAN DDS is proven between the robot and second RPi using the current
+  Kilted image on Docker bridge with explicit external-unicast locators and two
+  published RTPS UDP ports; unmodified bridge multicast directly failed. See
+  `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
 - Docker USB-loss contract is established: resolve exactly one stable by-id
   path, map only that device, and recreate the container after loss. A same
   tty/major:minor on replug does not prove recovery. UM982 runtime-only
@@ -446,9 +448,9 @@ each disruptive test. Never substitute a similar-looking result.
 
 ## EXACT_NEXT_STEP
 
-Phase C is complete. Do not start Phase D without fresh authorization. Preserve
-the restored robot baseline and reuse the separate active external-LAN DDS
-checkpoint if Phase D is later authorized.
+Phases B, C, and D are complete. Do not start Phase E without fresh
+authorization. Preserve the restored robot baseline and the retained DDS
+contract; do not rerun earlier phase evidence without an invalidating change.
 
 ## PHASE_C_PREFLIGHT_2026_09_05
 

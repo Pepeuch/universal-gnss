@@ -114,10 +114,12 @@ BlueOS-specific implementation.
   Native Kilted arm64 build/runtime is green on a physical Raspberry Pi,
   including the bounded no-device lifecycle and a least-privilege live UM982
   serial path; Lyrical-native and caster/network coverage were not inferred.
-  External-LAN/robot DDS, serial renumbering, MowgliNext, and the remaining
-  receiver/topology matrices remain pending. The external-LAN DDS peer blocker
-  is cleared by the inventoried robot and second RPi, but bidirectional Fast DDS
-  delivery and domain-isolation acceptance have not run.
+  External-LAN DDS is validated between the robot and second RPi: unmodified
+  default-bridge multicast discovery failed, while the single minimal
+  bridge/unicast alternative proved discovery and payload in both directions
+  plus different-domain non-delivery. Host networking was not used and domain
+  IDs are not a security boundary. Serial renumbering, MowgliNext, and the
+  remaining receiver/topology matrices remain pending.
   The exact current image is also validated independently on the real robot with
   a sole u-blox device grant, live fix, protected runtime-only NTRIP, valid RTCM
   forwarding/correction health, clean SIGINT stop, and exact restoration of the

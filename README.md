@@ -70,8 +70,10 @@ recovery behavior. Native Kilted arm64 build/runtime and live UM982 serial
 ingestion are also proven on a physical Raspberry Pi. The same current image is
 validated independently on the real robot with a sole u-blox grant, live
 fix/NTRIP/RTCM correction flow, clean stop, and exact legacy restoration.
-Lyrical-native, external-LAN/robot DDS, serial renumbering, MowgliNext, BlueOS,
-API, and WebUI remain pending.
+External-LAN DDS is validated in both physical directions with explicit
+bridge/unicast locators and different-domain non-delivery; unmodified bridge
+multicast failed and is not claimed. Lyrical-native, serial renumbering,
+MowgliNext, BlueOS, API, and WebUI remain pending.
 
 Current project state includes:
 

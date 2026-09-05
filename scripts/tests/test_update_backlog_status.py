@@ -95,7 +95,7 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertIn("Validation dependencies (orthogonal)", svg)
         self.assertIn("Open v0.7 gate classifications (exclusive)", svg)
         self.assertIn("Open hardware-dependent gates: 13", svg)
-        self.assertIn("External-LAN DDS remains a separate pending acceptance matrix", svg)
+        self.assertIn("External-LAN DDS is a separate completed acceptance matrix", svg)
 
         changed = replace(
             data,

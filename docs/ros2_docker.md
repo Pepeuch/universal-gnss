@@ -16,18 +16,19 @@ this operational guide when reviewing a release candidate.
   builds and container lifecycle validation are established.
 - Initial image architectures are `linux/amd64` and `linux/arm64`; `arm/v7` is
   not a target of this baseline. BuildKit/QEMU packaging and smoke are green
-  for both arm64 images, but native arm64 runtime and receiver hardware remain
-  required evidence.
+  for both arm64 images. Native Kilted build/runtime and receiver ingestion are
+  proven on a physical arm64 Raspberry Pi; Lyrical-native remains separate.
 - The image is non-root by default and does not use privileged mode or bind all
   of `/dev`.
 - The Docker healthcheck confirms only that both launch-managed processes are
   present. It does **not** assert receiver connectivity, observation freshness,
   NTRIP connection/RTCM flow, correction validity, or RTK state.
 
-The established scope is same-host Docker bridge DDS, amd64 receiver/caster
-hardware, and emulated arm64 packaging. External-LAN DDS, native arm64 runtime
-and hardware, serial renumbering, robot topology, and downstream platform
-validation remain separate evidence requirements.
+The established scope includes same-host Docker bridge DDS, physical-LAN DDS
+under the explicit unicast contract below, amd64 receiver/caster hardware,
+native Kilted arm64 runtime, and real-robot runtime. Lyrical-native, serial
+renumbering, lifecycle matrices, and downstream platform validation remain
+separate evidence requirements.
 
 ## Build
 
@@ -83,8 +84,8 @@ image version/revision, ROS distribution, and configured receiver family. It
 is deployment identity only, not a health verdict; discovery diagnostics retain
 the separate receiver model/firmware fields when they are actually known.
 
-`arm/v7` is not supported for v0.7. Native arm64 runtime/hardware remains a
-separate pending target despite the established BuildKit/QEMU package smoke.
+`arm/v7` is not supported for v0.7. BuildKit/QEMU evidence remains distinct
+from the proven native Kilted arm64 result; Lyrical-native is still pending.
 
 For each released image, retain an SPDX or CycloneDX SBOM generated from the
 immutable image digest, its exact Dockerfile revision, and the OCI
@@ -321,24 +322,32 @@ control mechanism. In this devcontainer/daemon topology,
 `ROS_LOCALHOST_ONLY=1` still allowed host/container delivery, so it must not be
 relied on for container or network isolation.
 
-### External-LAN DDS validation still required
+### Physical-LAN DDS evidence and required unicast contract
 
-This acceptance task is **BLOCKED_BY_ENVIRONMENT /
-HARDWARE_OR_TOPOLOGY_REQUIRED**. The current validation workspace is in Docker
-networking at `172.17.0.6`, on the `172.17.0.0/16` bridge, with no second
-physical LAN host reachable; its normal project user also cannot access the
-Docker daemon socket. No external-LAN claim is made.
+Kilted arm64 validation on the physical robot and a second Raspberry Pi first
+used unmodified Docker default bridges with Fast DDS subnet discovery. It
+failed discovery in both directions: `239.255.0.1` membership remained on each
+host's separate `docker0`, not its physical LAN interface, and both bridges
+assigned the overlapping locator `172.17.0.2/16`. No payload followed. Preserve
+that negative result; a plain default bridge is not an external-LAN contract.
 
-The future acceptance topology is machine A running the Dockerized Universal
-GNSS ROS2 node on Docker's default bridge and independent physical-LAN machine
-B running a ROS2 node. Configure the same explicit `ROS_DOMAIN_ID`, then record
-discovery and payload delivery separately for B -> container and container ->
-B. Repeat the payload check with a different domain and require no delivery.
-Record Fast DDS/RMW version and interface/discovery settings, host OS, LAN
-addresses/prefixes, Docker network mode, and inspectable firewall, multicast,
-or discovery-server configuration. Same-host bridge evidence neither proves nor
-replaces this test; do not switch globally to host networking unless a real
-default-bridge failure establishes that need.
+The single minimal alternative kept Docker network mode `bridge` and did not
+use host networking. Each validation container mounted a host-specific Fast DDS
+profile read-only, disabled builtin multicast, listed the opposite physical
+host as an initial unicast peer, and announced its own physical host as the
+external discovery/data locator. One fixed participant per endpoint used only
+published UDP ports 36662 and 36663. Under that exact contract, distinct nonce
+payloads and one remote publisher were observed in both physical directions.
+A domain-117 publisher against the same-path domain-118 subscriber produced
+zero remote discovery and zero payload.
+
+The fixed pair supports the one-participant validation contract only. ROS CLI
+daemon processes allocated additional participant ports and had to be stopped;
+a deployment with multiple DDS participants must explicitly allocate, publish,
+and announce every required locator rather than silently relying on this pair.
+`ROS_DOMAIN_ID` provides the observed domain filter but is not a security or
+access-control boundary. Revalidate whenever the hosts/interfaces, Docker
+networking, RMW/Fast DDS version/profile, ports, or firewall/LAN policy changes.
 
 `exec` is used for the launch process, so Docker `SIGTERM`/`SIGINT` reaches ROS
 launch directly and its managed receiver/NTRIP processes receive normal launch
