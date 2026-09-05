@@ -377,7 +377,7 @@ def render_svg(data: BacklogData) -> str:
         '<text x="28" y="500" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>',
         f'<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware {dependencies["HARDWARE_RECEIVER_REQUIRED"]} · USB action {dependencies["USB_PHYSICAL_ACTION_REQUIRED"]} · power cycle {dependencies["POWER_CYCLE_REQUIRED"]} · robot {dependencies["ROBOT_REQUIRED"]}</text>',
         f'<text x="28" y="545" font-family="sans-serif" font-size="13" fill="#334155">native arm64 {dependencies["NATIVE_ARM64_REQUIRED"]} · long duration {dependencies["LONG_DURATION_REQUIRED"]} · design contract {dependencies["DESIGN_CONTRACT_REQUIRED"]} · publication {dependencies["PUBLICATION_REQUIRED"]} · already partial {dependencies["ALREADY_PARTIAL"]}</text>',
-        f'<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: {hardware_dependent} (derived overlap group; do not add to the exclusive classifications). External-LAN DDS remains a separate blocked acceptance matrix outside the 65-item checklist.</text>',
+        f'<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: {hardware_dependent} (derived overlap group; do not add to the exclusive classifications). External-LAN DDS remains a separate pending acceptance matrix outside the 65-item checklist.</text>',
         '</svg>',
         '',
     ])

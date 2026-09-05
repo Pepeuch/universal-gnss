@@ -88,7 +88,6 @@
   "release_gate_dependencies": {
     "release": "v0.7",
     "gates": [
-      {"task": "`arm64` image validation (BuildKit/QEMU packaging and smoke are green; native runtime/hardware pending)", "classification": "NATIVE_ARM64_REQUIRED"},
       {"task": "multi-architecture CI build/publish pipeline", "classification": "PUBLICATION_REQUIRED"},
       {"task": "receiver-process restart without stale state resurrection", "classification": "HARDWARE_RECEIVER_REQUIRED"},
       {"task": "container restart with deterministic configuration reapplication", "classification": "HARDWARE_RECEIVER_REQUIRED"},
@@ -100,7 +99,6 @@
       {"task": "healthcheck behavior when no receiver is intentionally configured", "classification": "ALREADY_PARTIAL"},
       {"task": "structured logs suitable for Docker/Compose/BlueOS collection", "classification": "DESIGN_CONTRACT_REQUIRED"},
       {"task": "Docker DNS/reconnect behavior validation", "classification": "ROBOT_REQUIRED"},
-      {"task": "robot Docker validation", "classification": "ROBOT_REQUIRED"},
       {"task": "long-run container validation", "classification": "LONG_DURATION_REQUIRED"},
       {"task": "container crash/restart validation", "classification": "ROBOT_REQUIRED"},
       {"task": "host reboot/autostart validation", "classification": "ROBOT_REQUIRED"},

@@ -1,9 +1,8 @@
 # Agent checkpoint
 
 Repository: `/workspaces/universal-gnss`
-Branch: `main`
-HEAD: `cf3765a03c83c8858480e786b738fea2eb3d276f` before uncommitted
-`UG-PLAN-005` Phase A work
+Branch: `feat/docker`
+Execution HEAD: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
 
 ## Objective
 
@@ -105,14 +104,16 @@ grant for a newly enumerated physical receiver.
 - Do not restore API/WebUI as prerequisites for Docker.
 - Do not make BlueOS higher priority than ROS2 Docker.
 - Do not create separate GNSS semantics for native, ROS2, and BlueOS deployments.
-- Do not claim Docker or BlueOS runtime support is implemented.
+- Do not generalize the proven ROS2 Docker runtime to standalone or BlueOS
+  runtime support.
 
 ## Exact next step
 
-Validate the `UG-PLAN-005` image on Kilted and Lyrical (`linux/amd64` first),
-including no-hardware startup/help and graceful stop, when Docker is available;
-do not start BlueOS implementation ahead of the generic container/runtime
-contract.
+Phases B and C are complete. Do not start Phase D without fresh authorization;
+resume from `active/UG-PLAN-005_EXTERNAL_LAN_DDS.md` when authorized. Preserve
+the restored robot baseline, do not expose NTRIP credentials, and do not start
+BlueOS implementation ahead of the remaining generic container/runtime
+acceptance work.
 
 ## UG-PLAN-005 Phase A — partial ROS2 Docker baseline
 
@@ -1035,3 +1036,54 @@ against a production image; the expected tools/libraries were present, no
 missing `ldd` dependencies appeared, missing config exited 1, and unsupported
 schema exited 2. No metrics changed because this hardens already-complete
 build/runtime scope.
+
+## Native arm64 physical-RPi increment (2026-09-05)
+
+PROVEN: exact tracked source `90325b2a05501341b9e6f88460d8c4b194c7bf25`
+was built without a platform override on a native aarch64 Raspberry Pi using
+the Kilted production Dockerfile. The resulting inspected `linux/arm64` image
+ran as uid/gid 1000 with tini, SIGINT, exact OCI identity, resolved runtime
+libraries, no development trees, and the stable schema exits. A no-device
+container became process-healthy and stopped cleanly.
+
+HARDWARE EVIDENCE: the operator-confirmed UM982 behind the generic QinHeng
+CH340 bridge was selected only by
+`/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` -> `/dev/ttyUSB1`, `188:1`,
+USB `1a86:7523`, driver `ch341`, `root:dialout`. A non-root, non-privileged
+container mapped only that device and group 20. After the established volatile
+14-command runtime-only profile replay from 115200 to 921600 (no persistent
+write or reset), two snapshots advanced from sequence 223 / 351 observations
+and updates to sequence 237 / 373 with healthy, fresh Unicore transport and no
+parser anomalies. The clean SIGINT stop exited 0 and released the device.
+
+LIMITS: NTRIP was not required or accessed; no fix, satellites, corrections,
+Lyrical-native behavior, caster/network behavior, persistent profile, hotplug,
+or incarnation cutoff was inferred. Detailed reproducible evidence remains in
+`active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md`.
+
+ACCOUNTING: the canonical `arm64 image validation` gate closes; v0.7 advances
+45/65 -> 46/65, Project Roadmap 71/194 -> 72/194, and UGA remains 33/205.
+External-LAN DDS is ACTIVE/PENDING now that both physical peers are inventoried,
+but its payload/domain matrix remains unexecuted and receives no credit.
+
+## Real-robot Docker increment (2026-09-05)
+
+PROVEN: the exact current Kilted arm64 image ran independently on the real robot
+as uid/gid 1000, non-privileged, default bridge, with only the selected u-blox
+by-id device and supplemental GID 20, external read-only configuration, bounded
+Docker logs, and no broad device mount. Location-redacted snapshots showed an
+advancing valid fix, healthy/fresh receiver transport, and zero parser errors.
+
+A single protected NTRIP cell used the already-validated values only from a
+mode-0600 tmpfs config mounted read-only. It directly proved streaming,
+integrity-valid RTCM flow, GGA injection, receiver forwarding, active
+corrections, and valid multi-constellation RTCM semantics. RTK Fixed appeared
+naturally, but no Float-to-Fixed transition was observed. The SIGINT stop exited
+0 in one second, the secret tmpfs file was unlinked, and the exact legacy GPS
+container/image/config tuple was restored with restart count 0 and exclusive
+serial ownership. Other Mowgli services remained running.
+
+ACCOUNTING: `robot Docker validation` closes; v0.7 advances 46/65 -> 47/65,
+Project Roadmap 72/194 -> 73/194, and UGA remains 33/205. DNS/reconnect,
+crash/restart, host reboot, external-LAN DDS, Float-to-Fixed transition,
+persistence, and incarnation gates remain open.

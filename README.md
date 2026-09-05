@@ -41,13 +41,13 @@ Current phase: post-`v0.6.x` stabilization.
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
 
-**45 / 65** release-scoped tasks complete (69.23%), **20** not started.
+**47 / 65** release-scoped tasks complete (72.31%), **18** not started.
 
 Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.
 
 ### Project Roadmap Progress
 
-Current identified project work: **71 / 194** complete (36.60%), **123** not started.
+Current identified project work: **73 / 194** complete (37.63%), **121** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 
@@ -66,8 +66,12 @@ Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). U
 Deployment progress is tracked separately from the UGA baseline above. `UG-PLAN-005`
 Phase A has proven Kilted/Lyrical amd64 runtime, arm64 BuildKit/QEMU packaging,
 same-host DDS, and live u-blox/Unicore GNSS, NTRIP, RTCM, and UM982 USB-loss
-recovery behavior. Native arm64 hardware/runtime, external-LAN/robot DDS,
-serial renumbering, MowgliNext, BlueOS, API, and WebUI remain pending.
+recovery behavior. Native Kilted arm64 build/runtime and live UM982 serial
+ingestion are also proven on a physical Raspberry Pi. The same current image is
+validated independently on the real robot with a sole u-blox grant, live
+fix/NTRIP/RTCM correction flow, clean stop, and exact legacy restoration.
+Lyrical-native, external-LAN/robot DDS, serial renumbering, MowgliNext, BlueOS,
+API, and WebUI remain pending.
 
 Current project state includes:
 

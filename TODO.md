@@ -68,7 +68,7 @@ the current numeric source of truth.
 | `UG-PLAN-002` | IMPLEMENTED | NTRIP / DEPLOYMENT | HARDWARE_PENDING | `UG-PLAN-001` | Deterministic Phase 2 is complete: shared transport-neutral `UGA009` `RtcmFrameWriter`; ROS2 `ReceiverNode` semantic-parity migration; native supervisor `NtripClient` orchestration; independent receiver/NTRIP reconnect; RTCM forwarding; GGA observation-sequence/cadence policy; stop cancellation; redacted credential/status behavior; 33/33 runtime/NTRIP/transport/driver CTests; ROS2-enabled build; `test_receiver_node`; formatting; and diff checks. Remaining physical evidence: receiver lifecycle, real caster/network reconnect, USB/hotplug/re-enumeration, and BlueOS device grants. |
 | `UG-PLAN-003` | OPEN | DEPLOYMENT | — | `UG-PLAN-005` | Lightweight generic HTTP API above the production container/runtime contract: lifecycle/health, receiver identity and transport, normalized `GnssRuntimeState`, parser/session diagnostics, correction/RTK/NTRIP health, redacted configuration, and reconnect/incarnation data. Later endpoints validate and deliberately apply/restart configuration with existing receiver-configuration safeguards. HTTP handlers must not own GNSS logic; defer SSE/WebSocket selection until evidence justifies it. |
 | `UG-PLAN-004` | OPEN | DEPLOYMENT | — | `UG-PLAN-003` | Generic Universal GNSS web GUI, served by or alongside the native API and usable from native Linux, standalone Docker, and BlueOS. Use responsive Tailwind CSS and the existing logo under `docs/`; keep it presentation/configuration-only. Plan Basic (connection/fix/RTK/position/accuracy/correction/NTRIP health), Advanced (satellites, C/N0, motion, UTC, RTCM, metrics, reconnect/configuration summary), and Expert (AGC, interference, raw diagnostics, transport, auto-configuration, logs, incarnation, advanced controls) views. |
-| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, and the exact Unicore USB-loss contract. The current CH340/UM982 bench requires recreation after USB loss and runtime-profile replay after power loss; stable by-id returned unchanged in one non-renumbering trial. Remaining: serial-renumbering and other receiver/topology matrices, a qualified UGA-126 transport-incarnation cutoff, UGA-170's per-model u-blox reset matrix, native arm64/hardware, and robot/BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
+| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, the exact Unicore USB-loss contract, native Kilted arm64 build/runtime with live UM982 serial ingestion on a physical Raspberry Pi, and the real-robot least-privilege u-blox/NTRIP runtime baseline. The current CH340/UM982 bench requires recreation after USB loss and runtime-profile replay after power loss; stable by-id returned unchanged in one non-renumbering trial. Remaining: serial-renumbering and other receiver/topology matrices, a qualified UGA-126 transport-incarnation cutoff, UGA-170's per-model u-blox reset matrix, external-LAN DDS and robot lifecycle validation, and BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
 | `UG-PLAN-006` | PARTIAL | BLUEOS | HARDWARE_REQUIRED | `UG-PLAN-005` | Completed evidence: compatibility study, architecture proposal, Bazaar metadata and minimal receiver-permission templates, packaging/architecture research, and identified device/hotplug risks. BlueOS skeleton/packaging may reuse the production container/runtime contract once it exists and may initially be headless/status-oriented; it must not displace ROS2 Docker priority or reimplement GNSS semantics. Later phases add API/WebUI integration, `register_service`, relative-path-safe GUI exposure, settings/apply/restart, multi-arch publication, Bazaar submission, and install/update/rollback validation. USB hotplug/re-enumeration and Docker grants require real BlueOS proof; a reopened tty is not proof of a valid new device grant. |
 
 Priority and dependency order: complete deterministic `UG-PLAN-002`; establish
@@ -116,7 +116,7 @@ Container build and release:
 - [x] reproducible versioned image tags tied to Universal GNSS releases/commits
 - [x] multi-stage builds with a minimal runtime image
 - [x] `amd64` image validation
-- [ ] `arm64` image validation (BuildKit/QEMU packaging and smoke are green; native runtime/hardware pending)
+- [x] `arm64` image validation (native Kilted build, no-device lifecycle, and live UM982 serial ingestion proven on a physical aarch64 Raspberry Pi)
 - [x] define whether `arm/v7` remains a supported target (not supported for v0.7)
 - [ ] multi-architecture CI build/publish pipeline
 - [x] Software Bill of Materials / image provenance strategy
@@ -204,7 +204,7 @@ Deployment validation gates:
 
 - [x] PC Docker validation with u-blox F9P
 - [x] PC Docker validation with Unicore UM98x
-- [ ] robot Docker validation
+- [x] robot Docker validation (current Kilted arm64 image, least-privilege u-blox mapping, live fix/NTRIP/RTCM/correction health, clean stop, and exact legacy restoration proven)
 - [ ] long-run container validation
 - [x] receiver silence and reconnect validation (current UM982 contract requires recreation)
 - [x] NTRIP disconnect/reconnect validation
@@ -226,10 +226,10 @@ Documentation:
 - [x] troubleshooting / support-bundle guide
 - [x] security and secret-management notes
 
-v0.7 deployment reconciliation (2026-09-04), limited to the 65-task release
+v0.7 deployment reconciliation (updated 2026-09-05), limited to the 65-task release
 scope:
 
-Remaining-gate classification after the runtime-identity milestone (20 gates):
+Remaining-gate classification after robot validation (18 gates):
 
 - **ACTIONABLE_NOW:** persistent diagnostic/log/export directory contract;
   application-level no-receiver status regression/documentation; bounded,
@@ -241,18 +241,16 @@ Remaining-gate classification after the runtime-identity milestone (20 gates):
   against the local caster if deterministic; and a qualified stale-state cutoff.
   Existing live receiver/NTRIP evidence is reused and does not close those
   distinct lifecycle criteria.
-- **REQUIRES_NATIVE_ARM64:** native arm64 image runtime/receiver/caster
-  validation. BuildKit/QEMU packaging stays separate.
 - **REQUIRES_EXTERNAL_LAN:** the recorded two-host Fast DDS discovery,
-  bidirectional delivery, and domain-isolation acceptance. It is blocked by the
-  current topology and has no separate unchecked 65-task line.
+  bidirectional delivery, and domain-isolation acceptance. Its physical-peer
+  prerequisite is now satisfied, but the matrix has not run and has no separate
+  unchecked 65-task line.
 - **REQUIRES_LONG_DURATION:** long-run container, host reboot/autostart,
   low-receiver/high-publication-rate, high-receiver/low-publication-rate, and
   naturally observed RTK Float/Fixed transition validation.
 - **REQUIRES_POWER_CYCLE_OR_DESTRUCTIVE_TEST:** serial renumbering, F9P/UM982
   physical swap/recovery, and receiver/profile persistence. No reset or power
   cycle is implied by this classification.
-- **REQUIRES_MOWGLINEXT:** robot Docker validation only.
 - **REQUIRES_PUBLIC_API_OR_DESIGN_CONTRACT:** a Docker healthcheck that claims
   functional GNSS service rather than process liveness. The current deliberate
   process-only healthcheck remains correct; a richer claim needs an explicit
@@ -262,6 +260,17 @@ Remaining-gate classification after the runtime-identity milestone (20 gates):
 - **ALREADY_PROVEN_BUT_UNMARKED:** none. The support snapshot/export and
   runtime-identity gates are now checked only after focused implementation and
   validation; all other unchecked gates retain their separate evidence need.
+
+The native-arm64 gate is now checked from a native Kilted build and inspected
+runtime on a physical aarch64 Raspberry Pi, including both no-device lifecycle
+and a least-privilege live UM982 serial path. BuildKit/QEMU remains separate
+packaging evidence; Lyrical-native and caster/network coverage were not inferred.
+
+The robot Docker gate is checked from the exact current Kilted arm64 image on
+the real robot: selected u-blox-only mapping, non-root/non-privileged bridge
+runtime, live advancing fix, protected runtime-only NTRIP and valid RTCM
+forwarding/correction health, clean SIGINT stop, and exact legacy restoration.
+The naturally observed Fixed state does not prove a Float-to-Fixed transition.
 
 - **Actionable now:** release tagging/provenance/CI, lifecycle and persistent
   configuration policies, operational observability/logging/support guidance,
@@ -289,16 +298,18 @@ Remaining-gate classification after the runtime-identity milestone (20 gates):
   source/incarnation validation; UGA-126 transport-incarnation cutoff; and
   UGA-170's receiver-model reset matrix. The proven UM982 USB-loss contract is
   documented there; it requires container recreation and profile replay.
-- **Native-arm64-required:** native runtime and receiver/caster hardware; the
-  existing BuildKit/QEMU package/smoke result is not native evidence.
-- **BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED — external-LAN:**
+- **Native-arm64 proven (2026-09-05):** native Kilted build/runtime, bounded
+  no-device lifecycle, and a live least-privilege UM982 serial path passed on a
+  physical aarch64 Raspberry Pi. This does not claim Lyrical-native or caster
+  coverage.
+- **ACTIVE / HARDWARE_OR_TOPOLOGY_REQUIRED — external-LAN:**
   DDS discovery/data flow, topology/firewall policy, and domain isolation across
-  physical LAN hosts. The current validation namespace (`172.17.0.6`) is on the
-  same Docker bridge (`172.17.0.0/16`) and has no second physical LAN peer;
-  same-host bridge evidence is separate and receives no release credit. Resume
-  only with machine A running the default-bridge Dockerized ROS2 node and an
-  independent physical-LAN machine B: prove B -> container and container -> B
-  discovery/message flow on one explicit domain, then prove different-domain
+  physical LAN hosts. Robot `192.168.10.35` and second RPi `192.168.10.225`
+  satisfy the independent-peer prerequisite, but no DDS discovery or payload
+  direction has run. Same-host bridge evidence is separate and receives no
+  release credit. Resume with machine A running the default-bridge Dockerized
+  ROS2 node and machine B on the physical LAN: prove B -> container and
+  container -> B delivery on one explicit domain, then prove different-domain
   isolation while recording Fast DDS interface/discovery and firewall evidence.
   Do not use host networking unless a real failure justifies it.
 

@@ -247,9 +247,9 @@ Result:
 Using the supplied mountpoint and credentials, the live caster endpoint was
 identified on the local LAN as:
 
-- host: `192.168.10.31`
-- port: `2101`
-- mountpoint: `PEPEUCHGNSS`
+- host: `<redacted-host>`
+- port: `<redacted-port>`
+- mountpoint: `<redacted-mountpoint>`
 
 Credentials are intentionally omitted from this document. The validation used
 the operator-supplied username/password pair.
@@ -608,9 +608,9 @@ Low-level caster validation command:
 
 ```bash
 ./build/gnss_tools/gnss_ntrip_monitor \
-  --host 192.168.10.31 \
-  --port 2101 \
-  --mountpoint PEPEUCHGNSS \
+  --host <redacted-host> \
+  --port <redacted-port> \
+  --mountpoint <redacted-mountpoint> \
   --user <redacted> \
   --password <redacted> \
   --max-seconds 8 \
@@ -621,7 +621,7 @@ Observed result after the legacy-`ICY` compatibility fix:
 
 ```text
 Summary:
-  endpoint=192.168.10.31:2101/PEPEUCHGNSS state=streaming stop_reason=max_seconds
+  endpoint=<redacted-host>:<redacted-port>/<redacted-mountpoint> state=streaming stop_reason=max_seconds
   bytes_received=14060 bytes_sent=198 request_sent=true response_received=true elapsed_s=8.389
   rtcm_frames_seen=60 valid_frames=60 invalid_frames=0 gga_sent=0 gga_send_errors=0 reconnects=0 last_type=1006
   base_position_seen=true base_1005_seen=true base_1006_seen=true glonass_bias_1230_seen=true
@@ -650,9 +650,9 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   transport:=serial \
   serial_device:=/dev/ttyACM0 \
   serial_baud:=921600 \
-  caster_host:=192.168.10.31 \
-  caster_port:=2101 \
-  mountpoint:=PEPEUCHGNSS \
+  caster_host:=<redacted-host> \
+  caster_port:=<redacted-port> \
+  mountpoint:=<redacted-mountpoint> \
   username:=<redacted> \
   password:=<redacted> \
   gga_enabled:=true \
@@ -721,9 +721,9 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   transport:=serial \
   serial_device:=/dev/ttyUSB0 \
   serial_baud:=921600 \
-  caster_host:=192.168.10.31 \
-  caster_port:=2101 \
-  mountpoint:=PEPEUCHGNSS \
+  caster_host:=<redacted-host> \
+  caster_port:=<redacted-port> \
+  mountpoint:=<redacted-mountpoint> \
   username:=<redacted> \
   password:=<redacted> \
   gga_enabled:=true \
@@ -811,7 +811,7 @@ Result:
 - runtime-only USB diagnostics profile apply succeeded
 - final sampled USB output included `NAV-PVT`, `NAV-SAT`, `NAV-STATUS`,
   `NAV-DOP`, `MON-HW`, `MON-HW2`, and `MON-RF`
-- real local NTRIP caster validation passed on `192.168.10.31:2101/PEPEUCHGNSS`
+- real local NTRIP caster validation passed on `<redacted-host>:<redacted-port>/<redacted-mountpoint>`
 - combined ROS2 receiver + NTRIP launch validated live correction streaming,
   active GGA injection, and live RTCM forwarding into the receiver transport
 - live u-blox `RXM-RTCM` acceptance was observed through receiver diagnostics

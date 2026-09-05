@@ -111,11 +111,18 @@ BlueOS-specific implementation.
   container recreation and replay of its volatile runtime profile. The Docker
   healthcheck is intentionally process-only; receiver transport/freshness,
   NTRIP/RTCM/correction semantics, and RTK remain independent diagnostics.
-  Native arm64, external-LAN/robot DDS, serial renumbering, MowgliNext, and the
-  remaining receiver/topology matrices remain pending. External-LAN DDS is
-  specifically `BLOCKED_BY_ENVIRONMENT / HARDWARE_OR_TOPOLOGY_REQUIRED`: the
-  current workspace has only the same-host Docker bridge, so an independent LAN
-  host is required for bidirectional Fast DDS and domain-isolation acceptance.
+  Native Kilted arm64 build/runtime is green on a physical Raspberry Pi,
+  including the bounded no-device lifecycle and a least-privilege live UM982
+  serial path; Lyrical-native and caster/network coverage were not inferred.
+  External-LAN/robot DDS, serial renumbering, MowgliNext, and the remaining
+  receiver/topology matrices remain pending. The external-LAN DDS peer blocker
+  is cleared by the inventoried robot and second RPi, but bidirectional Fast DDS
+  delivery and domain-isolation acceptance have not run.
+  The exact current image is also validated independently on the real robot with
+  a sole u-blox device grant, live fix, protected runtime-only NTRIP, valid RTCM
+  forwarding/correction health, clean SIGINT stop, and exact restoration of the
+  legacy GPS container. A naturally observed Fixed state is not a Float-to-Fixed
+  transition result.
 - Release identity is available through standard OCI labels and the existing
   ROS diagnostic/snapshot surface: image build inputs supply version, revision,
   and deterministic source-commit creation time; runtime identity reports those

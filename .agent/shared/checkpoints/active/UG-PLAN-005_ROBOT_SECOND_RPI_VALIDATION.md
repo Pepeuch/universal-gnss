@@ -5,6 +5,7 @@ Lifecycle: ACTIVE. This is an execution plan, not evidence of completion.
 Repository: `/workspaces/universal-gnss`  
 Branch: `feat/docker`  
 Baseline: `a5b5755` (`ci(docker): harden v0.7 image contract checks`)
+Execution baseline: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
 
 ## CONTRACT
 
@@ -19,14 +20,16 @@ fully closed canonical TODO item.
 
 ## CURRENT_STATE
 
-- v0.7: 45/65; Project Roadmap: 71/194; UGA: 33/205.
+- v0.7: 47/65; Project Roadmap: 73/194; UGA: 33/205.
 - amd64 Kilted/Lyrical image/runtime, QEMU/BuildKit arm64 packaging, non-root
   serial mapping, tini/SIGINT lifecycle, external read-only configuration,
   same-host bridge DDS/domain isolation, and u-blox/UM982 live
   GNSS/NTRIP/RTCM evidence are established. Reuse the deployment checkpoint.
-- QEMU is not native arm64 evidence. External-LAN DDS is blocked only because
-  the current workspace has no independent physical peer; see
-  `blocked/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
+- Native Kilted arm64 build/runtime and a least-privilege live UM982 serial
+  path are proven on the second physical RPi. QEMU remains separate packaging
+  evidence; Lyrical-native and caster/network coverage were not inferred.
+  Physical peers are inventoried for external-LAN DDS, but its acceptance
+  matrix has not run; see `active/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
 - Docker USB-loss contract is established: resolve exactly one stable by-id
   path, map only that device, and recreate the container after loss. A same
   tty/major:minor on replug does not prove recovery. UM982 runtime-only
@@ -34,9 +37,215 @@ fully closed canonical TODO item.
 - UGA-126 and UGA-170 remain PARTIAL. Do not give either completion credit by
   inference.
 
+## PHASE_A_EVIDENCE_2026_09_05
+
+Phase A passive inventory completed at 2026-09-05 13:43–13:48 UTC. No remote
+package, service, container, network, repository, configuration, or receiver
+state was changed, and no serial port was opened or probed.
+
+### Robot — `192.168.10.35`
+
+- Host `Peuchmower2`; Debian 13.6 (trixie), kernel
+  `6.18.39+rpt-rpi-2712`, native `aarch64`.
+- Docker client/server `29.8.0 linux/arm64`; overlayfs, systemd cgroup v2.
+  Root filesystem `/dev/sda2`: 117 GiB total, 15 GiB used, 98 GiB free.
+- LAN is `wlan0` at `192.168.10.35/24`, default route via
+  `192.168.10.1`; Docker networks `172.17.0.0/16` and `172.18.0.0/16`.
+- Clock synchronized with active NTP; timezone `Europe/Paris`; UTC observation
+  `2026-09-05T13:43:49Z`. `ufw`, `nft`, and `iptables` CLIs are absent, so
+  Phase A saw no host firewall tooling but did not prove an empty kernel ruleset.
+- User `pepeuch` is in `docker` and `dialout` and can inspect Docker without
+  elevation.
+- MowgliNext worktree: `fix/gnss-downstream` at
+  `5bd4e6af37773ce6f44330cdf66362c9fe0a04e6`, with untracked
+  `docker/config/mowgli/mowgli_robot.yaml.pre460800test`. Its Universal GNSS
+  gitlink is `5281472116669972ae12b9d1997d66b064671cf5`.
+- Separate `/home/pepeuch/mowgli-docker` worktree is `v2` at
+  `f76800fe8c6ba665e105dbf2bc9e4322c1d09c21`, with pre-existing modified
+  `.env` and `config/om/mower_config.sh` plus untracked `.env.bak` and
+  `config/db/`. Contents were not read.
+- Existing Compose project is `/home/pepeuch/mowglinext/docker/docker-compose.yaml`.
+  All six containers were running with restart policy `unless-stopped` and
+  restart count 0: GUI `1e79992047af` / image `sha256:1b01abab8324`,
+  watchtower `9e26c54da00d` / `sha256:8042c9efdebd`, MQTT
+  `63b36e45d55c` / `sha256:6f8d8a947c50`, ROS2 `31ee55f0cac6` /
+  `sha256:f440535aae76`, lidar `7828333d2696` / `sha256:beaa5bf17972`,
+  and GPS `bf7bfaa9754f` / `sha256:267028885b2f`.
+- The stale GPS image is
+  `ghcr.io/mowglinext/mowglinext/gps@sha256:267028885b2f63b8e65c76d1705d065d8a89b21352fb0dab00e414bc5e0fb096`,
+  OCI revision `6506901497a6df21b5fa633773f46986a9abe9b0`. The stale GPS
+  container is privileged, host-networked, runs with an empty Docker `User`,
+  and bind-mounts all of `/dev`; it is rollback evidence, never current-UG
+  least-privilege evidence.
+- Stale ROS/GPS containers declare ROS 2 Kilted, domain 0,
+  `rmw_cyclonedds_cpp`, `ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`, and
+  `CYCLONEDDS_URI=file:///cyclonedds.xml`. The host has no `/opt/ros` tree and
+  no ROS/DDS variables in the SSH login environment.
+- Rollback configuration identity: `mowgli_robot.yaml` SHA-256
+  `f779520a50dadca060ff1082b2f5f93e2677f17c22398297984af25ede91dedc`;
+  `cyclonedds.xml` SHA-256
+  `4fc1039763f7fea849c8fead011a1bd6febcf3b855301e99bc97a3e1d2d068a1`.
+  No credential-bearing values were read.
+- Intended GNSS identity is the unambiguous u-blox link
+  `/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00`
+  -> `/dev/ttyACM1`, character device `166:1`, `root:dialout`, mode `0660`,
+  USB `1546:01a9`, driver `cdc_acm`. Udev identifies the family only as
+  `u-blox_GNSS_receiver`; an exact model was not safely observable without
+  opening the active serial device.
+- Mounted Docker configuration state is preserved by checksum, but the active
+  receiver's runtime/persistent profile and firmware were not deterministically
+  observable without opening the in-use serial device or reading mixed
+  credential-bearing configuration. Neither is inferred from the stale image.
+- The distinct Mowgli controller is
+  `/dev/serial/by-id/usb-STMicroelectronics_Mowgli_5CDA80483434-if00` ->
+  `/dev/ttyACM0`, `166:0`. It must not be substituted for the GNSS receiver.
+
+### Second RPi — `192.168.10.225`
+
+- Host `raspberrypi`; Debian 13.6 (trixie), kernel
+  `6.18.39+rpt-rpi-v8`, native `aarch64`.
+- Docker client/server `29.8.0 linux/arm64`; overlayfs, systemd cgroup v2.
+  Root filesystem `/dev/sda2`: 110 GiB total, 13 GiB used, 94 GiB free.
+- LAN is `eth0` at `192.168.10.225/24`, default route via
+  `192.168.10.1`; Docker networks `172.17.0.0/16` and `172.18.0.0/16`.
+- Clock synchronized with active NTP; timezone `Europe/London`; UTC observation
+  `2026-09-05T13:43:46Z`. `ufw`, `nft`, and `iptables` CLIs are absent, with
+  the same ruleset-visibility limitation as the robot.
+- MowgliNext worktree is clean `dev` at
+  `5cb07fabb72f4c1a8a31cc8857eb61814cbe986c`; its Universal GNSS gitlink
+  is `ab32f673da6e9e6ffa8eac9a57b08656f8843645`.
+- An existing Mowgli Compose stack is running despite this host's disposable
+  campaign role. All five containers use `unless-stopped` with restart count 0:
+  GUI `6d4a2c8e99c0` / image `sha256:d0e933c0b16c`, MQTT
+  `26ed1542d0569` / `sha256:6f8d8a947c50`, watchtower `3fc8f5b2cbc3` /
+  `sha256:8042c9efdebd`, ROS2 `f56fe6c13da5` / `sha256:c120330fe87f`,
+  and GPS `acd8aa738d0e` / `sha256:ac2ebe0e5042`. Compose path is
+  `/home/pepeuch/mowglinext/docker/docker-compose.yaml`.
+- The existing dev GPS image is
+  `ghcr.io/mowglinext/mowglinext/gps@sha256:ac2ebe0e504202358779ab2cc4c2af660e1cb3de8b875c0aeb9ae726029f6efa`,
+  OCI revision `f7f13db6305bc3b69693cfcfc738025d2b157ba4`. Existing ROS/GPS
+  containers are privileged, host-networked, broadly mount `/dev`, and declare
+  Kilted/Cyclone DDS/domain 0/localhost-only discovery. They are not current-UG
+  validation evidence.
+- The host has no `/opt/ros` tree, no ROS/DDS variables in the SSH login
+  environment, and no `/dev/serial/by-id`; no receiver is mapped or assumed.
+
+### Phase A classification
+
+- Both hosts meet the real native-arm64 prerequisite. Native current-UG
+  build/load/run is not yet tested, so the gate remains unchecked.
+- The two operator-identified physical hosts are independently reachable on the
+  same `/24`, Docker is accessible on both, and their interface roles are
+  recorded. This clears the previous peer-availability blocker for the
+  external-LAN DDS matrix; no DDS discovery/payload test has run, so the matrix
+  is ACTIVE/PENDING and receives no completion credit.
+- No canonical TODO gate closed. v0.7, Project Roadmap, and UGA totals remain
+  45/65, 71/194, and 33/205 respectively.
+
+### Pre-Phase-B second-RPi GNSS refresh
+
+The first refresh after operator action still returned
+`/dev/serial/by-id=absent`. After the operator rechecked physical USB
+enumeration, the final passive refresh established exactly one receiver bridge:
+
+- `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` -> `/dev/ttyUSB1`;
+- character device `188:1`, `root:dialout`, mode `0666`;
+- USB VID:PID `1a86:7523`, udev model `USB_Serial`, driver `ch341`;
+- no user-visible host handle and no handle in any running container with a
+  `/dev` bind mount was detected.
+
+Udev identifies only the generic QinHeng CH340 bridge. The operator physically
+confirms the receiver behind it is a Unicore UM982; do not present that model as
+udev-derived identity. The serial device was not opened or configured. Recheck
+the by-id realpath and major:minor immediately before any future container
+creation because this observation supersedes the earlier absent-device state.
+
+## PHASE_B_NATIVE_ARM64_EVIDENCE_2026_09_05
+
+- Exact build input was `git archive HEAD` from clean tracked source
+  `90325b2a05501341b9e6f88460d8c4b194c7bf25`; archive SHA-256
+  `57e64b11494ec0d95e9a70272130cb6a87f735f73b910229c48697c224a98a9c`.
+  Uncommitted checkpoint state was excluded. Docker contract-file hashes match
+  between the local repository and extracted RPi source.
+- On native `aarch64` host `raspberrypi` with Docker server
+  `29.8.0/linux/arm64`, ordinary `docker build` ran without a `--platform`
+  override and compiled `universal_gnss_ros2` natively in 12 min 50 s.
+- Kilted base resolved to
+  `ros:kilted-ros-base@sha256:0030f32dc8a71ef8401c89470db6003c779f036f532d40195790f58f0001902d`.
+  The resulting local tag is
+  `universal-gnss:ug-plan-005-kilted-90325b2`. Image inspection and runtime
+  acceptance initially remained pending; this build result alone did not close
+  the gate.
+- Static/runtime-content validation passed for native image ID and local digest
+  `sha256:1b01bb887132dccb425107c55f5d1b5c1cf840312c10cd0dc98d59bc0dd8184b`
+  (`linux/arm64`, 1,373,185,837 bytes): default user `1000:1000`, tini
+  group-forwarding entrypoint, `STOPSIGNAL SIGINT`, process healthcheck,
+  expected receiver/NTRIP nodes and operator tools, all dynamic libraries
+  resolved, and no final-image source/build/log development trees.
+- OCI identity exactly reports version `ug-plan-005-90325b2`, revision
+  `90325b2a05501341b9e6f88460d8c4b194c7bf25`, source repository, and source
+  commit timestamp `2026-09-04T22:05:54+00:00`; image environment contains no
+  secret-like NTRIP/password/token names. Native in-image `uname -m` returned
+  `aarch64` and runtime `id` returned uid/gid 1000.
+- Unsupported schema v2 exited 2 with the stable schema event; missing default
+  parameter mount exited 1 with the stable unreadable-file event.
+- External credential-empty parameter copy SHA-256
+  `1a5f45af8d435c2ae7f3c47697428c9cd7da08ccc53b151f63f0496b1e60b2ec`
+  was operator-owned mode `0600` and mounted read-only. Container
+  `ug-plan-005-native-kilted` (`5eae1c174a8c`) ran on default bridge with no
+  device grant, no added group, non-root user, and no privileged mode. It became
+  Docker-healthy with process tree `tini -> ros2 -> receiver_node,ntrip_node`;
+  receiver discovery failed independently while NTRIP reported disconnected.
+- `docker stop` used the image SIGINT path and completed in about one second.
+  Launch forwarded SIGINT to both nodes; each signal handler ran. Final state:
+  exit 0, OOM false, restart count 0. External logs were written as
+  `pepeuch:pepeuch`. The stopped evidence container remains available; legacy
+  Mowgli containers were not changed.
+- Immediately before each device-backed container creation, the selected by-id
+  link was re-resolved to `/dev/ttyUSB1`, character device `188:1`, and no
+  user-visible host handle was open. The live containers mapped only that by-id
+  path to `/dev/gnss-receiver`, added only group 20, ran as uid/gid 1000 on the
+  default bridge, and were neither privileged nor given a broad `/dev` mount.
+- The first receiver-backed run at the configured 921600 baud produced no
+  observations, matching the established volatile-profile behavior after USB
+  power loss. Its snapshots remained at sequence 0 and stale. A bounded
+  automatic runtime-only apply at that baud returned `transport_unavailable`
+  without executing any command; a 115200 passive discovery likewise saw no
+  periodic output.
+- The exact offline UM982 high-precision plan contained 14 runtime commands,
+  zero persistent commands, and no `FRESET` or `SAVECONFIG`. A one-off,
+  network-disabled, non-root container then applied those 14 commands from
+  current baud 115200 to target baud 921600 with explicit family `unicore`,
+  model `UM982`, and confirmation. All 14 completed; the post-switch `VERSIONA`
+  response was received at 921600. No persistent or factory-reset operation ran.
+- Fresh container `ug-plan-005-native-um982-profiled` (`ccc5c620`) then proved
+  advancing live data. Two bounded snapshots progressed from sequence 223 / 351
+  runtime observations and updates to sequence 237 / 373. Transport was healthy,
+  receiver state was fresh, parser anomalies and unknown records were zero, and
+  the selected session was `unicore`. Runtime identity matched the inspected
+  image. No position was recorded in the evidence.
+- The available sky state did not yield a fix or corrections: fix remained
+  invalid, satellites 0, and correction input inactive. These are separate
+  receiver/caster acceptance limits, not failures of native image execution or
+  serial ingestion. NTRIP was intentionally unused; its test credentials were
+  neither accessed nor persisted, and the external live config had empty
+  credential fields.
+- Both receiver-backed containers stopped through the SIGINT path in about one
+  second with exit 0, OOM false, and restart count 0. The selected serial device
+  was released. Existing Mowgli containers were not stopped or changed; the
+  exact source tree, native image, protected external configs/logs, and stopped
+  evidence containers remain on the second RPi for later campaign phases.
+- Phase B is PASS and closes only the canonical `arm64 image validation` gate.
+  v0.7 advances 45/65 -> 46/65 and Project Roadmap 71/194 -> 72/194; UGA remains
+  33/205. External-LAN DDS, robot, restart, persistence, rate, RTK Fixed,
+  incarnation, publication, and other hardware gates remain unclosed.
+- Tracker validation passed: status regeneration/check, five focused backlog
+  tests, checkpoint audit plus four focused checkpoint-audit tests, and
+  `git diff --check`.
+
 ## AVAILABLE_HARDWARE
 
-Expected tomorrow; verify before any state-changing action:
+Inventoried for this campaign; re-resolve identity before any state-changing action:
 
 | Resource | Intended role | Gates it can support |
 | --- | --- | --- |
@@ -50,19 +259,18 @@ receiver/caster gate until its physical topology is recorded.
 
 ## REMAINING V0.7 GATE CLASSIFICATION
 
-The 20 unchecked items in the fixed 65-item release scope each have one
+The 18 unchecked items in the fixed 65-item release scope each have one
 primary classification:
 
 | Primary classification | Count | Canonical unchecked gates |
 | --- | ---: | --- |
-| `NATIVE_ARM64_REQUIRED` | 1 | arm64 image validation |
 | `PUBLICATION_REQUIRED` | 1 | multi-architecture CI build/publish pipeline |
 | `HARDWARE_RECEIVER_REQUIRED` | 6 | receiver-process restart/no stale state; deterministic container configuration reapplication; low-receiver/high-publication rate; high-receiver/low-publication rate; RTK Float/Fixed transition; no stale state across incarnations |
 | `USB_PHYSICAL_ACTION_REQUIRED` | 2 | serial renumbering; F9P↔UM982 physical swap/recovery |
 | `POWER_CYCLE_REQUIRED` | 1 | persistent receiver/profile configuration |
 | `ALREADY_PARTIAL` | 2 | persistent diagnostic/log/export directory; no-receiver healthcheck behavior |
 | `DESIGN_CONTRACT_REQUIRED` | 2 | functional Docker healthcheck; structured logs suitable for Docker/Compose/BlueOS |
-| `ROBOT_REQUIRED` | 4 | Docker DNS/reconnect; robot Docker validation; container crash/restart; host reboot/autostart |
+| `ROBOT_REQUIRED` | 3 | Docker DNS/reconnect; container crash/restart; host reboot/autostart |
 | `LONG_DURATION_REQUIRED` | 1 | long-run container validation |
 
 External-LAN DDS has no separate unchecked line in the fixed 65-item list. Its
@@ -129,7 +337,7 @@ WebUI, BlueOS/Bazaar, MowgliNext integration, and publication remain
 | --- | --- | --- | --- | --- |
 | Native arm64 | arm64 image validation | Actual `aarch64` host runs the inspected arm64 image and required receiver/caster path where available | No-device runtime proves packaging/lifecycle only; no correctly mapped receiver/caster is PARTIAL | QEMU or `docker image inspect` alone proves no native runtime/hardware behavior |
 | Robot baseline | robot Docker validation | Robot runs the existing least-privilege image with selected receiver and bounded GNSS/NTRIP evidence | Missing selected identity, serial permission, caster, or status access is BLOCKED with exact reason | A transient tty, broad `/dev`, or a different receiver is not an acceptable substitute |
-| Physical LAN DDS | blocked external-LAN matrix | Same-domain discovery and payload in both directions, plus different-domain non-delivery, on two machines | Any missing peer/firewall/interface evidence is BLOCKED; direction-only result is PARTIAL | `ROS_DOMAIN_ID` is not security; same-host/host-net tests are not external LAN |
+| Physical LAN DDS | pending external-LAN matrix | Same-domain discovery and payload in both directions, plus different-domain non-delivery, on two machines | Any missing peer/firewall/interface evidence is BLOCKED; direction-only result is PARTIAL | `ROS_DOMAIN_ID` is not security; same-host/host-net tests are not external LAN |
 | DNS/NTRIP reconnect | Docker DNS/reconnect | Receiver remains healthy while independently observed resolver/caster interruption reconnects and correction diagnostics recover | No isolated interruption or missing healthy receiver is PARTIAL | Generic NTRIP success is not DNS/reconnect evidence |
 | Process crash | container crash/restart; UGA-126 only if qualified | Deliberate receiver-process crash has recorded exit/restart policy/config and fresh post-start status | `docker kill` tests only manual container termination; missing status evidence is PARTIAL | Restart alone does not prove stale-byte cutoff |
 | Container/daemon/host restart | config reapply; host reboot/autostart | Each named action separately restores expected image/config and records Docker policy and exit/status | Cannot perform action or ambiguous autostart is BLOCKED | Container restart, daemon restart, and host reboot are different contracts |
@@ -200,11 +408,11 @@ facts block external-LAN acceptance locally but do not predict robot behavior.
 
 ## EXPECTED_GATES_TO_CLOSE
 
-Conditional on the exact PASS criteria, tomorrow can close: robot Docker
-validation; physical-LAN DDS acceptance record; native arm64 image validation
-when an actual aarch64 runtime (and, if required by the gate, selected receiver
-and caster) is available; Docker DNS/reconnect; container crash/restart;
-host reboot/autostart; and deterministic container configuration reapplication.
+The native-arm64 image and robot Docker gates are closed by Phases B and C.
+Conditional on the exact PASS criteria, subsequent authorized phases can close:
+physical-LAN DDS acceptance record; Docker DNS/reconnect; container
+crash/restart; host reboot/autostart; and deterministic container configuration
+reapplication.
 
 USB renumbering, swap/recovery, receiver/profile persistence, rate mismatch,
 RTK Fixed, and UGA-126 may yield useful evidence but close only if their stricter
@@ -238,8 +446,99 @@ each disruptive test. Never substitute a similar-looking result.
 
 ## EXACT_NEXT_STEP
 
-Tomorrow morning, before creating or restarting any container, run the passive
-inventory on both machines beginning with `uname -m`, `git rev-parse --short
-HEAD`, and Docker/image identity inspection. Record the selected stable by-id
-realpath and major:minor on the robot before any device mapping. Then proceed
-to Phase B.
+Phase C is complete. Do not start Phase D without fresh authorization. Preserve
+the restored robot baseline and reuse the separate active external-LAN DDS
+checkpoint if Phase D is later authorized.
+
+## PHASE_C_PREFLIGHT_2026_09_05
+
+- At 14:42:57Z the robot remained native aarch64 with Docker 29.8.0 arm64.
+  The selected u-blox link still resolved to `/dev/ttyACM1`, character device
+  `166:1`, USB `1546:01a9`, driver `cdc_acm`, `root:dialout`, mode `0660`.
+- Phase A rollback identity was unchanged: running `mowgli-gps` container
+  `bf7bfaa9754f4817277359964667b65faf7851f74006551d490c0a7d0ec439b2`,
+  image `sha256:267028885b2f63b8e65c76d1705d065d8a89b21352fb0dab00e414bc5e0fb096`,
+  restart policy `unless-stopped`, restart count 0, and configuration SHA-256
+  `f779520a50dadca060ff1082b2f5f93e2677f17c22398297984af25ede91dedc`.
+- `mowgli-gps` alone held `/dev/ttyACM1` at process fd 9. Stopping only this
+  related container is strictly necessary for exclusive serial validation;
+  the GUI, watchtower, MQTT, ROS2, and lidar containers remain untouched.
+- The current image was absent on the robot. Load it before the bounded GPS
+  interruption, prepare protected external configuration/log paths, then
+  re-resolve the device immediately before container creation.
+- The exact Phase-B image was then streamed directly from the second RPi and
+  loaded on the robot. Robot inspection matches image ID
+  `sha256:1b01bb887132dccb425107c55f5d1b5c1cf840312c10cd0dc98d59bc0dd8184b`,
+  `linux/arm64`, uid/gid 1000, revision `90325b2a05501341b9e6f88460d8c4b194c7bf25`,
+  version `ug-plan-005-90325b2`, source timestamp
+  `2026-09-04T22:05:54+00:00`, SIGINT, and tini group forwarding.
+- A credential-empty u-blox config and external log path were prepared beneath
+  `/home/pepeuch/ug-plan-005/runtime/kilted-90325b2`. The config is
+  operator-owned mode 0600, SHA-256
+  `3a2c4622755984c2b5fd07107637b824866140913750710450aa5b9638f9b3df`,
+  and will be mounted read-only. Its NTRIP target is a non-listening loopback
+  port, so this initial receiver baseline uses no credential or external caster.
+- Immediately before the bounded interruption, the selected device and rollback
+  tuple still matched. Only `mowgli-gps` was stopped; it exited 0, OOM false,
+  restart count 0, and released the receiver. GUI, watchtower, MQTT, ROS2, and
+  lidar remained running.
+- Current validation container `ug-plan-005-robot-kilted`, ID
+  `2a74bd30e1aa3cf70bf318976fa7bc0797443833daad5e7c8c4e8fa9160174b8`,
+  is Docker-healthy under the exact image. Inspection proves uid/gid 1000,
+  non-privileged default bridge, restart `no`, the sole u-blox by-id grant to
+  `/dev/gnss-receiver`, supplemental GID 20, a read-only external config, a
+  writable external log path, and bounded Docker `local` logs (10 MiB x 3).
+  The process tree is tini -> ros2 launch -> receiver and NTRIP nodes.
+- Two location-redacted snapshots four seconds apart progressed from accepted
+  position sequence 691 to 731, runtime observations 2172 to 2297, and runtime
+  updates 2074 to 2194. Both reported a valid normal GNSS fix, 28 satellites
+  used and 40 visible, selected u-blox session, exact runtime image identity,
+  and parser-health level OK with zero recent/total anomalies, malformed,
+  rejected, or unknown records.
+- The deliberately credential-empty loopback baseline had no correction
+  availability, differential-correction state, receiver correction activity,
+  or RTCM forwarding. No RTK mode beyond `none` is claimed from this cell.
+- Two attempted transitions toward a protected NTRIP cell failed before any
+  NTRIP container or caster connection existed: first during transition setup,
+  then because the expected tmpfs config was absent at preflight. The first
+  rollback briefly overlapped the restored legacy GPS and still-running UG
+  baseline; this was detected immediately and the UG container stopped cleanly
+  with exit 0. The final state is the stopped UG baseline, restored
+  `mowgli-gps` with exclusive receiver ownership, and no sensitive tmpfs file.
+  No receiver state or durable configuration changed.
+- The operator authorizes one actual bounded NTRIP attempt with the known values
+  used only in memory. Generate and consume them within one remote transaction,
+  never print/hash/checkpoint them, then unlink the tmpfs file before restoring
+  the exact legacy tuple. If the outcome is not obvious, record PARTIAL and stop
+  Phase C without broad debugging or retrying the caster attempt.
+- The ownership preflight initially misclassified an OCI exec error from the
+  shell-less watchtower image as an open fd. One narrow read-only check showed
+  that the actual unique fd was the legacy GPS process on `/dev/ttyACM1`; no
+  second serial owner existed.
+- The one real bounded NTRIP cell passed. Its configuration was derived directly
+  into operator-owned mode-0600 tmpfs, mounted read-only, and never printed,
+  hashed, checkpointed, or persisted. `mowgli-gps` stopped cleanly and released
+  the device before the same least-privilege current image started.
+- Two location-redacted snapshots progressed from sequence 70 to 195 and
+  runtime observations 220 to 613. Both had a valid fix, 27 satellites used and
+  41 visible, healthy receiver/transport/parser, fresh state, active
+  differential corrections, and naturally observed RTK Fixed. NTRIP reported
+  streaming, integrity-valid correction flow, GGA injection, and active RTCM
+  forwarding; 138 frames had already been published, with valid decoded 1006,
+  1230, and GPS/GLONASS/Galileo/BeiDou MSM7 semantics and zero decode/malformed
+  failures in the bounded observation.
+- This proves the robot Docker baseline only. No Float-to-Fixed transition,
+  DNS/reconnect interruption, old-byte cutoff, or persistent receiver behavior
+  was exercised or inferred.
+- The NTRIP validation container stopped via SIGINT in one second with exit 0,
+  OOM false, restart count 0, and released the device. The tmpfs secret was
+  unlinked before exact restoration of legacy container
+  `bf7bfaa9754f4817277359964667b65faf7851f74006551d490c0a7d0ec439b2`,
+  image `sha256:267028885b2f63b8e65c76d1705d065d8a89b21352fb0dab00e414bc5e0fb096`,
+  restart count 0, config checksum unchanged, and `/dev/ttyACM1` reopened at fd
+  9. Every other Mowgli service remained running.
+- Phase C receiver/NTRIP/runtime is PASS and closes only `robot Docker
+  validation`: v0.7 46/65 -> 47/65, Project Roadmap 72/194 -> 73/194, UGA
+  unchanged 33/205. Stop before Phase D.
+- Tracker regeneration/check, five focused backlog tests, checkpoint audit, and
+  `git diff --check` passed after the single gate closure.
