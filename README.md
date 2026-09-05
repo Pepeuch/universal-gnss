@@ -41,13 +41,13 @@ Current phase: post-`v0.6.x` stabilization.
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
 
-**47 / 65** release-scoped tasks complete (72.31%), **18** not started.
+**50 / 65** release-scoped tasks complete (76.92%), **15** not started.
 
 Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.
 
 ### Project Roadmap Progress
 
-Current identified project work: **73 / 194** complete (37.63%), **121** not started.
+Current identified project work: **76 / 194** complete (39.18%), **118** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 
@@ -72,8 +72,13 @@ validated independently on the real robot with a sole u-blox grant, live
 fix/NTRIP/RTCM correction flow, clean stop, and exact legacy restoration.
 External-LAN DDS is validated in both physical directions with explicit
 bridge/unicast locators and different-domain non-delivery; unmodified bridge
-multicast failed and is not claimed. Lyrical-native, serial renumbering,
-MowgliNext, BlueOS, API, and WebUI remain pending.
+multicast failed and is not claimed. The robot lifecycle matrix also proves
+clean start/stop, unexpected main-process policy recovery, daemon restart, host
+reboot/autostart, and deterministic external-config reuse with fresh GNSS
+health. Isolated receiver-child recovery failed and remains open; operator
+`docker kill` remained stopped and is not treated as a process crash.
+Lyrical-native, serial renumbering, MowgliNext, BlueOS, API, and WebUI remain
+pending.
 
 Current project state includes:
 

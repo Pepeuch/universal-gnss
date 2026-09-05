@@ -90,7 +90,6 @@
     "gates": [
       {"task": "multi-architecture CI build/publish pipeline", "classification": "PUBLICATION_REQUIRED"},
       {"task": "receiver-process restart without stale state resurrection", "classification": "HARDWARE_RECEIVER_REQUIRED"},
-      {"task": "container restart with deterministic configuration reapplication", "classification": "HARDWARE_RECEIVER_REQUIRED"},
       {"task": "USB serial renumbering validation", "classification": "USB_PHYSICAL_ACTION_REQUIRED"},
       {"task": "F9P <-> UM982 physical swap/recovery validation", "classification": "USB_PHYSICAL_ACTION_REQUIRED"},
       {"task": "persistent receiver/profile configuration state where required", "classification": "POWER_CYCLE_REQUIRED"},
@@ -100,8 +99,6 @@
       {"task": "structured logs suitable for Docker/Compose/BlueOS collection", "classification": "DESIGN_CONTRACT_REQUIRED"},
       {"task": "Docker DNS/reconnect behavior validation", "classification": "ROBOT_REQUIRED"},
       {"task": "long-run container validation", "classification": "LONG_DURATION_REQUIRED"},
-      {"task": "container crash/restart validation", "classification": "ROBOT_REQUIRED"},
-      {"task": "host reboot/autostart validation", "classification": "ROBOT_REQUIRED"},
       {"task": "low receiver rate / high publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED"},
       {"task": "high receiver rate / low publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED"},
       {"task": "RTK Float/Fixed transition validation through container boundaries (RTK Float is proven; RTK Fixed remains pending)", "classification": "HARDWARE_RECEIVER_REQUIRED"},

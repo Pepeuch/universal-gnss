@@ -81,7 +81,7 @@ Validation boundary:
 - review operator observability for status, correction, discovery, and parser
   data, including Foxglove-style consumers
 - add CI and distro/arch validation for the integrated stack
-- continue long-run and disconnect/restart operational validation
+- continue long-run, receiver-child recovery, and Docker DNS/reconnect validation
 
 ### Receiver-specific backends
 

@@ -12,7 +12,8 @@
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
 - `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and
-  second-Raspberry-Pi hardware-validation plan for the remaining v0.7 gates.
+  second-Raspberry-Pi campaign evidence through Phase E plus the remaining v0.7
+  hardware-validation plan; stop before Phase F without fresh authorization.
 - `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — completed external-LAN DDS
   matrix: unmodified bridge multicast failed; explicit bridge/unicast locators
   passed both directions and different-domain non-delivery.

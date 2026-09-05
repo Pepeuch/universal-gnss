@@ -2,7 +2,7 @@
 
 Repository: `/workspaces/universal-gnss`
 Branch: `feat/docker`
-Execution HEAD: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
+Execution HEAD: `0cfea4360075faa85efbb72c3791c81b0c377a65`
 
 ## Objective
 
@@ -109,10 +109,10 @@ grant for a newly enumerated physical receiver.
 
 ## Exact next step
 
-Phases B, C, and D are complete. Do not start Phase E without fresh
-authorization. Preserve the restored robot baseline and the retained explicit
-bridge/unicast DDS contract, do not expose NTRIP credentials, and do not start
-BlueOS implementation ahead of the remaining generic container/runtime work.
+Phases B, C, D, and E are complete. Do not start Phase F without fresh
+authorization. Preserve the restored robot baseline and retained lifecycle/DDS
+contracts, do not expose NTRIP credentials, and do not start BlueOS
+implementation ahead of the remaining generic container/runtime work.
 
 ## UG-PLAN-005 Phase A — partial ROS2 Docker baseline
 
@@ -1108,3 +1108,34 @@ CLEANUP / ACCOUNTING: only the validation containers and ownership-checked
 temporary profiles were removed; all Mowgli services remained running and no
 GNSS or persistent network state changed. This separate matrix has no canonical
 65-task checkbox, so v0.7 remains 47/65, Project Roadmap 73/194, and UGA 33/205.
+
+## Robot lifecycle / restart increment (2026-09-05)
+
+PROVEN: on the recorded aarch64 robot/u-blox baseline, the same non-root,
+non-privileged, default-bridge container with exactly one stable by-id device
+grant and the same external read-only configuration restored fresh healthy GNSS
+after clean stop/start, an unexpected main `ros2 launch` SIGKILL, Docker daemon
+restart with live restore false, and a real host reboot/new boot ID. The main
+process SIGKILL exited 137/OOM false and `unless-stopped` restarted it with
+`RestartCount` 0 -> 1. Daemon and host boundaries exited cleanly with OOM false,
+autostarted under the same policy, and reported restart count 0. Detailed exact
+triggers, timestamps, observation counters, container identities, and cleanup
+are retained in `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` and
+`docs/ros2_docker.md`.
+
+NEGATIVE RESULTS: SIGKILL of only `receiver_node` left launch/container running
+but unhealthy, with no receiver respawn and restart count 0. Explicit operator
+`docker kill` exited 137/OOM false but remained stopped with restart count 0.
+Neither is substituted for the successful main-process, daemon, or host-reboot
+class. Receiver-child recovery remains open.
+
+LIMITS / CLEANUP: no operator provisioning replay was needed for this u-blox,
+but no USB hotplug/incarnation or receiver persistence is inferred and the UM982
+power-loss replay contract is unchanged. NTRIP was not needed. The validation
+container was stopped cleanly, its test policy restored to `no`, and the exact
+legacy GPS ID/image/config/fd ownership restored; unrelated Mowgli containers
+retained their IDs and running state.
+
+ACCOUNTING: deterministic configuration reapplication, container crash/restart,
+and host reboot/autostart close. v0.7 advances 47/65 -> 50/65, Project Roadmap
+73/194 -> 76/194, and UGA remains 33/205.

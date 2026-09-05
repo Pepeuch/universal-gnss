@@ -1,11 +1,13 @@
 # UG-PLAN-005 robot + second-RPi validation
 
-Lifecycle: ACTIVE. This is an execution plan, not evidence of completion.
+Lifecycle: ACTIVE. This contains completed evidence through Phase E and the
+bounded resumption plan for later phases.
 
 Repository: `/workspaces/universal-gnss`  
 Branch: `feat/docker`  
 Baseline: `a5b5755` (`ci(docker): harden v0.7 image contract checks`)
-Execution baseline: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
+Execution repository HEAD: `0cfea4360075faa85efbb72c3791c81b0c377a65`
+Validated image revision: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
 
 ## CONTRACT
 
@@ -20,7 +22,7 @@ fully closed canonical TODO item.
 
 ## CURRENT_STATE
 
-- v0.7: 47/65; Project Roadmap: 73/194; UGA: 33/205.
+- v0.7: 50/65; Project Roadmap: 76/194; UGA: 33/205.
 - amd64 Kilted/Lyrical image/runtime, QEMU/BuildKit arm64 packaging, non-root
   serial mapping, tini/SIGINT lifecycle, external read-only configuration,
   same-host bridge DDS/domain isolation, and u-blox/UM982 live
@@ -267,12 +269,12 @@ primary classification:
 | Primary classification | Count | Canonical unchecked gates |
 | --- | ---: | --- |
 | `PUBLICATION_REQUIRED` | 1 | multi-architecture CI build/publish pipeline |
-| `HARDWARE_RECEIVER_REQUIRED` | 6 | receiver-process restart/no stale state; deterministic container configuration reapplication; low-receiver/high-publication rate; high-receiver/low-publication rate; RTK Float/Fixed transition; no stale state across incarnations |
+| `HARDWARE_RECEIVER_REQUIRED` | 5 | receiver-process restart/no stale state; low-receiver/high-publication rate; high-receiver/low-publication rate; RTK Float/Fixed transition; no stale state across incarnations |
 | `USB_PHYSICAL_ACTION_REQUIRED` | 2 | serial renumbering; F9P↔UM982 physical swap/recovery |
 | `POWER_CYCLE_REQUIRED` | 1 | persistent receiver/profile configuration |
 | `ALREADY_PARTIAL` | 2 | persistent diagnostic/log/export directory; no-receiver healthcheck behavior |
 | `DESIGN_CONTRACT_REQUIRED` | 2 | functional Docker healthcheck; structured logs suitable for Docker/Compose/BlueOS |
-| `ROBOT_REQUIRED` | 3 | Docker DNS/reconnect; container crash/restart; host reboot/autostart |
+| `ROBOT_REQUIRED` | 1 | Docker DNS/reconnect |
 | `LONG_DURATION_REQUIRED` | 1 | long-run container validation |
 
 External-LAN DDS has no separate unchecked line in the fixed 65-item list. Its
@@ -448,9 +450,10 @@ each disruptive test. Never substitute a similar-looking result.
 
 ## EXACT_NEXT_STEP
 
-Phases B, C, and D are complete. Do not start Phase E without fresh
-authorization. Preserve the restored robot baseline and the retained DDS
-contract; do not rerun earlier phase evidence without an invalidating change.
+Phases B, C, D, and E are complete. Stop before Phase F without fresh
+authorization. Preserve the restored robot baseline and the retained DDS and
+lifecycle evidence; do not rerun earlier phase evidence without an invalidating
+change.
 
 ## PHASE_C_PREFLIGHT_2026_09_05
 
@@ -544,3 +547,78 @@ contract; do not rerun earlier phase evidence without an invalidating change.
   unchanged 33/205. Stop before Phase D.
 - Tracker regeneration/check, five focused backlog tests, checkpoint audit, and
   `git diff --check` passed after the single gate closure.
+
+## PHASE_E_LIFECYCLE_2026_09_05
+
+Validated baseline: robot `Peuchmower2`, aarch64 kernel
+`6.18.39+rpt-rpi-2712`, Docker 29.8.0 with live restore false, current image
+`sha256:1b01bb887132dccb425107c55f5d1b5c1cf840312c10cd0dc98d59bc0dd8184b`
+at revision `90325b2a`, external credential-empty read-only configuration SHA-256
+`3a2c4622755984c2b5fd07107637b824866140913750710450aa5b9638f9b3df`, and
+the sole selected u-blox by-id grant to `/dev/gnss-receiver` with GID 20.
+Every running validation state was uid/gid 1000, non-privileged, default bridge,
+and had no broad `/dev` mount. Docker running/process health was never accepted
+without fresh location-redacted receiver snapshots.
+
+- **PASS — clean stop/start.** Exact trigger
+  `docker stop --time 10 ug-plan-005-robot-kilted` at `19:28:27Z` exited 0,
+  OOM false, restart count 0, policy `unless-stopped`, and released the device.
+  Exact legacy GPS ID/image/config was restored during the stopped interval and
+  reopened `/dev/ttyACM1` at fd 9. After re-releasing it, exact trigger
+  `docker start ug-plan-005-robot-kilted` at `19:28:32Z` was healthy by
+  `19:28:38Z`; sequence advanced 46 -> 75 and observations 144 -> 235.
+- **FAIL — isolated receiver-process recovery.** Exact trigger at `19:29:41Z`
+  was SIGKILL of only `receiver_node` via `docker exec`. ROS recorded exit -9;
+  container state remained running/exit 0, OOM false, restart count 0, policy
+  `unless-stopped`. Receiver stayed absent and Docker became unhealthy by
+  `19:31:08Z`; no automatic recovery occurred. Explicit operator
+  `docker restart --time 10` restored healthy fresh GNSS but does not upgrade
+  the automatic result.
+- **FAIL — explicit Docker kill automatic restart.** Exact trigger
+  `docker kill --signal KILL ug-plan-005-robot-kilted` at `19:32:18Z` produced
+  signal 9/exit 137, OOM false, restart count 0, policy `unless-stopped`; it
+  remained exited through `19:34:02Z`. This is manual container-termination
+  behavior, not process-crash, daemon, or reboot evidence. Legacy GPS was
+  immediately restored.
+- **PASS — Docker restart-policy recovery.** Exact unexpected trigger at
+  `19:38:28Z` was SIGKILL of container PID 7, the `ros2 launch` main child of
+  tini, via `docker exec`. Docker wait/die recorded exit 137, OOM false; the
+  same container automatically started at `19:38:28.431Z`, restart count 0 -> 1,
+  policy `unless-stopped`, and was healthy by `19:38:34Z`. Sequence advanced
+  56 -> 85 and observations 176 -> 267.
+- **PASS — Docker daemon restart.** Exact authorized trigger
+  `sudo -n /usr/bin/systemctl restart docker` at `19:52:04.598Z` returned 0 at
+  `19:52:17.874Z`. With live restore false, Docker recorded SIGINT/exit 0, OOM
+  false; boot ID stayed `3248d0c3-c299-4977-ac2b-3acd3722b02a`, dockerd PID
+  changed 46198 -> 49209, and current-UG automatically started at
+  `19:52:16.115Z` with restart count 0 and the same policy. Sequence advanced
+  55 -> 88 and observations 172 -> 276. All five unrelated running Mowgli
+  containers returned with the same IDs; explicitly stopped legacy stayed
+  stopped.
+- **PASS — host reboot/autostart.** Exact authorized trigger
+  `sudo -n /usr/bin/systemctl reboot` at `19:54:01.944Z` returned 0. SSH became
+  unavailable at `19:54:22.884Z` and returned at `19:54:38.586Z`; boot ID
+  changed to `c6292218-bbc3-4262-9374-877b53a82550`. Current-UG prior exit was
+  0/OOM false and it autostarted at `19:54:38.322Z`, restart count 0, policy
+  `unless-stopped`. Sequence advanced 312 -> 345 and observations 981 -> 1084.
+  All five unrelated Mowgli containers returned with the same IDs; explicitly
+  stopped legacy stayed stopped.
+
+PROVISIONING / LIMITS: no operator receiver/runtime provisioning was replayed
+for this u-blox across any software/daemon/reboot boundary; the same mounted
+configuration restored healthy runtime. This proves only the directly observed
+deployment behavior. It is not USB hotplug/renumbering/incarnation evidence,
+does not prove receiver-profile persistence, does not qualify UGA-126, and does
+not supersede the UM982 power-loss runtime-profile replay requirement. NTRIP
+was not needed and no runtime secret was used.
+
+CLEANUP / ACCOUNTING: current-UG stopped cleanly at `19:56:35Z` with exit 0,
+OOM false, restart count 0; its test-only policy was restored to `no` and it
+released the device. Exact legacy container/image/config was running by
+`19:56:38Z`, restart count 0, with `/dev/ttyACM1` at fd 9. All five unrelated
+Mowgli containers remained running under their original IDs, and only Phase-E
+helpers were removed. `container restart with deterministic configuration
+reapplication`, `container crash/restart validation`, and `host reboot/autostart
+validation` close: v0.7 47/65 -> 50/65, Project Roadmap 73/194 -> 76/194, UGA
+unchanged 33/205. Receiver-child recovery, `docker kill` automatic restart,
+DNS/reconnect, USB/incarnation, and persistence remain explicit and separate.

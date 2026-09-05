@@ -46,16 +46,16 @@ class BacklogStatusTests(unittest.TestCase):
             ]
         )
         MODULE.validate_todo(data)
-        self.assertEqual({"total": 194, "complete": 73, "not_started": 121}, MODULE.project_progress_counts())
-        self.assertEqual({"total": 65, "complete": 47, "not_started": 18}, MODULE.release_progress_counts())
+        self.assertEqual({"total": 194, "complete": 76, "not_started": 118}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 65, "complete": 50, "not_started": 15}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
         dependency_counts = MODULE.release_dependency_counts(data)
-        self.assertEqual(18, sum(dependency_counts.values()))
-        self.assertEqual(13, sum(
+        self.assertEqual(15, sum(dependency_counts.values()))
+        self.assertEqual(10, sum(
             dependency_counts[classification]
             for classification in MODULE.HARDWARE_DEPENDENCY_CLASSES
         ))
-        self.assertEqual(18, len(data.release_dependencies))
+        self.assertEqual(15, len(data.release_dependencies))
 
     def test_unknown_release_dependency_classification_is_rejected(self) -> None:
         manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -86,15 +86,15 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertIn("CURRENT RELEASE", svg)
         self.assertIn("v0.6 → v0.7", svg)
-        self.assertIn("47 / 65 complete · 72.31%", svg)
+        self.assertIn("50 / 65 complete · 76.92%", svg)
         self.assertIn("PROJECT ROADMAP", svg)
-        self.assertIn("73 / 194 complete · 37.63%", svg)
+        self.assertIn("76 / 194 complete · 39.18%", svg)
         self.assertIn("UGA QUALITY / AUDIT", svg)
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)
         self.assertIn("Validation dependencies (orthogonal)", svg)
         self.assertIn("Open v0.7 gate classifications (exclusive)", svg)
-        self.assertIn("Open hardware-dependent gates: 13", svg)
+        self.assertIn("Open hardware-dependent gates: 10", svg)
         self.assertIn("External-LAN DDS is a separate completed acceptance matrix", svg)
 
         changed = replace(
@@ -104,7 +104,7 @@ class BacklogStatusTests(unittest.TestCase):
                 "multi-architecture CI build/publish pipeline": "ROBOT_REQUIRED",
             },
         )
-        self.assertIn("Open hardware-dependent gates: 14", MODULE.render_svg(changed))
+        self.assertIn("Open hardware-dependent gates: 11", MODULE.render_svg(changed))
 
     def test_check_rejects_stale_dashboard_output(self) -> None:
         data = MODULE.load_backlog()

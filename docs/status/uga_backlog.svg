@@ -6,14 +6,14 @@
 <text x="28" y="38" font-family="sans-serif" font-size="22" font-weight="700" fill="#0f172a">Universal GNSS Development Status</text>
 <text x="28" y="68" font-family="sans-serif" font-size="16" font-weight="700" fill="#0f172a">CURRENT RELEASE</text>
 <text x="28" y="89" font-family="sans-serif" font-size="13" fill="#334155">v0.6 → v0.7</text>
-<text x="732" y="89" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">47 / 65 complete · 72.31%</text>
+<text x="732" y="89" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">50 / 65 complete · 76.92%</text>
 <rect x="28" y="99" width="704" height="14" rx="7" fill="#dbe4ef"/>
-<rect x="28" y="99" width="509.05" height="14" rx="7" fill="#2563eb"/>
+<rect x="28" y="99" width="541.54" height="14" rx="7" fill="#2563eb"/>
 <text x="28" y="132" font-family="sans-serif" font-size="16" font-weight="700" fill="#0f172a">PROJECT ROADMAP</text>
 <text x="28" y="153" font-family="sans-serif" font-size="13" fill="#334155">Currently identified project work completed</text>
-<text x="732" y="153" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">73 / 194 complete · 37.63%</text>
+<text x="732" y="153" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">76 / 194 complete · 39.18%</text>
 <rect x="28" y="163" width="704" height="14" rx="7" fill="#dbe4ef"/>
-<rect x="28" y="163" width="264.91" height="14" rx="7" fill="#7c3aed"/>
+<rect x="28" y="163" width="275.79" height="14" rx="7" fill="#7c3aed"/>
 <text x="28" y="196" font-family="sans-serif" font-size="16" font-weight="700" fill="#0f172a">UGA QUALITY / AUDIT</text>
 <text x="28" y="217" font-family="sans-serif" font-size="13" fill="#334155">Checked or intentionally removed</text>
 <text x="732" y="217" text-anchor="end" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">33 / 205 complete · 16.10%</text>
@@ -37,7 +37,7 @@
 <rect x="188" y="429" width="430" height="14" rx="7" fill="#dbe4ef"/>
 <rect x="188" y="429" width="16.78" height="14" rx="7" fill="#6b7280"/>
 <text x="28" y="500" font-family="sans-serif" font-size="13" font-weight="700" fill="#0f172a">Validation dependencies (orthogonal)</text>
-<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware 6 · USB action 2 · power cycle 1 · robot 3</text>
+<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware 5 · USB action 2 · power cycle 1 · robot 1</text>
 <text x="28" y="545" font-family="sans-serif" font-size="13" fill="#334155">native arm64 0 · long duration 1 · design contract 2 · publication 1 · already partial 2</text>
-<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: 13 (derived overlap group; do not add to the exclusive classifications). External-LAN DDS is a separate completed acceptance matrix outside the 65-item checklist.</text>
+<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: 10 (derived overlap group; do not add to the exclusive classifications). External-LAN DDS is a separate completed acceptance matrix outside the 65-item checklist.</text>
 </svg>

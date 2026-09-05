@@ -155,10 +155,11 @@ docker compose \
 ```
 
 It uses `restart: unless-stopped` for Docker process recovery and reuses the
-same read-only parameter mount on every recreation. It does not make a stale
-USB device grant valid, restore a volatile UM982 runtime profile, or prove
-container-crash/reboot recovery; follow the USB-loss contract below and retain
-those validation gates as pending.
+same read-only parameter mount on every recreation. The robot Phase-E matrix
+below proves selected container/main-process/daemon/reboot behavior for its
+recorded u-blox baseline. It does not make a stale USB device grant valid,
+restore a volatile UM982 runtime profile, or make a running container evidence
+of healthy GNSS transport; follow the USB-loss contract below.
 
 ### Runtime and restart contract
 
@@ -175,9 +176,11 @@ a second process supervisor or automatic receiver-device reattachment. Receiver
 transport failure becomes receiver diagnostics/freshness state rather than a
 Docker health claim. NTRIP has its independent reconnect state and does not
 restart a healthy receiver. If either ROS process exits, the resulting launch/
-container lifecycle is Docker's responsibility under the configured restart
-policy; container crash/reboot and receiver-process restart matrices remain
-unvalidated deployment gates.
+container lifecycle depends on the launch process: the Phase-E matrix proved
+that killing `receiver_node` alone leaves launch/container running and
+eventually Docker-unhealthy without an automatic restart, while termination of
+the main `ros2 launch` process exits the container and activates the configured
+Docker restart policy. Receiver-child recovery therefore remains open.
 
 Entrypoint failures emit credential-free, stable key/value prefixes such as
 `universal_gnss_entrypoint event=parameters_file_not_readable`; ROS diagnostics
@@ -198,6 +201,36 @@ hotplug, reboot, or process-crash claim.
 | Clean Docker stop (`STOPSIGNAL SIGINT`) | container exited `0`, OOM false, restart count `0` with `restart: no` | launch-managed nodes received normal shutdown | normal explicit stop; this does not prove crash/daemon-reboot recovery |
 | Receiver present then unavailable | not rerun | established USB-loss evidence requires stable by-id re-resolution, container recreation, and UM982 profile replay | hardware-required; do not infer recovery from a reused tty/major/minor |
 | NTRIP unavailable while receiver remains healthy | not rerun | requires a visible selected receiver in this validation namespace | hardware-required here; existing live NTRIP and receiver evidence remains separate |
+
+### Robot Phase-E lifecycle evidence
+
+The following matrix ran on 2026-09-05 on the recorded aarch64 robot/u-blox
+baseline. Every post-start PASS required two location-redacted snapshots with
+advancing observation state and healthy, non-stale receiver transport/parser;
+Docker `running` or process health alone received no runtime-health credit.
+
+| Case | Exact trigger and time (UTC) | Docker result | GNSS/runtime result | Verdict |
+| --- | --- | --- | --- | --- |
+| Clean container stop/start | `docker stop --time 10 ug-plan-005-robot-kilted` at `19:28:27`, exact legacy restoration, then `docker start ug-plan-005-robot-kilted` at `19:28:32` | stop exit `0`, OOM false, `RestartCount=0`, policy `unless-stopped`; manual start healthy at `19:28:38` | sequence `46 -> 75`, observations `144 -> 235`; intended device reopened | **PASS** |
+| Receiver child termination | SIGKILL of only `receiver_node` via `docker exec` at `19:29:41` | ROS recorded exit `-9`; container remained running with state exit `0`, OOM false, `RestartCount=0`, policy `unless-stopped`, eventually `unhealthy`; no automatic restart | receiver was absent until explicit operator `docker restart --time 10`; recovery then advanced sequence `45 -> 75` | **FAIL** automatic receiver-process recovery |
+| Operator container kill | `docker kill --signal KILL ug-plan-005-robot-kilted` at `19:32:18` | wait/die event exit `137`, signal `9`, OOM false, `RestartCount=0`, policy `unless-stopped`; remained exited through `19:34:02` | no post-start health because no automatic start occurred; exact legacy GPS was restored | **FAIL** automatic restart for this explicit Docker trigger; not process-crash evidence |
+| Unexpected main application-process termination | SIGKILL of container PID 7 (`ros2 launch`, tini's main child) via `docker exec` at `19:38:28` | wait/die event exit `137`, OOM false; same container automatically started at `19:38:28.431`, `RestartCount=1`, policy `unless-stopped` | sequence `56 -> 85`, observations `176 -> 267`; healthy by `19:38:34` | **PASS** Docker restart-policy recovery |
+| Docker daemon restart | `sudo -n /usr/bin/systemctl restart docker` at `19:52:04.598` with live restore false | command returned `0`; SIGINT/exit `0`, OOM false; dockerd PID `46198 -> 49209`; same container started `19:52:16.115`, `RestartCount=0`, policy `unless-stopped`; boot ID unchanged | sequence `55 -> 88`, observations `172 -> 276`; healthy by `19:52:22` | **PASS** |
+| Host reboot/autostart | `sudo -n /usr/bin/systemctl reboot` at `19:54:01.944` | command returned `0`; SSH became unavailable; boot ID changed from `3248d0c3-c299-4977-ac2b-3acd3722b02a` to `c6292218-bbc3-4262-9374-877b53a82550`; prior exit `0`, OOM false; same container autostarted `19:54:38.322`, `RestartCount=0`, policy `unless-stopped` | sequence `312 -> 345`, observations `981 -> 1084`; healthy after the new boot | **PASS** |
+
+After every successful restart boundary, inspection reconfirmed user
+`1000:1000`, non-privileged default bridge, exactly the intended u-blox by-id
+device mapped to `/dev/gnss-receiver` with GID 20, and no broad `/dev` mount.
+The same external read-only configuration checksum was reused. No operator
+receiver/runtime provisioning command was replayed for this u-blox baseline.
+That observation is limited to these restart/reboot boundaries: it is not USB
+hotplug/incarnation evidence, does not prove receiver-profile persistence, and
+does not supersede the UM982 power-loss profile-replay requirement.
+
+Final cleanup stopped current-UG cleanly (exit `0`, OOM false), restored its
+test-only restart policy to `no`, released the receiver, and restored the exact
+legacy Mowgli GPS container/image/configuration with exclusive `/dev/ttyACM1`
+ownership. No unrelated Mowgli container definition was changed.
 
 A second ROS CLI process in this constrained container did not discover the
 diagnostics topic, so this matrix records the node/process/log evidence only;
