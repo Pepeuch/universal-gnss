@@ -1,12 +1,12 @@
 # UG-PLAN-005 robot + second-RPi validation
 
-Lifecycle: ACTIVE. This contains completed evidence through Phase E and the
+Lifecycle: ACTIVE. This contains completed evidence through Phase F and the
 bounded resumption plan for later phases.
 
 Repository: `/workspaces/universal-gnss`  
 Branch: `feat/docker`  
 Baseline: `a5b5755` (`ci(docker): harden v0.7 image contract checks`)
-Execution repository HEAD: `0cfea4360075faa85efbb72c3791c81b0c377a65`
+Execution repository HEAD: `7a7ebd012ac238cda74f292e8400a97648be5bae`
 Validated image revision: `90325b2a05501341b9e6f88460d8c4b194c7bf25`
 
 ## CONTRACT
@@ -22,7 +22,7 @@ fully closed canonical TODO item.
 
 ## CURRENT_STATE
 
-- v0.7: 50/65; Project Roadmap: 76/194; UGA: 33/205.
+- v0.7: 52/65; Project Roadmap: 78/194; UGA: 33/205.
 - amd64 Kilted/Lyrical image/runtime, QEMU/BuildKit arm64 packaging, non-root
   serial mapping, tini/SIGINT lifecycle, external read-only configuration,
   same-host bridge DDS/domain isolation, and u-blox/UM982 live
@@ -35,9 +35,12 @@ fully closed canonical TODO item.
   published RTPS UDP ports; unmodified bridge multicast directly failed. See
   `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md`.
 - Docker USB-loss contract is established: resolve exactly one stable by-id
-  path, map only that device, and recreate the container after loss. A same
-  tty/major:minor on replug does not prove recovery. UM982 runtime-only
-  provisioning must be replayed after USB power loss.
+  path, map only that device, and recreate the container after loss. Both the
+  UM982 same-number trial and u-blox actual-renumbering trial showed that an
+  already-running container did not regain the device grant. UM982 runtime-only
+  provisioning must be replayed after USB power loss; the tested u-blox needed
+  no provisioning replay. Expected-by-id pinning safely refused an unambiguous
+  wrong-receiver substitution.
 - UGA-126 and UGA-170 remain PARTIAL. Do not give either completion credit by
   inference.
 
@@ -622,3 +625,105 @@ reapplication`, `container crash/restart validation`, and `host reboot/autostart
 validation` close: v0.7 47/65 -> 50/65, Project Roadmap 73/194 -> 76/194, UGA
 unchanged 33/205. Receiver-child recovery, `docker kill` automatic restart,
 DNS/reconnect, USB/incarnation, and persistence remain explicit and separate.
+
+## PHASE_F_USB_IDENTITY_INCARNATION_2026_09_05
+
+Validated baseline: same robot, image, revision, external credential-empty
+configuration, stable u-blox by-id, and exact legacy rollback tuple recorded in
+Phase E. At `20:10:19Z`, `sudo -n -l` confirmed the temporary Phase-E
+NOPASSWD rule had been removed; Phase F used no privileged operation. No motion,
+motor/blade action, reset, persistent receiver write, firmware change, broad
+`/dev`, privileged container, or unrelated Mowgli service change occurred.
+NTRIP was not needed.
+
+- **PASS — physical loss/stale detection.** Immediately before the operator
+  unplug, the selected by-id resolved to `/dev/ttyACM1`, 166:1 (hex a6:1),
+  VID:PID 1546:01a9, driver `cdc_acm`, root:dialout GID 20 mode 0660, with the
+  current-UG receiver process as exclusive holder. Fresh observations advanced
+  sequence 45 -> 75 and observations 142 -> 236. The physical unplug made the
+  by-id and tty disappear at `20:15:04Z`. The container remained running and
+  Docker-healthy with exit 0, OOM false, restart count 0, policy `no`, but
+  sequence froze at 1093 and observations/updates at 3436/3280. After the
+  freshness window, diagnostics explicitly reported transport unhealthy and
+  runtime state stale. The retained numeric valid-fix value was cached stale
+  state, not a new observation. RTCM forwarding was idle before/during, so no
+  forwarding-stop or NTRIP-connectivity result is claimed.
+- **PASS — actual serial renumbering.** The same stable u-blox by-id returned at
+  `20:18:31Z` as `/dev/ttyACM2`, 166:2 (hex a6:2), with unchanged USB identity,
+  driver, and ownership. This closes the renumbering gate because both tty and
+  major:minor actually changed; selection never used either transient value.
+- **PASS — same-device recovery by recreation; FAIL — transparent in-place
+  recovery.** Before recreation, the existing receiver process retained its old
+  `/dev/gnss-receiver` fd while the returned host device had no holder. Three
+  post-replug observations remained frozen/stale even though Docker still
+  reported healthy. Exact triggers at `20:22:13Z` were `docker stop --time 10`,
+  `docker rm`, and `docker run` after a fresh by-id resolution. The old container
+  stopped exit 0/OOM false/restart count 0/policy `no`; the recreated container
+  started at `20:22:14Z`, also exit 0/OOM false/restart count 0/policy `no`.
+  It ran as 1000:1000, non-privileged bridge, with no added caps, GID 20,
+  exactly one expected by-id mapping, and no broad `/dev`. Fresh GNSS advanced
+  sequence 47 -> 84 and observations 148 -> 264 with healthy/non-stale
+  transport/parser and zero anomalies. No receiver provisioning was replayed or
+  required for this u-blox.
+- **PASS — wrong-receiver swap safety.** After a final fresh u-blox observation,
+  exact trigger `docker stop --time 10` at `20:25:19Z` stopped current-UG exit
+  0/OOM false/restart count 0/policy `no` and released the device. The operator
+  physically replaced it with the second-RPi UM982 USB. The u-blox by-id was
+  absent; the distinct UM982 appeared as
+  `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` -> `/dev/ttyUSB0`, 188:0,
+  VID:PID 1a86:7523, driver `ch341`, with no holder. Exact trigger
+  `docker start ug-plan-005-robot-kilted` at `20:27:43Z` returned command code 1
+  with an explicit missing-u-blox-device error. The container remained exited
+  with exit 128, OOM false, restart count 0, policy `no`; the UM982 stayed
+  unopened, proving no silent substitution. After physical restoration, the
+  u-blox returned to the robot as `/dev/ttyACM1` / 166:1 and the UM982 returned
+  to the second RPi as `/dev/ttyUSB1` / 188:1 under their unchanged by-id/USB
+  identities. Recreating against the u-blox by-id restored healthy advancing
+  sequence 45 -> 82 and observations 142 -> 258, again under the exact
+  least-privilege contract and without provisioning replay.
+- **PASS — required UM982 runtime-profile restoration after swap power loss.**
+  The physical swap power-cycled the UM982, so its previously established
+  volatile profile was explicitly replayed after it returned to the second
+  RPi. Immediately before apply at `20:43:49Z`, its stable by-id resolved to
+  `/dev/ttyUSB1` / 188:1 and had no holder. Exact trigger was a one-off,
+  network-disabled, uid/gid-1000 container running the already-established
+  guarded `gnss_config_apply` UM982 high-precision runtime-only plan. All 14
+  commands completed; persistent commands 0, factory-reset commands 0, no
+  FRESET, and no SAVECONFIG. The stale-grant evidence container was recreated
+  against exactly that by-id and credential-empty read-only config; it was
+  non-root/non-privileged with no broad `/dev`, and fresh observations advanced
+  sequence 49 -> 104 and runtime observations 77 -> 164 with healthy/non-stale
+  transport/parser. Exact trigger `docker stop --time 10` at `20:44:13Z`
+  stopped it exit 0/OOM false/restart count 0/policy `no` and released the
+  device. This proves replay after USB power loss, not profile persistence.
+- **PARTIAL — incarnation/UGA-126 old-data exclusion.** This phase did not
+  create a specifically identifiable pending A in incarnation N, correlate a
+  forced transport boundary with incarnation N+1, issue same-target B, or
+  directly exclude late A bytes/responses from B or trusted runtime state.
+  Current interfaces expose no response nonce, transport-incarnation token, or
+  qualified cutoff provider and cannot inject/delay a correlated old response
+  across this physical boundary. Required instrumentation/contract remains a
+  sole-owner response router/arbiter with tagged request epochs plus a
+  transport/provider attestation that receiver/bridge/driver queues from N
+  cannot enter N+1. USB disappearance, stale-state detection, fd replacement,
+  parser/process reset, and container recreation do not close UGA-126.
+
+CLEANUP / ACCOUNTING: immediately before cleanup the selected by-id again
+resolved to `/dev/ttyACM1` / 166:1. Exact trigger
+`docker stop --time 10 ug-plan-005-robot-kilted` at `20:34:46Z` stopped current-
+UG exit 0, OOM false, restart count 0, policy `no`, and released the receiver.
+Exact trigger `docker start mowgli-gps` at `20:34:46Z` restored the original
+container/image/configuration checksum, policy `unless-stopped`, restart count
+0, and exclusive `/dev/ttyACM1` fd 9. A redacted one-message `/gps/fix` probe
+returned 0; the older image does not expose the current snapshot Python API.
+Final audits at `20:45:52Z`/`20:45:54Z` confirmed every unrelated Mowgli
+container remained running under its original ID on both hosts. The robot
+current-UG evidence container remains stopped exit 0/policy `no`; the recreated
+second-RPi UM982 evidence container remains stopped exit 0/policy `no` with the
+UM982 unheld. Only the exact Phase-F remote helpers were removed, and none
+remain.
+Only `USB serial renumbering validation` and `F9P <-> UM982 physical
+swap/recovery validation` close: v0.7 50/65 -> 52/65, Project Roadmap 76/194 ->
+78/194, UGA unchanged 33/205. UGA-126, transparent in-place device recovery,
+receiver/profile persistence, and other topology claims remain open. Stop
+before Phase G without fresh authorization.

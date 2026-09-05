@@ -90,8 +90,6 @@
     "gates": [
       {"task": "multi-architecture CI build/publish pipeline", "classification": "PUBLICATION_REQUIRED"},
       {"task": "receiver-process restart without stale state resurrection", "classification": "HARDWARE_RECEIVER_REQUIRED"},
-      {"task": "USB serial renumbering validation", "classification": "USB_PHYSICAL_ACTION_REQUIRED"},
-      {"task": "F9P <-> UM982 physical swap/recovery validation", "classification": "USB_PHYSICAL_ACTION_REQUIRED"},
       {"task": "persistent receiver/profile configuration state where required", "classification": "POWER_CYCLE_REQUIRED"},
       {"task": "persistent diagnostic/log/export directory", "classification": "ALREADY_PARTIAL"},
       {"task": "container healthcheck that validates service functionality rather than only", "classification": "DESIGN_CONTRACT_REQUIRED"},

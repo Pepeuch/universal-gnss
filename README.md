@@ -41,13 +41,13 @@ Current phase: post-`v0.6.x` stabilization.
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
 
-**50 / 65** release-scoped tasks complete (76.92%), **15** not started.
+**52 / 65** release-scoped tasks complete (80.00%), **13** not started.
 
 Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.
 
 ### Project Roadmap Progress
 
-Current identified project work: **76 / 194** complete (39.18%), **118** not started.
+Current identified project work: **78 / 194** complete (40.21%), **116** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 

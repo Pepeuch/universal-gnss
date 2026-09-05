@@ -18,6 +18,12 @@ Analysis only; do not implement `ReceiverTrafficArbiter`.
 - `UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md`: CURRENT; neither u-blox nor
   Unicore supplies a protocol-level response fence, and an indeterminate
   post-write request must be quarantined until a proven recovery boundary.
+- `UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md`, Phase F (2026-09-05): CURRENT
+  physical evidence now includes actual u-blox tty/major:minor renumbering,
+  stale-state detection, container recreation, and safe wrong-receiver refusal.
+  No tagged pending A / same-target B response was available, so this evidence
+  confirms operational USB handling but does not supply the causal prior-byte
+  cutoff required to release quarantine or close UGA-126.
 
 Do not duplicate or revisit those investigations unless repository state or
 primary evidence contradicts them.

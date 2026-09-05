@@ -68,7 +68,7 @@ the current numeric source of truth.
 | `UG-PLAN-002` | IMPLEMENTED | NTRIP / DEPLOYMENT | HARDWARE_PENDING | `UG-PLAN-001` | Deterministic Phase 2 is complete: shared transport-neutral `UGA009` `RtcmFrameWriter`; ROS2 `ReceiverNode` semantic-parity migration; native supervisor `NtripClient` orchestration; independent receiver/NTRIP reconnect; RTCM forwarding; GGA observation-sequence/cadence policy; stop cancellation; redacted credential/status behavior; 33/33 runtime/NTRIP/transport/driver CTests; ROS2-enabled build; `test_receiver_node`; formatting; and diff checks. Remaining physical evidence: receiver lifecycle, real caster/network reconnect, USB/hotplug/re-enumeration, and BlueOS device grants. |
 | `UG-PLAN-003` | OPEN | DEPLOYMENT | — | `UG-PLAN-005` | Lightweight generic HTTP API above the production container/runtime contract: lifecycle/health, receiver identity and transport, normalized `GnssRuntimeState`, parser/session diagnostics, correction/RTK/NTRIP health, redacted configuration, and reconnect/incarnation data. Later endpoints validate and deliberately apply/restart configuration with existing receiver-configuration safeguards. HTTP handlers must not own GNSS logic; defer SSE/WebSocket selection until evidence justifies it. |
 | `UG-PLAN-004` | OPEN | DEPLOYMENT | — | `UG-PLAN-003` | Generic Universal GNSS web GUI, served by or alongside the native API and usable from native Linux, standalone Docker, and BlueOS. Use responsive Tailwind CSS and the existing logo under `docs/`; keep it presentation/configuration-only. Plan Basic (connection/fix/RTK/position/accuracy/correction/NTRIP health), Advanced (satellites, C/N0, motion, UTC, RTCM, metrics, reconnect/configuration summary), and Expert (AGC, interference, raw diagnostics, transport, auto-configuration, logs, incarnation, advanced controls) views. |
-| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, the exact Unicore USB-loss contract, native Kilted arm64 build/runtime with live UM982 serial ingestion on a physical Raspberry Pi, the real-robot least-privilege u-blox/NTRIP runtime baseline, bidirectional external-LAN DDS with different-domain non-delivery under the recorded bridge/unicast contract, and the bounded Phase-E container/main-process/daemon/reboot lifecycle matrix. Phase E proved clean stop/start, deterministic external-config reuse, automatic recovery from unexpected main launch-process exit, Docker-daemon restart, and host reboot/autostart; it also proved that an isolated receiver-node SIGKILL leaves the container unhealthy without automatic recovery and that operator `docker kill` does not automatically restart it. The current CH340/UM982 bench requires recreation after USB loss and runtime-profile replay after power loss; stable by-id returned unchanged in one non-renumbering trial. Remaining: receiver-child recovery, Docker DNS/reconnect, serial-renumbering and other receiver/topology matrices, a qualified UGA-126 transport-incarnation cutoff, UGA-170's per-model u-blox reset matrix, and BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
+| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, the exact Unicore USB-loss contract, native Kilted arm64 build/runtime with live UM982 serial ingestion on a physical Raspberry Pi, the real-robot least-privilege u-blox/NTRIP runtime baseline, bidirectional external-LAN DDS with different-domain non-delivery under the recorded bridge/unicast contract, the bounded Phase-E container/main-process/daemon/reboot lifecycle matrix, and the Phase-F u-blox USB-loss/re-enumeration plus deliberate UM982 substitution matrix. Phase E proved clean stop/start, deterministic external-config reuse, automatic recovery from unexpected main launch-process exit, Docker-daemon restart, and host reboot/autostart; it also proved that an isolated receiver-node SIGKILL leaves the container unhealthy without automatic recovery and that operator `docker kill` does not automatically restart it. Phase F proved actual `ttyACM1`/166:1 -> `ttyACM2`/166:2 renumbering under a stable u-blox by-id, required container recreation after the existing grant stayed stale, and safe refusal when the expected u-blox identity was absent and an unambiguous UM982 was substituted. The CH340/UM982 profile still requires runtime-profile replay after USB power loss. Remaining: receiver-child recovery, Docker DNS/reconnect, a qualified UGA-126 transport-incarnation cutoff, receiver/profile persistence, UGA-170's per-model u-blox reset matrix, and BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
 | `UG-PLAN-006` | PARTIAL | BLUEOS | HARDWARE_REQUIRED | `UG-PLAN-005` | Completed evidence: compatibility study, architecture proposal, Bazaar metadata and minimal receiver-permission templates, packaging/architecture research, and identified device/hotplug risks. BlueOS skeleton/packaging may reuse the production container/runtime contract once it exists and may initially be headless/status-oriented; it must not displace ROS2 Docker priority or reimplement GNSS semantics. Later phases add API/WebUI integration, `register_service`, relative-path-safe GUI exposure, settings/apply/restart, multi-arch publication, Bazaar submission, and install/update/rollback validation. USB hotplug/re-enumeration and Docker grants require real BlueOS proof; a reopened tty is not proof of a valid new device grant. |
 
 Priority and dependency order: complete deterministic `UG-PLAN-002`; establish
@@ -141,8 +141,13 @@ Device access / hotplug:
 - [x] document fallback behavior for platforms without `/dev/serial/by-id`
 - [x] least-privilege serial permissions; avoid `--privileged` as the normal path
 - [x] USB receiver disconnect/reconnect inside a running container
-- [ ] USB serial renumbering validation
-- [ ] F9P <-> UM982 physical swap/recovery validation
+- [x] USB serial renumbering validation (same u-blox by-id changed from
+  `/dev/ttyACM1` / 166:1 to `/dev/ttyACM2` / 166:2; the existing container
+  stayed stale until recreation)
+- [x] F9P <-> UM982 physical swap/recovery validation (with the expected
+  u-blox by-id absent and UM982 identity present, pinned startup failed safely
+  and did not open or silently substitute the UM982; both receivers were then
+  restored by stable identity)
 - [x] define udev/device-manager integration needed by production deployments
 
 Hardware sweep (2026-09-04): the current UM982/CH340 bench proves the exact
@@ -151,6 +156,15 @@ recreation, and runtime-profile replay after USB power loss. It does not prove
 serial renumbering, a receiver-incarnation byte cutoff, automatic recovery, or
 u-blox reset recovery; those remain separately tracked rather than being
 implicitly closed by the successful replug trial.
+
+Robot Phase-F supplement (2026-09-05): a controlled u-blox unplug/replug caused
+actual tty and major:minor renumbering while its stable by-id remained unchanged.
+The already-running least-privilege container stayed Docker-healthy but GNSS
+transport/states remained explicitly stale until recreation. A deliberate,
+unambiguous UM982 substitution then caused the exact u-blox-by-id-pinned startup
+to fail rather than opening the wrong receiver. These results close only the
+renumbering and physical swap/recovery gates; they do not prove UGA-126's
+old-incarnation byte/response cutoff or receiver-profile persistence.
 
 Configuration / persistence / secrets:
 
@@ -229,7 +243,7 @@ Documentation:
 v0.7 deployment reconciliation (updated 2026-09-05), limited to the 65-task release
 scope:
 
-Remaining-gate classification after Phase E (15 gates):
+Remaining-gate classification after Phase F (13 gates):
 
 - **ACTIONABLE_NOW:** persistent diagnostic/log/export directory contract;
   application-level no-receiver status regression/documentation; bounded,
@@ -244,9 +258,8 @@ Remaining-gate classification after Phase E (15 gates):
 - **REQUIRES_EXTERNAL_LAN:** none. The recorded two-host Fast DDS matrix is
   complete and has no separate unchecked 65-task line.
 - **REQUIRES_LONG_DURATION:** long-run container validation only.
-- **REQUIRES_POWER_CYCLE_OR_DESTRUCTIVE_TEST:** serial renumbering, F9P/UM982
-  physical swap/recovery, and receiver/profile persistence. No reset or power
-  cycle is implied by this classification.
+- **REQUIRES_POWER_CYCLE_OR_DESTRUCTIVE_TEST:** receiver/profile persistence.
+  No reset or power cycle is implied for any other remaining gate.
 - **REQUIRES_PUBLIC_API_OR_DESIGN_CONTRACT:** a Docker healthcheck that claims
   functional GNSS service rather than process liveness. The current deliberate
   process-only healthcheck remains correct; a richer claim needs an explicit
@@ -289,8 +302,7 @@ The naturally observed Fixed state does not prove a Float-to-Fixed transition.
   ELF dependency resolution, no development trees, and both checked startup
   exits (missing parameters `1`, unsupported schema `2`). This strengthens an
   existing completed build/runtime contract and does not alter release counts.
-- **HARDWARE_REQUIRED:** serial renumbering; F9P/UM982 swap and recovery;
-  long-run, receiver-child recovery, rate-mismatch, RTK Fixed, and
+- **HARDWARE_REQUIRED:** long-run, receiver-child recovery, rate-mismatch, RTK Fixed, and
   source/incarnation validation; UGA-126 transport-incarnation cutoff; and
   UGA-170's receiver-model reset matrix. The proven UM982 USB-loss contract is
   documented there; it requires container recreation and profile replay.
@@ -318,6 +330,21 @@ evidence. No USB hotplug/incarnation or receiver persistence is inferred.
 Serial renumbering needs an actual renumbering; swap needs a physical receiver
 swap; persistence needs a deliberate power-cycle/persistent-profile matrix;
 RTK Fixed is opportunistic; UGA-126 needs an explicit old-byte exclusion proof.
+
+Phase-F reconciliation (2026-09-05): the selected u-blox by-id persisted while
+its tty and major:minor changed across physical USB loss/replug. The existing
+container did not recover the re-enumerated device grant and remained
+GNSS-stale despite Docker process health; recreation restored fresh advancing
+GNSS under the same one-device, non-root, non-privileged contract. During a
+deliberate physical swap, the absent expected u-blox by-id caused Docker startup
+to fail explicitly while the distinct UM982 remained unopened. Both receivers
+and the exact legacy Mowgli GPS baseline were restored. Because moving the
+UM982 power-cycled it, its already-established 14-command runtime-only profile
+was replayed on the second Pi with zero persistent/reset commands before fresh
+transport was accepted; this confirms replay, not persistence. This closes only
+the serial-renumbering and F9P/UM982 swap/recovery gates. UGA-126 remains
+PARTIAL: there was no tagged pending A from incarnation N, correlated N+1
+request B, or direct proof that late A bytes cannot enter trusted state.
 - **MowgliNext-required:** robot and downstream deployment validation only;
   neither is exercised by this release-scope work.
 - **Deferred beyond v0.7:** the non-ROS API/control surface, generic WebUI,

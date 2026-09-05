@@ -314,21 +314,35 @@ verify the selected node and permissions before creating the container. This is
 a deployment-specific fallback, not permission to guess from a transient tty
 name or to attach every serial device.
 
-The current CH340/UM982 hardware result establishes a deliberately conservative
-contract. USB loss makes the existing Docker device grant stale. Replugging may
-return the same tty and major/minor number, yet the already-running container
-does not regain access. Its process-only Docker healthcheck can therefore stay
-healthy while receiver transport and observations are stale; use the ROS
-diagnostics/status surfaces to distinguish that state. Stop and recreate the
-container only after the chosen stable identity has been re-resolved. Never
-silently substitute a different receiver.
+The current CH340/UM982 and robot u-blox hardware results establish a
+deliberately conservative contract. USB loss makes the existing Docker device
+grant stale. Replugging may return the same tty and major/minor number, as in the
+UM982 trial, or actually renumber, as when the robot u-blox changed from
+`ttyACM1` / 166:1 to `ttyACM2` / 166:2. In both cases the already-running
+container did not regain access. Its process-only Docker healthcheck can
+therefore stay healthy while receiver transport and observations are stale; use
+the ROS diagnostics/status surfaces to distinguish that state. Stop and
+recreate the container only after the chosen stable identity has been
+re-resolved.
+
+Stable identity is also the wrong-receiver safety boundary. In the robot trial,
+the expected u-blox by-id was absent while an unambiguous UM982/CH341 identity
+was present. Starting the stopped container, still pinned only to the expected
+u-blox by-id, failed with Docker's missing-device error and did not open or
+silently substitute the UM982. After both receivers returned to their original
+hosts, explicit by-id re-resolution and recreation restored fresh u-blox GNSS.
+The swap power-cycled the UM982, so its established runtime-only profile was
+replayed before accepting fresh UM982 transport on the second host; all 14
+runtime commands completed and no persistent/reset command ran.
 
 The UM982's runtime-only configuration is volatile across USB power loss.
 After recreation, replay the intended profile using the normal guarded
 provisioning workflow before accepting operation. This image does not claim
 transparent in-place hotplug recovery, automatic device reattachment, or an
-old-byte cutoff. Serial renumbering, other receivers/adapters, and other USB
-topologies require their own validation.
+old-byte cutoff. The u-blox trial required no provisioning replay. Actual
+renumbering and deliberate receiver substitution are proven only for the
+recorded devices/topology; other receivers, adapters, and USB topologies require
+their own validation.
 
 The image leaves DDS networking policy to deployment configuration. Docker's
 default bridge is not disabled, and no RMW implementation, domain ID, or
