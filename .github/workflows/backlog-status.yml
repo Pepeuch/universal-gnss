@@ -20,11 +20,13 @@ jobs:
             scripts/tests/test_checkpoint_audit.py \
             scripts/tests/test_collect_support_snapshot.py \
             scripts/tests/test_docker_entrypoint_contract.py \
+            scripts/tests/test_repo_status.py \
             scripts/tests/test_update_backlog_status.py
           python3 -m unittest \
             scripts.tests.test_checkpoint_audit \
             scripts.tests.test_collect_support_snapshot \
             scripts.tests.test_docker_entrypoint_contract \
+            scripts.tests.test_repo_status \
             scripts.tests.test_update_backlog_status
           python3 scripts/agent/checkpoint_audit.py --check
           python3 scripts/update_backlog_status.py --check

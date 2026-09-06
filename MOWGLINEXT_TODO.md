@@ -302,6 +302,8 @@ New Universal GNSS capability:
   new position/fix observation; republishing cached state leaves it unchanged
 * public `RtcmFrame.stamp` remains ROS time while correction freshness is kept
   on an internal monotonic clock
+* `source_id` and `source_incarnation` qualify the observation sequence;
+  process restart creates a new incarnation and sequence reuse is valid there
 
 Why this matters for MowgliNext:
 
@@ -313,8 +315,9 @@ Why this matters for MowgliNext:
 
 Pending MowgliNext work:
 
-* preserve `position_observation_sequence` through the robot-side GNSS status
-  projection or explicitly document where equivalent provenance is retained
+* preserve `(source_id, source_incarnation, position_observation_sequence)`
+  through the robot-side GNSS status projection or explicitly document where
+  equivalent provenance is retained
 * drive any cached-status/new-observation distinction from this provenance,
   not coordinate equality or callback frequency
 * keep GUI/operator stale indications based on a local monotonic receipt timer;

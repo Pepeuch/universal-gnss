@@ -51,6 +51,11 @@ RELEASE_DEPENDENCY_CLASSES = (
     "ROBOT_REQUIRED",
     "LONG_DURATION_REQUIRED",
 )
+RELEASE_PREREQUISITE_CLASSES = (
+    "NONE",
+    "DESIGN_DECISION_REQUIRED",
+    "SOFTWARE_IMPLEMENTATION_REQUIRED",
+)
 HARDWARE_DEPENDENCY_CLASSES = frozenset({
     "NATIVE_ARM64_REQUIRED",
     "HARDWARE_RECEIVER_REQUIRED",
@@ -70,6 +75,7 @@ class BacklogData:
     records: dict[str, dict[str, str]]
     baseline_count: int
     release_dependencies: dict[str, str]
+    release_prerequisites: dict[str, str]
 
     @property
     def status_counts(self) -> Counter[str]:
@@ -123,7 +129,7 @@ def apply_assignments(manifest: dict[str, Any], key: str, property_name: str, ex
     return values
 
 
-def load_release_dependencies(manifest: dict[str, Any]) -> dict[str, str]:
+def load_release_dependencies(manifest: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
     section = manifest.get("release_gate_dependencies")
     if not isinstance(section, dict) or section.get("release") != "v0.7":
         raise ManifestError("release_gate_dependencies must identify v0.7")
@@ -131,18 +137,23 @@ def load_release_dependencies(manifest: dict[str, Any]) -> dict[str, str]:
     if not isinstance(entries, list):
         raise ManifestError("release_gate_dependencies.gates must be a list")
     dependencies: dict[str, str] = {}
+    prerequisites: dict[str, str] = {}
     for entry in entries:
         if not isinstance(entry, dict):
             raise ManifestError("release dependency entry must be an object")
         task, classification = entry.get("task"), entry.get("classification")
+        prerequisite = entry.get("prerequisite")
         if not isinstance(task, str) or not task:
             raise ManifestError("release dependency entry has no task")
         if classification not in RELEASE_DEPENDENCY_CLASSES:
             raise ManifestError(f"release dependency {task!r} has an unknown classification")
+        if prerequisite not in RELEASE_PREREQUISITE_CLASSES:
+            raise ManifestError(f"release dependency {task!r} has an unknown prerequisite")
         if task in dependencies:
             raise ManifestError(f"release dependency assigns {task!r} more than once")
         dependencies[task] = classification
-    return dependencies
+        prerequisites[task] = prerequisite
+    return dependencies, prerequisites
 
 
 def load_backlog(path: Path = MANIFEST_PATH) -> BacklogData:
@@ -238,10 +249,12 @@ def load_backlog(path: Path = MANIFEST_PATH) -> BacklogData:
     }
     if len(records) != baseline_count:
         raise ManifestError("baseline conservation failed")
+    release_dependencies, release_prerequisites = load_release_dependencies(manifest)
     return BacklogData(
         records=records,
         baseline_count=baseline_count,
-        release_dependencies=load_release_dependencies(manifest),
+        release_dependencies=release_dependencies,
+        release_prerequisites=release_prerequisites,
     )
 
 
@@ -306,6 +319,29 @@ def release_dependency_counts(data: BacklogData) -> Counter[str]:
     return Counter(data.release_dependencies.values())
 
 
+def release_prerequisite_counts(data: BacklogData) -> Counter[str]:
+    return Counter(data.release_prerequisites.values())
+
+
+def accounting_prose(data: BacklogData) -> str:
+    todo_counts = data.todo_counts
+    implemented_removed = sum(
+        record["todo_state"] == "removed" and record["status"] == "IMPLEMENTED"
+        for record in data.records.values()
+    )
+    duplicate_removed = sum(
+        record["todo_state"] == "removed" and record["status"] == "DUPLICATE"
+        for record in data.records.values()
+    )
+    accounted = data.baseline_count - todo_counts["unchecked"]
+    return (
+        f"The {accounted} accounted entries are {todo_counts['checked']} checked findings, "
+        f"{implemented_removed} implemented findings intentionally removed from the worklist, "
+        f"and {duplicate_removed} intentionally removed duplicates; they are not a claim of "
+        f"{accounted} implemented findings."
+    )
+
+
 def project_progress_counts(todo_path: Path = README_PATH.parent / "TODO.md") -> dict[str, int]:
     states = [
         match.group(1).lower()
@@ -334,8 +370,9 @@ def render_svg(data: BacklogData) -> str:
     project = project_progress_counts()
     status_counts = counts["status"]
     dependencies = release_dependency_counts(data)
+    prerequisites = release_prerequisite_counts(data)
     hardware_dependent = sum(dependencies[classification] for classification in HARDWARE_DEPENDENCY_CLASSES)
-    width, height = 760, 570
+    width, height = 760, 592
     bar_x, bar_width = 28, 704
     def progress_section(title: str, subtitle: str, complete: int, total: int, y: int, color: str) -> list[str]:
         percent = complete * 100 / total
@@ -378,6 +415,7 @@ def render_svg(data: BacklogData) -> str:
         f'<text x="28" y="523" font-family="sans-serif" font-size="13" fill="#334155">Open v0.7 gate classifications (exclusive): receiver hardware {dependencies["HARDWARE_RECEIVER_REQUIRED"]} · USB action {dependencies["USB_PHYSICAL_ACTION_REQUIRED"]} · power cycle {dependencies["POWER_CYCLE_REQUIRED"]} · robot {dependencies["ROBOT_REQUIRED"]}</text>',
         f'<text x="28" y="545" font-family="sans-serif" font-size="13" fill="#334155">native arm64 {dependencies["NATIVE_ARM64_REQUIRED"]} · long duration {dependencies["LONG_DURATION_REQUIRED"]} · design contract {dependencies["DESIGN_CONTRACT_REQUIRED"]} · publication {dependencies["PUBLICATION_REQUIRED"]} · already partial {dependencies["ALREADY_PARTIAL"]}</text>',
         f'<text x="28" y="565" font-family="sans-serif" font-size="12" fill="#475569">Open hardware-dependent gates: {hardware_dependent} (derived overlap group; do not add to the exclusive classifications). External-LAN DDS is a separate completed acceptance matrix outside the 65-item checklist.</text>',
+        f'<text x="28" y="585" font-family="sans-serif" font-size="12" fill="#475569">Orthogonal prerequisites: software {prerequisites["SOFTWARE_IMPLEMENTATION_REQUIRED"]} · design decision {prerequisites["DESIGN_DECISION_REQUIRED"]} · none {prerequisites["NONE"]}.</text>',
         '</svg>',
         '',
     ])
@@ -409,7 +447,7 @@ def render_readme_block(data: BacklogData) -> str:
         "",
         f"Baseline: **{counts['baseline']}** audited items. Unchecked worklist entries: **{counts['remaining']}**. Checked or intentionally removed: **{counts['closed']}**.",
         "",
-        "The 33 accounted entries are 21 checked findings, 4 implemented findings intentionally removed from the worklist, and 8 intentionally removed duplicates; they are not a claim of 33 implemented findings.",
+        accounting_prose(data),
         "",
         "Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). Update with `python3 scripts/update_backlog_status.py`; verify CI/local state with `python3 scripts/update_backlog_status.py --check`.",
         "",

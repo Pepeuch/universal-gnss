@@ -36,9 +36,9 @@ jobs:
           test "$(docker image inspect --format '{{index .Config.Entrypoint 0}}' "${IMAGE}")" = "/usr/bin/tini"
           test "$(docker image inspect --format '{{index .Config.Entrypoint 3}}' "${IMAGE}")" = "/usr/local/bin/universal-gnss-entrypoint"
           healthcheck="$(docker image inspect --format '{{json .Config.Healthcheck.Test}}' "${IMAGE}")"
-          printf '%s\n' "${healthcheck}" | grep -F 'CMD-SHELL'
-          printf '%s\n' "${healthcheck}" | grep -F '[r]eceiver_node'
-          printf '%s\n' "${healthcheck}" | grep -F '[n]trip_node'
+          printf '%s\n' "${healthcheck}" | grep -F 'CMD'
+          printf '%s\n' "${healthcheck}" | grep -F '/usr/local/bin/universal-gnss-healthcheck'
+          printf '%s\n' "${healthcheck}" | grep -F -- '--timeout'
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.title"}}' "${IMAGE}")" = "Universal GNSS ROS 2"
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.description"}}' "${IMAGE}")" = "Universal GNSS ROS 2 production container"
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "${IMAGE}")" = "ci-${GITHUB_SHA}"
@@ -51,6 +51,8 @@ jobs:
           docker run --rm "${IMAGE}" bash -lc '
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/ntrip_node
+            test -x /usr/local/bin/universal-gnss-healthcheck
+            test -x /usr/local/libexec/universal-gnss-healthcheck.py
             command -v gnss_discover
             command -v gnss_config_apply
             command -v gnss_export
