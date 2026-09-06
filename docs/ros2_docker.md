@@ -78,7 +78,7 @@ full OCI label set, non-root image contract, ROS nodes, representative operator
 tools, and absence of source/build/log directories in the final stage. It does
 not publish an image or validate hardware.
 
-The `/universal_gnss_receiver/diagnostics` stream and its
+The shared `/diagnostics` stream and the receiver's
 `~/get_snapshot` response contain `universal_gnss/runtime_identity` with the
 image version/revision, ROS distribution, and configured receiver family. It
 is deployment identity only, not a health verdict; discovery diagnostics retain
@@ -87,12 +87,14 @@ the separate receiver model/firmware fields when they are actually known.
 `arm/v7` is not supported for v0.7. BuildKit/QEMU evidence remains distinct
 from the proven native Kilted arm64 result; Lyrical-native is still pending.
 
-For each released image, retain an SPDX or CycloneDX SBOM generated from the
-immutable image digest, its exact Dockerfile revision, and the OCI
-version/revision labels. The v0.7 CI establishes deterministic amd64 build
-inputs and identity but does not publish attestations or multi-architecture
-images; SBOM generation/provenance capture is a release artifact step before
-any later publication, not a runtime dependency.
+For each released image, retain its immutable digest, exact Dockerfile revision,
+OCI version/revision labels, and attached SBOM/provenance attestations. The
+tag-gated `docker-release.yml` workflow builds Kilted and Lyrical indexes for
+`linux/amd64` and `linux/arm64`, requests SBOM plus maximal BuildKit provenance,
+and verifies both published platforms. A manual dry run builds without pushing;
+publication is allowed only from a `v*` tag. The workflow definition and a dry
+build are strategy/software evidence only: the release gate closes only after
+the registry indexes and attestations are actually emitted and inspected.
 
 Before an upgrade, retain the prior immutable image tag and back up the
 operator-owned parameter file and log directory. Stop the old container cleanly,
@@ -123,10 +125,20 @@ new deployments. An unknown value exits the entrypoint with code 2 before ROS
 launch; it does not attempt an implicit migration. A future schema change must
 add a deliberate migration/rejection rule while preserving this v1 default.
 
-ROS logs default to `/var/log/universal_gnss`; mount it to external writable
-storage. The container user defaults to UID/GID `1000`; use the Dockerfile
-`APP_UID`/`APP_GID` build arguments or provision the mounted directory for that
-identity. `ROS_LOG_DIR` may be overridden with another writable path.
+ROS logs default to `/var/log/universal_gnss`, and support exports default to
+`/var/lib/universal_gnss/export`; mount both to external writable storage. The
+container user defaults to UID/GID `1000`; use the Dockerfile `APP_UID`/`APP_GID`
+build arguments or provision both mounted directories for that identity.
+`ROS_LOG_DIR` and `UNIVERSAL_GNSS_EXPORT_DIR` may be overridden with other
+writable paths. Entrypoint startup fails before ROS launch if either surface is
+not writable.
+
+ROS console lines use a stable, non-colored collection envelope:
+`timestamp={time} severity={severity} logger={name} message={message}`. This is
+a field-oriented Docker/Compose/BlueOS collection contract, not JSON; message
+text remains human-readable and the structured `/diagnostics` topic remains the
+authoritative health surface. NTRIP logs both failed and accepted `streaming`
+state transitions without printing credentials.
 
 Credentials belong only in the protected external parameter file. Do not pass
 NTRIP user names/passwords in image tags, Docker build arguments, a committed
@@ -139,7 +151,8 @@ Use bounded host and Docker log retention. The provided Compose example uses
 Docker's `local` logging driver with five 10 MiB files; size and retention are
 operator policy, and the mounted ROS log directory needs an equivalent host
 rotation/archival policy. Preserve relevant logs before rotation when collecting
-support evidence; there is no automatic support-bundle export in v0.7.
+support evidence; snapshot export is explicit and bounded, never an automatic
+upload.
 
 ### Docker Compose example
 
@@ -264,7 +277,8 @@ files, recreating the selected immutable image/container, and applying the
 receiver-specific provisioning procedure where required. Never include NTRIP
 credentials in a support archive.
 
-Use the repository-local `scripts/collect_support_snapshot.py` to create a
+Use the image-installed `universal-gnss-support-snapshot` (or the identical
+repository script `scripts/collect_support_snapshot.py`) to create a
 deterministic, non-secret JSON support artifact without receiver access or an
 API. It records runtime identity, platform architecture, configuration schema,
 a SHA-256 plus parameter-key shape (never parameter values), bounded direct-log
@@ -279,6 +293,16 @@ python3 scripts/collect_support_snapshot.py \
   --log-directory /srv/universal-gnss/log \
   --max-log-files 10 \
   --image universal-gnss:ros2-kilted-v0.7.0
+```
+
+Inside the Compose container, write directly to the persistent export mount:
+
+```bash
+docker compose -f docker/compose.yaml exec universal-gnss \
+  universal-gnss-support-snapshot \
+  --output /var/lib/universal_gnss/export/support-snapshot.json \
+  --parameters /etc/universal_gnss/parameters.yaml \
+  --log-directory /var/log/universal_gnss
 ```
 
 The optional `--image` uses local `docker image inspect` only to collect the
@@ -361,6 +385,19 @@ default bridge is not disabled, and no RMW implementation, domain ID, or
 localhost-only setting is hard-coded. Validate host-to-container,
 container-to-host, and container-to-container discovery before selecting bridge
 or host networking for a robot deployment.
+
+### Docker DNS and NTRIP recovery evidence
+
+The image CI uses a private Docker bridge and a credential-free local fake
+caster. It starts one Universal GNSS container while `caster.test` is absent,
+requires an NTRIP connection failure, then starts a caster under that network
+alias and requires an accepted response plus valid RTCM streaming. CI removes
+the caster, requires another disconnected transition, recreates a different
+caster container under the same alias, and requires a second accepted streaming
+transition while the Universal GNSS container ID remains unchanged. This proves
+that reconnect attempts re-resolve Docker DNS and recover after endpoint loss.
+It does not prove external DNS, Internet routing, TLS, credentials, a specific
+production caster, receiver acceptance of corrections, or RTK quality.
 
 ### Initial DDS topology evidence
 

@@ -1149,3 +1149,50 @@ recovery and the full source/receiver/process/container stale-state matrix remai
 hardware-required and receive no completion credit from this no-device run. The
 earlier `/tmp` log ownership and workspace bind-mount behavior were disposable
 fixture constraints and caused no production change.
+
+## v0.7 Docker software closeout (2026-09-06)
+
+PROVEN: the production image now has explicit writable external surfaces for
+ROS logs and bounded support exports, installs the redacted snapshot tool, and
+uses a stable non-colored ROS console envelope. The rebuilt Kilted image wrote
+UID/GID `1000:1000` log/export artifacts across two container recreations and
+did not persist a supplied credential marker. This local host-daemon topology
+cannot see devcontainer bind paths, so the checked-in Kilted/Lyrical image CI
+performs the equivalent same-runner bind-mount test; local named-volume evidence
+proves the image-side ownership, writability, redaction, and persistence contract.
+
+PROVEN: a credential-free local caster test starts the unchanged Universal GNSS
+container before its Docker DNS alias exists, observes connection failure,
+adds the alias and valid RTCM streaming, removes the caster, then recreates a
+different caster under the same alias and observes a second streaming state.
+This closes Docker DNS/NTRIP re-resolution only; it does not claim external DNS,
+TLS, credentials, receiver correction acceptance, or RTK quality.
+
+SOFTWARE IMPLEMENTED / PUBLICATION PENDING: `docker-release.yml` has a dry-run
+path and a `v*`-tag-only publication path for Kilted/Lyrical amd64+arm64 image
+indexes with SBOM and maximal provenance requests. No image was published.
+The release gate now requires actual registry indexes/digests and attached
+attestations; workflow source is not artifact evidence.
+
+ACCOUNTING: persistent log/export, structured logging, and Docker DNS/reconnect
+close. v0.7 advances 54/65 -> 57/65; Project Roadmap 80/194 -> 83/194; UGA
+remains 33/205. Exactly eight v0.7 gates remain, all with prerequisite `NONE`:
+five receiver-hardware gates, one power-cycle gate, one long-duration gate, and
+one publication gate. UGA-126 remains PARTIAL / HARDWARE_REQUIRED.
+
+EXACT NEXT STEP: complete focused Kilted/Lyrical and ROS2 validation for the
+software closeout. Later release work may execute the tag-gated publication
+workflow or the recorded physical matrices; do not infer either from this pass.
+
+VALIDATION: Kilted image `sha256:ad5ea84ad851c88a3c2981a5d2d5e0e4d7bd0a718541af11107f8c51d75bc0f9`
+and Lyrical image `sha256:6fea29ca08894beee7e87d8ac37a8c8a9cc7bc49f5ae5ba82b9264c027e89cee`
+built PASS on amd64 as UID/GID `1000:1000`. Direct ROS setup followed by
+`set -u` passed for both distributions. Kilted `test_ntrip_node` passed via
+CTest (1/1, 15.69 s); the live Docker DNS matrix exercised the new accepted
+streaming log. Thirty focused Python tests, Python compilation, shell syntax,
+YAML parsing, clang-format-21, generated status `--check`, checkpoint audit,
+repository-status sanity, and `git diff --check` passed.
+
+EXACT NEXT STEP (validated): no software closeout action remains. Execute one of
+the eight external acceptance gates from its recorded matrix; for publication,
+use an immutable `v*` tag and inspect actual registry indexes/attestations.

@@ -22,7 +22,9 @@ fully closed canonical TODO item.
 
 ## CURRENT_STATE
 
-- v0.7: 52/65; Project Roadmap: 78/194; UGA: 33/205.
+- Current canonical accounting after the independent 2026-09-06 software
+  closeout: v0.7 57/65; Project Roadmap 83/194; UGA 33/205. This hardware
+  checkpoint's Phase-F increment originally ended at 52/65 and remains valid.
 - amd64 Kilted/Lyrical image/runtime, QEMU/BuildKit arm64 packaging, non-root
   serial mapping, tini/SIGINT lifecycle, external read-only configuration,
   same-host bridge DDS/domain isolation, and u-blox/UM982 live
@@ -43,6 +45,10 @@ fully closed canonical TODO item.
   wrong-receiver substitution.
 - UGA-126 and UGA-170 remain PARTIAL. Do not give either completion credit by
   inference.
+- Deterministic image CI now owns Docker DNS/NTRIP alias loss/re-resolution;
+  do not repeat it during later hardware phases unless the network/reconnect
+  implementation changes. Receiver-child recovery, rate matrices, RTK
+  transition, persistence, and the qualified incarnation cutoff remain physical.
 
 ## PHASE_A_EVIDENCE_2026_09_05
 
