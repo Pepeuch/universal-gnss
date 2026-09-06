@@ -180,13 +180,13 @@ Configuration / persistence / secrets:
 
 Health / observability:
 
-- [ ] container healthcheck that validates service functionality rather than only
-  PID/process existence
+- [x] container healthcheck that validates enabled-component responsiveness
+  rather than only PID/process existence
 - [x] distinguish container/service health from receiver transport health
 - [x] distinguish receiver observation freshness from ROS/publication activity
 - [x] distinguish NTRIP transport, accepted response, correction flow, semantic
   correction health, and RTK solution quality
-- [ ] healthcheck behavior when no receiver is intentionally configured
+- [x] healthcheck behavior when an enabled receiver has no available device
 - [ ] structured logs suitable for Docker/Compose/BlueOS collection
 - [x] bounded log retention guidance
 - [x] snapshot/support bundle export for field diagnostics
@@ -243,13 +243,13 @@ Documentation:
 v0.7 deployment reconciliation (updated 2026-09-05), limited to the 65-task release
 scope:
 
-Remaining-gate classification after Phase F (13 gates):
+Remaining-gate classification after the current-image health proof (11 gates):
 
 - **ACTIONABLE_NOW:** persistent diagnostic/log/export directory contract;
-  application-level no-receiver status regression/documentation; bounded,
-  structured ROS-node logging; and a deterministic Docker DNS/reconnect
+  bounded, structured ROS-node logging; and a deterministic Docker DNS/reconnect
   characterization if it can be isolated from live-caster topology. The
-  non-secret support snapshot/export is now complete.
+  component-responsive healthcheck, enabled-receiver/no-device behavior, and
+  non-secret support snapshot/export are complete.
 - **ACTIONABLE_WITH_EXISTING_HARDWARE:** receiver-process recovery without stale
   state; Docker DNS/reconnect against the local caster if deterministic;
   rate-mismatch/Float-to-Fixed observations; and a qualified stale-state cutoff.
@@ -260,10 +260,10 @@ Remaining-gate classification after Phase F (13 gates):
 - **REQUIRES_LONG_DURATION:** long-run container validation only.
 - **REQUIRES_POWER_CYCLE_OR_DESTRUCTIVE_TEST:** receiver/profile persistence.
   No reset or power cycle is implied for any other remaining gate.
-- **REQUIRES_PUBLIC_API_OR_DESIGN_CONTRACT:** a Docker healthcheck that claims
-  functional GNSS service rather than process liveness. The current deliberate
-  process-only healthcheck remains correct; a richer claim needs an explicit
-  consumer/false-positive contract, not a silent change.
+- **REQUIRES_PUBLIC_API_OR_DESIGN_CONTRACT:** none. Bounded responsiveness for
+  each enabled ROS component is now proven by the current image. Receiver
+  transport/freshness, NTRIP/RTCM, corrections, and RTK remain independent
+  diagnostics and never collapse into Docker health.
 - **REQUIRES_IMAGE_PUBLICATION:** multi-architecture CI build/publish pipeline.
   Publication is not authorized for this batch.
 - **ALREADY_PROVEN_BUT_UNMARKED:** none. The support snapshot/export and

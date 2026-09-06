@@ -17,39 +17,16 @@ echo
 
 if [[ -f docs/status/uga_backlog.json ]]; then
 python3 - <<'PY'
-import json
-from pathlib import Path
+from scripts.update_backlog_status import dashboard_counts, load_backlog
 
-data = json.loads(Path("docs/status/uga_backlog.json").read_text())
-
-def walk(obj):
-    if isinstance(obj, dict):
-        yield obj
-        for v in obj.values():
-            yield from walk(v)
-    elif isinstance(obj, list):
-        for v in obj:
-            yield from walk(v)
-
-findings = {}
-for obj in walk(data):
-    if not isinstance(obj, dict) or "status" not in obj:
-        continue
-    fid = obj.get("id") or obj.get("finding_id") or obj.get("uga_id")
-    if isinstance(fid, str) and fid.startswith("UGA-"):
-        findings[fid] = obj
-
-counts = {}
-for obj in findings.values():
-    status = str(obj.get("status", "UNKNOWN")).upper()
-    counts[status] = counts.get(status, 0) + 1
+data = load_backlog()
+counts = data.status_counts
 
 print("Backlog/status manifest:")
 for key in ("OPEN", "PARTIAL", "BLOCKED", "IMPLEMENTED", "DUPLICATE", "SUPERSEDED", "OBSOLETE"):
     if key in counts:
         print(f"  {key}: {counts[key]}")
-remaining = sum(counts.get(k, 0) for k in ("OPEN", "PARTIAL", "BLOCKED"))
-print(f"  Remaining: {remaining}")
+print(f"  Remaining: {dashboard_counts(data)['remaining']}")
 PY
 else
   echo "Backlog/status manifest: missing docs/status/uga_backlog.json"

@@ -109,7 +109,7 @@ BlueOS-specific implementation.
   smoke are green, but remain emulated evidence only. Live u-blox and Unicore
   GNSS/NTRIP/RTCM validation is green; the UM982 USB-loss contract requires
   container recreation and replay of its volatile runtime profile. The Docker
-  healthcheck is intentionally process-only; receiver transport/freshness,
+  healthcheck proves bounded responsiveness of both enabled nodes; receiver transport/freshness,
   NTRIP/RTCM/correction semantics, and RTK remain independent diagnostics.
   Native Kilted arm64 build/runtime is green on a physical Raspberry Pi,
   including the bounded no-device lifecycle and a least-privilege live UM982

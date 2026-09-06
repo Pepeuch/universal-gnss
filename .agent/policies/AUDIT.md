@@ -140,6 +140,11 @@ VALIDATION: HARDWARE_PENDING
 
 Do not force `IMPLEMENTED` when physical validation is part of acceptance.
 
+For release gates, record unfinished software implementation or design decisions
+orthogonally to hardware validation. Hardware may be the final acceptance layer
+while a software prerequisite is still open; never describe such a gate as ready
+for hardware execution until that prerequisite is complete.
+
 ## 7. Durable manifest/dashboard discipline
 
 When the repository has a versioned backlog/status manifest, treat it as the durable

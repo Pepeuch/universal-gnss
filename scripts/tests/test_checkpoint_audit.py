@@ -71,6 +71,34 @@ class CheckpointAuditTests(unittest.TestCase):
         self.assertFalse([problem for problem in problems if problem.startswith("UGA-126:")])
         self.assertEqual([], warnings)
 
+    def test_shared_index_covers_every_checkpoint_and_lifecycle(self) -> None:
+        entries, problems, warnings = MODULE.audit_shared_index()
+
+        self.assertEqual(8, len(entries))
+        self.assertEqual([], problems)
+        self.assertEqual([], warnings)
+
+    def test_shared_index_rejects_missing_unindexed_and_misplaced_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            active = base / "active"
+            blocked = base / "blocked"
+            active.mkdir()
+            blocked.mkdir()
+            (active / "indexed.md").write_text("Lifecycle: BLOCKED\n", encoding="utf-8")
+            (blocked / "unindexed.md").write_text("Lifecycle: BLOCKED\n", encoding="utf-8")
+            (base / "INDEX.md").write_text(
+                "- `active/indexed.md`\n- `closed/missing.md`\n", encoding="utf-8"
+            )
+
+            entries, problems, warnings = MODULE.audit_shared_index(base)
+
+        self.assertEqual(2, len(entries))
+        self.assertEqual([], warnings)
+        self.assertTrue(any("references missing file" in problem for problem in problems))
+        self.assertTrue(any("is not indexed" in problem for problem in problems))
+        self.assertTrue(any("declares lifecycle BLOCKED" in problem for problem in problems))
+
 
 if __name__ == "__main__":
     unittest.main()

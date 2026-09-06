@@ -1,14 +1,16 @@
 # Shared checkpoint index
 
-- `active/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
-  `active/REPOSITORY_BASELINE_AUDIT_LEDGER.md` — audit baseline and its durable
-  classification/evidence cache.
-- `active/UG-DOCS-STATUS-001_CHECKPOINT.md` — generated UGA status dashboard
-  work and its remaining CI follow-up.
-- `active/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` — driver response-fence
-  work.
-- `active/UG-DRIVER-TRANSPORT-INCARNATION-001_CHECKPOINT.md` — transport
-  incarnation work.
+- `retained/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
+  `retained/REPOSITORY_BASELINE_AUDIT_LEDGER.md` — frozen audit baseline,
+  stable IDs, duplicate graph, and reusable evidence; current classifications
+  and counts come from the manifest/TODO.
+- `closed/UG-DOCS-STATUS-001_CHECKPOINT.md` — completed generated UGA status
+  dashboard and CI validation contract.
+- `blocked/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` — protocol response
+  fencing is blocked pending a qualified cutoff/recovery contract.
+- `blocked/UG-DRIVER-TRANSPORT-INCARNATION-001_CHECKPOINT.md` — POSIX serial
+  cannot prove an end-to-end prior-byte cutoff; automatic recovery remains
+  blocked pending a qualified provider.
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
 - `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and

@@ -1,5 +1,12 @@
 # Repository Baseline Audit Ledger
 
+Lifecycle: RETAINED
+
+This ledger preserves stable IDs, duplicate relationships, and baseline audit
+evidence. Current classifications and counts come from
+`docs/status/uga_backlog.json` and `TODO.md`; historical current-state prose
+below is not a live dashboard.
+
 Repository: `/workspaces/universal-gnss`  
 Branch: `audit/repository-baseline`  
 HEAD: `b4fa7f0fd51bab8b7562795416e1211e10623a05`  

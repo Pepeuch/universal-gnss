@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate lifecycle placement for explicitly UGA-owned shared checkpoints."""
+"""Validate UGA ownership plus index/lifecycle integrity for shared checkpoints."""
 
 from __future__ import annotations
 
@@ -15,6 +15,10 @@ BASE = ROOT / ".agent/shared/checkpoints"
 LIFECYCLES = ("active", "blocked", "retained", "closed")
 ID_SPEC_RE = re.compile(r"UGA-(\d{3})(?:\.\.UGA-(\d{3}))?")
 OWNERSHIP_FILENAME_RE = re.compile(r"(?<![A-Za-z0-9])(UGA-\d{3})(?![A-Za-z0-9])")
+INDEX_PATH_RE = re.compile(r"`((?:active|blocked|retained|closed)/[^`]+\.md)`")
+DECLARED_LIFECYCLE_RE = re.compile(
+    r"^Lifecycle:\s*(ACTIVE|BLOCKED|RETAINED|CLOSED)\b", re.IGNORECASE | re.MULTILINE
+)
 
 
 def expand_id_spec(spec: str) -> list[str]:
@@ -98,6 +102,58 @@ def shared_entries(base: Path = BASE):
     return entries, duplicates
 
 
+def all_shared_entries(base: Path = BASE) -> dict[str, Path]:
+    entries: dict[str, Path] = {}
+    for lifecycle in LIFECYCLES:
+        directory = base / lifecycle
+        if not directory.exists():
+            continue
+        for path in sorted(directory.glob("*.md")):
+            if path.name == "README.md":
+                continue
+            entries[path.relative_to(base).as_posix()] = path
+    return entries
+
+
+def audit_shared_index(base: Path = BASE) -> tuple[dict[str, Path], list[str], list[str]]:
+    entries = all_shared_entries(base)
+    problems: list[str] = []
+    warnings: list[str] = []
+    index_path = base / "INDEX.md"
+    if not index_path.exists():
+        return entries, [f"shared checkpoint index is missing: {index_path}"], warnings
+
+    references = INDEX_PATH_RE.findall(index_path.read_text(encoding="utf-8"))
+    reference_counts = {reference: references.count(reference) for reference in set(references)}
+    for reference, count in sorted(reference_counts.items()):
+        if count != 1:
+            problems.append(f"shared checkpoint index references {reference} {count} times")
+        if reference not in entries:
+            problems.append(f"shared checkpoint index references missing file: {reference}")
+    for relative_path in sorted(set(entries) - set(references)):
+        problems.append(f"shared checkpoint is not indexed: {relative_path}")
+
+    basenames: dict[str, str] = {}
+    for relative_path, path in entries.items():
+        if path.name in basenames:
+            problems.append(
+                f"shared checkpoint filename exists in multiple lifecycles: "
+                f"{basenames[path.name]} and {relative_path}"
+            )
+        else:
+            basenames[path.name] = relative_path
+
+        declared = DECLARED_LIFECYCLE_RE.search(path.read_text(encoding="utf-8"))
+        if declared is not None:
+            actual = relative_path.split("/", 1)[0].upper()
+            if declared.group(1).upper() != actual:
+                problems.append(
+                    f"{relative_path}: declares lifecycle {declared.group(1).upper()} "
+                    f"but is stored in {actual}"
+                )
+    return entries, problems, warnings
+
+
 def allowed_lifecycle(status, validation):
     status = str(status).upper()
     validation = str(validation or "").upper()
@@ -140,9 +196,13 @@ def main():
     args = parser.parse_args()
 
     manifest, entries, problems, warnings = audit()
+    all_entries, shared_problems, shared_warnings = audit_shared_index()
+    problems.extend(shared_problems)
+    warnings.extend(shared_warnings)
     print("Shared checkpoint audit")
     print(f"  manifest findings: {len(manifest)}")
-    print(f"  shared checkpoints: {len(entries)}")
+    print(f"  UGA-owned checkpoints: {len(entries)}")
+    print(f"  all indexed shared checkpoints: {len(all_entries)}")
     print(f"  problems: {len(problems)}")
     print(f"  warnings: {len(warnings)}")
     for problem in problems:

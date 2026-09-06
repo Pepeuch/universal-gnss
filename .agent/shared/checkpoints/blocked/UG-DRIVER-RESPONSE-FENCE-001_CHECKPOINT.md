@@ -1,5 +1,7 @@
 # Agent checkpoint
 
+Lifecycle: BLOCKED
+
 Repository: `/workspaces/universal-gnss`
 Branch: `main`
 HEAD: `179159e864b38204bba02b7375e04fb824ab0a2d`

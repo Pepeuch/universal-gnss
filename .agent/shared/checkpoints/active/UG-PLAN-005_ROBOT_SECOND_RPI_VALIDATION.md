@@ -266,25 +266,15 @@ receiver/caster gate until its physical topology is recorded.
 
 ## REMAINING V0.7 GATE CLASSIFICATION
 
-The 18 unchecked items in the fixed 65-item release scope each have one
-primary classification:
+Current unchecked gates, exclusive acceptance classifications, and orthogonal
+software/design prerequisites are generated from
+`docs/status/uga_backlog.json` and the fixed release scope in `TODO.md`. Use the
+README/SVG dashboard and `python3 scripts/update_backlog_status.py --check`;
+do not preserve another numeric table here.
 
-| Primary classification | Count | Canonical unchecked gates |
-| --- | ---: | --- |
-| `PUBLICATION_REQUIRED` | 1 | multi-architecture CI build/publish pipeline |
-| `HARDWARE_RECEIVER_REQUIRED` | 5 | receiver-process restart/no stale state; low-receiver/high-publication rate; high-receiver/low-publication rate; RTK Float/Fixed transition; no stale state across incarnations |
-| `USB_PHYSICAL_ACTION_REQUIRED` | 2 | serial renumbering; F9P↔UM982 physical swap/recovery |
-| `POWER_CYCLE_REQUIRED` | 1 | persistent receiver/profile configuration |
-| `ALREADY_PARTIAL` | 2 | persistent diagnostic/log/export directory; no-receiver healthcheck behavior |
-| `DESIGN_CONTRACT_REQUIRED` | 2 | functional Docker healthcheck; structured logs suitable for Docker/Compose/BlueOS |
-| `ROBOT_REQUIRED` | 1 | Docker DNS/reconnect |
-| `LONG_DURATION_REQUIRED` | 1 | long-run container validation |
-
-External-LAN DDS has no separate unchecked line in the fixed 65-item list. Its
-separate acceptance matrix is `ROBOT_PLUS_SECOND_RPI`; do not count it as a
-completed v0.7 checkbox until the canonical tracker changes. Non-ROS API,
-WebUI, BlueOS/Bazaar, MowgliNext integration, and publication remain
-`DEFERRED_BEYOND_V0_7` or `PUBLICATION_REQUIRED` as already scoped.
+External-LAN DDS remains a separate completed physical acceptance matrix
+outside the 65-item checklist. Non-ROS API, WebUI, BlueOS/Bazaar, MowgliNext,
+and publication authorization remain outside this campaign.
 
 ## TEST_ORDER
 

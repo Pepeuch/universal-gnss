@@ -46,16 +46,24 @@ class BacklogStatusTests(unittest.TestCase):
             ]
         )
         MODULE.validate_todo(data)
-        self.assertEqual({"total": 194, "complete": 78, "not_started": 116}, MODULE.project_progress_counts())
-        self.assertEqual({"total": 65, "complete": 52, "not_started": 13}, MODULE.release_progress_counts())
+        self.assertEqual({"total": 194, "complete": 80, "not_started": 114}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 65, "complete": 54, "not_started": 11}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
         dependency_counts = MODULE.release_dependency_counts(data)
-        self.assertEqual(13, sum(dependency_counts.values()))
+        self.assertEqual(11, sum(dependency_counts.values()))
         self.assertEqual(8, sum(
             dependency_counts[classification]
             for classification in MODULE.HARDWARE_DEPENDENCY_CLASSES
         ))
-        self.assertEqual(13, len(data.release_dependencies))
+        self.assertEqual(11, len(data.release_dependencies))
+        self.assertEqual(
+            {"SOFTWARE_IMPLEMENTATION_REQUIRED": 3, "NONE": 8},
+            dict(MODULE.release_prerequisite_counts(data)),
+        )
+        self.assertIn(
+            "33 accounted entries are 21 checked findings, 4 implemented findings",
+            MODULE.accounting_prose(data),
+        )
 
     def test_unknown_release_dependency_classification_is_rejected(self) -> None:
         manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))
@@ -66,6 +74,28 @@ class BacklogStatusTests(unittest.TestCase):
             path = Path(directory) / "manifest.json"
             path.write_text(json.dumps(invalid), encoding="utf-8")
             with self.assertRaisesRegex(MODULE.ManifestError, "unknown classification"):
+                MODULE.load_backlog(path)
+
+    def test_accounting_prose_is_derived_from_manifest_state(self) -> None:
+        data = MODULE.load_backlog()
+        records = copy.deepcopy(data.records)
+        records["UGA-128"]["todo_state"] = "unchecked"
+        changed = replace(data, records=records)
+
+        prose = MODULE.accounting_prose(changed)
+
+        self.assertIn("32 accounted entries are 20 checked findings", prose)
+        self.assertIn("not a claim of 32 implemented findings", prose)
+
+    def test_unknown_release_prerequisite_is_rejected(self) -> None:
+        manifest = json.loads(MODULE.MANIFEST_PATH.read_text(encoding="utf-8"))
+        invalid = copy.deepcopy(manifest)
+        invalid["release_gate_dependencies"]["gates"][0]["prerequisite"] = "UNKNOWN"
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manifest.json"
+            path.write_text(json.dumps(invalid), encoding="utf-8")
+            with self.assertRaisesRegex(MODULE.ManifestError, "unknown prerequisite"):
                 MODULE.load_backlog(path)
 
     def test_duplicate_cycle_is_rejected(self) -> None:
@@ -86,9 +116,9 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertIn("CURRENT RELEASE", svg)
         self.assertIn("v0.6 → v0.7", svg)
-        self.assertIn("52 / 65 complete · 80.00%", svg)
+        self.assertIn("54 / 65 complete · 83.08%", svg)
         self.assertIn("PROJECT ROADMAP", svg)
-        self.assertIn("78 / 194 complete · 40.21%", svg)
+        self.assertIn("80 / 194 complete · 41.24%", svg)
         self.assertIn("UGA QUALITY / AUDIT", svg)
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)
@@ -96,6 +126,7 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertIn("Open v0.7 gate classifications (exclusive)", svg)
         self.assertIn("Open hardware-dependent gates: 8", svg)
         self.assertIn("External-LAN DDS is a separate completed acceptance matrix", svg)
+        self.assertIn("Orthogonal prerequisites: software 3 · design decision 0 · none 8", svg)
 
         changed = replace(
             data,

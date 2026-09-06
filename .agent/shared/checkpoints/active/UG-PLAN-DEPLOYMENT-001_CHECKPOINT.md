@@ -1,8 +1,8 @@
 # Agent checkpoint
 
 Repository: `/workspaces/universal-gnss`
-Branch: `feat/docker`
-Execution HEAD: `0cfea4360075faa85efbb72c3791c81b0c377a65`
+Branch: `dev`
+Baseline HEAD: `d62066101bb66d2d1c11cc7c496497f91ec903e9` (current follow-up work is uncommitted)
 
 ## Objective
 
@@ -15,20 +15,11 @@ study without making BlueOS a second GNSS implementation.
 source of truth for `UG-PLAN-001` through `UG-PLAN-006`. `ROADMAP.md` carries
 the release/dependency view. This checkpoint is only a resumption aid.
 
-PROGRESS ACCOUNTING (2026-09-04): the repository's only numeric progress
-indicator is the generated UGA dashboard. Its documented formula is the count
-of checked/resolved entries among the fixed 205-item UGA baseline; `PARTIAL`,
-`BLOCKED`, and hardware evidence do not count as closed. UG-PLAN-005 evidence
-therefore advances the concise deployment plan/roadmap without inventing a
-second weighted percentage. Before reconciliation the dashboard reported 37
-closed/resolved and 168 unchecked (18.05%). The corrected dashboard reports 33
-checked/intentionally removed and 172 unchecked (16.10%): four findings
-(`UGA-131`, `UGA-160`, `UGA-166`, `UGA-167`) are correctly PARTIAL and excluded
-from checked progress. The 33 consists of 21 checked entries, 4 implemented
-intentional removals, and 8 duplicate removals; it is not an implementation
-count. Its lifecycle mix
-also reflects the authoritative UGA-126 PARTIAL classification. No UG-PLAN
-item entered the fixed 205-item denominator or its resolved numerator.
+PROGRESS ACCOUNTING: current UGA, project, and v0.7 counts are generated from
+`docs/status/uga_backlog.json` and `TODO.md` by
+`scripts/update_backlog_status.py`. Historical figures below describe the
+evidence increment at that time and must not be used as current state. PARTIAL,
+BLOCKED, and hardware-required acceptance receive no completion credit.
 
 PROJECT IMPLEMENTATION INDICATOR (2026-09-04): this reconciliation formalizes
 a separate equal-weight count of every current TODO checklist item. It reports
@@ -47,16 +38,9 @@ BlueOS scope are excluded by the roadmap. It reports 25/65 COMPLETE (38.46%) and
 credit for partial/blocked work. This is a subset of the 50/194 project roadmap
 worklist, not an additive metric.
 
-TOOLING INCONSISTENCY (deferred, 2026-09-04):
-`python3 scripts/agent/checkpoint_audit.py --check` is not a valid gate for the
-current compact `docs/status/uga_backlog.json`: its `load_manifest()` searches
-for per-object `id`/`finding_id`/`uga_id` fields and consequently reports
-`manifest findings: 0`. Its fallback ownership heuristic then treats the first
-`UGA-xxx` mention in each shared checkpoint as that checkpoint's owner, yielding
-false duplicate `UGA-126` ownership errors. This does not invalidate the
-deployment checkpoint or generated UGA dashboard evidence. It is tracked as a
-separate unchecked Documentation/Quality tooling item in `TODO.md`; do not fix
-it during this bookkeeping reconciliation.
+TOOLING INCONSISTENCY (resolved 2026-09-06): the checkpoint auditor now reuses
+the compact manifest parser, reports UGA-owned and all indexed shared
+checkpoints separately, and validates shared index/lifecycle consistency.
 
 ## Established evidence
 
@@ -1139,3 +1123,29 @@ retained their IDs and running state.
 ACCOUNTING: deterministic configuration reapplication, container crash/restart,
 and host reboot/autostart close. v0.7 advances 47/65 -> 50/65, Project Roadmap
 73/194 -> 76/194, and UGA remains 33/205.
+
+## Current-image atomic child and no-device increment (2026-09-06)
+
+PROVEN in local image `sha256:e36c3b8764b25260b6a8d90da5847215a2f3bd7868302ea36829ba07df952267`,
+labelled revision `d62066101bb66d2d1c11cc7c496497f91ec903e9`: both enabled ROS nodes
+answered bounded health services while Docker reported healthy. With the
+configured receiver device absent, discovery was ERROR, transport was false,
+observation sequence was zero, fix/RTK/corrections were false, NTRIP was
+reconnecting, and forwarded RTCM count was zero. Docker health therefore proves
+component responsiveness only.
+
+The receiver child host PID `225380` was then killed. Launch reported receiver
+exit `-9`, sent SIGINT to NTRIP PID `225381`, and exited. Docker
+`unless-stopped` advanced `RestartCount` from zero to one and recreated both
+children as host PIDs `227363` and `227364`. Receiver incarnation changed from
+`2df0c85e9e564408a1fea76e0a948a5b` to
+`bd727b278d944ecab31c44e428290eef`; the restarted snapshot still had sequence
+zero, invalid fix, and no active corrections, and NTRIP still reported zero
+forwarded RTCM frames. Deterministic launch tests separately cover unexpected
+NTRIP exit and clean shutdown.
+
+LIMIT: this closes the two software-only health checklist items. Receiver-child
+recovery and the full source/receiver/process/container stale-state matrix remain
+hardware-required and receive no completion credit from this no-device run. The
+earlier `/tmp` log ownership and workspace bind-mount behavior were disposable
+fixture constraints and caused no production change.
