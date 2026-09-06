@@ -1092,6 +1092,32 @@ TEST_F(ReceiverNodeTest, PublishesRuntimeIdentityInDiagnostics)
             std::optional<std::string>{"kilted-test"});
 }
 
+TEST_F(ReceiverNodeTest, PublishesStableSourceIdentityAndUniqueProcessIncarnation)
+{
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("transport", "serial"),
+      rclcpp::Parameter("serial_device", "/definitely_missing_universal_gnss_device"),
+      rclcpp::Parameter("receiver_family", "unicore"),
+  });
+
+  universal_gnss_ros2::ReceiverNode first(universal_gnss_ros2::ReceiverNode::DiscoveryFunction{},
+                                          options);
+  universal_gnss_ros2::ReceiverNode second(universal_gnss_ros2::ReceiverNode::DiscoveryFunction{},
+                                           options);
+  first.PublishNow();
+  second.PublishNow();
+
+  ASSERT_TRUE(first.last_status_message().has_value());
+  ASSERT_TRUE(second.last_status_message().has_value());
+  EXPECT_FALSE(first.last_status_message()->source_id.empty());
+  EXPECT_EQ(first.last_status_message()->source_id, second.last_status_message()->source_id);
+  EXPECT_FALSE(first.last_status_message()->source_incarnation.empty());
+  EXPECT_NE(first.last_status_message()->source_incarnation,
+            second.last_status_message()->source_incarnation);
+  EXPECT_EQ(first.last_status_message()->position_observation_sequence, 0u);
+}
+
 TEST_F(ReceiverNodeTest, ExplicitPathWithAutoBaudAndFamilyProbesOnlyThatPath)
 {
   std::optional<std::string> captured_path;

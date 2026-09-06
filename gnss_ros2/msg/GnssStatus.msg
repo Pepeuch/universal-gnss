@@ -60,6 +60,13 @@ builtin_interfaces/Time stamp
 # a new position/fix observation is accepted, even if its numeric values match
 # the preceding observation. Zero means provenance is unavailable (legacy).
 uint64 position_observation_sequence
+# Stable logical source identity for this producer configuration. Empty means
+# legacy provenance is unavailable.
+string source_id
+# Opaque identity for one source/session incarnation. It changes on process
+# restart and must change before a future in-process transport replacement can
+# publish observations. Empty means legacy provenance is unavailable.
+string source_incarnation
 bool fix_valid
 uint8 fix_type
 uint8 rtk_mode

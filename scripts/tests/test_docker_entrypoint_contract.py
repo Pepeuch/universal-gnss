@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 ENTRYPOINT = Path(__file__).resolve().parents[2] / "docker" / "entrypoint.sh"
+HEALTHCHECK = Path(__file__).resolve().parents[2] / "docker" / "healthcheck.sh"
+DOCKERFILE = Path(__file__).resolve().parents[2] / "Dockerfile"
 
 
 class DockerEntrypointContractTests(unittest.TestCase):
@@ -30,6 +32,16 @@ class DockerEntrypointContractTests(unittest.TestCase):
         source = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn(': "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:=1}"', source)
         self.assertIn('  1) ;;', source)
+
+    def test_image_healthcheck_uses_bounded_component_responsiveness(self) -> None:
+        source = DOCKERFILE.read_text(encoding="utf-8")
+        self.assertIn('CMD ["/usr/local/bin/universal-gnss-healthcheck", "--timeout", "2"]', source)
+        self.assertNotIn("pgrep -f", source)
+
+    def test_healthcheck_enables_nounset_only_after_ros_setup(self) -> None:
+        source = HEALTHCHECK.read_text(encoding="utf-8")
+        self.assertNotIn("set -euo pipefail", source)
+        self.assertGreater(source.index("set -u"), source.index("install/setup.bash"))
 
 
 if __name__ == "__main__":

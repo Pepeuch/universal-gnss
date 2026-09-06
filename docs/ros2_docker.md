@@ -20,8 +20,8 @@ this operational guide when reviewing a release candidate.
   proven on a physical arm64 Raspberry Pi; Lyrical-native remains separate.
 - The image is non-root by default and does not use privileged mode or bind all
   of `/dev`.
-- The Docker healthcheck confirms only that both launch-managed processes are
-  present. It does **not** assert receiver connectivity, observation freshness,
+- The Docker healthcheck calls bounded responsiveness services on both enabled
+  launch-managed components. It does **not** assert receiver connectivity, observation freshness,
   NTRIP connection/RTCM flow, correction validity, or RTK state.
 
 The established scope includes same-host Docker bridge DDS, physical-LAN DDS
@@ -172,15 +172,27 @@ external input. Every container recreation reads the mounted configuration
 again, but physical receiver/profile persistence is not implied.
 
 ROS launch owns `receiver_node` and `ntrip_node`; Universal GNSS does not embed
-a second process supervisor or automatic receiver-device reattachment. Receiver
+a second process supervisor or automatic receiver-device reattachment. Either
+child's unexpected exit shuts down the combined launch/container so Docker can
+recreate both children from the same external configuration. A child is never
+independently respawned while the peer's caches survive. Receiver
+and NTRIP receive one launch-generated source-incarnation token; each combined
+launch start gets a new token, and NTRIP rejects samples from any other
+incarnation even before its first current sample arrives. Receiver
 transport failure becomes receiver diagnostics/freshness state rather than a
 Docker health claim. NTRIP has its independent reconnect state and does not
-restart a healthy receiver. If either ROS process exits, the resulting launch/
-container lifecycle depends on the launch process: the Phase-E matrix proved
-that killing `receiver_node` alone leaves launch/container running and
-eventually Docker-unhealthy without an automatic restart, while termination of
-the main `ros2 launch` process exits the container and activates the configured
-Docker restart policy. Receiver-child recovery therefore remains open.
+restart a healthy receiver. Normal SIGINT/SIGTERM still follows launch's clean
+group shutdown. The earlier Phase-E receiver-child failure applies to the prior
+image; deterministic launch regression is now present, while physical container
+recovery validation remains pending and receives no release credit yet.
+
+Both enabled components expose `~/get_health` using `std_srvs/Trigger`. A
+successful response means only that the component executor handled a bounded
+request. The combined image always enables Receiver and NTRIP, so both must
+respond. An enabled receiver with no available device remains responsive but
+reports degraded transport/discovery and stale/no observation through diagnostics;
+missing hardware never silently becomes a disabled mode. NTRIP connectivity,
+RTCM flow, correction health, and RTK quality remain separate diagnostic states.
 
 Entrypoint failures emit credential-free, stable key/value prefixes such as
 `universal_gnss_entrypoint event=parameters_file_not_readable`; ROS diagnostics
@@ -195,7 +207,7 @@ hotplug, reboot, or process-crash claim.
 
 | Scenario | Process / exit behavior | Application evidence | Restart / operator action |
 | --- | --- | --- | --- |
-| Valid v1 configuration, no mapped receiver | `receiver_node` and `ntrip_node` remained running; Docker process health became `healthy` | receiver discovery emitted `receiver_discovery_failed`; NTRIP independently reported disconnected | Docker health remains process-only; investigate ROS diagnostics and provide/re-resolve the selected device before recreating if needed |
+| Valid v1 configuration, no mapped receiver | `receiver_node` and `ntrip_node` remained running; the current image's bounded component-response health became `healthy` | receiver discovery was ERROR; observation sequence stayed zero; fix/RTK/corrections stayed false; NTRIP was reconnecting with zero forwarded RTCM | Proven in the current local Kilted image; this closes health semantics only |
 | Unreadable parameter file | entrypoint exited `1` before launch | `event=parameters_file_not_readable`; no ROS diagnostics exist because ROS never starts | fix the external mount/path, then let Docker policy recreate or recreate explicitly |
 | Unsupported configuration schema | entrypoint exited `2` before launch | `event=unsupported_configuration_schema_version`; no ROS diagnostics exist | supply a supported schema, then recreate/restart under the Docker policy |
 | Clean Docker stop (`STOPSIGNAL SIGINT`) | container exited `0`, OOM false, restart count `0` with `restart: no` | launch-managed nodes received normal shutdown | normal explicit stop; this does not prove crash/daemon-reboot recovery |
@@ -319,7 +331,7 @@ deliberately conservative contract. USB loss makes the existing Docker device
 grant stale. Replugging may return the same tty and major/minor number, as in the
 UM982 trial, or actually renumber, as when the robot u-blox changed from
 `ttyACM1` / 166:1 to `ttyACM2` / 166:2. In both cases the already-running
-container did not regain access. Its process-only Docker healthcheck can
+container did not regain access. Its bounded component-response healthcheck can
 therefore stay healthy while receiver transport and observations are stale; use
 the ROS diagnostics/status surfaces to distinguish that state. Stop and
 recreate the container only after the chosen stable identity has been

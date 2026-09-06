@@ -29,11 +29,11 @@
 #include <unistd.h>
 #endif
 
-namespace
-{
+namespace {
 
-const diagnostic_msgs::msg::DiagnosticStatus* FindDiagnosticStatusByName(
-    const diagnostic_msgs::msg::DiagnosticArray& array, const std::string& name)
+const diagnostic_msgs::msg::DiagnosticStatus*
+FindDiagnosticStatusByName(const diagnostic_msgs::msg::DiagnosticArray& array,
+                           const std::string& name)
 {
   for (const auto& status : array.status)
   {
@@ -92,8 +92,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -119,10 +118,8 @@ void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, cons
   ++bit_offset;
 }
 
-void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
-                        std::size_t& bit_offset,
-                        const std::uint64_t value,
-                        const std::size_t bit_count)
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
+                        const std::uint64_t value, const std::size_t bit_count)
 {
   for (std::size_t i = 0u; i < bit_count; ++i)
   {
@@ -131,17 +128,14 @@ void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
   }
 }
 
-void AppendSignedBits(std::vector<std::uint8_t>& payload,
-                      std::size_t& bit_offset,
-                      const std::int64_t value,
-                      const std::size_t bit_count)
+void AppendSignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
+                      const std::int64_t value, const std::size_t bit_count)
 {
   const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
-void AppendZeroBits(std::vector<std::uint8_t>& payload,
-                    std::size_t& bit_offset,
+void AppendZeroBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
                     const std::size_t bit_count)
 {
   for (std::size_t index = 0u; index < bit_count; ++index)
@@ -150,22 +144,21 @@ void AppendZeroBits(std::vector<std::uint8_t>& payload,
   }
 }
 
-std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
-                               const std::size_t satellite_count,
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant, const std::size_t satellite_count,
                                const std::size_t populated_cell_count)
 {
   switch (msm_variant)
   {
-    case 4u:
-      return satellite_count * 18u + populated_cell_count * 48u;
-    case 5u:
-      return satellite_count * 36u + populated_cell_count * 63u;
-    case 6u:
-      return satellite_count * 18u + populated_cell_count * 65u;
-    case 7u:
-      return satellite_count * 36u + populated_cell_count * 80u;
-    default:
-      return 0u;
+  case 4u:
+    return satellite_count * 18u + populated_cell_count * 48u;
+  case 5u:
+    return satellite_count * 36u + populated_cell_count * 63u;
+  case 6u:
+    return satellite_count * 18u + populated_cell_count * 65u;
+  case 7u:
+    return satellite_count * 36u + populated_cell_count * 80u;
+  default:
+    return 0u;
   }
 }
 
@@ -178,8 +171,7 @@ std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -213,10 +205,8 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
 
 std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
                                              const bool code_phase_bias_indicator,
-                                             const bool has_l1_ca_bias,
-                                             const bool has_l1_p_bias,
-                                             const bool has_l2_ca_bias,
-                                             const bool has_l2_p_bias,
+                                             const bool has_l1_ca_bias, const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias, const bool has_l2_p_bias,
                                              const std::optional<std::int16_t> l1_ca_bias_raw,
                                              const std::optional<std::int16_t> l1_p_bias_raw,
                                              const std::optional<std::int16_t> l2_ca_bias_raw,
@@ -309,11 +299,9 @@ std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
     }
   }
 
-  AppendZeroBits(payload,
-                 bit_offset,
+  AppendZeroBits(payload, bit_offset,
                  GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
-                                    satellite_ids.size(),
-                                    populated_cell_count));
+                                    satellite_ids.size(), populated_cell_count));
   return BuildRtcmFrameFromPayload(payload);
 }
 
@@ -457,8 +445,8 @@ public:
     std::size_t offset = 0u;
     while (offset < data.size())
     {
-      const ssize_t bytes_written =
-          ::write(peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
+      const ssize_t bytes_written = ::write(
+          peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
       if (bytes_written < 0)
       {
         if (errno == EINTR)
@@ -481,8 +469,7 @@ public:
 
     while (std::chrono::steady_clock::now() < deadline)
     {
-      const ssize_t bytes_read =
-          ::recv(peer_fd_, buffer.data(), buffer.size(), MSG_DONTWAIT);
+      const ssize_t bytes_read = ::recv(peer_fd_, buffer.data(), buffer.size(), MSG_DONTWAIT);
       if (bytes_read > 0)
       {
         return std::string(buffer.data(), buffer.data() + bytes_read);
@@ -574,9 +561,8 @@ TEST_F(NtripNodeTest, ForwardsGnssStatusToRealGgaInjectionAndDiagnostics)
   const auto& diagnostics = *node.last_diagnostics_message();
   EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/ntrip_streaming"),
             nullptr);
-  EXPECT_NE(
-      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_injection_active"),
-      nullptr);
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/gga_injection_active"),
+            nullptr);
 }
 
 TEST_F(NtripNodeTest, PublishesRtcmFramesForReceiverForwarding)
@@ -706,8 +692,8 @@ TEST_F(NtripNodeTest, ReportsRtcmForwardingStaleAfterSilenceAndRecovers)
 
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
-  const auto* active = FindDiagnosticStatusByName(
-      *node.last_diagnostics_message(), "universal_gnss_ntrip/rtcm_forwarding");
+  const auto* active = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                  "universal_gnss_ntrip/rtcm_forwarding");
   ASSERT_NE(active, nullptr);
   EXPECT_EQ(active->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(active->message, "RTCM forwarding active");
@@ -721,8 +707,7 @@ TEST_F(NtripNodeTest, ReportsRtcmForwardingStaleAfterSilenceAndRecovers)
   ASSERT_NE(stale, nullptr);
   EXPECT_EQ(stale->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(stale->message, "RTCM forwarding stale");
-  EXPECT_EQ(FindDiagnosticValue(*stale, "published_frame_count"),
-            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*stale, "published_frame_count"), std::optional<std::string>{"1"});
   EXPECT_NE(FindDiagnosticStatusByName(silent_diagnostics, "universal_gnss_ntrip/ntrip_streaming"),
             nullptr);
 
@@ -742,8 +727,8 @@ TEST_F(NtripNodeTest, ReportsRtcmForwardingStaleAfterSilenceAndRecovers)
 
   node.PublishNow();
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
-  const auto* recovered = FindDiagnosticStatusByName(
-      *node.last_diagnostics_message(), "universal_gnss_ntrip/rtcm_forwarding");
+  const auto* recovered = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                     "universal_gnss_ntrip/rtcm_forwarding");
   ASSERT_NE(recovered, nullptr);
   EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(recovered->message, "RTCM forwarding active");
@@ -771,8 +756,8 @@ TEST_F(NtripNodeTest, ProjectsRtcmSemanticObservationsIntoDiagnostics)
   ASSERT_TRUE(sockets.WritePeer("ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n"));
 
   const auto rtcm_1006 = BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u);
-  const auto rtcm_1230 = BuildRtcm1230Frame(
-      42u, true, true, false, true, false, 25, std::nullopt, -10, std::nullopt);
+  const auto rtcm_1230 =
+      BuildRtcm1230Frame(42u, true, true, false, true, false, 25, std::nullopt, -10, std::nullopt);
   const auto rtcm_1077 = BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {2u}, {true, false});
   const auto rtcm_1087 = BuildRtcmMsmFrame(1087u, 42u, {4u}, {1u, 2u}, {true, true});
 
@@ -791,13 +776,12 @@ TEST_F(NtripNodeTest, ProjectsRtcmSemanticObservationsIntoDiagnostics)
   ASSERT_TRUE(node.last_diagnostics_message().has_value());
   const auto& diagnostics = *node.last_diagnostics_message();
 
-  const auto* base_station =
-      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/base_station_arp");
+  const auto* base_station = FindDiagnosticStatusByName(
+      diagnostics, "universal_gnss_ntrip/rtcm_semantic/base_station_arp");
   ASSERT_NE(base_station, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*base_station, "seen"), std::optional<std::string>{"true"});
   EXPECT_EQ(FindDiagnosticValue(*base_station, "decoded"), std::optional<std::string>{"true"});
-  EXPECT_EQ(FindDiagnosticValue(*base_station, "message_type"),
-            std::optional<std::string>{"1006"});
+  EXPECT_EQ(FindDiagnosticValue(*base_station, "message_type"), std::optional<std::string>{"1006"});
   EXPECT_EQ(FindDiagnosticValue(*base_station, "station_id"), std::optional<std::string>{"42"});
 
   const auto* glonass_bias = FindDiagnosticStatusByName(
@@ -812,22 +796,20 @@ TEST_F(NtripNodeTest, ProjectsRtcmSemanticObservationsIntoDiagnostics)
   ASSERT_NE(msm_summary, nullptr);
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "seen"), std::optional<std::string>{"true"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "decoded"), std::optional<std::string>{"true"});
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "message_type"),
-            std::optional<std::string>{"1087"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "message_type"), std::optional<std::string>{"1087"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "station_id"), std::optional<std::string>{"42"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "constellations_seen"),
             std::optional<std::string>{"gps,glonass"});
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "satellite_count"),
-            std::optional<std::string>{"1"});
-  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"),
-            std::optional<std::string>{"2"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "satellite_count"), std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*msm_summary, "signal_count"), std::optional<std::string>{"2"});
   EXPECT_EQ(FindDiagnosticValue(*msm_summary, "cell_count"), std::optional<std::string>{"2"});
   EXPECT_NE(FindDiagnosticValue(*msm_summary, "age_ns"), std::nullopt);
 
-  EXPECT_NE(FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_gps_msm7"),
-            nullptr);
-  EXPECT_NE(FindDiagnosticStatusByName(
-                diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_glonass_msm7"),
+  EXPECT_NE(
+      FindDiagnosticStatusByName(diagnostics, "universal_gnss_ntrip/rtcm_semantic/msm_gps_msm7"),
+      nullptr);
+  EXPECT_NE(FindDiagnosticStatusByName(diagnostics,
+                                       "universal_gnss_ntrip/rtcm_semantic/msm_glonass_msm7"),
             nullptr);
 }
 
@@ -972,8 +954,7 @@ TEST_F(NtripNodeTest, RepeatedCachedStatusCannotKeepGgaSourceFresh)
   node.StepOnce();
   sockets.ReadPeerText(1024u);
 
-  const auto stale_deadline =
-      std::chrono::steady_clock::now() + std::chrono::milliseconds(5300);
+  const auto stale_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5300);
   while (std::chrono::steady_clock::now() < stale_deadline)
   {
     publisher->publish(cached_status);
@@ -986,8 +967,7 @@ TEST_F(NtripNodeTest, RepeatedCachedStatusCannotKeepGgaSourceFresh)
   publisher->publish(cached_status);
   executor.spin_some();
   node.StepOnce();
-  const auto stale_peer_text =
-      sockets.ReadPeerText(1024u, std::chrono::milliseconds(250));
+  const auto stale_peer_text = sockets.ReadPeerText(1024u, std::chrono::milliseconds(250));
   EXPECT_EQ(stale_peer_text.find("$GPGGA"), std::string::npos)
       << "high-rate republication of one cached observation must not refresh GGA input";
 
@@ -1006,6 +986,82 @@ TEST_F(NtripNodeTest, RepeatedCachedStatusCannotKeepGgaSourceFresh)
       << "a new observation with identical values must restore GGA freshness";
 }
 
+TEST_F(NtripNodeTest, SequenceReuseIsValidAfterAtomicProcessRestart)
+{
+  auto status = MakeGnssStatus();
+  status.source_id = "serial:/dev/gnss-receiver";
+  status.position_observation_sequence = 1u;
+  rclcpp::NodeOptions first_options;
+  first_options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("expected_source_incarnation", "incarnation-a"),
+  });
+
+  {
+    SocketPair sockets;
+    ASSERT_TRUE(sockets.Open());
+    universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), first_options);
+    auto publisher = std::make_shared<rclcpp::Node>("first_incarnation_publisher");
+    rclcpp::executors::SingleThreadedExecutor executor;
+    status.source_incarnation = "incarnation-a";
+    DeliverStatus(node, publisher, executor, status);
+    EXPECT_TRUE(node.has_runtime_state());
+  }
+
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+  rclcpp::NodeOptions second_options;
+  second_options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("expected_source_incarnation", "incarnation-b"),
+  });
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), second_options);
+  auto publisher = std::make_shared<rclcpp::Node>("second_incarnation_publisher");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  status.source_incarnation = "incarnation-b";
+  DeliverStatus(node, publisher, executor, status);
+
+  EXPECT_TRUE(node.has_runtime_state());
+}
+
+TEST_F(NtripNodeTest, RejectsDelayedRetiredIncarnationAndDiagnosesCompetingSource)
+{
+  SocketPair sockets;
+  ASSERT_TRUE(sockets.Open());
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(std::vector<rclcpp::Parameter>{
+      rclcpp::Parameter("caster_host", "caster.example.com"),
+      rclcpp::Parameter("mountpoint", "RTCM3"),
+      rclcpp::Parameter("expected_source_incarnation", "current-incarnation"),
+  });
+  universal_gnss_ros2::NtripNode node(sockets.ReleaseClientFd(), options);
+  auto publisher = std::make_shared<rclcpp::Node>("competing_incarnation_publisher");
+  rclcpp::executors::SingleThreadedExecutor executor;
+
+  auto retired = MakeGnssStatus();
+  retired.source_id = "serial:/dev/gnss-receiver";
+  retired.source_incarnation = "retired-incarnation";
+  retired.position_observation_sequence = 2u;
+  DeliverStatus(node, publisher, executor, retired);
+  EXPECT_FALSE(node.has_runtime_state());
+
+  auto current = retired;
+  current.source_incarnation = "current-incarnation";
+  current.position_observation_sequence = 1u;
+  DeliverStatus(node, publisher, executor, current);
+  ASSERT_TRUE(node.has_runtime_state());
+
+  DeliverStatus(node, publisher, executor, retired);
+  node.PublishNow();
+
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  EXPECT_NE(FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                       "universal_gnss_ntrip/gga_source_conflict"),
+            nullptr);
+}
+
 #endif
 
-}  // namespace
+} // namespace

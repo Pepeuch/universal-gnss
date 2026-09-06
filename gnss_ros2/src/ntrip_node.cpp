@@ -1,9 +1,9 @@
 #include "universal_gnss_ros2/ntrip_node.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -11,6 +11,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "diagnostic_msgs/msg/key_value.hpp"
 #include "rclcpp/time.hpp"
 #include "rtcm_diagnostic_projection.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
@@ -31,11 +33,9 @@
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
 #include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 
-namespace universal_gnss_ros2
-{
+namespace universal_gnss_ros2 {
 
-namespace
-{
+namespace {
 
 using SteadyClock = std::chrono::steady_clock;
 
@@ -45,10 +45,10 @@ struct NtripNodeConfig
   universal_gnss_transport::TcpClientConfig tcp{};
   bool tls_enabled{false};
   double rtcm_forwarding_activity_timeout_s{5.0};
+  std::string expected_source_incarnation{};
 };
 
-[[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node,
-                                        const std::string& parameter_name,
+[[noreturn]] void ThrowInvalidParameter(rclcpp::Node& node, const std::string& parameter_name,
                                         const std::string& message)
 {
   const std::string full_message = "Invalid parameter '" + parameter_name + "': " + message;
@@ -62,23 +62,23 @@ const char* ToString(const universal_gnss_ntrip::NtripClientError error)
 
   switch (error)
   {
-    case NtripClientError::kNone:
-      return "none";
-    case NtripClientError::kConfiguration:
-      return "configuration";
-    case NtripClientError::kAuthentication:
-      return "authentication";
-    case NtripClientError::kHttp:
-      return "http";
-    case NtripClientError::kProtocol:
-      return "protocol";
-    case NtripClientError::kTimeout:
-      return "timeout";
-    case NtripClientError::kDisconnected:
-      return "disconnected";
-    case NtripClientError::kUnknown:
-    default:
-      return "unknown";
+  case NtripClientError::kNone:
+    return "none";
+  case NtripClientError::kConfiguration:
+    return "configuration";
+  case NtripClientError::kAuthentication:
+    return "authentication";
+  case NtripClientError::kHttp:
+    return "http";
+  case NtripClientError::kProtocol:
+    return "protocol";
+  case NtripClientError::kTimeout:
+    return "timeout";
+  case NtripClientError::kDisconnected:
+    return "disconnected";
+  case NtripClientError::kUnknown:
+  default:
+    return "unknown";
   }
 }
 
@@ -88,17 +88,17 @@ const char* ToString(const universal_gnss_ntrip::NtripClientState state)
 
   switch (state)
   {
-    case NtripClientState::kDisconnected:
-      return "disconnected";
-    case NtripClientState::kConnecting:
-      return "connecting";
-    case NtripClientState::kConnected:
-      return "connected";
-    case NtripClientState::kStreaming:
-      return "streaming";
-    case NtripClientState::kFailed:
-    default:
-      return "failed";
+  case NtripClientState::kDisconnected:
+    return "disconnected";
+  case NtripClientState::kConnecting:
+    return "connecting";
+  case NtripClientState::kConnected:
+    return "connected";
+  case NtripClientState::kStreaming:
+    return "streaming";
+  case NtripClientState::kFailed:
+  default:
+    return "failed";
   }
 }
 
@@ -108,22 +108,21 @@ const char* ToString(const universal_gnss_ntrip::NtripGgaSendError error)
 
   switch (error)
   {
-    case NtripGgaSendError::kGenerationFailed:
-      return "generation_failed";
-    case NtripGgaSendError::kDisconnected:
-      return "disconnected";
-    case NtripGgaSendError::kTimeout:
-      return "timeout";
-    case NtripGgaSendError::kWriteFailure:
-    default:
-      return "write_failure";
+  case NtripGgaSendError::kGenerationFailed:
+    return "generation_failed";
+  case NtripGgaSendError::kDisconnected:
+    return "disconnected";
+  case NtripGgaSendError::kTimeout:
+    return "timeout";
+  case NtripGgaSendError::kWriteFailure:
+  default:
+    return "write_failure";
   }
 }
 
 universal_gnss::GnssDiagnosticEvent MakeEvent(universal_gnss::GnssDiagnosticSeverity severity,
                                               universal_gnss::GnssDiagnosticCategory category,
-                                              std::string code,
-                                              std::string message)
+                                              std::string code, std::string message)
 {
   universal_gnss::GnssDiagnosticEvent event;
   event.severity = severity;
@@ -146,28 +145,27 @@ void LogDiagnosticEvent(rclcpp::Node& node, const universal_gnss::GnssDiagnostic
 {
   switch (event.severity)
   {
-    case universal_gnss::GnssDiagnosticSeverity::kError:
-      RCLCPP_ERROR(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
-      break;
-    case universal_gnss::GnssDiagnosticSeverity::kWarning:
-    case universal_gnss::GnssDiagnosticSeverity::kStale:
-      RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
-      break;
-    case universal_gnss::GnssDiagnosticSeverity::kInfo:
-    case universal_gnss::GnssDiagnosticSeverity::kOk:
-      RCLCPP_INFO(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
-      break;
-    case universal_gnss::GnssDiagnosticSeverity::kUnknown:
-    default:
-      RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
-      break;
+  case universal_gnss::GnssDiagnosticSeverity::kError:
+    RCLCPP_ERROR(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+    break;
+  case universal_gnss::GnssDiagnosticSeverity::kWarning:
+  case universal_gnss::GnssDiagnosticSeverity::kStale:
+    RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+    break;
+  case universal_gnss::GnssDiagnosticSeverity::kInfo:
+  case universal_gnss::GnssDiagnosticSeverity::kOk:
+    RCLCPP_INFO(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+    break;
+  case universal_gnss::GnssDiagnosticSeverity::kUnknown:
+  default:
+    RCLCPP_WARN(node.get_logger(), "%s: %s", event.code.c_str(), event.message.c_str());
+    break;
   }
 }
 
 std::int64_t MonotonicNowNs()
 {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             SteadyClock::now().time_since_epoch())
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(SteadyClock::now().time_since_epoch())
       .count();
 }
 
@@ -177,22 +175,19 @@ std::int64_t RosTimestampNs(const builtin_interfaces::msg::Time& stamp)
          static_cast<std::int64_t>(stamp.nanosec);
 }
 
-std::uint32_t LoadTimeoutMilliseconds(rclcpp::Node& node,
-                                      const std::string& parameter_name,
+std::uint32_t LoadTimeoutMilliseconds(rclcpp::Node& node, const std::string& parameter_name,
                                       const double default_seconds)
 {
   const double seconds = node.declare_parameter<double>(parameter_name, default_seconds);
   constexpr double kMillisecondsPerSecond = 1000.0;
   const double max_seconds =
-      static_cast<double>(std::numeric_limits<std::uint32_t>::max()) /
-      kMillisecondsPerSecond;
+      static_cast<double>(std::numeric_limits<std::uint32_t>::max()) / kMillisecondsPerSecond;
   const double milliseconds = std::ceil(seconds * kMillisecondsPerSecond);
   if (!std::isfinite(seconds) || seconds < 0.0 || seconds > max_seconds ||
       milliseconds > static_cast<double>(std::numeric_limits<std::uint32_t>::max()))
   {
     ThrowInvalidParameter(
-        node,
-        parameter_name,
+        node, parameter_name,
         "must be finite, non-negative, and representable in milliseconds (zero disables it)");
   }
 
@@ -208,8 +203,7 @@ bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
   }
 
   return universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
-         state.rtk_mode.has_value() &&
-         *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
+         state.rtk_mode.has_value() && *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
          *state.rtk_mode != universal_gnss::GnssRtkMode::kUnknown;
 }
 
@@ -234,6 +228,8 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   config.tls_enabled = node.declare_parameter<bool>("tls_enabled", false);
   config.rtcm_forwarding_activity_timeout_s =
       node.declare_parameter<double>("rtcm_forwarding_activity_timeout_s", 5.0);
+  config.expected_source_incarnation =
+      node.declare_parameter<std::string>("expected_source_incarnation", "");
   config.ntrip.first_rtcm_frame_timeout_ms =
       LoadTimeoutMilliseconds(node, "correction_first_frame_timeout_s", 30.0);
   config.ntrip.rtcm_frame_timeout_ms =
@@ -263,11 +259,9 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   }
   config.ntrip.gga_interval_s = static_cast<std::uint32_t>(gga_interval_s);
 
-  if (operational_min_valid_rtcm_frames <= 0 ||
-      operational_min_valid_rtcm_frames > 1000000)
+  if (operational_min_valid_rtcm_frames <= 0 || operational_min_valid_rtcm_frames > 1000000)
   {
-    ThrowInvalidParameter(node,
-                          "correction_operational_min_valid_frames",
+    ThrowInvalidParameter(node, "correction_operational_min_valid_frames",
                           "must be in the 1..1000000 range");
   }
   config.ntrip.operational_min_valid_rtcm_frames =
@@ -275,15 +269,14 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
 
   if (config.tls_enabled)
   {
-    ThrowInvalidParameter(
-        node, "tls_enabled", "TLS is not supported by the current low-level NTRIP transport");
+    ThrowInvalidParameter(node, "tls_enabled",
+                          "TLS is not supported by the current low-level NTRIP transport");
   }
 
   if (!std::isfinite(config.rtcm_forwarding_activity_timeout_s) ||
       !(config.rtcm_forwarding_activity_timeout_s > 0.0))
   {
-    ThrowInvalidParameter(node,
-                          "rtcm_forwarding_activity_timeout_s",
+    ThrowInvalidParameter(node, "rtcm_forwarding_activity_timeout_s",
                           "must be finite and strictly positive");
   }
 
@@ -297,7 +290,7 @@ NtripNodeConfig LoadNtripNodeConfig(rclcpp::Node& node)
   return config;
 }
 
-}  // namespace
+} // namespace
 
 struct NtripNode::Impl
 {
@@ -306,8 +299,8 @@ struct NtripNode::Impl
   static constexpr std::chrono::seconds kGnssInputStaleTimeout{5};
   static constexpr universal_gnss_protocols::ProtocolTimestampNs kCorrectionStaleAfterNs =
       5000000000LL;
-  static constexpr universal_gnss_protocols::ProtocolTimestampNs
-      kCorrectionRequirementWindowNs = 30000000000LL;
+  static constexpr universal_gnss_protocols::ProtocolTimestampNs kCorrectionRequirementWindowNs =
+      30000000000LL;
   static constexpr universal_gnss_protocols::ProtocolTimestampNs
       kCorrectionRequirementStartupGraceNs = 30000000000LL;
 
@@ -319,6 +312,12 @@ struct NtripNode::Impl
 
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
+    health_service_ = owner_.create_service<std_srvs::srv::Trigger>(
+        "~/get_health", [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                           std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          response->success = true;
+          response->message = "component=ntrip_node responsive=true";
+        });
     rtcm_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::RtcmFrame>(
         "rtcm", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
     status_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::GnssStatus>(
@@ -338,22 +337,19 @@ struct NtripNode::Impl
         client_ready_ = false;
         startup_events_.push_back(MakeEvent(
             universal_gnss::GnssDiagnosticSeverity::kError,
-            universal_gnss::GnssDiagnosticCategory::kTransport,
-            "ntrip_socket_adopt_failed",
+            universal_gnss::GnssDiagnosticCategory::kTransport, "ntrip_socket_adopt_failed",
             "Failed to adopt connected NTRIP test socket: " + std::string(ToString(error))));
-      }
-      else
+      } else
       {
         initial_connect_attempted_ = true;
       }
     }
 #else
     (void)adopted_socket_fd;
-    startup_events_.push_back(MakeEvent(
-        universal_gnss::GnssDiagnosticSeverity::kError,
-        universal_gnss::GnssDiagnosticCategory::kTransport,
-        "ntrip_transport_unavailable",
-        "TCP-backed NTRIP transport is unavailable on this platform"));
+    startup_events_.push_back(
+        MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                  universal_gnss::GnssDiagnosticCategory::kTransport, "ntrip_transport_unavailable",
+                  "TCP-backed NTRIP transport is unavailable on this platform"));
 #endif
 
     for (const auto& event : startup_events_)
@@ -361,9 +357,7 @@ struct NtripNode::Impl
       LogDiagnosticEvent(owner_, event);
     }
 
-    timer_ = owner_.create_wall_timer(kPollPeriod, [this]() {
-      this->OnTimer();
-    });
+    timer_ = owner_.create_wall_timer(kPollPeriod, [this]() { this->OnTimer(); });
   }
 
   void OnTimer()
@@ -374,6 +368,26 @@ struct NtripNode::Impl
 
   void OnStatusMessage(const universal_gnss_ros2::msg::GnssStatus& message)
   {
+    const auto source = std::make_tuple(message.source_id, message.source_incarnation);
+    const bool has_partial_source = message.source_id.empty() != message.source_incarnation.empty();
+    const bool has_unexpected_incarnation =
+        !config_.expected_source_incarnation.empty() &&
+        message.source_incarnation != config_.expected_source_incarnation;
+    if (has_partial_source || has_unexpected_incarnation ||
+        (active_source_.has_value() && source != *active_source_))
+    {
+      ++source_conflicts_;
+      return;
+    }
+    if (!active_source_.has_value())
+    {
+      active_source_ = source;
+      runtime_state_.reset();
+      last_position_observation_time_.reset();
+      last_position_observation_sequence_.reset();
+      last_legacy_position_stamp_ns_.reset();
+    }
+
     runtime_state_ = FromGnssStatusMessage(message);
 
     bool is_new_position_observation = false;
@@ -384,13 +398,12 @@ struct NtripNode::Impl
           message.position_observation_sequence != *last_position_observation_sequence_;
       last_position_observation_sequence_ = message.position_observation_sequence;
       last_legacy_position_stamp_ns_.reset();
-    }
-    else
+    } else
     {
       const std::int64_t stamp_ns = RosTimestampNs(message.stamp);
-      is_new_position_observation =
-          !received_status_ || !last_legacy_position_stamp_ns_.has_value() ||
-          stamp_ns != *last_legacy_position_stamp_ns_;
+      is_new_position_observation = !received_status_ ||
+                                    !last_legacy_position_stamp_ns_.has_value() ||
+                                    stamp_ns != *last_legacy_position_stamp_ns_;
       last_legacy_position_stamp_ns_ = stamp_ns;
       last_position_observation_sequence_.reset();
     }
@@ -438,8 +451,7 @@ struct NtripNode::Impl
           universal_gnss_protocols::BuildRtcmSemanticObservations(
               client_->correction_monitor(),
               static_cast<universal_gnss_protocols::ProtocolTimestampNs>(MonotonicNowNs())),
-          "universal_gnss_ntrip",
-          hardware_id_);
+          "universal_gnss_ntrip", hardware_id_);
     }
     diagnostics_publisher_->publish(*last_diagnostics_message_);
   }
@@ -450,10 +462,7 @@ struct NtripNode::Impl
            rtcm_publisher_ != nullptr;
   }
 
-  bool has_runtime_state() const
-  {
-    return runtime_state_.has_value();
-  }
+  bool has_runtime_state() const { return runtime_state_.has_value(); }
 
   bool EnsureConnected(const universal_gnss::GnssTimestampNs now_ns)
   {
@@ -543,8 +552,8 @@ struct NtripNode::Impl
       if (read_result.bytes_read > 0u)
       {
         advanced = true;
-        const auto public_receipt_stamp = ToRosTime(
-            std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
+        const auto public_receipt_stamp =
+            ToRosTime(std::optional<universal_gnss::GnssTimestampNs>(owner_.now().nanoseconds()));
 
         for (const auto& frame : observed_frames)
         {
@@ -629,8 +638,8 @@ struct NtripNode::Impl
 #endif
   }
 
-  universal_gnss_protocols::RtcmCorrectionHealthOptions BuildCorrectionHealthOptions(
-      const universal_gnss::GnssTimestampNs now_ns) const
+  universal_gnss_protocols::RtcmCorrectionHealthOptions
+  BuildCorrectionHealthOptions(const universal_gnss::GnssTimestampNs now_ns) const
   {
     universal_gnss_protocols::RtcmCorrectionHealthOptions options;
     options.now_timestamp_ns = now_ns;
@@ -691,58 +700,50 @@ struct NtripNode::Impl
 
     switch (client_state)
     {
-      case universal_gnss_ntrip::NtripClientState::kDisconnected:
+    case universal_gnss_ntrip::NtripClientState::kDisconnected:
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kTransport,
+                                 "ntrip_disconnected", "NTRIP client is disconnected"));
+      break;
+
+    case universal_gnss_ntrip::NtripClientState::kConnected:
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                                 universal_gnss::GnssDiagnosticCategory::kTransport,
+                                 "ntrip_connected",
+                                 "NTRIP TCP connection is open and awaiting stream data"));
+      break;
+
+    case universal_gnss_ntrip::NtripClientState::kStreaming:
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                 universal_gnss::GnssDiagnosticCategory::kTransport,
+                                 "ntrip_streaming", "NTRIP response stream is open"));
+      break;
+
+    case universal_gnss_ntrip::NtripClientState::kFailed: {
+      if (config_.ntrip.reconnect_policy.CanAttempt(client_->reconnect_state()) &&
+          client_->reconnect_state().next_attempt_time_ns.has_value())
+      {
+        std::ostringstream message;
+        message << "NTRIP client is reconnecting after " << ToString(metrics.last_error);
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
                                    universal_gnss::GnssDiagnosticCategory::kTransport,
-                                   "ntrip_disconnected",
-                                   "NTRIP client is disconnected"));
-        break;
-
-      case universal_gnss_ntrip::NtripClientState::kConnected:
-        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
-                                   universal_gnss::GnssDiagnosticCategory::kTransport,
-                                   "ntrip_connected",
-                                   "NTRIP TCP connection is open and awaiting stream data"));
-        break;
-
-      case universal_gnss_ntrip::NtripClientState::kStreaming:
-        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
-                                   universal_gnss::GnssDiagnosticCategory::kTransport,
-                                   "ntrip_streaming",
-                                   "NTRIP response stream is open"));
-        break;
-
-      case universal_gnss_ntrip::NtripClientState::kFailed:
+                                   "ntrip_reconnecting", message.str()));
+      } else
       {
-        if (config_.ntrip.reconnect_policy.CanAttempt(client_->reconnect_state()) &&
-            client_->reconnect_state().next_attempt_time_ns.has_value())
-        {
-          std::ostringstream message;
-          message << "NTRIP client is reconnecting after "
-                  << ToString(metrics.last_error);
-          summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                                     universal_gnss::GnssDiagnosticCategory::kTransport,
-                                     "ntrip_reconnecting",
-                                     message.str()));
-        }
-        else
-        {
-          summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
-                                     universal_gnss::GnssDiagnosticCategory::kTransport,
-                                     "ntrip_failed",
-                                     "NTRIP client failed: " +
-                                         std::string(ToString(metrics.last_error))));
-        }
-        break;
+        summary.AddEvent(
+            MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                      universal_gnss::GnssDiagnosticCategory::kTransport, "ntrip_failed",
+                      "NTRIP client failed: " + std::string(ToString(metrics.last_error))));
       }
+      break;
+    }
 
-      case universal_gnss_ntrip::NtripClientState::kConnecting:
-      default:
-        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
-                                   universal_gnss::GnssDiagnosticCategory::kTransport,
-                                   "ntrip_connecting",
-                                   "NTRIP client is connecting"));
-        break;
+    case universal_gnss_ntrip::NtripClientState::kConnecting:
+    default:
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                                 universal_gnss::GnssDiagnosticCategory::kTransport,
+                                 "ntrip_connecting", "NTRIP client is connecting"));
+      break;
     }
 
     if (!metrics.response_received &&
@@ -767,12 +768,11 @@ struct NtripNode::Impl
       const auto& correction_flow = client_->correction_flow_state();
       if (correction_flow.valid_rtcm_frames == 0u)
       {
-        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
-                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
-                                   "correction_stream_waiting",
-                                   "Correction stream is connected but no RTCM frames have been observed yet"));
-      }
-      else
+        summary.AddEvent(MakeEvent(
+            universal_gnss::GnssDiagnosticSeverity::kInfo,
+            universal_gnss::GnssDiagnosticCategory::kCorrection, "correction_stream_waiting",
+            "Correction stream is connected but no RTCM frames have been observed yet"));
+      } else
       {
         if (client_->IsCorrectionFlowing())
         {
@@ -799,8 +799,7 @@ struct NtripNode::Impl
                                  universal_gnss::GnssDiagnosticCategory::kCorrection,
                                  "rtcm_forwarding_active",
                                  "RTCM frames are being published for live receiver forwarding"));
-    }
-    else if (last_rtcm_published_time_.has_value())
+    } else if (last_rtcm_published_time_.has_value())
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
                                  universal_gnss::GnssDiagnosticCategory::kCorrection,
@@ -814,14 +813,13 @@ struct NtripNode::Impl
       {
         if (now - startup_time_ >= kGnssInputGracePeriod)
         {
-          summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
-                                     universal_gnss::GnssDiagnosticCategory::kTiming,
-                                     "gga_source_missing",
-                                     "GGA injection is enabled but no GNSS status has been received yet"));
+          summary.AddEvent(
+              MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                        universal_gnss::GnssDiagnosticCategory::kTiming, "gga_source_missing",
+                        "GGA injection is enabled but no GNSS status has been received yet"));
         }
-      }
-      else if (last_position_observation_time_.has_value() &&
-               now - *last_position_observation_time_ >= kGnssInputStaleTimeout)
+      } else if (last_position_observation_time_.has_value() &&
+                 now - *last_position_observation_time_ >= kGnssInputStaleTimeout)
       {
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kStale,
                                    universal_gnss::GnssDiagnosticCategory::kTiming,
@@ -833,30 +831,34 @@ struct NtripNode::Impl
       {
         summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
                                    universal_gnss::GnssDiagnosticCategory::kCorrection,
-                                   "gga_injection_active",
-                                   "NTRIP GGA injection is active"));
-      }
-      else if (client_state != universal_gnss_ntrip::NtripClientState::kStreaming)
+                                   "gga_injection_active", "NTRIP GGA injection is active"));
+      } else if (client_state != universal_gnss_ntrip::NtripClientState::kStreaming)
       {
-        summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
-                                   universal_gnss::GnssDiagnosticCategory::kCorrection,
-                                   "gga_waiting_stream",
-                                   "NTRIP GGA injection is enabled and waiting for a streaming connection"));
+        summary.AddEvent(
+            MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                      universal_gnss::GnssDiagnosticCategory::kCorrection, "gga_waiting_stream",
+                      "NTRIP GGA injection is enabled and waiting for a streaming connection"));
       }
 
       if (metrics.last_gga_error.has_value())
       {
-        const bool transportish = *metrics.last_gga_error ==
-                                      universal_gnss_ntrip::NtripGgaSendError::kTimeout ||
-                                  *metrics.last_gga_error ==
-                                      universal_gnss_ntrip::NtripGgaSendError::kDisconnected;
+        const bool transportish =
+            *metrics.last_gga_error == universal_gnss_ntrip::NtripGgaSendError::kTimeout ||
+            *metrics.last_gga_error == universal_gnss_ntrip::NtripGgaSendError::kDisconnected;
         summary.AddEvent(MakeEvent(
             transportish ? universal_gnss::GnssDiagnosticSeverity::kWarning
                          : universal_gnss::GnssDiagnosticSeverity::kError,
-            universal_gnss::GnssDiagnosticCategory::kCorrection,
-            "gga_send_error",
+            universal_gnss::GnssDiagnosticCategory::kCorrection, "gga_send_error",
             "NTRIP GGA injection error: " + std::string(ToString(*metrics.last_gga_error))));
       }
+    }
+
+    if (source_conflicts_ > 0u)
+    {
+      summary.AddEvent(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
+                    universal_gnss::GnssDiagnosticCategory::kConfiguration, "gga_source_conflict",
+                    "GNSS status from a competing or incomplete source incarnation was rejected"));
     }
 
     return summary;
@@ -876,19 +878,16 @@ struct NtripNode::Impl
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
       status.message = "RTCM forwarding active";
-    }
-    else if (last_rtcm_published_time_.has_value())
+    } else if (last_rtcm_published_time_.has_value())
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
       status.message = "RTCM forwarding stale";
-    }
-    else if (client_.has_value() &&
-             client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)
+    } else if (client_.has_value() &&
+               client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
       status.message = "RTCM forwarding waiting for valid frames";
-    }
-    else
+    } else
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
       status.message = "RTCM forwarding idle";
@@ -933,19 +932,20 @@ struct NtripNode::Impl
 
     if (state == universal_gnss_ntrip::NtripClientState::kFailed)
     {
-      RCLCPP_WARN(
-          owner_.get_logger(), "NTRIP client state=%s error=%s", ToString(state), ToString(error));
+      RCLCPP_WARN(owner_.get_logger(), "NTRIP client state=%s error=%s", ToString(state),
+                  ToString(error));
       return;
     }
 
-    RCLCPP_INFO(
-        owner_.get_logger(), "NTRIP client state=%s error=%s", ToString(state), ToString(error));
+    RCLCPP_INFO(owner_.get_logger(), "NTRIP client state=%s error=%s", ToString(state),
+                ToString(error));
   }
 
   NtripNode& owner_;
   NtripNodeConfig config_{};
   std::string hardware_id_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr health_service_{};
   rclcpp::Publisher<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_publisher_{};
   rclcpp::Subscription<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_subscription_{};
   rclcpp::TimerBase::SharedPtr timer_{};
@@ -953,9 +953,11 @@ struct NtripNode::Impl
   std::optional<diagnostic_msgs::msg::DiagnosticArray> last_diagnostics_message_{};
   std::optional<universal_gnss_ros2::msg::RtcmFrame> last_rtcm_message_{};
   std::optional<universal_gnss::GnssRuntimeState> runtime_state_{};
+  std::optional<std::tuple<std::string, std::string>> active_source_{};
   std::optional<SteadyClock::time_point> last_position_observation_time_{};
   std::optional<std::uint64_t> last_position_observation_sequence_{};
   std::optional<std::int64_t> last_legacy_position_stamp_ns_{};
+  std::size_t source_conflicts_{0u};
   std::optional<SteadyClock::time_point> last_rtcm_published_time_{};
   std::optional<universal_gnss_ntrip::NtripGgaSendResult> last_gga_result_{};
   std::optional<std::uint16_t> last_rtcm_message_type_{};
@@ -974,7 +976,8 @@ struct NtripNode::Impl
 };
 
 NtripNode::NtripNode(const rclcpp::NodeOptions& options)
-    : rclcpp::Node("universal_gnss_ntrip", options), impl_(std::make_unique<Impl>(*this, std::nullopt))
+    : rclcpp::Node("universal_gnss_ntrip", options),
+      impl_(std::make_unique<Impl>(*this, std::nullopt))
 {
 }
 
@@ -986,33 +989,18 @@ NtripNode::NtripNode(const int adopted_socket_fd, const rclcpp::NodeOptions& opt
 
 NtripNode::~NtripNode() = default;
 
-bool NtripNode::StepOnce()
-{
-  return impl_->StepOnce();
-}
+bool NtripNode::StepOnce() { return impl_->StepOnce(); }
 
-void NtripNode::PublishNow()
-{
-  impl_->PublishNow();
-}
+void NtripNode::PublishNow() { impl_->PublishNow(); }
 
-bool NtripNode::client_ready() const
-{
-  return impl_->client_ready_;
-}
+bool NtripNode::client_ready() const { return impl_->client_ready_; }
 
-bool NtripNode::diagnostics_ready() const
-{
-  return impl_->diagnostics_ready();
-}
+bool NtripNode::diagnostics_ready() const { return impl_->diagnostics_ready(); }
 
-bool NtripNode::has_runtime_state() const
-{
-  return impl_->has_runtime_state();
-}
+bool NtripNode::has_runtime_state() const { return impl_->has_runtime_state(); }
 
-const std::optional<diagnostic_msgs::msg::DiagnosticArray>& NtripNode::last_diagnostics_message()
-    const
+const std::optional<diagnostic_msgs::msg::DiagnosticArray>&
+NtripNode::last_diagnostics_message() const
 {
   return impl_->last_diagnostics_message_;
 }
@@ -1022,4 +1010,4 @@ const std::optional<universal_gnss_ros2::msg::RtcmFrame>& NtripNode::last_rtcm_m
   return impl_->last_rtcm_message_;
 }
 
-}  // namespace universal_gnss_ros2
+} // namespace universal_gnss_ros2

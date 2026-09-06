@@ -16,6 +16,7 @@ find_package(std_srvs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  find_package(ament_cmake_pytest REQUIRED)
 endif()
 
 set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_core/include")
@@ -145,6 +146,7 @@ target_link_libraries(
     ${diagnostic_msgs_TARGETS}
     ${rclcpp_TARGETS}
     ${sensor_msgs_TARGETS}
+    ${std_srvs_TARGETS}
     ${PROJECT_NAME}_diagnostic_adapter
     ${PROJECT_NAME}_gnss_status_adapter
     ${PROJECT_NAME}_navsat_fix_adapter
@@ -209,6 +211,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     PUBLIC
       ${diagnostic_msgs_TARGETS}
       ${rclcpp_TARGETS}
+      ${std_srvs_TARGETS}
       ${PROJECT_NAME}_diagnostic_adapter
       ${PROJECT_NAME}_gnss_status_adapter
       universal_gnss_ntrip
@@ -379,6 +382,17 @@ if(BUILD_TESTING)
       set_tests_properties(test_ntrip_node PROPERTIES ENVIRONMENT "${_ros2_test_library_path}")
     endif()
   endif()
+
+  ament_add_pytest_test(
+    test_combined_launch
+    tests/test_combined_launch.py
+    TIMEOUT 30
+  )
+  ament_add_pytest_test(
+    test_docker_healthcheck
+    ${UNIVERSAL_GNSS_SOURCE_ROOT}/scripts/tests/test_docker_healthcheck.py
+    TIMEOUT 30
+  )
 endif()
 
 ament_export_include_directories(include)

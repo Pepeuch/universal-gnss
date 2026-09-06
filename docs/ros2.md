@@ -172,6 +172,9 @@ runtime state.
 Always-present fields:
 
 - `stamp`
+- `source_id`
+- `source_incarnation`
+- `position_observation_sequence`
 - `fix_valid`
 - `fix_type`
 - `rtk_mode`
@@ -222,6 +225,28 @@ Timestamp semantics:
 - the core stores an optional `timestamp_ns`
 - the ROS 2 adapter converts it to `builtin_interfaces/Time`
 - absent timestamps map to zero ROS time
+
+Observation identity semantics:
+
+- authoritative identity is the tuple `(source_id, source_incarnation,
+  position_observation_sequence)`
+- `source_id` identifies the configured logical receiver source;
+  `source_incarnation` is opaque and changes on every ReceiverNode process
+  start and before any future in-process transport/session replacement
+- sequence values are monotonic only within one incarnation, so sequence reuse
+  after restart is valid
+- ReceiverNode republishes the same tuple for cached state and advances only
+  the sequence for a newly accepted position/fix observation
+- NtripNode accepts one source/incarnation for its lifetime, rejects competing,
+  incomplete, or delayed retired-incarnation messages, and reports
+  `gga_source_conflict`; the combined launch supplies one fresh incarnation to
+  both children, so NtripNode rejects retired messages even if one arrives
+  before the first current ReceiverNode sample. Atomic restart clears its
+  GGA/runtime association before it accepts the new incarnation
+- empty source fields preserve legacy compatibility; when sequence is also zero,
+  consumers retain the documented receipt-stamp fallback
+- these fields do not establish UGA-126 command-response fencing or a physical
+  prior-byte cutoff
 
 Heading semantics:
 

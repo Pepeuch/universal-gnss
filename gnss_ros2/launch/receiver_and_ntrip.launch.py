@@ -1,12 +1,27 @@
+import uuid
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, EmitEvent
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
 from launch_ros.substitutions import FindPackageShare
 
 
+def atomic_shutdown_actions(component: str):
+    """Terminate the combined launch when either required child exits."""
+    return [
+        EmitEvent(
+            event=Shutdown(
+                reason=f"required Universal GNSS component exited: {component}"
+            )
+        )
+    ]
+
+
 def generate_launch_description() -> LaunchDescription:
+    source_incarnation = uuid.uuid4().hex
     receiver_family = LaunchConfiguration("receiver_family")
     transport = LaunchConfiguration("transport")
     serial_device = LaunchConfiguration("serial_device")
@@ -65,9 +80,11 @@ def generate_launch_description() -> LaunchDescription:
                         "tcp_port": tcp_port,
                         "publish_rate_hz": publish_rate_hz,
                         "frame_id": frame_id,
+                        "source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
                 ],
+                on_exit=atomic_shutdown_actions("receiver_node"),
             ),
             Node(
                 package="universal_gnss_ros2",
@@ -84,9 +101,11 @@ def generate_launch_description() -> LaunchDescription:
                         "gga_enabled": gga_enabled,
                         "gga_interval_s": gga_interval_s,
                         "tls_enabled": tls_enabled,
+                        "expected_source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
                 ],
+                on_exit=atomic_shutdown_actions("ntrip_node"),
             ),
         ]
     )

@@ -4,6 +4,8 @@ ARG ROS_DISTRO=kilted
 FROM ros:${ROS_DISTRO}-ros-base AS builder
 
 ARG ROS_DISTRO
+ARG APP_UID=1000
+ARG APP_GID=1000
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -25,14 +27,20 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
-COPY . /workspace/src/universal_gnss
+RUN chown "${APP_UID}:${APP_GID}" /workspace
+COPY --chown=${APP_UID}:${APP_GID} . /workspace/src/universal_gnss
+
+USER ${APP_UID}:${APP_GID}
+ENV HOME=/tmp
 
 RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
  && colcon build --merge-install \
       --base-paths src/universal_gnss/gnss_ros2 \
       --packages-select universal_gnss_ros2 \
-      --cmake-args -DCMAKE_BUILD_TYPE=Release \
- && rm -rf build log src
+      --cmake-args -DCMAKE_BUILD_TYPE=Release
+
+USER root
+RUN rm -rf /workspace/build /workspace/log /workspace/src
 
 FROM ros:${ROS_DISTRO}-ros-base AS runtime
 
@@ -67,6 +75,7 @@ RUN apt-get update \
     ros-${ROS_DISTRO}-diagnostic-msgs \
     ros-${ROS_DISTRO}-launch \
     ros-${ROS_DISTRO}-launch-ros \
+    ros-${ROS_DISTRO}-rclpy \
     ros-${ROS_DISTRO}-rclcpp \
     ros-${ROS_DISTRO}-rosidl-default-runtime \
     ros-${ROS_DISTRO}-sensor-msgs \
@@ -77,8 +86,13 @@ RUN apt-get update \
 
 COPY --from=builder /workspace/install /opt/universal_gnss/install
 COPY docker/entrypoint.sh /usr/local/bin/universal-gnss-entrypoint
+COPY docker/healthcheck.sh /usr/local/bin/universal-gnss-healthcheck
+COPY docker/healthcheck.py /usr/local/libexec/universal-gnss-healthcheck.py
 
-RUN chmod 0755 /usr/local/bin/universal-gnss-entrypoint
+RUN chmod 0755 \
+    /usr/local/bin/universal-gnss-entrypoint \
+    /usr/local/bin/universal-gnss-healthcheck \
+    /usr/local/libexec/universal-gnss-healthcheck.py
 
 ENV ROS_DISTRO=${ROS_DISTRO} \
     HOME=/tmp \
@@ -92,9 +106,9 @@ USER ${APP_UID}:${APP_GID}
 
 STOPSIGNAL SIGINT
 
-# This verifies only that both launch-managed ROS processes are present. It does
-# not assert receiver transport, observation freshness, NTRIP, RTCM, or RTK health.
+# This verifies bounded ROS service responsiveness for both enabled components.
+# It does not assert receiver transport, observation freshness, NTRIP, RTCM, or RTK health.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD pgrep -f '[r]eceiver_node' > /dev/null && pgrep -f '[n]trip_node' > /dev/null || exit 1
+  CMD ["/usr/local/bin/universal-gnss-healthcheck", "--timeout", "2"]
 
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/universal-gnss-entrypoint"]

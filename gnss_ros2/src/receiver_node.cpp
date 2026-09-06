@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,7 @@
 #include "rcl_interfaces/msg/parameter_descriptor.hpp"
 #include "rtcm_diagnostic_projection.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include "universal_gnss/gnss_capabilities.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
@@ -67,6 +69,20 @@ std::string EnvironmentValueOrUnknown(const char* name)
   return value != nullptr && value[0] != '\0' ? value : "unknown";
 }
 
+std::string NewSourceIncarnation()
+{
+  std::random_device random;
+  std::ostringstream value;
+  value << std::hex;
+  for (int index = 0; index < 4; ++index)
+  {
+    value.width(8);
+    value.fill('0');
+    value << random();
+  }
+  return value.str();
+}
+
 struct ReceiverNodeConfig
 {
   universal_gnss_driver::ReceiverSessionConfig session{};
@@ -102,6 +118,7 @@ struct ReceiverNodeConfig
   // cross clock domains here.
   double rtcm_forwarding_activity_timeout_s{kDefaultRtcmForwardingActivityTimeoutSeconds};
   std::string frame_id{"gnss"};
+  std::string source_incarnation{};
 };
 
 struct ReceiverDiscoveryStatus
@@ -527,6 +544,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   config.rtcm_forwarding_activity_timeout_s = node.declare_parameter<double>(
       "rtcm_forwarding_activity_timeout_s", kDefaultRtcmForwardingActivityTimeoutSeconds);
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
+  config.source_incarnation = node.declare_parameter<std::string>("source_incarnation", "");
   config.discovery_include_platform_uarts =
       node.declare_parameter<bool>("discovery_include_platform_uarts", false);
   config.discovery_allow_generic_nmea =
@@ -829,6 +847,8 @@ struct ReceiverNode::Impl
     }
 
     hardware_id_ = BuildHardwareId(config_, injected_source != nullptr);
+    source_incarnation_ =
+        config_.source_incarnation.empty() ? NewSourceIncarnation() : config_.source_incarnation;
 
     session_ = std::make_unique<universal_gnss_driver::ReceiverSession>(config_.session);
 
@@ -843,6 +863,12 @@ struct ReceiverNode::Impl
           const auto snapshot = this->BuildSnapshot();
           response->status = snapshot.status;
           response->diagnostics = snapshot.diagnostics;
+        });
+    health_service_ = owner_.create_service<std_srvs::srv::Trigger>(
+        "~/get_health", [](const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                           std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+          response->success = true;
+          response->message = "component=receiver_node responsive=true";
         });
     rtcm_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
         "rtcm",
@@ -1757,6 +1783,8 @@ struct ReceiverNode::Impl
     snapshot.status = ToGnssStatusMessage(snapshot.runtime_state);
     snapshot.status.position_observation_sequence =
         static_cast<std::uint64_t>(session_->metrics().position_observations);
+    snapshot.status.source_id = hardware_id_;
+    snapshot.status.source_incarnation = source_incarnation_;
 
     auto summary = BuildHealthSummary();
     snapshot.diagnostics = ToDiagnosticArrayMessage(summary, "universal_gnss", hardware_id_);
@@ -2054,6 +2082,7 @@ struct ReceiverNode::Impl
   ReceiverDiscoveryStatus discovery_status_{};
   ReceiverAutoConfigDryRunStatus auto_config_dry_run_status_{};
   std::string hardware_id_{};
+  std::string source_incarnation_{};
   std::unique_ptr<universal_gnss_driver::ReceiverSession> session_{};
   std::unique_ptr<universal_gnss_transport::ByteSource> transport_source_{};
   std::optional<universal_gnss_driver::ReceiverSessionRunner> runner_{};
@@ -2062,6 +2091,7 @@ struct ReceiverNode::Impl
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr status_publisher_{};
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_publisher_{};
   rclcpp::Service<universal_gnss_ros2::srv::GetReceiverSnapshot>::SharedPtr snapshot_service_{};
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr health_service_{};
   rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
   rclcpp::TimerBase::SharedPtr acquisition_timer_{};
   rclcpp::TimerBase::SharedPtr publication_timer_{};
