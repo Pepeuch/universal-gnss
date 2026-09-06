@@ -88,12 +88,9 @@
   "release_gate_dependencies": {
     "release": "v0.7",
     "gates": [
-      {"task": "multi-architecture CI build/publish pipeline", "classification": "PUBLICATION_REQUIRED", "prerequisite": "SOFTWARE_IMPLEMENTATION_REQUIRED"},
+      {"task": "published multi-architecture image indexes with attached SBOM and provenance attestations (the tag-gated Kilted/Lyrical amd64+arm64 workflow is implemented; registry artifacts remain release-action evidence)", "classification": "PUBLICATION_REQUIRED", "prerequisite": "NONE"},
       {"task": "receiver-process restart without stale state resurrection", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
       {"task": "persistent receiver/profile configuration state where required", "classification": "POWER_CYCLE_REQUIRED", "prerequisite": "NONE"},
-      {"task": "persistent diagnostic/log/export directory", "classification": "ALREADY_PARTIAL", "prerequisite": "SOFTWARE_IMPLEMENTATION_REQUIRED"},
-      {"task": "structured logs suitable for Docker/Compose/BlueOS collection", "classification": "DESIGN_CONTRACT_REQUIRED", "prerequisite": "SOFTWARE_IMPLEMENTATION_REQUIRED"},
-      {"task": "Docker DNS/reconnect behavior validation", "classification": "ROBOT_REQUIRED", "prerequisite": "NONE"},
       {"task": "long-run container validation", "classification": "LONG_DURATION_REQUIRED", "prerequisite": "NONE"},
       {"task": "low receiver rate / high publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
       {"task": "high receiver rate / low publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
