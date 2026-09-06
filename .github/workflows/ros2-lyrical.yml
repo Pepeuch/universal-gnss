@@ -22,20 +22,31 @@ jobs:
         with:
           required-ros-distributions: lyrical
 
+      - name: Prepare normal project build user
+        run: |
+          groupadd --gid 1001 universal-gnss-ci
+          useradd --create-home --uid 1001 --gid 1001 universal-gnss-ci
+          install --directory --owner=1001 --group=1001 "$ROS_LOG_DIR"
+          chown -R 1001:1001 "$GITHUB_WORKSPACE"
+
       - name: Build and test universal_gnss_ros2 on Lyrical
         shell: bash
         run: |
-          set -eo pipefail
-          source /opt/ros/lyrical/setup.bash
-          set -u
-          mkdir -p "$ROS_LOG_DIR"
-          mkdir -p "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
-          ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
-          ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_core"
-          cd "$GITHUB_WORKSPACE/ros2_ws_lyrical"
-          colcon build --packages-select universal_gnss_ros2
-          if ! colcon test --packages-select universal_gnss_ros2; then
-            colcon test-result --verbose
-            exit 1
-          fi
-          colcon test-result --verbose
+          runuser -u universal-gnss-ci -- env \
+            HOME=/home/universal-gnss-ci \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            ROS_LOG_DIR="$ROS_LOG_DIR" \
+            bash -lc '
+              set -euo pipefail
+              source /opt/ros/lyrical/setup.bash
+              mkdir -p "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
+              ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
+              ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_core"
+              cd "$GITHUB_WORKSPACE/ros2_ws_lyrical"
+              colcon build --packages-select universal_gnss_ros2
+              if ! colcon test --packages-select universal_gnss_ros2; then
+                colcon test-result --verbose
+                exit 1
+              fi
+              colcon test-result --verbose
+            '

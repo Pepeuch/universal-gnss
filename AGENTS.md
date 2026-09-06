@@ -73,7 +73,7 @@ classification, conservation accounting, duplicate graphs, or durable audit ledg
 Load `.agent/policies/MIGRATION.md` when using historical PRs, forks, old branches,
 patches, or semantic porting/adaptation.
 
-Load `.agent/policies/ROS2.md` when modifying C++ source/header files under `ros2/`
+Load `.agent/policies/ROS2.md` when modifying C++ source/header files under `gnss_ros2/`
 or when ROS2-specific validation/formatting rules apply.
 
 Load `.agent/policies/HARDWARE.md` when correctness depends on physical receiver,
@@ -197,6 +197,12 @@ This includes at least:
 
 Root may be used only for operations genuinely requiring system-level privileges.
 Read-only inspection may run as root when necessary.
+
+In CI/container bootstrap, dependency installation and system package setup may
+run as root. Project configure/build/test/generation steps must then run as a
+normal build user where the CI environment permits creating or selecting one.
+Do not classify a hosted runner's ordinary root default as a forced-identity
+exception without inspectable evidence that privilege dropping is unavailable.
 
 Do not leave root-owned repository artifacts.
 Repair ownership or remove only generated root-owned artifacts before continuing.
@@ -468,6 +474,9 @@ bookkeeping.
 
 For generated dashboards that show orthogonal release-gate dependencies, maintain
 one versioned machine-readable classification source for every open release gate.
+Keep the acceptance dependency (hardware, robot, duration, publication, or
+design evidence) separate from any prerequisite software implementation or
+design decision; a hardware acceptance label must not hide unfinished software.
 Any release-gate classification change must update or validate those dependency
 indicators; they never change completion metrics. The generator and its tests
 must reject unknown classifications, mismatches with the canonical release
