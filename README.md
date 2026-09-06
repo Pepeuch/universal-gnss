@@ -1,4 +1,7 @@
 <p align="center">
+<img src="docs/UG_logo.png" height="400">
+
+<p align="center">
 <a href="https://www.u-blox.com/"><img src="assets/logo/ublox_white.png" height="60"></a>
 <a href="https://www.unicorecomm.com/"><img src="assets/logo/unicore_white.png" height="60"></a>
 <a href="https://www.quectel.com/"><img src="assets/logo/quectel_white.png" height="60"></a>
