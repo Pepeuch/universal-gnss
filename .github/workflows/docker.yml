@@ -81,3 +81,133 @@ jobs:
           status=$?
           set -e
           test "${status}" = "1"
+
+      - name: Verify external runtime persistence contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_root="$(mktemp -d)"
+          install -d "${runtime_root}/config" "${runtime_root}/log" "${runtime_root}/export"
+          sudo chown 1000:1000 "${runtime_root}/log" "${runtime_root}/export"
+          credential_marker="must-not-appear-in-support-output"
+          printf '%s\n' \
+            '/universal_gnss_ntrip:' \
+            '  ros__parameters:' \
+            '    caster_host: caster.invalid' \
+            "    password: ${credential_marker}" \
+            > "${runtime_root}/config/parameters.yaml"
+
+          for generation in first second; do
+            docker run --rm \
+              --mount "type=bind,src=${runtime_root}/config/parameters.yaml,dst=/etc/universal_gnss/parameters.yaml,readonly" \
+              --mount "type=bind,src=${runtime_root}/log,dst=/var/log/universal_gnss" \
+              --mount "type=bind,src=${runtime_root}/export,dst=/var/lib/universal_gnss/export" \
+              "${IMAGE}" bash -lc '
+                test ! -w "${UNIVERSAL_GNSS_PARAMETERS_FILE}"
+                test -w "${ROS_LOG_DIR}"
+                test -w "${UNIVERSAL_GNSS_EXPORT_DIR}"
+                printf "%s\n" "'"${generation}"'" >> "${ROS_LOG_DIR}/recreate.log"
+                universal-gnss-support-snapshot \
+                  --output "${UNIVERSAL_GNSS_EXPORT_DIR}/'"${generation}"'.json" \
+                  --parameters "${UNIVERSAL_GNSS_PARAMETERS_FILE}" \
+                  --log-directory "${ROS_LOG_DIR}" \
+                  --max-log-files 5
+              '
+          done
+
+          test "$(stat --format='%u:%g' "${runtime_root}/log/recreate.log")" = "1000:1000"
+          test "$(stat --format='%u:%g' "${runtime_root}/export/second.json")" = "1000:1000"
+          test "$(sed -n '$=' "${runtime_root}/log/recreate.log")" = "2"
+          grep -Fx "first" "${runtime_root}/log/recreate.log"
+          grep -Fx "second" "${runtime_root}/log/recreate.log"
+          ! grep -R -F "${credential_marker}" "${runtime_root}/log" "${runtime_root}/export"
+
+      - name: Verify Docker DNS and NTRIP reconnect contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix="${{ matrix.ros_distro }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          network="ug-dns-${suffix}"
+          client="ug-dns-client-${suffix}"
+          caster="ug-dns-caster-${suffix}"
+          fixture_root="$(mktemp -d)"
+
+          cleanup() {
+            docker rm -f "${caster}" "${client}" >/dev/null 2>&1 || true
+            docker network rm "${network}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          cat > "${fixture_root}/parameters.yaml" <<'EOF'
+          /universal_gnss_receiver:
+            ros__parameters:
+              receiver_family: auto
+              transport: serial
+              serial_device: /dev/gnss-receiver
+              serial_baud: 921600
+          /universal_gnss_ntrip:
+            ros__parameters:
+              caster_host: caster.test
+              caster_port: 2101
+              mountpoint: RTCM3
+              username: ""
+              password: ""
+              gga_enabled: false
+              tls_enabled: false
+          EOF
+
+          wait_for_log() {
+            local container="$1"
+            local expected="$2"
+            for _ in $(seq 1 30); do
+              if docker logs "${container}" 2>&1 | grep -F "${expected}"; then
+                return 0
+              fi
+              sleep 1
+            done
+            docker logs "${container}" >&2
+            return 1
+          }
+
+          wait_for_log_count() {
+            local container="$1"
+            local expected="$2"
+            local minimum="$3"
+            for _ in $(seq 1 30); do
+              if [[ "$(docker logs "${container}" 2>&1 | grep -F -c "${expected}" || true)" -ge "${minimum}" ]]; then
+                return 0
+              fi
+              sleep 1
+            done
+            docker logs "${container}" >&2
+            return 1
+          }
+
+          docker network create "${network}"
+          docker run -d --name "${client}" \
+            --network "${network}" \
+            --mount "type=bind,src=${fixture_root}/parameters.yaml,dst=/etc/universal_gnss/parameters.yaml,readonly" \
+            "${IMAGE}"
+          client_id="$(docker inspect --format '{{.Id}}' "${client}")"
+
+          wait_for_log "${client}" "NTRIP client state=failed error=disconnected"
+
+          docker run -d --name "${caster}" \
+            --network "${network}" \
+            --network-alias caster.test \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/tests/fake_ntrip_caster.py,dst=/tmp/fake_ntrip_caster.py,readonly" \
+            "${IMAGE}" python3 /tmp/fake_ntrip_caster.py --port 2101
+          wait_for_log "${caster}" "fake_ntrip_caster event=request_accepted"
+          wait_for_log_count "${client}" "NTRIP client state=streaming" 1
+
+          docker rm -f "${caster}"
+          wait_for_log_count "${client}" "NTRIP client state=failed error=disconnected" 2
+
+          docker run -d --name "${caster}" \
+            --network "${network}" \
+            --network-alias caster.test \
+            --mount "type=bind,src=${GITHUB_WORKSPACE}/scripts/tests/fake_ntrip_caster.py,dst=/tmp/fake_ntrip_caster.py,readonly" \
+            "${IMAGE}" python3 /tmp/fake_ntrip_caster.py --port 2101
+          wait_for_log "${caster}" "fake_ntrip_caster event=request_accepted"
+          wait_for_log_count "${client}" "NTRIP client state=streaming" 2
+          test "$(docker inspect --format '{{.Id}}' "${client}")" = "${client_id}"

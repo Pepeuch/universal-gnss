@@ -3,6 +3,7 @@ set -eo pipefail
 
 : "${ROS_DISTRO:?ROS_DISTRO must be set}"
 : "${ROS_LOG_DIR:=/var/log/universal_gnss}"
+: "${UNIVERSAL_GNSS_EXPORT_DIR:=/var/lib/universal_gnss/export}"
 : "${UNIVERSAL_GNSS_PARAMETERS_FILE:=/etc/universal_gnss/parameters.yaml}"
 : "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:=1}"
 
@@ -17,6 +18,12 @@ esac
 mkdir -p "${ROS_LOG_DIR}"
 if [[ ! -w "${ROS_LOG_DIR}" ]]; then
   echo "universal_gnss_entrypoint event=log_directory_not_writable" >&2
+  exit 1
+fi
+
+mkdir -p "${UNIVERSAL_GNSS_EXPORT_DIR}"
+if [[ ! -w "${UNIVERSAL_GNSS_EXPORT_DIR}" ]]; then
+  echo "universal_gnss_entrypoint event=export_directory_not_writable" >&2
   exit 1
 fi
 

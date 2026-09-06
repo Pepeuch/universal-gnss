@@ -548,6 +548,13 @@ struct NtripNode::Impl
       std::vector<universal_gnss_protocols::RtcmFrame> observed_frames;
       const auto state_before = client_->state();
       const auto read_result = client_->Read(buffer, sizeof(buffer), now_ns, &observed_frames);
+      const bool entered_streaming =
+          state_before != universal_gnss_ntrip::NtripClientState::kStreaming &&
+          client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming;
+      if (entered_streaming)
+      {
+        LogClientTransition(client_->state(), universal_gnss_ntrip::NtripClientError::kNone);
+      }
 
       if (read_result.bytes_read > 0u)
       {
@@ -576,8 +583,7 @@ struct NtripNode::Impl
         break;
       }
 
-      if (state_before != universal_gnss_ntrip::NtripClientState::kStreaming &&
-          client_->state() == universal_gnss_ntrip::NtripClientState::kStreaming)
+      if (entered_streaming)
       {
         advanced = true;
         continue;

@@ -82,21 +82,28 @@ RUN apt-get update \
     ros-${ROS_DISTRO}-std-srvs \
  && if apt-cache show libssl3 > /dev/null 2>&1; then apt-get install -y --no-install-recommends libssl3; else apt-get install -y --no-install-recommends libssl3t64; fi \
  && rm -rf /var/lib/apt/lists/* \
- && install --directory --owner=${APP_UID} --group=${APP_GID} /var/log/universal_gnss
+ && install --directory --owner=${APP_UID} --group=${APP_GID} \
+    /var/log/universal_gnss \
+    /var/lib/universal_gnss/export
 
 COPY --from=builder /workspace/install /opt/universal_gnss/install
 COPY docker/entrypoint.sh /usr/local/bin/universal-gnss-entrypoint
 COPY docker/healthcheck.sh /usr/local/bin/universal-gnss-healthcheck
 COPY docker/healthcheck.py /usr/local/libexec/universal-gnss-healthcheck.py
+COPY scripts/collect_support_snapshot.py /usr/local/bin/universal-gnss-support-snapshot
 
 RUN chmod 0755 \
     /usr/local/bin/universal-gnss-entrypoint \
     /usr/local/bin/universal-gnss-healthcheck \
-    /usr/local/libexec/universal-gnss-healthcheck.py
+    /usr/local/libexec/universal-gnss-healthcheck.py \
+    /usr/local/bin/universal-gnss-support-snapshot
 
 ENV ROS_DISTRO=${ROS_DISTRO} \
     HOME=/tmp \
     ROS_LOG_DIR=/var/log/universal_gnss \
+    UNIVERSAL_GNSS_EXPORT_DIR=/var/lib/universal_gnss/export \
+    RCUTILS_COLORIZED_OUTPUT=0 \
+    RCUTILS_CONSOLE_OUTPUT_FORMAT="timestamp={time} severity={severity} logger={name} message={message}" \
     UNIVERSAL_GNSS_VERSION=${VERSION} \
     UNIVERSAL_GNSS_REVISION=${REVISION} \
     UNIVERSAL_GNSS_PARAMETERS_FILE=/etc/universal_gnss/parameters.yaml

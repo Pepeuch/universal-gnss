@@ -10,10 +10,12 @@ services:
       - "${GNSS_GROUP:?set the selected receiver device GID}"
     environment:
       UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION: "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:-1}"
+      UNIVERSAL_GNSS_EXPORT_DIR: /var/lib/universal_gnss/export
       ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-42}"
     volumes:
       - "${UNIVERSAL_GNSS_PARAMETERS_FILE:?set the external parameters file}:/etc/universal_gnss/parameters.yaml:ro"
       - "${UNIVERSAL_GNSS_LOG_DIR:?set an operator-owned log directory}:/var/log/universal_gnss"
+      - "${UNIVERSAL_GNSS_EXPORT_DIR:?set an operator-owned export directory}:/var/lib/universal_gnss/export"
     logging:
       driver: local
       options:

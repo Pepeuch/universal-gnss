@@ -39,6 +39,7 @@ jobs:
             bash -lc '
               set -eo pipefail
               source /opt/ros/kilted/setup.bash
+              set -u
               mkdir -p "$GITHUB_WORKSPACE/ros2_ws_kilted/src"
               ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_ros2"
               ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_core"

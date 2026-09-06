@@ -12,9 +12,21 @@ from pathlib import Path
 ENTRYPOINT = Path(__file__).resolve().parents[2] / "docker" / "entrypoint.sh"
 HEALTHCHECK = Path(__file__).resolve().parents[2] / "docker" / "healthcheck.sh"
 DOCKERFILE = Path(__file__).resolve().parents[2] / "Dockerfile"
+COMPOSE = Path(__file__).resolve().parents[2] / "docker" / "compose.yaml"
+KILTED_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ros2-kilted.yml"
+LYRICAL_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ros2-lyrical.yml"
 
 
 class DockerEntrypointContractTests(unittest.TestCase):
+    def test_ros_ci_enables_nounset_only_after_distribution_setup(self) -> None:
+        for distro, workflow in (("kilted", KILTED_WORKFLOW), ("lyrical", LYRICAL_WORKFLOW)):
+            source = workflow.read_text(encoding="utf-8")
+            setup = f"source /opt/ros/{distro}/setup.bash"
+
+            self.assertIn("set -eo pipefail", source)
+            self.assertIn(setup, source)
+            self.assertGreater(source.index("set -u", source.index(setup)), source.index(setup))
+
     def test_unknown_configuration_schema_fails_before_ros_setup(self) -> None:
         environment = os.environ.copy()
         environment["ROS_DISTRO"] = "kilted"
@@ -32,6 +44,28 @@ class DockerEntrypointContractTests(unittest.TestCase):
         source = ENTRYPOINT.read_text(encoding="utf-8")
         self.assertIn(': "${UNIVERSAL_GNSS_CONFIGURATION_SCHEMA_VERSION:=1}"', source)
         self.assertIn('  1) ;;', source)
+
+    def test_external_log_and_export_directories_are_required_writable_surfaces(self) -> None:
+        entrypoint = ENTRYPOINT.read_text(encoding="utf-8")
+        dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+        compose = COMPOSE.read_text(encoding="utf-8")
+
+        self.assertIn('ROS_LOG_DIR:=/var/log/universal_gnss', entrypoint)
+        self.assertIn('UNIVERSAL_GNSS_EXPORT_DIR:=/var/lib/universal_gnss/export', entrypoint)
+        self.assertIn('event=log_directory_not_writable', entrypoint)
+        self.assertIn('event=export_directory_not_writable', entrypoint)
+        self.assertIn('COPY scripts/collect_support_snapshot.py /usr/local/bin/universal-gnss-support-snapshot', dockerfile)
+        self.assertIn('/var/log/universal_gnss', compose)
+        self.assertIn('/var/lib/universal_gnss/export', compose)
+
+    def test_ros_console_has_stable_non_colored_collection_envelope(self) -> None:
+        source = DOCKERFILE.read_text(encoding="utf-8")
+
+        self.assertIn('RCUTILS_COLORIZED_OUTPUT=0', source)
+        self.assertIn(
+            'RCUTILS_CONSOLE_OUTPUT_FORMAT="timestamp={time} severity={severity} logger={name} message={message}"',
+            source,
+        )
 
     def test_image_healthcheck_uses_bounded_component_responsiveness(self) -> None:
         source = DOCKERFILE.read_text(encoding="utf-8")
