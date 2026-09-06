@@ -37,8 +37,9 @@ jobs:
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             ROS_LOG_DIR="$ROS_LOG_DIR" \
             bash -lc '
-              set -euo pipefail
+              set -eo pipefail
               source /opt/ros/lyrical/setup.bash
+              set -u
               mkdir -p "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
               ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
               ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_core"
