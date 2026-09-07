@@ -44,13 +44,13 @@ Current phase: post-`v0.6.x` stabilization.
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
 
-**57 / 65** release-scoped tasks complete (87.69%), **8** not started.
+**61 / 65** release-scoped tasks complete (93.85%), **4** not started.
 
 Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle, device, configuration, health, networking, validation, and documentation sections of `TODO.md`. The later non-ROS API surface and v0.8 BlueOS scope are excluded; PARTIAL/BLOCKED receive no fractional credit. New mandatory v0.7 work may increase this denominator.
 
 ### Project Roadmap Progress
 
-Current identified project work: **83 / 194** complete (42.78%), **111** not started.
+Current identified project work: **87 / 194** complete (44.85%), **107** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 
@@ -134,8 +134,9 @@ Current release guidance:
 
 - live receiver writes do not occur unless `gnss_config_apply` is given
   explicit `--confirm` or `--yes`
-- Unicore persistent apply is available through the reset/recovery workflow and
-  remains an operator-driven path with manual rollback expectations
+- Unicore persistent apply is a normal confirmed profile apply followed by
+  `SAVECONFIG`; it does not issue `FRESET` and retains manual rollback
+  expectations
 - Unicore `gnss_profile_preview`, `gnss_config_plan`, and `gnss_config_apply`
   accept an optional `--model` selector; when the model is unknown, the safe
   fallback skips `CONFIG SIGNALGROUP` and leaves the receiver's current
@@ -218,6 +219,10 @@ Safety note:
 - the current Unicore recovery workflow uses an active `VERSIONA` query plus
   explicit `CONFIG COM1 <target-baud> 8 n 1` recovery before continuing the
   profile
+- the recovery window permits up to 60 seconds for the receiver to reopen and
+  answer `VERSIONA` at the factory-default `115200 bps`
+- persistent apply is separate: it applies and verifies the normal profile,
+  then emits `SAVECONFIG` without `FRESET`
 - the current Unicore `factory_reset` path is destructive and should not be
   treated as a routine runtime recovery mechanism
 

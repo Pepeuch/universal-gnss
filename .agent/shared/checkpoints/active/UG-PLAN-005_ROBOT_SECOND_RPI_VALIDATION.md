@@ -1,7 +1,8 @@
 # UG-PLAN-005 robot + second-RPi validation
 
-Lifecycle: ACTIVE. This contains completed evidence through Phase F and the
-bounded resumption plan for later phases.
+Lifecycle: ACTIVE. This contains completed evidence through Phase F, the
+2026-09-07 RTK/recovery/rate closeout, and the bounded resumption plan for later
+phases.
 
 Repository: `/workspaces/universal-gnss`  
 Branch: `feat/docker`  
@@ -22,8 +23,8 @@ fully closed canonical TODO item.
 
 ## CURRENT_STATE
 
-- Current canonical accounting after the independent 2026-09-06 software
-  closeout: v0.7 57/65; Project Roadmap 83/194; UGA 33/205. This hardware
+- Current canonical accounting after the 2026-09-07 mower closeout
+  reconciliation: v0.7 61/65; Project Roadmap 87/194; UGA 33/205. This hardware
   checkpoint's Phase-F increment originally ended at 52/65 and remains valid.
 - amd64 Kilted/Lyrical image/runtime, QEMU/BuildKit arm64 packaging, non-root
   serial mapping, tini/SIGINT lifecycle, external read-only configuration,
@@ -47,8 +48,8 @@ fully closed canonical TODO item.
   inference.
 - Deterministic image CI now owns Docker DNS/NTRIP alias loss/re-resolution;
   do not repeat it during later hardware phases unless the network/reconnect
-  implementation changes. Receiver-child recovery, rate matrices, RTK
-  transition, persistence, and the qualified incarnation cutoff remain physical.
+  implementation changes. Persistence and the qualified incarnation cutoff
+  remain physical.
 
 ## PHASE_A_EVIDENCE_2026_09_05
 
@@ -723,3 +724,71 @@ swap/recovery validation` close: v0.7 50/65 -> 52/65, Project Roadmap 76/194 ->
 78/194, UGA unchanged 33/205. UGA-126, transparent in-place device recovery,
 receiver/profile persistence, and other topology claims remain open. Stop
 before Phase G without fresh authorization.
+
+## PASSIVE_RTK_RECONCILIATION_2026_09_07
+
+The preserved mower-session bag from the current Kilted arm64 Mowgli sidecar
+records a natural RTK Float-to-Fixed transition with observation sequence
+advancing from 8416 through 16972, fresh solution timestamps, and continuously
+healthy NTRIP/RTCM correction context. It includes a sustained Fixed interval
+from 10:12:36.163Z through 10:15:22.451Z. Preflight, deployment, and post-session
+records identify the same current image/revision chain. A corrected 60-second
+passive collector run independently observed Float-to-Fixed, advancing sequence,
+healthy ROS/correction diagnostics, and stable container/process identity without
+mower motion, service restart, GNSS reconfiguration, or container redeployment.
+
+This closes only `RTK Float/Fixed transition validation through container
+boundaries`: v0.7 57/65 -> 58/65; Project Roadmap 83/194 -> 84/194; UGA remains
+33/205. Seven v0.7 gates remain, all with prerequisite `NONE`. The bag has no
+source/incarnation fields and neither passive run test-correlates a retired
+incarnation byte/response, so UGA-126 remains PARTIAL / HARDWARE_REQUIRED. No
+receiver-child restart, rate-mismatch, persistence/power-cycle, long-duration,
+or publication evidence is inferred.
+
+## UM982_PERSISTENCE_SOFTWARE_SEPARATION_2026_09_07
+
+The Unicore planner/apply implementation now keeps the three configuration
+semantics distinct. Normal `runtime-only` emits profile commands without
+`FRESET` or `SAVECONFIG`; normal `persistent` emits the profile and saves only
+after live verification, without `FRESET`; the explicit destructive
+`factory_reset` profile performs preflight `VERSIONA`, `FRESET`, conservative
+reopen/active-`VERSIONA` retry at 115200 bps for up to 60000 ms, COM1 recovery,
+target-baud `VERSIONA`, and full replay, with `SAVECONFIG` only when persistent
+apply was also requested. Deterministic driver/tools coverage passes, including
+negative missing-`VERSIONA` and target-baud verification cases.
+
+This is software evidence only and awards no release credit. The persistence
+gate still requires the planned second-RPi UM982 test: record original state,
+apply and verify one harmless reversible setting through normal persistent
+apply, disable runtime replay, cross a real receiver power boundary, read back
+the retained value, restore the original profile, and capture final readback.
+
+## RECEIVER_RECOVERY_AND_RATE_RECONCILIATION_2026_09_07
+
+The exact current Kilted arm64 u-blox image completed one bounded, stationary
+closeout campaign recorded under
+`universal-gnss-validation/results/v07-closeout-20260907T112031Z/`.
+
+- Receiver-child SIGKILL terminated the combined launch/NTRIP group. Docker
+  retained the container ID, incremented RestartCount `0 -> 1`, replaced both
+  child PIDs and source incarnation, exposed only post-restart observations, and
+  returned receiver/NTRIP health to responding without cached-state resurrection.
+- With physical input held at 7 Hz and publication set to 20 Hz, 84 publications
+  represented 30 position sequences. Fifty-two were exact cached republications;
+  two additional same-position-sequence stamp advances were accepted NAV-SAT
+  runtime updates, not publication-time freshness or fabricated positions. There
+  was no sequence decrease and the maximum jump was one.
+- With physical input held at 7 Hz and publication set to 1 Hz, output remained
+  bounded at 1.000 Hz. Eighteen publications advanced sequence 245 -> 364 with
+  exactly seven positions per publication, no decrease, bounded timestamp gaps,
+  and no backlog, stale-state, or corruption diagnostic.
+- The original production sidecar was restored healthy after each isolated rate
+  container. No mower motion, firmware action, persistent write, USB action, or
+  endurance run occurred.
+
+These three physical gates close: v0.7 58/65 -> 61/65; Project Roadmap 84/194
+-> 87/194; UGA remains 33/205. Four release gates remain, all with software
+prerequisite `NONE`: qualified retired-incarnation rejection, UM982 persistence
+across a real power boundary, long-run container validation, and real registry
+publication with indexes/SBOM/provenance. UGA-126 remains PARTIAL /
+HARDWARE_REQUIRED independently.

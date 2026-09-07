@@ -33,7 +33,8 @@ Already delivered in `v0.6.0` and its follow-up fixes:
   - `rover_high_precision`
   - `rover_high_precision_debug`
   - `factory_reset`
-- operator-driven Unicore reset/recovery persistent apply
+- distinct operator-driven Unicore persistent apply and destructive
+  factory-reset/recovery apply
 - u-blox persistent FLASH configuration and output-port selection
 - model-aware Unicore signal-group planning/profile selection with safe
   unknown-model fallback and documented UM982 baseline gating
@@ -81,8 +82,9 @@ Validation boundary:
 - review operator observability for status, correction, discovery, and parser
   data, including Foxglove-style consumers
 - add CI and distro/arch validation for the integrated stack
-- continue long-run and receiver-child recovery validation; deterministic Docker
-  DNS/NTRIP alias loss and recovery is now covered in image CI
+- continue long-run and qualified retired-incarnation rejection validation;
+  receiver-child recovery is proven physically and deterministic Docker DNS/NTRIP
+  alias loss and recovery is covered in image CI
 
 ### Receiver-specific backends
 
@@ -124,8 +126,13 @@ BlueOS-specific implementation.
   The exact current image is also validated independently on the real robot with
   a sole u-blox device grant, live fix, protected runtime-only NTRIP, valid RTCM
   forwarding/correction health, clean SIGINT stop, and exact restoration of the
-  legacy GPS container. A naturally observed Fixed state is not a Float-to-Fixed
-  transition result.
+  legacy GPS container. The 2026-09-07 mower bag then records a natural
+  Float-to-Fixed transition on that current Kilted arm64 sidecar with advancing,
+  fresh observations and continuously healthy NTRIP/RTCM correction context.
+  The same bounded closeout campaign proves receiver-child recovery with fresh
+  process/source state plus both 7 Hz receiver / 20 Hz publication and 7 Hz
+  receiver / 1 Hz publication mismatch contracts without stale promotion,
+  fabricated position observations, or unbounded backlog.
 - Release identity is available through standard OCI labels and the existing
   ROS diagnostic/snapshot surface: image build inputs supply version, revision,
   and deterministic source-commit creation time; runtime identity reports those

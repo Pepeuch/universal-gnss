@@ -89,12 +89,8 @@
     "release": "v0.7",
     "gates": [
       {"task": "published multi-architecture image indexes with attached SBOM and provenance attestations (the tag-gated Kilted/Lyrical amd64+arm64 workflow is implemented; registry artifacts remain release-action evidence)", "classification": "PUBLICATION_REQUIRED", "prerequisite": "NONE"},
-      {"task": "receiver-process restart without stale state resurrection", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
       {"task": "persistent receiver/profile configuration state where required", "classification": "POWER_CYCLE_REQUIRED", "prerequisite": "NONE"},
       {"task": "long-run container validation", "classification": "LONG_DURATION_REQUIRED", "prerequisite": "NONE"},
-      {"task": "low receiver rate / high publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
-      {"task": "high receiver rate / low publication-rate validation", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
-      {"task": "RTK Float/Fixed transition validation through container boundaries (RTK Float is proven; RTK Fixed remains pending)", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"},
       {"task": "no stale state survives source, receiver, process, or container incarnation", "classification": "HARDWARE_RECEIVER_REQUIRED", "prerequisite": "NONE"}
     ]
   },

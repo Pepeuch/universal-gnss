@@ -30,7 +30,7 @@ Recently completed:
 - parser counters plus recent malformed/rejected diagnostic visibility in ROS2
 - portable Auto Configuration planner/report/apply flow
 - operator-driven runtime-only apply for u-blox and Unicore
-- Unicore persistent / `factory_reset` reset-recovery apply
+- distinct Unicore persistent apply and `factory_reset` reset-recovery apply
 - u-blox persistent FLASH configuration and output-port selection
 - model-aware Unicore signal-group planning/profile selection with safe
   unknown-model fallback and documented UM982 baseline gating
@@ -68,7 +68,7 @@ the current numeric source of truth.
 | `UG-PLAN-002` | IMPLEMENTED | NTRIP / DEPLOYMENT | HARDWARE_PENDING | `UG-PLAN-001` | Deterministic Phase 2 is complete: shared transport-neutral `UGA009` `RtcmFrameWriter`; ROS2 `ReceiverNode` semantic-parity migration; native supervisor `NtripClient` orchestration; independent receiver/NTRIP reconnect; RTCM forwarding; GGA observation-sequence/cadence policy; stop cancellation; redacted credential/status behavior; 33/33 runtime/NTRIP/transport/driver CTests; ROS2-enabled build; `test_receiver_node`; formatting; and diff checks. Remaining physical evidence: receiver lifecycle, real caster/network reconnect, USB/hotplug/re-enumeration, and BlueOS device grants. |
 | `UG-PLAN-003` | OPEN | DEPLOYMENT | — | `UG-PLAN-005` | Lightweight generic HTTP API above the production container/runtime contract: lifecycle/health, receiver identity and transport, normalized `GnssRuntimeState`, parser/session diagnostics, correction/RTK/NTRIP health, redacted configuration, and reconnect/incarnation data. Later endpoints validate and deliberately apply/restart configuration with existing receiver-configuration safeguards. HTTP handlers must not own GNSS logic; defer SSE/WebSocket selection until evidence justifies it. |
 | `UG-PLAN-004` | OPEN | DEPLOYMENT | — | `UG-PLAN-003` | Generic Universal GNSS web GUI, served by or alongside the native API and usable from native Linux, standalone Docker, and BlueOS. Use responsive Tailwind CSS and the existing logo under `docs/`; keep it presentation/configuration-only. Plan Basic (connection/fix/RTK/position/accuracy/correction/NTRIP health), Advanced (satellites, C/N0, motion, UTC, RTCM, metrics, reconnect/configuration summary), and Expert (AGC, interference, raw diagnostics, transport, auto-configuration, logs, incarnation, advanced controls) views. |
-| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, the exact Unicore USB-loss contract, native Kilted arm64 build/runtime with live UM982 serial ingestion on a physical Raspberry Pi, the real-robot least-privilege u-blox/NTRIP runtime baseline, bidirectional external-LAN DDS with different-domain non-delivery under the recorded bridge/unicast contract, the bounded Phase-E container/main-process/daemon/reboot lifecycle matrix, and the Phase-F u-blox USB-loss/re-enumeration plus deliberate UM982 substitution matrix. Phase E proved clean stop/start, deterministic external-config reuse, automatic recovery from unexpected main launch-process exit, Docker-daemon restart, and host reboot/autostart; it also proved that an isolated receiver-node SIGKILL leaves the container unhealthy without automatic recovery and that operator `docker kill` does not automatically restart it. Phase F proved actual `ttyACM1`/166:1 -> `ttyACM2`/166:2 renumbering under a stable u-blox by-id, required container recreation after the existing grant stayed stale, and safe refusal when the expected u-blox identity was absent and an unambiguous UM982 was substituted. Deterministic image CI now proves Docker DNS/NTRIP alias loss and re-resolution without external infrastructure. The CH340/UM982 profile still requires runtime-profile replay after USB power loss. Remaining: receiver-child recovery, a qualified UGA-126 transport-incarnation cutoff, receiver/profile persistence, UGA-170's per-model u-blox reset matrix, and BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
+| `UG-PLAN-005` | PARTIAL | DEPLOYMENT | HARDWARE_REQUIRED | `UG-PLAN-002` | Phase A evidence is now established for Kilted/Lyrical amd64 and BuildKit/QEMU arm64 packaging, non-root/tini lifecycle, external read-only config, same-host DDS, live u-blox/Unicore GNSS+NTRIP/RTCM, the exact Unicore USB-loss contract, native Kilted arm64 build/runtime with live UM982 serial ingestion on a physical Raspberry Pi, the real-robot least-privilege u-blox/NTRIP runtime baseline, bidirectional external-LAN DDS with different-domain non-delivery under the recorded bridge/unicast contract, the bounded Phase-E container/main-process/daemon/reboot lifecycle matrix, and the Phase-F u-blox USB-loss/re-enumeration plus deliberate UM982 substitution matrix. Phase E proved clean stop/start, deterministic external-config reuse, automatic recovery from unexpected main launch-process exit, Docker-daemon restart, and host reboot/autostart; the later current-image campaign also proved receiver-child recovery with fresh process/source state and both bounded receiver/publication rate mismatches. Phase F proved actual `ttyACM1`/166:1 -> `ttyACM2`/166:2 renumbering under a stable u-blox by-id, required container recreation after the existing grant stayed stale, and safe refusal when the expected u-blox identity was absent and an unambiguous UM982 was substituted. Deterministic image CI now proves Docker DNS/NTRIP alias loss and re-resolution without external infrastructure. The CH340/UM982 profile still requires runtime-profile replay after USB power loss. Remaining: a qualified UGA-126 transport-incarnation cutoff, receiver/profile persistence, UGA-170's per-model u-blox reset matrix, and BlueOS validation. Phase B reuses the portable runtime/supervisor for a native/headless standalone UG image with no ROS2 or GUI requirement and the same configuration/device/persistence principles. Phase C enriches images with the generic API/WebUI once those layers exist. The WebUI must not create or validate the Docker baseline. |
 | `UG-PLAN-006` | PARTIAL | BLUEOS | HARDWARE_REQUIRED | `UG-PLAN-005` | Completed evidence: compatibility study, architecture proposal, Bazaar metadata and minimal receiver-permission templates, packaging/architecture research, and identified device/hotplug risks. BlueOS skeleton/packaging may reuse the production container/runtime contract once it exists and may initially be headless/status-oriented; it must not displace ROS2 Docker priority or reimplement GNSS semantics. Later phases add API/WebUI integration, `register_service`, relative-path-safe GUI exposure, settings/apply/restart, multi-arch publication, Bazaar submission, and install/update/rollback validation. USB hotplug/re-enumeration and Docker grants require real BlueOS proof; a reopened tty is not proof of a valid new device grant. |
 
 Priority and dependency order: complete deterministic `UG-PLAN-002`; establish
@@ -129,7 +129,10 @@ Runtime / process lifecycle:
 - [x] production entrypoint and deterministic startup ordering
 - [x] graceful SIGTERM/SIGINT shutdown
 - [x] restart policy and crash-recovery behavior
-- [ ] receiver-process restart without stale state resurrection
+- [x] receiver-process restart without stale state resurrection (receiver-child
+  SIGKILL terminated its launch/NTRIP group; Docker restarted the same container,
+  incremented RestartCount, created fresh receiver/NTRIP PIDs and source
+  incarnation, and resumed healthy fresh observations without cached-state reuse)
 - [x] NTRIP reconnect/restart without stale source metadata leakage
 - [x] container restart with deterministic configuration reapplication (same external read-only configuration restored healthy current-UG runtime after clean/manual start, unexpected main-process policy restart, Docker daemon restart, and host reboot on the recorded robot/u-blox baseline)
 - [x] expose running Universal GNSS version/commit in runtime diagnostics
@@ -222,11 +225,22 @@ Deployment validation gates:
 - [ ] long-run container validation
 - [x] receiver silence and reconnect validation (current UM982 contract requires recreation)
 - [x] NTRIP disconnect/reconnect validation
-- [x] container crash/restart validation (unexpected `ros2 launch` SIGKILL exited the container 137 and `unless-stopped` automatically restored fresh healthy GNSS; isolated receiver-node SIGKILL and operator `docker kill` remain separate failed recovery cases)
+- [x] container crash/restart validation (unexpected `ros2 launch` SIGKILL exited
+  the container 137 and `unless-stopped` automatically restored fresh healthy
+  GNSS; receiver-child recovery is proven separately on the current image, while
+  operator `docker kill` remains a deliberate manual-stop case)
 - [x] host reboot/autostart validation (new boot ID, Docker/current-UG autostart, exact least-privilege by-id grant, and fresh healthy GNSS proven)
-- [ ] low receiver rate / high publication-rate validation
-- [ ] high receiver rate / low publication-rate validation
-- [ ] RTK Float/Fixed transition validation through container boundaries (RTK Float is proven; RTK Fixed remains pending)
+- [x] low receiver rate / high publication-rate validation (7 Hz receiver / 20 Hz
+  publication: 84 publications, 30 position sequences, 52 exact cached
+  republications, two legitimate NAV-SAT aggregate-stamp advances without new
+  position, no sequence decrease, and maximum sequence jump one)
+- [x] high receiver rate / low publication-rate validation (7 Hz receiver / 1 Hz
+  publication: bounded 1.000 Hz output, exactly seven position observations per
+  publication, no sequence decrease or backlog/freshness corruption)
+- [x] RTK Float/Fixed transition validation through container boundaries (a
+  natural Float-to-Fixed transition with advancing observation sequence, fresh
+  solution state, and continuously healthy corrections is recorded from the
+  current Kilted arm64 Mowgli sidecar session)
 - [ ] no stale state survives source, receiver, process, or container incarnation
   changes
 
@@ -240,20 +254,18 @@ Documentation:
 - [x] troubleshooting / support-bundle guide
 - [x] security and secret-management notes
 
-v0.7 deployment reconciliation (updated 2026-09-06), limited to the 65-task release
+v0.7 deployment reconciliation (updated 2026-09-07), limited to the 65-task release
 scope:
 
-Remaining-gate classification after the software closeout (8 gates):
+Remaining-gate classification after the mower-session reconciliation (4 gates):
 
 - **SOFTWARE PREREQUISITES:** none. The tag-gated Kilted/Lyrical multi-platform
   workflow, external log/export runtime contract, structured console envelope,
   and deterministic Docker-DNS/NTRIP recovery matrix are implemented. A
   workflow definition is not publication evidence.
-- **REQUIRES_RECEIVER HARDWARE:** receiver-process recovery without stale state,
-  both receiver/publication rate-mismatch matrices, a naturally observed RTK
-  Float-to-Fixed transition, and the qualified source/receiver/process/container
-  incarnation matrix. Existing live evidence does not close these distinct
-  acceptance criteria.
+- **REQUIRES_RECEIVER HARDWARE:** the qualified source/receiver/process/container
+  incarnation matrix. Existing evidence does not inject and reject a correlated
+  delayed message from a retired incarnation.
 - **REQUIRES_EXTERNAL_LAN:** none. The recorded two-host Fast DDS matrix is
   complete and has no separate unchecked 65-task line.
 - **REQUIRES_LONG_DURATION:** long-run container validation only.
@@ -280,7 +292,10 @@ The robot Docker gate is checked from the exact current Kilted arm64 image on
 the real robot: selected u-blox-only mapping, non-root/non-privileged bridge
 runtime, live advancing fix, protected runtime-only NTRIP and valid RTCM
 forwarding/correction health, clean SIGINT stop, and exact legacy restoration.
-The naturally observed Fixed state does not prove a Float-to-Fixed transition.
+The 2026-09-07 mower bag independently records a natural Float-to-Fixed
+transition with advancing observations, fresh solution timestamps, and healthy
+NTRIP/RTCM correction context; the corrected passive collector also observed
+Float-to-Fixed on the same current image without mower motion or reconfiguration.
 
 - **Software closeout complete (2026-09-06):** no open v0.7 gate has an unfinished
   software prerequisite. Remaining acceptance requires receiver/power-cycle,
@@ -303,8 +318,8 @@ The naturally observed Fixed state does not prove a Float-to-Fixed transition.
   ELF dependency resolution, no development trees, and both checked startup
   exits (missing parameters `1`, unsupported schema `2`). This strengthens an
   existing completed build/runtime contract and does not alter release counts.
-- **HARDWARE_REQUIRED:** long-run, receiver-child recovery, rate-mismatch, RTK Fixed, and
-  source/incarnation validation; UGA-126 transport-incarnation cutoff; and
+- **HARDWARE_REQUIRED:** long-run and source/incarnation validation; UGA-126
+  transport-incarnation cutoff; and
   UGA-170's receiver-model reset matrix. The proven UM982 USB-loss contract is
   documented there; it requires container recreation and profile replay.
 - **Native-arm64 proven (2026-09-05):** native Kilted build/runtime, bounded

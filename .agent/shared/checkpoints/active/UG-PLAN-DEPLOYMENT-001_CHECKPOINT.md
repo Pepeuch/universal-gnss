@@ -1196,3 +1196,49 @@ repository-status sanity, and `git diff --check` passed.
 EXACT NEXT STEP (validated): no software closeout action remains. Execute one of
 the eight external acceptance gates from its recorded matrix; for publication,
 use an immutable `v*` tag and inspect actual registry indexes/attestations.
+
+## v0.7 physical RTK reconciliation (2026-09-07)
+
+The preserved mower-session bag from the current Kilted arm64 Mowgli sidecar
+records a natural RTK Float-to-Fixed transition with advancing observation
+sequence, fresh solution timestamps, continuously healthy NTRIP/RTCM correction
+context, and a sustained Fixed interval from 10:12:36.163Z through
+10:15:22.451Z. The deployment/preflight/post-session chain identifies the same
+current image and revision. A corrected 60-second passive collector run
+independently observed Float-to-Fixed, advancing sequence, healthy ROS and
+correction diagnostics, and stable runtime identity without motion, restart,
+reconfiguration, or redeployment.
+
+ACCOUNTING: only `RTK Float/Fixed transition validation through container
+boundaries` closes. v0.7 advances 57/65 -> 58/65; Project Roadmap 83/194 ->
+84/194; UGA remains 33/205. Seven release gates remain, all with prerequisite
+`NONE`: four receiver-hardware gates, one power-cycle gate, one long-duration
+gate, and one publication gate. The bag lacks source/incarnation fields and no
+test-correlated retired-incarnation byte/response was excluded; UGA-126 remains
+PARTIAL / HARDWARE_REQUIRED. No other physical or publication credit is awarded.
+
+## v0.7 receiver recovery/rate reconciliation (2026-09-07)
+
+The bounded current-image u-blox closeout campaign under
+`universal-gnss-validation/results/v07-closeout-20260907T112031Z/` directly
+closes three additional release gates. Receiver-child SIGKILL exercised the
+combined launch/Docker restart policy and returned fresh receiver/NTRIP PIDs,
+source incarnation, observations, and health without cached-state resurrection.
+The physical 7 Hz receiver was then observed at 20 Hz publication and at 1 Hz
+publication in isolated least-privilege containers, with clean baseline restore.
+
+The 7 -> 20 Hz evidence contains 52 exact cached republications. Two same-position
+sequence stamp advances are conforming NAV-SAT aggregate updates: the aggregate
+stamp tracks the newest accepted runtime-field update while the sequence counts
+only position/fix observations. The 7 -> 1 Hz evidence remained bounded at
+1.000 Hz and represented exactly seven positions per publication without
+sequence regression, backlog, stale promotion, or corruption.
+
+ACCOUNTING: `receiver-process restart without stale state resurrection`, `low
+receiver rate / high publication-rate validation`, and `high receiver rate / low
+publication-rate validation` close. v0.7 advances 58/65 -> 61/65; Project
+Roadmap 84/194 -> 87/194; UGA remains 33/205. Four release gates remain, all
+with prerequisite `NONE`: qualified retired-incarnation rejection, persistent
+receiver/profile state across a real power boundary, long-run validation, and
+actual multiarchitecture registry publication with SBOM/provenance. UGA-126 and
+the long-run gate remain open independently.

@@ -46,18 +46,18 @@ class BacklogStatusTests(unittest.TestCase):
             ]
         )
         MODULE.validate_todo(data)
-        self.assertEqual({"total": 194, "complete": 83, "not_started": 111}, MODULE.project_progress_counts())
-        self.assertEqual({"total": 65, "complete": 57, "not_started": 8}, MODULE.release_progress_counts())
+        self.assertEqual({"total": 194, "complete": 87, "not_started": 107}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 65, "complete": 61, "not_started": 4}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
         dependency_counts = MODULE.release_dependency_counts(data)
-        self.assertEqual(8, sum(dependency_counts.values()))
-        self.assertEqual(7, sum(
+        self.assertEqual(4, sum(dependency_counts.values()))
+        self.assertEqual(3, sum(
             dependency_counts[classification]
             for classification in MODULE.HARDWARE_DEPENDENCY_CLASSES
         ))
-        self.assertEqual(8, len(data.release_dependencies))
+        self.assertEqual(4, len(data.release_dependencies))
         self.assertEqual(
-            {"NONE": 8},
+            {"NONE": 4},
             dict(MODULE.release_prerequisite_counts(data)),
         )
         self.assertIn(
@@ -116,17 +116,17 @@ class BacklogStatusTests(unittest.TestCase):
 
         self.assertIn("CURRENT RELEASE", svg)
         self.assertIn("v0.6 → v0.7", svg)
-        self.assertIn("57 / 65 complete · 87.69%", svg)
+        self.assertIn("61 / 65 complete · 93.85%", svg)
         self.assertIn("PROJECT ROADMAP", svg)
-        self.assertIn("83 / 194 complete · 42.78%", svg)
+        self.assertIn("87 / 194 complete · 44.85%", svg)
         self.assertIn("UGA QUALITY / AUDIT", svg)
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)
         self.assertIn("Validation dependencies (orthogonal)", svg)
         self.assertIn("Open v0.7 gate classifications (exclusive)", svg)
-        self.assertIn("Open hardware-dependent gates: 7", svg)
+        self.assertIn("Open hardware-dependent gates: 3", svg)
         self.assertIn("External-LAN DDS is a separate completed acceptance matrix", svg)
-        self.assertIn("Orthogonal prerequisites: software 0 · design decision 0 · none 8", svg)
+        self.assertIn("Orthogonal prerequisites: software 0 · design decision 0 · none 4", svg)
 
         changed = replace(
             data,
@@ -135,7 +135,7 @@ class BacklogStatusTests(unittest.TestCase):
                 "published multi-architecture image indexes with attached SBOM and provenance attestations (the tag-gated Kilted/Lyrical amd64+arm64 workflow is implemented; registry artifacts remain release-action evidence)": "ROBOT_REQUIRED",
             },
         )
-        self.assertIn("Open hardware-dependent gates: 8", MODULE.render_svg(changed))
+        self.assertIn("Open hardware-dependent gates: 4", MODULE.render_svg(changed))
 
     def test_check_rejects_stale_dashboard_output(self) -> None:
         data = MODULE.load_backlog()
