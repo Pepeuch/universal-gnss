@@ -225,6 +225,11 @@ Timestamp semantics:
 - the core stores an optional `timestamp_ns`
 - the ROS 2 adapter converts it to `builtin_interfaces/Time`
 - absent timestamps map to zero ROS time
+- `GnssStatus.stamp` tracks the newest accepted runtime-field update in the
+  aggregate, so a non-position message such as u-blox `NAV-SAT` may advance it
+  without advancing `position_observation_sequence`
+- periodic publication alone changes neither the aggregate stamp nor the
+  position sequence
 
 Observation identity semantics:
 

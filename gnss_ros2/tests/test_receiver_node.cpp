@@ -387,6 +387,26 @@ std::vector<std::uint8_t> MakeUbxRxmRtcmPayload(const std::uint16_t message_type
   return payload;
 }
 
+std::vector<std::uint8_t> MakeUbxNavPvtPayload()
+{
+  std::vector<std::uint8_t> payload(92u, 0u);
+  payload[20u] = 3u;
+  payload[21u] = 0x01u;
+  payload[23u] = 1u;
+  return payload;
+}
+
+std::vector<std::uint8_t> MakeUbxNavSatPayload(const std::uint8_t cn0_db_hz)
+{
+  std::vector<std::uint8_t> payload(20u, 0u);
+  payload[4u] = 0x01u;
+  payload[5u] = 1u;
+  payload[9u] = 4u;
+  payload[10u] = cn0_db_hz;
+  payload[16u] = 0x1Cu;
+  return payload;
+}
+
 class ScriptedByteSource : public universal_gnss_transport::ByteSource
 {
 public:
@@ -1551,6 +1571,47 @@ TEST_F(ReceiverNodeTest, PublishesStableReceiptProvenanceInsteadOfPublicationTim
       << "a genuinely new observation must carry new receipt provenance";
   EXPECT_EQ(node.last_status_message()->position_observation_sequence, first_position_sequence + 1u)
       << "an identical newly received fix must advance position provenance";
+}
+
+TEST_F(ReceiverNodeTest, UbloxNavSatAdvancesRuntimeStampWithoutInventingPositionObservation)
+{
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildUbxFrame(0x01u, 0x07u, MakeUbxNavPvtPayload()), true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       BuildUbxFrame(0x01u, 0x35u, MakeUbxNavSatPayload(42u)), true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "ublox")});
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  const auto position_sequence = node.last_status_message()->position_observation_sequence;
+  const auto position_stamp_ns = RosTimeToNanoseconds(node.last_status_message()->stamp);
+  EXPECT_EQ(position_sequence, 1u);
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  const auto runtime_update_stamp_ns = RosTimeToNanoseconds(node.last_status_message()->stamp);
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence, position_sequence)
+      << "NAV-SAT is a runtime observation, not a position observation";
+  EXPECT_GT(runtime_update_stamp_ns, position_stamp_ns)
+      << "NAV-SAT must expose its newer receiver receipt time in the aggregate stamp";
+  EXPECT_FLOAT_EQ(node.last_status_message()->mean_cn0_db_hz, 42.0f);
+
+  node.PublishNow();
+  ASSERT_TRUE(node.last_status_message().has_value());
+  EXPECT_EQ(node.last_status_message()->position_observation_sequence, position_sequence);
+  EXPECT_EQ(RosTimeToNanoseconds(node.last_status_message()->stamp), runtime_update_stamp_ns)
+      << "publication alone must not renew runtime freshness";
 }
 
 TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)

@@ -5,7 +5,7 @@
   "max_sequence_jump": 1,
   "repeated_publications": 54,
   "rows": 84,
-  "same_sequence_stamp_mismatches": 2,
+  "same_position_sequence_runtime_stamp_advances": 2,
   "sequence_decreases": 0,
   "sequence_first": 1301,
   "sequence_last": 1330,

@@ -29,11 +29,12 @@ test-correlated retired-byte cutoff or close UGA-126.
 The physical u-blox profile remained at 7 Hz. A least-privilege test container,
 selected by the host stable by-id and without running the startup configurator,
 set only `publish_rate_hz=20.0`. Raw `low-high-status.csv` contains 84
-publications representing 30 unique position sequences: 54 repeated cached
-publications, no sequence decrease, and a maximum sequence jump of one.
-Repeated position observations retained their sequence; collector diagnostics
-reported no stale/no-data samples, restart, process/incarnation change, parser
-transition, or corruption. See `low-high-analysis.json` and the
+publications representing 30 unique position sequences: 54 same-sequence
+transitions, comprising 52 exact cached republications and two accepted NAV-SAT
+aggregate updates whose runtime stamp advanced without inventing a position.
+There was no sequence decrease and the maximum sequence jump was one. Collector
+diagnostics reported no stale/no-data samples, restart, process/incarnation
+change, parser transition, or corruption. See `low-high-analysis.json` and the
 `low-input-high-publication/` collector directory.
 
 ## High receiver rate / low publication rate — PASS
