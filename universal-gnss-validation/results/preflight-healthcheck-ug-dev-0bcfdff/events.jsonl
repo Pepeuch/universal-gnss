@@ -1,0 +1,3 @@
+{"event": "session_started", "record_type": "event", "schema_version": 1, "source": "collector", "timestamp_local": "2026-09-07T11:42:37.337+02:00", "timestamp_utc": "2026-09-07T09:42:37.337Z"}
+{"container": "mowgli-gps", "created": true, "error": null, "path": "snapshots/support-000001.json", "record_type": "support_snapshot", "sample_index": 1, "schema_version": 1, "timestamp_utc": "2026-09-07T09:42:40.049Z"}
+{"event": "session_stopped", "record_type": "event", "schema_version": 1, "signal_requested": false, "source": "collector", "timestamp_local": "2026-09-07T11:42:44.885+02:00", "timestamp_utc": "2026-09-07T09:42:44.885Z"}

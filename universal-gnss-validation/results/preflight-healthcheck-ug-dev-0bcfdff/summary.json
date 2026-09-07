@@ -1,0 +1,54 @@
+{
+  "container_restart_count_change": 0,
+  "container_restart_count_max": 0,
+  "container_restart_count_min": 0,
+  "correction_or_rtcm_transitions": [],
+  "cpu_peak_percent": 3.08,
+  "diagnostic_state_transitions": [],
+  "duration_seconds": 5.000247123999998,
+  "event_count": 2,
+  "generated_utc": "2026-09-07T09:42:44.894Z",
+  "largest_collection_interval_seconds": 5.000247123999998,
+  "limitations": [
+    "This summary reports mechanically observable evidence only.",
+    "It does not prove a retired-byte cutoff or award release checklist credit."
+  ],
+  "log_growth_bytes": null,
+  "memory_peak_percent": 0.0,
+  "missing_collection_interval_count": 0,
+  "ntrip_diagnostic_transitions": [],
+  "observed_container_ids": [
+    "5b397933ffec55eea3e1a04f233060067fe009ca870da33460389b657ed55b58"
+  ],
+  "observed_ntrip_pids": [
+    12935
+  ],
+  "observed_receiver_pids": [
+    12908
+  ],
+  "observed_source_incarnations": [
+    "45909fcb0ec0ef205ace22420e05fc30"
+  ],
+  "position_sequence_max": 923,
+  "position_sequence_min": 889,
+  "position_sequence_progression": 34,
+  "record_type": "summary",
+  "release_credit_awarded": false,
+  "ros_unavailable_samples": 0,
+  "rtk_transitions": [
+    {
+      "from": null,
+      "timestamp_utc": "2026-09-07T09:42:37.342Z",
+      "to": "FIXED"
+    }
+  ],
+  "sample_count": 2,
+  "schema_version": 1,
+  "session_status": "COMPLETED",
+  "stale_or_no_data_sample_indexes": [],
+  "support_export_growth_bytes": null,
+  "unexpected_container_change": false,
+  "unexpected_ntrip_process_change": false,
+  "unexpected_receiver_process_change": false,
+  "unexpected_source_incarnation_change": false
+}

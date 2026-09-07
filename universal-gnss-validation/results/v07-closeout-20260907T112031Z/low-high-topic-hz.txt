@@ -1,0 +1,1 @@
+Cannot echo topic '/gps/status', as it contains more than one type: [mowgli_interfaces/msg/GnssStatus, universal_gnss_ros2/msg/GnssStatus]

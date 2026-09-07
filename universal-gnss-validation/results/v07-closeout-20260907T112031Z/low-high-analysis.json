@@ -1,0 +1,19 @@
+{
+  "configured_publication_hz": 20.0,
+  "configured_receiver_hz": 7.0,
+  "distinct_observation_stamps": 32,
+  "max_sequence_jump": 1,
+  "repeated_publications": 54,
+  "rows": 84,
+  "same_sequence_stamp_mismatches": 2,
+  "sequence_decreases": 0,
+  "sequence_first": 1301,
+  "sequence_last": 1330,
+  "source_ids": [
+    "/dev/gnss-receiver"
+  ],
+  "source_incarnations": [
+    "34c286b554e60f5461fc6b98fb3daa02"
+  ],
+  "unique_sequences": 30
+}

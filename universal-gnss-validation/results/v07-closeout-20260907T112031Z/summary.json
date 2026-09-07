@@ -1,0 +1,678 @@
+{
+  "container_restart_count_change": 1,
+  "container_restart_count_max": 1,
+  "container_restart_count_min": 0,
+  "correction_or_rtcm_transitions": [
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:27.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:57.113Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:47.127Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:30:12.127Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    }
+  ],
+  "cpu_peak_percent": 107.23,
+  "diagnostic_state_transitions": [
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:27.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:57.113Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:47.127Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:30:12.127Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM forwarding idle"
+      },
+      "name": "universal_gnss/rtcm_forwarding",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM forwarding active"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/base_station_arp",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss/rtcm_semantic/msm_summary",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    }
+  ],
+  "duration_seconds": 835.027541589001,
+  "event_count": 10,
+  "generated_utc": "2026-09-07T11:37:53.384Z",
+  "largest_collection_interval_seconds": 5.005401587999586,
+  "limitations": [
+    "This summary reports mechanically observable evidence only.",
+    "It does not prove a retired-byte cutoff or award release checklist credit."
+  ],
+  "log_growth_bytes": null,
+  "memory_peak_percent": 0.0,
+  "missing_collection_interval_count": 0,
+  "ntrip_diagnostic_transitions": [
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:22:57.113Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      }
+    },
+    {
+      "from": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation not seen"
+      },
+      "name": "universal_gnss_ntrip/rtcm_semantic/glonass_code_phase_bias",
+      "timestamp_utc": "2026-09-07T11:30:12.127Z",
+      "to": {
+        "level": "\u0000",
+        "message": "RTCM semantic observation decoded"
+      }
+    }
+  ],
+  "observed_container_ids": [
+    "5b397933ffec55eea3e1a04f233060067fe009ca870da33460389b657ed55b58"
+  ],
+  "observed_ntrip_pids": [
+    12935,
+    33978,
+    43715,
+    48359
+  ],
+  "observed_receiver_pids": [
+    12908,
+    33919,
+    43590,
+    43673,
+    48224
+  ],
+  "observed_source_incarnations": [
+    "4239597d4b081713efd3fa914670b123",
+    "45909fcb0ec0ef205ace22420e05fc30",
+    "a244a4285d7d3d32250c9461e8edd1ae",
+    "da13d3118a8a54ab4755a83ac0a606b5"
+  ],
+  "position_sequence_max": 42635,
+  "position_sequence_min": 10,
+  "position_sequence_progression": 42625,
+  "record_type": "summary",
+  "release_credit_awarded": false,
+  "ros_unavailable_samples": 78,
+  "rtk_transitions": [
+    {
+      "from": null,
+      "timestamp_utc": "2026-09-07T11:20:32.104Z",
+      "to": "FIXED"
+    },
+    {
+      "from": "FIXED",
+      "timestamp_utc": "2026-09-07T11:22:17.111Z",
+      "to": "NONE"
+    },
+    {
+      "from": "NONE",
+      "timestamp_utc": "2026-09-07T11:22:22.111Z",
+      "to": "FLOAT"
+    },
+    {
+      "from": "FLOAT",
+      "timestamp_utc": "2026-09-07T11:24:02.114Z",
+      "to": "FIXED"
+    },
+    {
+      "from": "FIXED",
+      "timestamp_utc": "2026-09-07T11:29:37.121Z",
+      "to": "NONE"
+    },
+    {
+      "from": "NONE",
+      "timestamp_utc": "2026-09-07T11:29:42.121Z",
+      "to": "FLOAT"
+    },
+    {
+      "from": "FLOAT",
+      "timestamp_utc": "2026-09-07T11:32:32.130Z",
+      "to": "NONE"
+    },
+    {
+      "from": "NONE",
+      "timestamp_utc": "2026-09-07T11:32:37.130Z",
+      "to": "FLOAT"
+    }
+  ],
+  "sample_count": 168,
+  "schema_version": 1,
+  "session_status": "COMPLETED",
+  "stale_or_no_data_sample_indexes": [],
+  "support_export_growth_bytes": null,
+  "unexpected_container_change": false,
+  "unexpected_ntrip_process_change": true,
+  "unexpected_receiver_process_change": true,
+  "unexpected_source_incarnation_change": true
+}

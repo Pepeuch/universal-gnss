@@ -1,0 +1,7 @@
+{"event": "session_started", "record_type": "event", "schema_version": 1, "source": "collector", "timestamp_local": "2026-09-07T13:25:53.152+02:00", "timestamp_utc": "2026-09-07T11:25:53.152Z"}
+{"event": "operator_marker", "message": "observing_receiver_7hz_publication_20hz", "record_type": "event", "schema_version": 1, "source": "operator", "timestamp_local": "2026-09-07T13:25:57.944+02:00", "timestamp_utc": "2026-09-07T11:25:57.944Z"}
+{"container": "v07-rate-low-high", "created": true, "error": null, "path": "snapshots/support-000001.json", "record_type": "support_snapshot", "sample_index": 1, "schema_version": 1, "timestamp_utc": "2026-09-07T11:25:58.275Z"}
+{"container": "v07-rate-low-high", "created": true, "error": null, "path": "snapshots/support-000006.json", "record_type": "support_snapshot", "sample_index": 6, "schema_version": 1, "timestamp_utc": "2026-09-07T11:26:22.631Z"}
+{"container": "v07-rate-low-high", "created": true, "error": null, "path": "snapshots/support-000011.json", "record_type": "support_snapshot", "sample_index": 11, "schema_version": 1, "timestamp_utc": "2026-09-07T11:26:47.007Z"}
+{"container": "v07-rate-low-high", "created": true, "error": null, "path": "snapshots/support-000016.json", "record_type": "support_snapshot", "sample_index": 16, "schema_version": 1, "timestamp_utc": "2026-09-07T11:27:11.472Z"}
+{"event": "session_stopped", "record_type": "event", "schema_version": 1, "signal_requested": false, "source": "collector", "timestamp_local": "2026-09-07T13:27:30.822+02:00", "timestamp_utc": "2026-09-07T11:27:30.822Z"}
