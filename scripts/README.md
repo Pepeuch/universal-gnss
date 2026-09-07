@@ -1,5 +1,15 @@
 # Universal GNSS — Codex repository-maintenance pack
 
+Hardware-session preparation uses the passive collector documented in
+[`docs/validation/README.md`](../docs/validation/README.md):
+
+- `validation/run_hardware_session.sh` — functional/endurance collection;
+- `validation/mark_hardware_event.sh` — append an operator marker safely;
+- `validation/analyze_hardware_session.py` — regenerate the mechanical summary.
+
+These tools observe an existing production runtime. They do not start, stop, or
+reconfigure it and never award release credit.
+
 This pack adds deterministic helper scripts so Codex can inspect and maintain repository state
 without repeatedly reconstructing it from large context.
 

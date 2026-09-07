@@ -35,10 +35,8 @@ session="/home/pepeuch/universal-gnss-validation/results/robot-test-$(date +%Y%m
 Replace the u-blox path with
 `/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0` only when UM982 is selected
 on that machine. Never substitute transient `/dev/ttyACM*` or `/dev/ttyUSB*`.
-If exactly one running container identifies itself as Universal GNSS through
-its Compose-service or OCI image labels, `--container` may be omitted. This
-supports both the standalone Compose service and the MowgliNext GPS sidecar;
-use explicit `--container` selection when more than one candidate is running.
+If exactly one running Compose service has the
+`com.docker.compose.service=universal-gnss` label, `--container` may be omitted.
 Confirm the revision-specific image tag and OCI revision label against the image
 on the mower. The prepared MowgliNext Compose service has bounded Docker logs,
 but no separate host-mounted ROS log or support-export directory. Therefore the
