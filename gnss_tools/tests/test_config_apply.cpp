@@ -706,7 +706,7 @@ void TestNmeaWriteProfileRejected(TestContext& ctx)
              "generic NMEA receivers should reject write-side portable profiles for apply");
 }
 
-void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
+void TestPersistentWorkflowPreparesWithoutFactoryReset(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -720,13 +720,14 @@ void TestPersistentRecoveryWorkflowPreparesSuccessfully(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.requires_runtime_confirmation &&
                  result.requires_persistent_confirmation && result.execution_confirmed &&
-                 result.plan.summary.commands_total == 17u &&
-                 result.plan.summary.factory_reset_commands == 1u &&
+                 result.plan.summary.commands_total == 15u &&
+                 result.plan.summary.factory_reset_commands == 0u &&
                  result.plan.summary.persistent_commands == 1u,
-             "persistent Unicore apply should prepare a confirmed reset-first recovery workflow");
+             "persistent Unicore apply should prepare confirmed CONFIG plus SAVECONFIG without "
+             "factory reset");
 }
 
-void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContext& ctx)
+void TestPersistentWorkflowWithTargetBaudPreparesSuccessfully(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -740,24 +741,24 @@ void TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(TestContex
   const auto result = PrepareConfigApply(options);
   const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 result.plan.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.plan.summary.commands_total == 17u &&
-                 result.plan.summary.runtime_commands == 15u &&
-                 result.plan.summary.persistent_commands == 1u &&
-                 result.plan.summary.factory_reset_commands == 1u &&
-                 result.plan.commands.size() > 1u &&
-                 result.plan.commands[1].command.payload.text.find("CONFIG COM1 460800 8 n 1") !=
-                     std::string::npos,
-             "persistent Unicore apply should preserve a distinct target config baud override in "
-             "the prepared plan");
+  ctx.Expect(
+      result.status == ConfigApplyStatus::kOk &&
+          result.plan.baud == std::optional<std::uint32_t>{460800u} &&
+          result.plan.summary.commands_total == 16u &&
+          result.plan.summary.runtime_commands == 15u &&
+          result.plan.summary.persistent_commands == 1u &&
+          result.plan.summary.factory_reset_commands == 0u && !result.plan.commands.empty() &&
+          result.plan.commands.front().command.payload.text.find("CONFIG COM1 460800 8 n 1") !=
+              std::string::npos,
+      "persistent Unicore apply should preserve a distinct target config baud override in "
+      "the prepared plan");
   ctx.Expect(text.find("Detected receiver baud: 921600") != std::string::npos &&
                  text.find("Current transport baud: 921600") != std::string::npos &&
-                 text.find("Factory reset baud: 115200") != std::string::npos &&
+                 text.find("Factory reset baud: 115200") == std::string::npos &&
                  text.find("Target configured baud: 460800") != std::string::npos &&
                  text.find("Config baud override: 460800") != std::string::npos,
-             "prepared Unicore apply text should distinguish detected, current, factory, and "
-             "target baud values");
+             "prepared persistent Unicore apply text should expose detected, current, and target "
+             "baud values without implying a factory reset");
 }
 
 void TestSignalProfilePreparationFlowsIntoApplyPlan(TestContext& ctx)
@@ -1472,6 +1473,9 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  const auto freset_position = written.find("FRESET\r\n");
+  const auto post_reset_version_position = written.find("VERSIONA\r\n", freset_position);
+  const auto replay_position = written.find("CONFIG COM1 921600 8 n 1\r\n");
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk &&
                  result.execution_summary.commands_total == 16u &&
@@ -1482,13 +1486,62 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
              "factory_reset live apply should complete across the reset/reprobe recovery workflow");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
-                 written.find("FRESET\r\n") != std::string::npos &&
-                 written.find("VERSIONA\r\n") < written.find("FRESET\r\n") &&
-                 written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+                 freset_position != std::string::npos &&
+                 written.find("VERSIONA\r\n") < freset_position &&
+                 post_reset_version_position != std::string::npos &&
+                 post_reset_version_position < replay_position &&
                  written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
                  written.find("SAVECONFIG") == std::string::npos,
-             "factory_reset recovery apply should write reset and COM1 recovery commands without "
-             "persisting the temporary rover profile");
+             "factory_reset recovery should verify VERSIONA at 115200 after FRESET and before "
+             "replaying configuration, without saving a runtime-only replay");
+  ctx.Expect(ContainsProgressLine(result, "up to 60 s"),
+             "factory_reset recovery should expose its conservative 60-second post-reset window");
+}
+
+void TestUnicoreFactoryResetPersistentApplySavesAfterReplay(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 921600u);
+  const std::string post_reset_version = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0", 115200u, 100u,
+       std::vector<std::uint8_t>(post_reset_version.begin(), post_reset_version.end())});
+  const std::string baud_response = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u,
+                       std::vector<std::uint8_t>(baud_response.begin(), baud_response.end())});
+  const std::string target_version = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
+                       std::vector<std::uint8_t>(target_version.begin(), target_version.end())});
+  AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 9u);
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  const auto freset_position = written.find("FRESET\r\n");
+  const auto post_reset_version_position = written.find("VERSIONA\r\n", freset_position);
+  const auto replay_position = written.find("CONFIG COM1 921600 8 n 1\r\n");
+  const auto save_position = written.find("SAVECONFIG\r\n");
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_total == 17u &&
+                 result.execution_summary.commands_completed == 17u &&
+                 result.execution_summary.commands_failed == 0u,
+             "persistent factory_reset should complete reset, verification, replay, and save");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() && freset_position != std::string::npos &&
+          post_reset_version_position != std::string::npos &&
+          replay_position != std::string::npos && save_position != std::string::npos &&
+          freset_position < post_reset_version_position &&
+          post_reset_version_position < replay_position && replay_position < save_position,
+      "persistent factory_reset should save only after VERSIONA verification and full replay");
 }
 
 void TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(TestContext& ctx)
@@ -1614,7 +1667,39 @@ void TestUnicoreFactoryResetPreflightAbortWhenNoBaudResponds(TestContext& ctx)
              "factory_reset preflight should never send FRESET before a successful VERSIONA scan");
 }
 
-void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
+void TestUnicoreFactoryResetStopsWhenPostResetVersionaIsAbsent(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport({});
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 921600u);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u, {}});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  const auto freset_position = written.find("FRESET\r\n");
+  const auto post_reset_version_position = written.find("VERSIONA\r\n", freset_position);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.error_message.find("did not answer VERSIONA") != std::string::npos &&
+                 result.execution_summary.commands_completed == 1u,
+             "factory_reset should stop after FRESET when VERSIONA is absent at 115200");
+  ctx.Expect(
+      hooks.AllStepsConsumed() && hooks.failure().empty() && freset_position != std::string::npos &&
+          post_reset_version_position != std::string::npos &&
+          written.find("CONFIG COM1", freset_position) == std::string::npos &&
+          written.find("SAVECONFIG", freset_position) == std::string::npos,
+      "factory_reset must probe VERSIONA after reset and must not replay or save on timeout");
+}
+
+void TestUnicorePersistentApplySavesWithoutFactoryReset(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -1624,47 +1709,29 @@ void TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(TestContext& ctx)
   options.receiver_model = "UM982";
   options.confirm = true;
 
-  ScriptedByteDuplex transport({});
+  const std::string current_config = BuildUnicoreConfigResponse("4 5", 921600u);
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(current_config.begin(), current_config.end()));
   ScriptedConfigApplyHooks hooks(transport);
-  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
-  const std::string first_probe_response = BuildUnicoreVersionResponse();
-  hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
-       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
-  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
-  hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
-       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
-  const std::string second_probe_response = BuildUnicoreVersionResponse();
-  hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
-       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
-  AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 9u);
+  AddUnicoreSignalGroupRecoverySteps(hooks, "/dev/ttyUSB0", 921600u, "3 6", 5u, 9u);
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
-  ctx.Expect(
-      result.status == ConfigApplyStatus::kOk && result.execution_summary.commands_total == 17u &&
-          result.execution_summary.commands_completed == 17u &&
-          result.execution_summary.commands_failed == 0u &&
-          result.execution_summary.responses_applied == 15u &&
-          result.execution_summary.final_status == "ok",
-      "persistent Unicore apply should complete across reset, baud recovery, and SAVECONFIG");
+  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
+                 result.execution_summary.commands_total == 15u &&
+                 result.execution_summary.commands_completed == 15u &&
+                 result.execution_summary.commands_failed == 0u &&
+                 result.execution_summary.responses_applied == 15u &&
+                 result.execution_summary.final_status == "ok",
+             "persistent Unicore apply should verify the profile and finish with SAVECONFIG");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
-                 written.find("FRESET\r\n") != std::string::npos &&
+                 written.find("FRESET\r\n") == std::string::npos &&
                  written.find("VERSIONA\r\n") != std::string::npos &&
-                 written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG SIGNALGROUP 3 6\r\n") != std::string::npos &&
-                 written.find("SAVECONFIG\r\n") != std::string::npos,
-             "persistent Unicore recovery apply should restore COM1, replay the rover profile, and "
-             "save it");
+                 written.find("SAVECONFIG\r\n") != std::string::npos &&
+                 written.find("CONFIG SIGNALGROUP 3 6\r\n") < written.find("SAVECONFIG\r\n"),
+             "persistent Unicore apply should configure and verify before saving, without FRESET");
 }
 
 void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
@@ -1678,35 +1745,26 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
   options.config_baud = 460800u;
   options.confirm = true;
 
-  ScriptedByteDuplex transport({});
+  const std::string baud_command_response = BuildRepeatedUnicoreOkResponses(1u);
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(baud_command_response.begin(), baud_command_response.end()));
   ScriptedConfigApplyHooks hooks(transport);
-  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
-  const std::string first_probe_response = BuildUnicoreVersionResponse();
+  const std::string old_baud_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
-       std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
-  const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
-  hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
-       std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
-  const std::string second_probe_response = BuildUnicoreVersionResponse();
-  hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       460800u,
-       100u,
-       std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
+      {"/dev/ttyUSB0", 921600u, 100u,
+       std::vector<std::uint8_t>(old_baud_probe_response.begin(), old_baud_probe_response.end())});
+  const std::string target_baud_probe_response = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0", 460800u, 100u,
+                       std::vector<std::uint8_t>(target_baud_probe_response.begin(),
+                                                 target_baud_probe_response.end())});
   AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 460800u, "4 5", "3 6", 5u, 9u);
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 460800u &&
-                 result.execution_summary.commands_total == 17u &&
-                 result.execution_summary.commands_completed == 17u &&
+                 result.execution_summary.commands_total == 16u &&
+                 result.execution_summary.commands_completed == 16u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 15u &&
                  result.execution_summary.final_status == "ok",
@@ -1714,9 +1772,50 @@ void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
                  written.find("CONFIG COM1 921600 8 n 1\r\n") == std::string::npos &&
-                 written.find("SAVECONFIG\r\n") != std::string::npos,
-             "persistent Unicore recovery apply should switch COM1 to the overridden target baud "
-             "before saving");
+                 written.find("FRESET\r\n") == std::string::npos &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("CONFIG COM1 460800 8 n 1\r\n") < written.find("VERSIONA\r\n") &&
+                 written.find("VERSIONA\r\n") < written.find("SAVECONFIG\r\n"),
+             "persistent Unicore apply should verify the target baud before SAVECONFIG and never "
+             "send FRESET");
+}
+
+void TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  const std::string baud_command_response = BuildRepeatedUnicoreOkResponses(1u);
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(baud_command_response.begin(), baud_command_response.end()));
+  ScriptedConfigApplyHooks hooks(transport);
+  for (std::size_t attempt = 0u; attempt < 3u; ++attempt)
+  {
+    const std::string old_baud_response = BuildUnicoreVersionResponse();
+    hooks.AddReopenStep(
+        {"/dev/ttyUSB0", 921600u, 100u,
+         std::vector<std::uint8_t>(old_baud_response.begin(), old_baud_response.end())});
+    hooks.AddReopenStep({"/dev/ttyUSB0", 460800u, 100u, {}});
+    hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
+  }
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.error_message.find("refusing SAVECONFIG") != std::string::npos,
+             "persistent apply should fail when the requested target baud never becomes active");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
+                 written.find("FRESET\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos,
+             "persistent apply must not save an unverified target baud and must never reset");
 }
 
 void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
@@ -1758,8 +1857,8 @@ int main()
   TestRuntimeOnlyRequiresConfirmation(ctx);
   TestUnknownReceiverRejected(ctx);
   TestNmeaWriteProfileRejected(ctx);
-  TestPersistentRecoveryWorkflowPreparesSuccessfully(ctx);
-  TestPersistentRecoveryWorkflowWithTargetBaudPreparesSuccessfully(ctx);
+  TestPersistentWorkflowPreparesWithoutFactoryReset(ctx);
+  TestPersistentWorkflowWithTargetBaudPreparesSuccessfully(ctx);
   TestSignalProfilePreparationFlowsIntoApplyPlan(ctx);
   TestRoverPolicyPreparationMatchesPlanSemantics(ctx);
   TestRuntimeOnlyUnicoreSameBaudOverrideSkipsConfigCom1(ctx);
@@ -1779,11 +1878,14 @@ int main()
   TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
+  TestUnicoreFactoryResetPersistentApplySavesAfterReplay(ctx);
   TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(ctx);
   TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(ctx);
   TestUnicoreFactoryResetPreflightAbortWhenNoBaudResponds(ctx);
-  TestUnicorePersistentApplyWorksThroughRecoveryWorkflow(ctx);
+  TestUnicoreFactoryResetStopsWhenPostResetVersionaIsAbsent(ctx);
+  TestUnicorePersistentApplySavesWithoutFactoryReset(ctx);
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
+  TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
 
   if (ctx.failures != 0)

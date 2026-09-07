@@ -169,16 +169,17 @@ void TestUnicorePersistentTargetBaudPlan(TestContext& ctx)
 
   ctx.Expect(result.status == ConfigPlanStatus::kOk &&
                  result.baud == std::optional<std::uint32_t>{460800u} &&
-                 result.summary.commands_total == 17u && result.summary.runtime_commands == 15u &&
+                 result.summary.commands_total == 16u && result.summary.runtime_commands == 15u &&
                  result.summary.persistent_commands == 1u &&
-                 result.summary.factory_reset_commands == 1u,
+                 result.summary.factory_reset_commands == 0u && !HasTextCommand(result, "FRESET") &&
+                 HasTextCommand(result, "SAVECONFIG"),
              "persistent Unicore plans should preserve a distinct target config baud override");
   ctx.Expect(text.find("Config baud override: 460800") != std::string::npos &&
-                 text.find("Factory reset baud: 115200") != std::string::npos &&
+                 text.find("Factory reset baud: 115200") == std::string::npos &&
                  text.find("Target configured baud: 460800") != std::string::npos &&
                  text.find("CONFIG COM1 460800 8 n 1") != std::string::npos,
-             "persistent Unicore plan text should distinguish override, factory baud, and target "
-             "COM1 baud");
+             "persistent Unicore plan text should expose the target COM1 baud without implying a "
+             "factory-reset baud transition");
 }
 
 void TestSignalProfilePlanning(TestContext& ctx)
@@ -423,11 +424,11 @@ void TestPersistentSafetySummary(TestContext& ctx)
 
   const auto unicore_result = BuildConfigPlan(unicore_options);
   ctx.Expect(unicore_result.status == ConfigPlanStatus::kOk &&
-                 unicore_result.summary.factory_reset_commands == 1u &&
+                 unicore_result.summary.factory_reset_commands == 0u &&
                  unicore_result.summary.persistent_commands == 1u &&
-                 unicore_result.summary.commands_requiring_confirmation == 2u &&
+                 unicore_result.summary.commands_requiring_confirmation == 1u &&
                  unicore_result.summary.requires_explicit_safety_confirmation,
-             "persistent Unicore plans should require confirmation for reset plus SAVECONFIG");
+             "persistent Unicore plans should require confirmation for SAVECONFIG without reset");
 }
 
 void TestFactoryResetPlan(TestContext& ctx)

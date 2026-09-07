@@ -765,12 +765,14 @@ Current behavior:
 - accepts the same `--output-port usb|uart1|uart2|all|auto` values as
   `gnss_config_plan`
 - refuses runtime-only live writes unless `--confirm` or `--yes` is present
-- supports Unicore persistent live apply through the reset/recovery workflow
+- supports Unicore persistent live apply as a normal verified profile apply
+  followed by `SAVECONFIG`, without `FRESET`
 - allows `runtime_only` live apply as a no-op when the selected family/profile
   generates no receiver commands
 - rejects unknown receivers for apply
 - supports generic NMEA only through the `runtime_only` no-op profile
-- supports Unicore live `factory_reset` through the same reset/recovery flow
+- supports Unicore live `factory_reset` through a distinct destructive
+  reset/recovery flow
 - executes one command at a time over a Linux serial port
 - waits synchronously for one matching response at a time
 - on mixed Unicore binary/ASCII streams, resynchronizes to recognized
@@ -779,6 +781,10 @@ Current behavior:
 - after Unicore `FRESET`, actively queries `VERSIONA` at `115200`, restores
   `COM1` with the explicit `CONFIG COM1 <baud> 8 n 1` form, then verifies the
   receiver again at the restored baud before replaying the profile
+- allows up to 60 seconds for post-`FRESET` reopen and active `VERSIONA`
+  confirmation; missing/invalid `VERSIONA` stops before profile replay
+- emits `SAVECONFIG` only for `--apply-mode persistent`; a persistent baud
+  change is not saved unless `VERSIONA` confirms the requested baud is active
 - supports a simple per-command `--timeout-ms` loop without threads
 - stops on the first rejected command, dispatch failure, read failure, or timeout
 
@@ -799,6 +805,16 @@ Current non-goals:
 - background retry scheduling
 - interactive prompts
 - fully automatic rollback after persistent receiver writes
+
+Persistent rollback strategy:
+
+- capture the current baud and known-good profile before applying a persistent
+  change
+- rollback by reapplying that known-good profile with its original baud using
+  `--apply-mode persistent`
+- require the same live verification before the rollback `SAVECONFIG`
+- verify receiver persistence across the required real power boundary; no
+  automatic rollback is claimed
 
 Examples:
 
@@ -825,9 +841,14 @@ Hardware notes from the `v0.6-4` operator validation pass:
   short read-only
   captures may therefore show the accepted apply response but still not show an
   emitted `RTCMSTATUSA` record until receiver-side correction state changes
-- the validated UM982 persistent workflow now performs
+- the current software-defined UM982 persistent workflow performs normal
+  profile `CONFIG` commands, verifies baud and restart-sensitive settings where
+  applicable, and finishes with `SAVECONFIG` without `FRESET`; its persistence
+  across a real power boundary is not inferred from the earlier hardware pass
+- the distinct destructive `factory_reset` workflow performs
   `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600`
-  before replaying the rover profile and finishing with `SAVECONFIG`
+  before replaying the rover profile; it appends `SAVECONFIG` only when
+  `--apply-mode persistent` is requested
 - the documented UM982 model-aware rover profile now includes
   `CONFIG SIGNALGROUP 3 6`; unknown or non-baseline Unicore models now skip
   that command instead of inheriting a family-wide default

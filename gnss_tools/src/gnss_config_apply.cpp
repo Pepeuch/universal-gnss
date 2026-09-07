@@ -47,6 +47,7 @@ struct CliOptions
   std::vector<std::uint32_t> probe_baud_candidates{};
   std::optional<std::string> family_text{};
   std::optional<std::string> profile_text{};
+  bool factory_reset_mode_requested{false};
   universal_gnss_tools::ConfigApplyOptions apply{};
 };
 
@@ -102,8 +103,9 @@ void PrintUsage(const char* program_name)
             << "  " << program_name << " --family nmea --profile runtime_only\n"
             << "Notes:\n"
             << "  no live writes occur unless --confirm or --yes is present\n"
-            << "  Unicore persistent/factory_reset apply uses a reset/reprobe workflow; other "
-               "persistent workflows remain guarded\n"
+            << "  Unicore persistent apply uses CONFIG plus SAVECONFIG without FRESET\n"
+            << "  factory-reset is a compatibility apply-mode spelling and requires the "
+               "factory_reset profile; use persistent with that profile to save the replay\n"
             << "  --baud selects the current transport baud; --config-baud selects the target "
                "receiver baud\n"
             << "  --probe-bauds overrides the auto-probe baud order used with --baud auto\n"
@@ -187,9 +189,11 @@ bool ParseProfile(const std::string& text, ReceiverAutoConfigProfile& profile)
   return true;
 }
 
-bool ParseApplyMode(const std::string& text, ReceiverAutoConfigApplyMode& apply_mode)
+bool ParseApplyMode(const std::string& text, ReceiverAutoConfigApplyMode& apply_mode,
+                    bool& factory_reset_mode_requested)
 {
   const std::string normalized = ToLowerCopy(text);
+  factory_reset_mode_requested = false;
   if (normalized == "dry-run" || normalized == "dry_run")
   {
     apply_mode = ReceiverAutoConfigApplyMode::kDryRun;
@@ -208,6 +212,7 @@ bool ParseApplyMode(const std::string& text, ReceiverAutoConfigApplyMode& apply_
   if (normalized == "factory-reset" || normalized == "factory_reset")
   {
     apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+    factory_reset_mode_requested = true;
     return true;
   }
   return false;
@@ -505,7 +510,8 @@ int main(int argc, char** argv)
     if (argument == "--apply-mode")
     {
       ReceiverAutoConfigApplyMode apply_mode{};
-      if (!ParseApplyMode(require_value("--apply-mode"), apply_mode))
+      if (!ParseApplyMode(require_value("--apply-mode"), apply_mode,
+                          cli_options.factory_reset_mode_requested))
       {
         std::cerr << "error: invalid --apply-mode value\n";
         PrintUsage(argv[0]);
@@ -670,6 +676,13 @@ int main(int argc, char** argv)
   {
     std::cerr << "error: unsupported --profile value\n";
     PrintUsage(argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  if (cli_options.factory_reset_mode_requested &&
+      cli_options.apply.profile != ReceiverAutoConfigProfile::kFactoryReset)
+  {
+    std::cerr << "error: --apply-mode factory-reset requires --profile factory_reset\n";
     return EXIT_FAILURE;
   }
 

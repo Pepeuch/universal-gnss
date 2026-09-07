@@ -236,16 +236,14 @@ void ApplyFactoryResetRecoveryWarningsAndRollback(ReceiverAutoConfigPlan& plan,
       "COM1, then continue at " +
       std::to_string(recovery_baud) + " bps");
   plan.warnings.push_back(
-      "after FRESET the receiver may need about 30 seconds or slightly more before it starts "
-      "responding again");
+      "after FRESET the receiver may need up to about 60 seconds before it starts responding "
+      "again");
 
   if (plan.request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
     plan.warnings.push_back(
-        "persistent Unicore profile apply performs FRESET first so the saved profile is rebuilt "
-        "from a clean baseline");
-    plan.warnings.push_back(
-        "persistent recovery will finish with SAVECONFIG after the post-reset profile is restored");
+        "factory-reset recovery will finish with SAVECONFIG after the post-reset profile is "
+        "restored because persistent apply was requested");
     plan.rollback_expectation.summary =
         "factory reset clears saved receiver configuration before restoring a saved Unicore "
         "profile";
@@ -1118,10 +1116,11 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     return plan;
   }
 
-  const bool requires_clean_reset_workflow =
-      request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset ||
+  const bool requires_factory_reset_workflow =
+      request.requested_profile == ReceiverAutoConfigProfile::kFactoryReset;
+  const bool allow_automatic_signal_group_selection =
+      requires_factory_reset_workflow ||
       request.apply_mode == ReceiverAutoConfigApplyMode::kPersistent;
-  const bool allow_automatic_signal_group_selection = requires_clean_reset_workflow;
 
   plan.validation.profile_supported = true;
   plan.validation.apply_mode_supported = true;
@@ -1217,7 +1216,7 @@ ReceiverAutoConfigPlan BuildUnicorePlan(const ReceiverAutoConfigRequest& request
     }
   }
 
-  if (requires_clean_reset_workflow)
+  if (requires_factory_reset_workflow)
   {
     const auto recovery_baud = ResolveUnicoreRecoveryBaud(request);
     profile.com1_baud_rate = recovery_baud;

@@ -620,8 +620,11 @@ For `v1`, support:
 - `rover_high_precision`
 - `rover_high_precision_debug`
 - persistent through `SAVECONFIG`
+- persistent profile apply is distinct from reset: normal configuration and
+  verification complete before `SAVECONFIG`, with no `FRESET`
 - `factory_reset` planning/preview support via `FRESET`, with live
-  reset/recovery execution through the reconnect / active probe workflow
+  reset/recovery execution through the reconnect / active probe workflow;
+  post-reset replay is saved only when persistent apply is requested
 
 Keep base explicitly unsupported until the config/profile layer can model it
 honestly.
@@ -664,9 +667,13 @@ Validated in `v0.6-4` on real hardware:
   response tokens inside mixed binary/ASCII lines
 - after that router fix, confirmed UM982 runtime-only
   `rover_high_precision` apply completed with `--timeout-ms 5000`
-- follow-up UM982 persistent validation confirmed the full
+- follow-up UM982 validation confirmed the combined destructive
   `FRESET -> VERSIONA@115200 -> CONFIG COM1 921600 8 n 1 -> VERSIONA@921600 ->
-  rover_high_precision -> SAVECONFIG` recovery workflow
+  rover_high_precision -> SAVECONFIG` sequence; this is now classified as a
+  persistent post-reset replay, not as the normal persistent apply path
+- the separated normal persistent path (`CONFIG` and verification followed by
+  `SAVECONFIG`, without `FRESET`) is deterministically covered in software but
+  still requires its own receiver power-cycle evidence
 - that same validation also confirmed the documented model-aware UM982 rover
   signal-group selection `CONFIG SIGNALGROUP 3 6`; unknown or non-baseline
   Unicore models now skip that command instead of inheriting a family-wide

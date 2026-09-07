@@ -765,14 +765,27 @@ void TestUnicoreFactoryResetPlan(TestContext& ctx)
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  plan.validation.generated_command_count == 15u &&
                  plan.validation.runtime_command_count == 14u &&
-                 plan.validation.factory_reset_command_count == 1u,
+                 plan.validation.factory_reset_command_count == 1u &&
+                 ContainsCommandText(plan, "FRESET") && !ContainsCommandText(plan, "SAVECONFIG"),
              "a documented Unicore factory_reset plan should expand into reset plus runtime "
              "recovery commands without guessing a signal-group selection");
   ctx.Expect(plan.validation.production_ready && plan.validation.ready_to_execute &&
                  ContainsWarning(plan, "115200") && ContainsWarning(plan, "reconnect/probe") &&
-                 ContainsWarning(plan, "30 seconds"),
+                 ContainsWarning(plan, "60 seconds"),
              "Unicore factory_reset planning should document the reset recovery workflow and "
              "restart delay");
+
+  request.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  const auto persistent_plan = BuildReceiverAutoConfigPlan(request);
+  ctx.Expect(
+      persistent_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          persistent_plan.validation.factory_reset_command_count == 1u &&
+          persistent_plan.validation.persistent_command_count == 1u &&
+          !persistent_plan.commands.empty() &&
+          persistent_plan.commands.front().payload.text.find("FRESET") != std::string::npos &&
+          persistent_plan.commands.back().payload.text.find("SAVECONFIG") != std::string::npos,
+      "factory_reset with persistent apply should reset first and save only after the full "
+      "recovery profile");
 }
 
 void TestRuntimeOnlyPersistentModeRejected(TestContext& ctx)
@@ -804,27 +817,31 @@ void TestPersistentApplyWarnings(TestContext& ctx)
   const auto plan = BuildReceiverAutoConfigPlan(generic_request);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 plan.validation.generated_command_count == 16u &&
-                 plan.validation.runtime_command_count == 14u &&
+                 plan.validation.generated_command_count == 14u &&
+                 plan.validation.runtime_command_count == 13u &&
                  plan.validation.persistent_command_count == 1u &&
-                 plan.validation.factory_reset_command_count == 1u &&
+                 plan.validation.factory_reset_command_count == 0u &&
+                 !ContainsCommandText(plan, "FRESET") && ContainsCommandText(plan, "SAVECONFIG") &&
                  !ContainsCommandText(plan, "CONFIG SIGNALGROUP"),
-             "a documented single-antenna Unicore plan should rebuild the saved profile from a "
-             "clean reset baseline without guessing signal groups");
-  ctx.Expect(ContainsWarning(plan, "FRESET") && ContainsWarning(plan, "SAVECONFIG") &&
-                 ContainsWarning(plan, "clean baseline") &&
+             "a documented single-antenna persistent Unicore plan should configure then save "
+             "without reset or an undocumented signal group");
+  ctx.Expect(!ContainsWarning(plan, "FRESET") && ContainsWarning(plan, "SAVECONFIG") &&
                  plan.rollback_expectation.operator_action_required,
-             "persistent portable planning should surface reset-first warnings and manual rollback "
-             "expectations");
+             "persistent portable planning should surface save warnings and a manual rollback "
+             "strategy without claiming factory reset");
 
   ReceiverAutoConfigRequest um982_request = generic_request;
   um982_request.receiver_model = "UM982";
   const auto um982_plan = BuildReceiverAutoConfigPlan(um982_request);
   ctx.Expect(
       um982_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-          um982_plan.validation.generated_command_count == 17u &&
-          ContainsCommandText(um982_plan, "CONFIG SIGNALGROUP 3 6"),
-      "UM982 persistent planning should retain the documented dual-antenna signal-group command");
+          um982_plan.validation.generated_command_count == 15u &&
+          um982_plan.validation.factory_reset_command_count == 0u &&
+          ContainsCommandText(um982_plan, "CONFIG SIGNALGROUP 3 6") &&
+          ContainsCommandText(um982_plan, "SAVECONFIG") &&
+          !ContainsCommandText(um982_plan, "FRESET"),
+      "UM982 persistent planning should retain the documented dual-antenna signal-group command "
+      "and save it without reset");
 }
 
 void TestUnicorePersistentBaudOverride(TestContext& ctx)
@@ -842,9 +859,12 @@ void TestUnicorePersistentBaudOverride(TestContext& ctx)
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  plan.request.config_baud == std::optional<std::uint32_t>{460800u} &&
                  !plan.commands.empty() &&
-                 plan.commands[1].payload.text.find("CONFIG COM1 460800") != std::string::npos,
-             "persistent Unicore planning should accept a baud override only through the clean "
-             "reset workflow");
+                 plan.commands.front().payload.text.find("CONFIG COM1 460800") !=
+                     std::string::npos &&
+                 plan.commands.back().payload.text.find("SAVECONFIG") != std::string::npos &&
+                 !ContainsCommandText(plan, "FRESET"),
+             "persistent Unicore planning should configure and save an explicit baud override "
+             "without factory reset");
 }
 
 void TestUnicorePersistentDefaultTargetBaud(TestContext& ctx)
@@ -860,9 +880,11 @@ void TestUnicorePersistentDefaultTargetBaud(TestContext& ctx)
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  !plan.request.config_baud.has_value() && !plan.commands.empty() &&
-                 plan.commands[1].payload.text.find("CONFIG COM1 921600") != std::string::npos,
-             "persistent Unicore planning should default the post-reset target baud to 921600 when "
-             "no override is provided");
+                 !ContainsCommandText(plan, "CONFIG COM1") &&
+                 !ContainsCommandText(plan, "FRESET") &&
+                 plan.commands.back().payload.text.find("SAVECONFIG") != std::string::npos,
+             "persistent Unicore planning should preserve the live baud when no baud override is "
+             "provided and save without reset");
 }
 
 void TestNmeaProfiles(TestContext& ctx)

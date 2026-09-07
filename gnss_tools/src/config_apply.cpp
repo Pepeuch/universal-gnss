@@ -587,8 +587,10 @@ bool ApplyExecutionSafetyRules(ConfigApplyResult& result, const ConfigApplyOptio
   if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
   {
     const bool is_ublox_persistent_plan = result.plan.vendor == "ublox";
+    const bool is_unicore_persistent_plan =
+        IsUnicorePlan(result.plan) && result.plan.summary.persistent_commands > 0u;
 
-    if (!uses_unicore_recovery_workflow && !is_ublox_persistent_plan)
+    if (!is_unicore_persistent_plan && !is_ublox_persistent_plan)
     {
       result.status = ConfigApplyStatus::kSafetyRejected;
       result.error_message = "persistent live apply remains guarded for this receiver family";
@@ -1949,14 +1951,9 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   }
 
   static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
-  if (!ReopenTransportUntilReady(hooks,
-                                 transport,
-                                 result,
-                                 result.device_path,
-                                 115200u,
-                                 transport_read_timeout_ms,
-                                 kUnicoreFactoryResetRecoveryWindowMs,
-                                 "Waiting for Unicore receiver restart after FRESET (up to 45 s)",
+  if (!ReopenTransportUntilReady(hooks, transport, result, result.device_path, 115200u,
+                                 transport_read_timeout_ms, kUnicoreFactoryResetRecoveryWindowMs,
+                                 "Waiting for Unicore receiver restart after FRESET (up to 60 s)",
                                  transport_error))
   {
     result.status = ConfigApplyStatus::kTransportUnavailable;
@@ -2227,20 +2224,32 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
                                 old_reopen_error))
       {
         active_baud = current_baud;
-        continue_at_old = true;
-        result.progress_log.push_back(
-            "Configured baud " + std::to_string(*target_baud) +
-            " bps did not become active live; continuing at the previously detected " +
-            std::to_string(current_baud) + " bps transport");
-        result.plan.warnings.push_back(
-            "configured baud " + std::to_string(*target_baud) +
-            " bps did not become active live after CONFIG COM1; continuing at the previously "
-            "detected " +
-            std::to_string(current_baud) +
-            " bps transport until a persistent/save workflow or reboot makes the new baud active");
-        break;
+        if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
+        {
+          last_error = "configured baud " + std::to_string(*target_baud) +
+                       " bps did not become active live; refusing SAVECONFIG on the previous " +
+                       std::to_string(current_baud) + " bps transport";
+          result.progress_log.push_back(last_error);
+        } else
+        {
+          continue_at_old = true;
+          result.progress_log.push_back(
+              "Configured baud " + std::to_string(*target_baud) +
+              " bps did not become active live; continuing at the previously detected " +
+              std::to_string(current_baud) + " bps transport");
+          result.plan.warnings.push_back(
+              "configured baud " + std::to_string(*target_baud) +
+              " bps did not become active live after CONFIG COM1; continuing at the previously "
+              "detected " +
+              std::to_string(current_baud) +
+              " bps transport until a persistent/save workflow or reboot makes the new baud "
+              "active");
+          break;
+        }
+      } else
+      {
+        last_error = old_reopen_error;
       }
-      last_error = old_reopen_error;
     }
 
     if (attempt < kUnicoreRuntimeBaudSwitchMaxAttempts)
@@ -2252,9 +2261,12 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   if (!continue_at_target && !continue_at_old)
   {
     result.status = ConfigApplyStatus::kTransportUnavailable;
-    result.error_message = "no receiver response on probed baud rates after CONFIG COM1: old " +
-                           std::to_string(current_baud) + " bps, target " +
-                           std::to_string(*target_baud) + " bps";
+    result.error_message =
+        options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
+            ? last_error
+            : "no receiver response on probed baud rates after CONFIG COM1: old " +
+                  std::to_string(current_baud) + " bps, target " + std::to_string(*target_baud) +
+                  " bps";
     result.execution_summary.final_status = "transport_unavailable";
     return result;
   }
@@ -2307,7 +2319,10 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   result.execution_summary.final_status = ToString(result.status);
   if (continue_at_target)
   {
-    result.progress_log.push_back("Continuing runtime-only profile apply at target baud " +
+    const std::string apply_mode = options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
+                                       ? "persistent"
+                                       : "runtime-only";
+    result.progress_log.push_back("Continuing " + apply_mode + " profile apply at target baud " +
                                   std::to_string(active_baud) + " bps");
   }
   else
