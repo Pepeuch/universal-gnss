@@ -46,7 +46,7 @@ class BacklogStatusTests(unittest.TestCase):
             ]
         )
         MODULE.validate_todo(data)
-        self.assertEqual({"total": 194, "complete": 87, "not_started": 107}, MODULE.project_progress_counts())
+        self.assertEqual({"total": 194, "complete": 88, "not_started": 106}, MODULE.project_progress_counts())
         self.assertEqual({"total": 65, "complete": 61, "not_started": 4}, MODULE.release_progress_counts())
         self.assertEqual({"IMPLEMENTED": 1, "PARTIAL": 3, "OPEN": 2}, dict(MODULE.plan_status_counts()))
         dependency_counts = MODULE.release_dependency_counts(data)
@@ -118,7 +118,7 @@ class BacklogStatusTests(unittest.TestCase):
         self.assertIn("v0.6 → v0.7", svg)
         self.assertIn("61 / 65 complete · 93.85%", svg)
         self.assertIn("PROJECT ROADMAP", svg)
-        self.assertIn("87 / 194 complete · 44.85%", svg)
+        self.assertIn("88 / 194 complete · 45.36%", svg)
         self.assertIn("UGA QUALITY / AUDIT", svg)
         self.assertIn("33 / 205 complete · 16.10%", svg)
         self.assertIn("Lifecycle status", svg)

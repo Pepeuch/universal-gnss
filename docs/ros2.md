@@ -2,10 +2,12 @@
 
 This document describes the current ROS 2 boundary for Universal GNSS.
 
-Today the project contains two implemented layers:
+The project contains these ROS-facing layers:
 
 - `gnss_core`: a portable, ROS-independent runtime model
 - `gnss_ros2`: the ROS 2 package `universal_gnss_ros2`
+- `gnss_mavros`: the optional external MAVROS plugin package
+  `universal_gnss_mavros`
 
 The low-level stack is now implemented in sibling packages:
 
@@ -15,6 +17,11 @@ The low-level stack is now implemented in sibling packages:
 - `gnss_ntrip`: NTRIP request/auth/client foundations
 
 Those layers are intentionally separate from `gnss_ros2`.
+
+`gnss_mavros` is also separate: MAVROS APIs are isolated in its plugin source,
+while its state adapter reuses `GnssRuntimeAggregator`, `GnssStatus`, and
+`NavSatFix` projection. See [`../gnss_mavros/README.md`](../gnss_mavros/README.md)
+for its pinned baseline, topics, handlers, and FCU-incarnation contract.
 
 ## Purpose
 
@@ -74,6 +81,8 @@ flowchart TB
     DA --> RN
 
     RN --> RL["robot_localization"]
+    ML["MAVLink GPS1 / GPS2"] --> MP["Optional MAVROS plugin"]
+    MP --> R
     RL --> NAV["Nav2"]
 
     style R fill:#d4f4dd,stroke:#2e7d32,stroke-width:3px

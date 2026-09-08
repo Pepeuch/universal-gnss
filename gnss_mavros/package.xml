@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>universal_gnss_mavros</name>
+  <version>0.1.0</version>
+  <description>Optional external MAVROS source transport for Universal GNSS.</description>
+  <maintainer email="opensource@example.com">Universal GNSS</maintainer>
+  <license>LGPL-3.0-or-later</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>eigen3_cmake_module</buildtool_depend>
+
+  <build_depend>eigen</build_depend>
+  <build_depend>geographiclib</build_depend>
+  <build_depend>mavlink</build_depend>
+
+  <depend>mavros</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>diagnostic_updater</depend>
+  <depend>libmavconn</depend>
+  <depend>mavros_msgs</depend>
+  <depend>pluginlib</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>rcpputils</depend>
+  <depend>sensor_msgs</depend>
+  <depend>tf2_eigen</depend>
+  <depend>tf2_ros</depend>
+  <depend>universal_gnss_ros2</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+    <mavros plugin="${prefix}/universal_gnss_mavros_plugins.xml" />
+  </export>
+</package>

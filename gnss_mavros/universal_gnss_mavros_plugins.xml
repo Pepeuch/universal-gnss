@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<library path="universal_gnss_mavros_plugin">
+  <class name="universal_gnss"
+         type="mavros::plugin::PluginFactoryTemplate&lt;universal_gnss_mavros::UniversalGnssPlugin&gt;"
+         base_class_type="mavros::plugin::PluginFactory">
+    <description>
+      Maps FCU GPS1/GPS2 MAVLink observations into independent Universal GNSS sources.
+    </description>
+  </class>
+</library>

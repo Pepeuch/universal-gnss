@@ -45,6 +45,8 @@ Recently completed:
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
 - additive public dual-antenna baseline capability/runtime/ROS2 surface with
   `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`
+- optional external MAVROS 2.15.1 source adapter with independent GPS1/GPS2
+  state, receipt-time provenance, and FCU incarnation invalidation
 
 ## Native runtime, API, web, and deployment planning
 
@@ -432,7 +434,7 @@ BlueOS integration API:
 - [ ] no duplicated GNSS parser/configuration logic in the extension
 - [ ] no dependency on ROS2 for normal BlueOS operation
 - [ ] define optional ROS2 bridge enablement separately
-- [ ] evaluate optional MAVLink integration/export as a separate adapter contract
+- [x] optional MAVLink integration is a separate external adapter contract
   rather than coupling it to core GNSS behavior
 
 BlueOS validation:

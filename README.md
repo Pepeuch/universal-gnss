@@ -50,7 +50,7 @@ Calculation: equal-weight checked tasks in the v0.7 Docker/deployment, lifecycle
 
 ### Project Roadmap Progress
 
-Current identified project work: **87 / 194** complete (44.85%), **107** not started.
+Current identified project work: **88 / 194** complete (45.36%), **106** not started.
 
 Calculation: every current TODO checklist item has equal weight; only checked items count as complete. The `UG-PLAN` register is reported separately as **1 COMPLETE**, **3 PARTIAL**, **0 BLOCKED**, and **2 NOT_STARTED**. PARTIAL/BLOCKED phases receive no fractional credit. This indicator includes implementation planning; it does not alter the 205-item UGA metric below.
 
@@ -318,6 +318,12 @@ Current implemented layers:
     optional `rtcm` publication from sanitized logs
   - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state
   - serial / TCP / replay / combined launch examples
+- `gnss_mavros`
+  - optional external MAVROS plugin pinned to MAVROS `2.15.1`
+  - direct `GPS_RAW_INT`, `GPS2_RAW`, `GPS_RTK`, `GPS2_RTK`, and `SYSTEM_TIME`
+    handlers
+  - independent GPS1/GPS2 Universal GNSS source state and lifecycle fencing
+  - ROS receipt timestamps with FCU/GPS time retained only as metadata
 
 Later modules:
 
