@@ -78,6 +78,7 @@ RUN apt-get update \
     ros-${ROS_DISTRO}-launch-ros \
     ros-${ROS_DISTRO}-rclpy \
     ros-${ROS_DISTRO}-rclcpp \
+    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     ros-${ROS_DISTRO}-rosidl-default-runtime \
     ros-${ROS_DISTRO}-sensor-msgs \
     ros-${ROS_DISTRO}-std-srvs \
@@ -85,7 +86,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && install --directory --owner=${APP_UID} --group=${APP_GID} \
     /var/log/universal_gnss \
-    /var/lib/universal_gnss/export
+    /var/lib/universal_gnss/export \
+ && test -e "/opt/ros/${ROS_DISTRO}/lib/librmw_cyclonedds_cpp.so" \
+ && source "/opt/ros/${ROS_DISTRO}/setup.bash" \
+ && RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 --help > /dev/null
 
 COPY --from=builder /workspace/install /opt/universal_gnss/install
 COPY docker/entrypoint.sh /usr/local/bin/universal-gnss-entrypoint

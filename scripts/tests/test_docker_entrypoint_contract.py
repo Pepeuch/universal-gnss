@@ -67,6 +67,14 @@ class DockerEntrypointContractTests(unittest.TestCase):
             source,
         )
 
+    def test_runtime_installs_and_validates_cyclonedds_rmw(self) -> None:
+        source = DOCKERFILE.read_text(encoding="utf-8")
+        runtime = source.split("FROM ros:${ROS_DISTRO}-ros-base AS runtime", maxsplit=1)[1]
+
+        self.assertIn("ros-${ROS_DISTRO}-rmw-cyclonedds-cpp", runtime)
+        self.assertIn('test -e "/opt/ros/${ROS_DISTRO}/lib/librmw_cyclonedds_cpp.so"', runtime)
+        self.assertIn("RMW_IMPLEMENTATION=rmw_cyclonedds_cpp ros2 --help > /dev/null", runtime)
+
     def test_image_healthcheck_uses_bounded_component_responsiveness(self) -> None:
         source = DOCKERFILE.read_text(encoding="utf-8")
         self.assertIn('CMD ["/usr/local/bin/universal-gnss-healthcheck", "--timeout", "2"]', source)
