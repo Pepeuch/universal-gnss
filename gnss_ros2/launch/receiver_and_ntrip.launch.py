@@ -40,6 +40,9 @@ def generate_launch_description() -> LaunchDescription:
     gga_interval_s = LaunchConfiguration("gga_interval_s")
     tls_enabled = LaunchConfiguration("tls_enabled")
     parameters_file = LaunchConfiguration("parameters_file")
+    fix_topic = LaunchConfiguration("fix_topic")
+    status_topic = LaunchConfiguration("status_topic")
+    rtcm_topic = LaunchConfiguration("rtcm_topic")
 
     return LaunchDescription(
         [
@@ -65,6 +68,9 @@ def generate_launch_description() -> LaunchDescription:
                     [FindPackageShare("universal_gnss_ros2"), "config", "empty_parameters.yaml"]
                 ),
             ),
+            DeclareLaunchArgument("fix_topic", default_value="/fix"),
+            DeclareLaunchArgument("status_topic", default_value="/status"),
+            DeclareLaunchArgument("rtcm_topic", default_value="/rtcm"),
             Node(
                 package="universal_gnss_ros2",
                 executable="receiver_node",
@@ -83,6 +89,11 @@ def generate_launch_description() -> LaunchDescription:
                         "source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
+                ],
+                remappings=[
+                    ("fix", fix_topic),
+                    ("status", status_topic),
+                    ("rtcm", rtcm_topic),
                 ],
                 on_exit=atomic_shutdown_actions("receiver_node"),
             ),
@@ -104,6 +115,10 @@ def generate_launch_description() -> LaunchDescription:
                         "expected_source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
+                ],
+                remappings=[
+                    ("status", status_topic),
+                    ("rtcm", rtcm_topic),
                 ],
                 on_exit=atomic_shutdown_actions("ntrip_node"),
             ),

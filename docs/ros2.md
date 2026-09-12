@@ -620,6 +620,25 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
   gga_enabled:=true
 ```
 
+The combined launch accepts `parameters_file` plus optional `fix_topic`,
+`status_topic`, and `rtcm_topic` arguments. Their defaults preserve the
+existing graph: `/fix`, `/status`, and `/rtcm`.
+
+For an integration that needs isolated Universal GNSS topics, use launch
+arguments rather than trailing `--ros-args`:
+
+```bash
+ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
+  parameters_file:=/config/receiver.yaml \
+  fix_topic:=/gps/fix \
+  status_topic:=/universal_gnss_receiver/status \
+  rtcm_topic:=/universal_gnss_receiver/rtcm
+```
+
+This remaps receiver fix and status publication, NTRIP status subscription,
+NTRIP RTCM publication, and receiver RTCM subscription so the two nodes remain
+connected on the requested status and RTCM topics.
+
 Recommended operator flow:
 
 1. use explicit `serial_device` / `serial_baud` / `receiver_family` when they
