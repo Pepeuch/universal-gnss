@@ -9,10 +9,9 @@ find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
-find_package(rosidl_default_runtime REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(universal_gnss_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -66,14 +65,6 @@ if(NOT TARGET universal_gnss_tools)
 endif()
 set(BUILD_TESTING "${_saved_build_testing}")
 
-rosidl_generate_interfaces(
-  ${PROJECT_NAME}
-  "msg/GnssStatus.msg"
-  "msg/RtcmFrame.msg"
-  "srv/GetReceiverSnapshot.srv"
-  DEPENDENCIES builtin_interfaces diagnostic_msgs
-)
-
 add_library(${PROJECT_NAME}_gnss_status_adapter src/gnss_status_adapter.cpp)
 target_compile_features(${PROJECT_NAME}_gnss_status_adapter PUBLIC cxx_std_17)
 target_include_directories(
@@ -83,16 +74,11 @@ target_include_directories(
     $<BUILD_INTERFACE:${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
-rosidl_get_typesupport_target(
-  cpp_typesupport_target
-  ${PROJECT_NAME}
-  "rosidl_typesupport_cpp"
-)
 target_link_libraries(
   ${PROJECT_NAME}_gnss_status_adapter
   PUBLIC
     ${builtin_interfaces_TARGETS}
-    "${cpp_typesupport_target}"
+    ${universal_gnss_msgs_TARGETS}
 )
 
 add_library(${PROJECT_NAME}_navsat_fix_adapter src/navsat_fix_adapter.cpp)
@@ -147,12 +133,12 @@ target_link_libraries(
     ${rclcpp_TARGETS}
     ${sensor_msgs_TARGETS}
     ${std_srvs_TARGETS}
+    ${universal_gnss_msgs_TARGETS}
     ${PROJECT_NAME}_diagnostic_adapter
     ${PROJECT_NAME}_gnss_status_adapter
     ${PROJECT_NAME}_navsat_fix_adapter
     universal_gnss_driver
     universal_gnss_transport
-    "${cpp_typesupport_target}"
 )
 
 add_executable(receiver_node src/receiver_node_main.cpp)
@@ -179,11 +165,11 @@ target_link_libraries(
     ${rclcpp_TARGETS}
     ${sensor_msgs_TARGETS}
     ${std_srvs_TARGETS}
+    ${universal_gnss_msgs_TARGETS}
     ${PROJECT_NAME}_diagnostic_adapter
     ${PROJECT_NAME}_gnss_status_adapter
     ${PROJECT_NAME}_navsat_fix_adapter
     universal_gnss_tools
-    "${cpp_typesupport_target}"
 )
 
 add_executable(replay_node src/replay_node_main.cpp)
@@ -212,10 +198,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       ${diagnostic_msgs_TARGETS}
       ${rclcpp_TARGETS}
       ${std_srvs_TARGETS}
+      ${universal_gnss_msgs_TARGETS}
       ${PROJECT_NAME}_diagnostic_adapter
       ${PROJECT_NAME}_gnss_status_adapter
       universal_gnss_ntrip
-      "${cpp_typesupport_target}"
   )
 
   add_executable(ntrip_node src/ntrip_node_main.cpp)
@@ -272,6 +258,15 @@ install(
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  ament_add_gtest(test_interface_aliases tests/test_interface_aliases.cpp)
+  if(TARGET test_interface_aliases)
+    target_include_directories(
+      test_interface_aliases
+      PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_link_libraries(test_interface_aliases ${universal_gnss_msgs_TARGETS})
+  endif()
+
   set(_ros2_test_library_path "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
 
   ament_add_gtest(test_gnss_status_adapter tests/test_gnss_status_adapter.cpp)
@@ -401,8 +396,8 @@ ament_export_dependencies(
   builtin_interfaces
   diagnostic_msgs
   rclcpp
-  rosidl_default_runtime
   sensor_msgs
+  universal_gnss_msgs
 )
 
 ament_package()

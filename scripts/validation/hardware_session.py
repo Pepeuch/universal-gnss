@@ -259,7 +259,7 @@ import json, math, os, rclpy
 from diagnostic_msgs.msg import DiagnosticArray
 from rosidl_runtime_py.convert import message_to_ordereddict
 from std_srvs.srv import Trigger
-from universal_gnss_ros2.srv import GetReceiverSnapshot
+from universal_gnss_msgs.srv import GetReceiverSnapshot
 
 def clean(value):
     if isinstance(value, dict): return {str(k): clean(v) for k, v in value.items()}

@@ -5,7 +5,10 @@ This document describes the current ROS 2 boundary for Universal GNSS.
 The project contains these ROS-facing layers:
 
 - `gnss_core`: a portable, ROS-independent runtime model
-- `gnss_ros2`: the ROS 2 package `universal_gnss_ros2`
+- `universal_gnss_msgs`: public ROS messages and services, with no runtime
+  targets
+- `gnss_ros2`: the ROS 2 runtime package `universal_gnss_ros2`, which depends
+  on `universal_gnss_msgs`
 - `gnss_mavros`: the optional external MAVROS plugin package
   `universal_gnss_mavros`
 
@@ -25,12 +28,17 @@ for its pinned baseline, topics, handlers, and FCU-incarnation contract.
 
 ## Purpose
 
-`universal_gnss_ros2` exists to project the portable `gnss_core` model into
-standard ROS 2 types and messages without teaching the core about ROS.
+`universal_gnss_msgs` owns the generated public ROS types. It is intentionally
+buildable and consumable without compiling the receiver, transport, driver,
+NTRIP, tools, or ROS runtime nodes.
+
+`universal_gnss_ros2` projects the portable `gnss_core` model into those public
+types and standard ROS 2 messages without teaching the core about ROS.
 
 Current responsibilities:
 
-- expose a typed ROS 2 status message: `universal_gnss_ros2/msg/GnssStatus`
+- consume the public `universal_gnss_msgs/msg/GnssStatus` and
+  `universal_gnss_msgs/msg/RtcmFrame` interfaces
 - convert `universal_gnss::GnssRuntimeState` to `GnssStatus`
 - convert `universal_gnss::GnssRuntimeState` to `sensor_msgs/msg/NavSatFix`
 - convert portable `GnssHealthSummary` / `GnssDiagnosticEvent` values into
@@ -175,7 +183,7 @@ core state in debug builds.
 
 ## GnssStatus Contract
 
-`universal_gnss_ros2/msg/GnssStatus` is the ROS 2 projection of the normalized
+`universal_gnss_msgs/msg/GnssStatus` is the ROS 2 projection of the normalized
 runtime state.
 
 Always-present fields:
@@ -420,7 +428,7 @@ Supported receiver families:
 Correction subscription:
 
 - `rtcm`
-  - type: `universal_gnss_ros2/msg/RtcmFrame`
+  - type: `universal_gnss_msgs/msg/RtcmFrame`
   - used only when the active transport is writable
 
 ### Parameters
@@ -480,14 +488,14 @@ Topics published by the skeleton node:
 - `fix`
   - type: `sensor_msgs/msg/NavSatFix`
 - `status`
-  - type: `universal_gnss_ros2/msg/GnssStatus`
+  - type: `universal_gnss_msgs/msg/GnssStatus`
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
 
 Services:
 
 - `~/get_snapshot`
-  - type: `universal_gnss_ros2/srv/GetReceiverSnapshot`
+  - type: `universal_gnss_msgs/srv/GetReceiverSnapshot`
   - returns one bounded, current pair of the canonical `GnssStatus` and
     `DiagnosticArray` projections
   - preserves the existing status and diagnostic timestamp/provenance rules,
@@ -669,7 +677,7 @@ existing low-level path:
 GnssStatus subscription -> GnssRuntimeState -> NtripClient::MaybeInjectGga()
                         -> NtripClient TCP/reconnect/read loop
                         -> RTCM correction monitor
-                        -> /rtcm (universal_gnss_ros2/msg/RtcmFrame)
+                        -> /rtcm (universal_gnss_msgs/msg/RtcmFrame)
                         -> ROS 2 diagnostics
 ```
 
@@ -687,7 +695,7 @@ for the exact live commands and observed diagnostics.
 Subscriptions:
 
 - `status`
-  - type: `universal_gnss_ros2/msg/GnssStatus`
+  - type: `universal_gnss_msgs/msg/GnssStatus`
 
 The incoming status message is used only as the normalized position/fix source
 for optional GGA injection. The node does not create a second ROS-side runtime
@@ -725,7 +733,7 @@ Runtime policy:
 Topics published by the current NTRIP node:
 
 - `rtcm`
-  - type: `universal_gnss_ros2/msg/RtcmFrame`
+  - type: `universal_gnss_msgs/msg/RtcmFrame`
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
 
@@ -733,7 +741,7 @@ ROS 2 forwarding contract:
 
 - `NtripNode` publishes `rtcm`
 - `ReceiverNode` subscribes to `rtcm`
-- message type: `universal_gnss_ros2/msg/RtcmFrame`
+- message type: `universal_gnss_msgs/msg/RtcmFrame`
 - QoS: `reliable`, `KeepLast(50)`
 - the payload is the full RTCM frame bytes exactly as extracted by the reusable
   low-level `NtripClient`
@@ -865,13 +873,13 @@ Replay policy:
 Topics published by the replay node:
 
 - `status`
-  - type: `universal_gnss_ros2/msg/GnssStatus`
+  - type: `universal_gnss_msgs/msg/GnssStatus`
 - `fix`
   - type: `sensor_msgs/msg/NavSatFix`
 - `diagnostics`
   - type: `diagnostic_msgs/msg/DiagnosticArray`
 - `rtcm`
-  - type: `universal_gnss_ros2/msg/RtcmFrame`
+  - type: `universal_gnss_msgs/msg/RtcmFrame`
   - only when `publish_rtcm=true` and the replay contains RTCM frames
 
 Current diagnostics include:

@@ -28,8 +28,8 @@ flowchart TB
     RX["Receiver transport<br/>serial or tcp"]
     RS["ReceiverNode"]
     FIX["/fix<br/>sensor_msgs/NavSatFix"]
-    STATUS["/status<br/>universal_gnss_ros2/GnssStatus"]
-    RTCM["/rtcm<br/>universal_gnss_ros2/RtcmFrame"]
+    STATUS["/status<br/>universal_gnss_msgs/GnssStatus"]
+    RTCM["/rtcm<br/>universal_gnss_msgs/RtcmFrame"]
     DIAG1["/diagnostics<br/>DiagnosticArray"]
     NTRIP["NtripNode"]
     DIAG2["/diagnostics<br/>DiagnosticArray"]
@@ -74,7 +74,7 @@ Supported runtime sources:
 - real TCP byte source
 - injected / scripted byte sources in tests
 - `/rtcm`
-  - `universal_gnss_ros2/msg/RtcmFrame`
+  - `universal_gnss_msgs/msg/RtcmFrame`
   - consumed as correction input and written back to the active receiver
     transport when that transport is writable
 
@@ -85,7 +85,7 @@ Published topics:
 - `/fix`
   - `sensor_msgs/msg/NavSatFix`
 - `/status`
-  - `universal_gnss_ros2/msg/GnssStatus`
+  - `universal_gnss_msgs/msg/GnssStatus`
 - `/diagnostics`
   - `diagnostic_msgs/msg/DiagnosticArray`
 
@@ -115,7 +115,7 @@ Published topics:
 Subscription:
 
 - `/status`
-  - `universal_gnss_ros2/msg/GnssStatus`
+  - `universal_gnss_msgs/msg/GnssStatus`
 
 Supported parameters:
 
@@ -133,7 +133,7 @@ Supported parameters:
 Published topics:
 
 - `/rtcm`
-  - `universal_gnss_ros2/msg/RtcmFrame`
+  - `universal_gnss_msgs/msg/RtcmFrame`
 - `/diagnostics`
   - `diagnostic_msgs/msg/DiagnosticArray`
 

@@ -1,23 +1,22 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>universal_gnss_ros2</name>
+  <name>universal_gnss_msgs</name>
   <version>0.1.0</version>
-  <description>ROS 2 adapters and messages for the Universal GNSS core runtime model.</description>
+  <description>Public ROS 2 messages and services for Universal GNSS integrations.</description>
   <maintainer email="opensource@example.com">Universal GNSS</maintainer>
   <license>LGPL-3.0-or-later</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
   <depend>builtin_interfaces</depend>
   <depend>diagnostic_msgs</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
-  <depend>rclcpp</depend>
-  <depend>sensor_msgs</depend>
-  <depend>std_srvs</depend>
-  <depend>universal_gnss_msgs</depend>
 
-  <test_depend>ament_cmake_gtest</test_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+
   <test_depend>ament_cmake_pytest</test_depend>
+
+  <member_of_group>rosidl_interface_packages</member_of_group>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -64,6 +64,9 @@ jobs:
             done
             ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 receiver_node"
             ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 ntrip_node"
+            ros2 interface show universal_gnss_msgs/msg/GnssStatus >/dev/null
+            ros2 interface show universal_gnss_msgs/msg/RtcmFrame >/dev/null
+            test -z "$(ros2 pkg executables universal_gnss_msgs)"
             test ! -e /opt/universal_gnss/src
             test ! -e /opt/universal_gnss/build
             test ! -e /opt/universal_gnss/log

@@ -7,7 +7,7 @@ Date of audit: `2026-06-01`
 
 Scope:
 
-- `universal_gnss::GnssRuntimeState` -> `universal_gnss_ros2/msg/GnssStatus`
+- `universal_gnss::GnssRuntimeState` -> `universal_gnss_msgs/msg/GnssStatus`
 - `universal_gnss::GnssRuntimeState` -> `sensor_msgs/msg/NavSatFix`
 - `universal_gnss::GnssHealthSummary` / `GnssDiagnosticEvent`
   -> `diagnostic_msgs/msg/DiagnosticArray`
@@ -146,7 +146,7 @@ Reason:
 
 ## `GnssStatus` Mapping Policy
 
-`universal_gnss_ros2/msg/GnssStatus` is the direct ROS projection of the
+`universal_gnss_msgs/msg/GnssStatus` is the direct ROS projection of the
 portable runtime model.
 
 Key rules:

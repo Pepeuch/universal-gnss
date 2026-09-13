@@ -41,9 +41,15 @@ jobs:
               source /opt/ros/kilted/setup.bash
               set -u
               mkdir -p "$GITHUB_WORKSPACE/ros2_ws_kilted/src"
+              ln -s "$GITHUB_WORKSPACE/universal_gnss_msgs" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/universal_gnss_msgs"
               ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_ros2"
               ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_core"
               cd "$GITHUB_WORKSPACE/ros2_ws_kilted"
+              colcon build --packages-select universal_gnss_msgs
+              colcon test --packages-select universal_gnss_msgs
+              colcon test-result --verbose
+              source install/setup.bash
+              test -z "$(ros2 pkg executables universal_gnss_msgs)"
               colcon build --packages-select universal_gnss_ros2
               if ! colcon test --packages-select universal_gnss_ros2; then
                 colcon test-result --verbose

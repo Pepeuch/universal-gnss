@@ -597,7 +597,7 @@ None.
 - **Severity:** P1 High
 - **Confidence:** Confirmed
 - **Component:** NtripNode -> `RtcmFrame` -> ReceiverNode correction monitor
-- **File(s):** `gnss_ros2/src/ntrip_node.cpp`; `gnss_ros2/src/receiver_node.cpp`; `gnss_ros2/msg/RtcmFrame.msg`; `gnss_protocols/src/rtcm_correction_monitor.cpp`
+- **File(s):** `gnss_ros2/src/ntrip_node.cpp`; `gnss_ros2/src/receiver_node.cpp`; `universal_gnss_msgs/msg/RtcmFrame.msg`; `gnss_protocols/src/rtcm_correction_monitor.cpp`
 - **Function(s):** `NtripNode::Impl::StepOnce`, `ReadOnce`; `RtcmTimestampFromRosMessage`, `ObserveRtcmSemanticMessage`; `ComputeAgeSince`, `HasSeenSince`
 - **Relevant line(s):** Ntrip node 333-360 and 455-485; receiver node 263-280 and 855-872; monitor 81-113
 - **Category:** clock-domain mismatch / false freshness

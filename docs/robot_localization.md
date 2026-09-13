@@ -11,7 +11,7 @@ flowchart TB
     RX["GNSS Receiver"]
     UGNSS["universal_gnss_ros2<br/>receiver_node"]
     FIX["fix<br/>sensor_msgs/NavSatFix"]
-    STATUS["status<br/>universal_gnss_ros2/GnssStatus"]
+    STATUS["status<br/>universal_gnss_msgs/GnssStatus"]
     DIAG["diagnostics<br/>diagnostic_msgs/DiagnosticArray"]
     NST["robot_localization<br/>navsat_transform_node"]
     EKF["robot_localization<br/>ekf_node"]
@@ -31,7 +31,7 @@ flowchart TB
 Today `receiver_node` publishes:
 
 - `fix`: `sensor_msgs/msg/NavSatFix`
-- `status`: `universal_gnss_ros2/msg/GnssStatus`
+- `status`: `universal_gnss_msgs/msg/GnssStatus`
 - `diagnostics`: `diagnostic_msgs/msg/DiagnosticArray`
 
 For `robot_localization`, the critical topic is `fix`.

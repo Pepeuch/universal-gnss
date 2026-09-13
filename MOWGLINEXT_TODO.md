@@ -10,6 +10,28 @@ transitions, malformed MSM summaries, and generic NMEA `rtk_mode`.
 
 The remaining items below are still-pending downstream follow-up work only.
 
+## Immediate packaging migration — consume interfaces without the UG runtime
+
+Universal GNSS now owns its generated ROS interfaces in the standalone
+`universal_gnss_msgs` package. MowgliNext must update `mowgli_gnss_bridge` to:
+
+* declare `universal_gnss_msgs` instead of `universal_gnss_ros2` in
+  `package.xml` and `CMakeLists.txt`
+* include `universal_gnss_msgs/msg/gnss_status.hpp` and
+  `universal_gnss_msgs/msg/rtcm_frame.hpp`
+* use `universal_gnss_msgs::msg::GnssStatus` and
+  `universal_gnss_msgs::msg::RtcmFrame`
+* build only `universal_gnss_msgs` from the vendored UG source; do not build or
+  install `universal_gnss_ros2`, receiver, transport, driver, NTRIP, or tools
+  in the Mowgli ROS image
+* assert in the Mowgli image build that `universal_gnss_msgs` has no
+  executables and that `universal_gnss_ros2` is absent
+
+The canonical ROS type names change with this split. Deploy the updated
+`mowgli-gps` sidecar and updated Mowgli bridge together; a bridge compiled for
+`universal_gnss_ros2/msg/*` cannot subscribe to
+`universal_gnss_msgs/msg/*` topics.
+
 Dual-antenna GNSS baseline is now a first-class GNSS/geodesy surface, but it is
 not automatically a robot yaw source. Any robot-frame heading/orientation use
 must remain downstream of explicit antenna mounting transform/calibration and

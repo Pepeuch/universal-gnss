@@ -300,9 +300,14 @@ Current implemented layers:
   - `gnss_config_apply` CLI for operator-driven receiver config application
   - `gnss_serial_monitor` CLI for live Linux serial monitoring
   - `gnss_ntrip_monitor` CLI for live NTRIP caster testing
+- `universal_gnss_msgs`
+  - lightweight ROS 2 interface package for external integrations
+  - `GnssStatus` and `RtcmFrame` messages
+  - read-only `GetReceiverSnapshot` service
+  - no receiver, transport, driver, NTRIP, tool, or node targets
 - `gnss_ros2`
-  - ROS 2 package `universal_gnss_ros2`
-  - `GnssStatus` message
+  - ROS 2 runtime package `universal_gnss_ros2`, depending on
+    `universal_gnss_msgs`
   - `GnssRuntimeState -> GnssStatus` adapter
   - `GnssRuntimeState -> NavSatFix` adapter
   - `GnssHealthSummary -> DiagnosticArray` adapter
