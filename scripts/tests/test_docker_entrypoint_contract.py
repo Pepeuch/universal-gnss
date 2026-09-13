@@ -18,14 +18,17 @@ LYRICAL_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 
 class DockerEntrypointContractTests(unittest.TestCase):
-    def test_ros_ci_enables_nounset_only_after_distribution_setup(self) -> None:
+    def test_ros_ci_sources_ros_and_colcon_without_nounset(self) -> None:
         for distro, workflow in (("kilted", KILTED_WORKFLOW), ("lyrical", LYRICAL_WORKFLOW)):
             source = workflow.read_text(encoding="utf-8")
             setup = f"source /opt/ros/{distro}/setup.bash"
 
             self.assertIn("set -eo pipefail", source)
             self.assertIn(setup, source)
-            self.assertGreater(source.index("set -u", source.index(setup)), source.index(setup))
+            self.assertIn("source install/setup.bash", source)
+            self.assertNotIn("set -u", source)
+            self.assertNotIn("set -o nounset", source)
+            self.assertNotIn("set -euo pipefail", source)
 
     def test_unknown_configuration_schema_fails_before_ros_setup(self) -> None:
         environment = os.environ.copy()
