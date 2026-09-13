@@ -14,11 +14,11 @@
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
-namespace
-{
+namespace {
 
 namespace fs = std::filesystem;
 
+using universal_gnss_driver::DetectedStreamProtocol;
 using universal_gnss_driver::DiscoverSerialPorts;
 using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
 using universal_gnss_driver::ReceiverDetectedFamily;
@@ -29,7 +29,6 @@ using universal_gnss_driver::ReceiverProbeConfidence;
 using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
 using universal_gnss_driver::SortReceiverProbeResults;
-using universal_gnss_driver::DetectedStreamProtocol;
 using universal_gnss_driver::StreamDetector;
 
 struct TestContext
@@ -46,8 +45,7 @@ struct TestContext
   }
 };
 
-std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
-                                        const std::uint8_t message_id,
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id, const std::uint8_t message_id,
                                         const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> bytes;
@@ -73,8 +71,7 @@ std::vector<std::uint8_t> BuildMonVerPayload(const std::vector<std::string>& ext
   constexpr std::size_t kExtensionSize = 30u;
   std::vector<std::uint8_t> payload(kFixedPayloadSize + extensions.size() * kExtensionSize, 0u);
 
-  const auto write_field = [&](const std::size_t offset,
-                               const std::size_t size,
+  const auto write_field = [&](const std::size_t offset, const std::size_t size,
                                const std::string& text) {
     for (std::size_t index = 0u; index < text.size() && index + 1u < size; ++index)
     {
@@ -106,8 +103,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -117,23 +113,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
 std::vector<std::uint8_t> BuildMavlinkV1Heartbeat()
 {
   std::vector<std::uint8_t> bytes = {
-      0xFEu,
-      9u,
-      1u,
-      1u,
-      1u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0u,
-      0x12u,
-      0x34u,
+      0xFEu, 9u, 1u, 1u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0x12u, 0x34u,
   };
   return bytes;
 }
@@ -196,8 +176,7 @@ void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8
 }
 
 ReceiverProbeResult Analyze(const ReceiverPortCandidate& candidate,
-                            const std::vector<std::uint8_t>& bytes,
-                            const bool allow_nmea = false)
+                            const std::vector<std::uint8_t>& bytes, const bool allow_nmea = false)
 {
   ReceiverProbeConfig config;
   config.allow_generic_nmea_fallback = allow_nmea;
@@ -249,8 +228,7 @@ void TestPlatformUartsExcludedByDefault(TestContext& ctx)
   paths.dev_dir = (root / "dev").string();
 
   const auto candidates = DiscoverSerialPorts(paths);
-  ctx.Expect(candidates.empty(),
-             "platform UARTs should stay excluded unless explicitly enabled");
+  ctx.Expect(candidates.empty(), "platform UARTs should stay excluded unless explicitly enabled");
 
   fs::remove_all(root);
 }
@@ -322,8 +300,8 @@ void TestUbxDetection(TestContext& ctx)
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
-                 result.discovery_score == 100 &&
-                 result.evidence.ubx_frames_seen == 1u && !result.identity.model.has_value() &&
+                 result.discovery_score == 100 && result.evidence.ubx_frames_seen == 1u &&
+                 !result.identity.model.has_value() &&
                  !result.identity.firmware_version.has_value() &&
                  result.reason.find("valid_ubx_frame:+100") != std::string::npos,
              "UBX traffic without MON-VER should detect u-blox without inventing metadata");
@@ -335,26 +313,27 @@ void TestUbloxMonVerMetadata(TestContext& ctx)
   candidate.path = "/dev/ttyACM0";
 
   const auto metadata_bytes = BuildUbxFrame(
-      0x0Au,
-      0x04u,
+      0x0Au, 0x04u,
       BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32", "CHIPID=000000D0D69D0F7A54"}));
   const auto result = Analyze(candidate, metadata_bytes);
   const auto identity_only = Analyze(
       candidate, BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"CHIPID=000000D0D69D0F7A54"})));
-  const auto replacement = Analyze(
-      candidate, BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u)));
+  const auto replacement =
+      Analyze(candidate, BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u)));
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUblox &&
                  result.identity.model == std::optional<std::string>{"ZED-F9P-00B"} &&
                  result.identity.firmware_version == std::optional<std::string>{"HPG 1.32"} &&
                  result.identity.receiver_identity ==
                      std::optional<std::string>{"000000D0D69D0F7A54"},
-             "valid MON-VER extensions should provide documented u-blox model, firmware, and chip identity");
-  ctx.Expect(identity_only.identity.receiver_identity ==
-                     std::optional<std::string>{"000000D0D69D0F7A54"} &&
-                 !identity_only.identity.model.has_value() &&
-                 !identity_only.identity.firmware_version.has_value(),
-             "a documented CHIPID-only MON-VER reply should retain only observed receiver identity");
+             "valid MON-VER extensions should provide documented u-blox model, firmware, and chip "
+             "identity");
+  ctx.Expect(
+      identity_only.identity.receiver_identity ==
+              std::optional<std::string>{"000000D0D69D0F7A54"} &&
+          !identity_only.identity.model.has_value() &&
+          !identity_only.identity.firmware_version.has_value(),
+      "a documented CHIPID-only MON-VER reply should retain only observed receiver identity");
   ctx.Expect(!replacement.identity.receiver_identity.has_value() &&
                  !replacement.identity.model.has_value() &&
                  !replacement.identity.firmware_version.has_value(),
@@ -366,8 +345,8 @@ void TestUbloxMonVerRejectsMalformedPayload(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyACM0";
 
-  auto malformed_payload = BuildMonVerPayload(
-      {"MOD=ZED-F9P-00B", "CHIPID=000000D0D69D0F7A54", "FWVER=HPG 1.32"});
+  auto malformed_payload =
+      BuildMonVerPayload({"MOD=ZED-F9P-00B", "CHIPID=000000D0D69D0F7A54", "FWVER=HPG 1.32"});
   for (std::size_t index = 100u; index < 130u; ++index)
   {
     malformed_payload[index] = static_cast<std::uint8_t>('X');
@@ -388,29 +367,28 @@ void TestUnicoreAsciiDetection(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
 
-  const std::string line = BuildUnicoreAsciiFrame(
-      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
-      "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
-      "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
-      "0.0194,0.0123") +
+  const std::string line =
+      BuildUnicoreAsciiFrame(
+          "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+          "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
+          "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
+          "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
+          "0.0194,0.0123") +
       BuildUnicoreAsciiFrame(
           "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",\"R4.10Build5251\","
           "\"HRPT00-S10C-P\",\"2310415000012-LR23A2225208904\",\"ffff48ffff0fffff\","
           "\"2021/11/26\"");
-  const auto result = Analyze(
-      candidate, std::vector<std::uint8_t>(line.begin(), line.end()));
+  const auto result = Analyze(candidate, std::vector<std::uint8_t>(line.begin(), line.end()));
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnicore &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
-                 result.discovery_score == 100 &&
-                 result.evidence.unicore_ascii_seen == 1u &&
+                 result.discovery_score == 100 && result.evidence.unicore_ascii_seen == 1u &&
                  result.identity.model == std::optional<std::string>{"UM982"} &&
                  result.identity.receiver_identity ==
                      std::optional<std::string>{"2310415000012-LR23A2225208904"} &&
-                 result.identity.firmware_version ==
-                     std::optional<std::string>{"R4.10Build5251"},
-             "verified Unicore probe data should retain documented VERSIONA model, firmware, and product serial identity");
+                 result.identity.firmware_version == std::optional<std::string>{"R4.10Build5251"},
+             "verified Unicore probe data should retain documented VERSIONA model, firmware, and "
+             "product serial identity");
 }
 
 void TestUnicoreVersionARequiresDocumentedFields(TestContext& ctx)
@@ -418,12 +396,13 @@ void TestUnicoreVersionARequiresDocumentedFields(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
 
-  const std::string bytes = BuildUnicoreAsciiFrame(
-      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
-      "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
-      "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
-      "0.0194,0.0123") +
+  const std::string bytes =
+      BuildUnicoreAsciiFrame(
+          "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+          "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
+          "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,"
+          "SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,"
+          "0.0194,0.0123") +
       BuildUnicoreAsciiFrame(
           "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;\"UM982\",R4.10Build5251");
   const auto result = Analyze(candidate, std::vector<std::uint8_t>(bytes.begin(), bytes.end()));
@@ -446,8 +425,8 @@ void TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence(TestContext& ctx
       "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,"
       "WGS84,1.2221,1.1053,2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,");
   const std::string crc_valid_malformed = BuildUnicoreAsciiFrame("#BESTNAVA,garbage");
-  const std::string crc_invalid = valid_bestnav.substr(0u, valid_bestnav.size() - 10u) +
-                                  "00000000\r\n";
+  const std::string crc_invalid =
+      valid_bestnav.substr(0u, valid_bestnav.size() - 10u) + "00000000\r\n";
 
   const std::vector<std::string> unverified_or_malformed = {
       "#BESTNAVA,garbage\r\n",
@@ -462,33 +441,37 @@ void TestUnicoreAsciiDiscoveryRequiresVerifiedPlausibleEvidence(TestContext& ctx
     const auto bytes = std::vector<std::uint8_t>(input.begin(), input.end());
     const auto detected = detector.Detect(bytes);
     const auto result = Analyze(candidate, bytes);
-    ctx.Expect(detected.protocol == DetectedStreamProtocol::kUnknown,
-               "unverified or malformed Unicore-looking text must not select the Unicore stream detector");
-    ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
-                   result.confidence == ReceiverProbeConfidence::kNone &&
-                   result.evidence.unicore_ascii_seen == 0u,
-               "unverified or malformed Unicore-looking text must not produce high-confidence discovery");
+    ctx.Expect(
+        detected.protocol == DetectedStreamProtocol::kUnknown,
+        "unverified or malformed Unicore-looking text must not select the Unicore stream detector");
+    ctx.Expect(
+        result.detected_family == ReceiverDetectedFamily::kUnknown &&
+            result.confidence == ReceiverProbeConfidence::kNone &&
+            result.evidence.unicore_ascii_seen == 0u,
+        "unverified or malformed Unicore-looking text must not produce high-confidence discovery");
   }
 
   const auto valid_bytes = std::vector<std::uint8_t>(valid_bestnav.begin(), valid_bestnav.end());
   const auto valid_detected = detector.Detect(valid_bytes);
   const auto valid_result = Analyze(candidate, valid_bytes);
-  ctx.Expect(valid_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
-                 valid_result.detected_family == ReceiverDetectedFamily::kUnicore &&
-                 valid_result.confidence == ReceiverProbeConfidence::kHigh &&
-                 valid_result.evidence.unicore_ascii_seen == 1u,
-             "CRC-valid, semantically plausible BESTNAVA must retain high-confidence Unicore discovery");
+  ctx.Expect(
+      valid_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
+          valid_result.detected_family == ReceiverDetectedFamily::kUnicore &&
+          valid_result.confidence == ReceiverProbeConfidence::kHigh &&
+          valid_result.evidence.unicore_ascii_seen == 1u,
+      "CRC-valid, semantically plausible BESTNAVA must retain high-confidence Unicore discovery");
 
   std::string mixed = "noise #BESTNAVA,garbage\r\n";
   mixed += valid_bestnav;
   const auto mixed_bytes = std::vector<std::uint8_t>(mixed.begin(), mixed.end());
   const auto mixed_detected = detector.Detect(mixed_bytes);
   const auto mixed_result = Analyze(candidate, mixed_bytes);
-  ctx.Expect(mixed_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
-                 mixed_result.detected_family == ReceiverDetectedFamily::kUnicore &&
-                 mixed_result.confidence == ReceiverProbeConfidence::kHigh &&
-                 mixed_result.evidence.unicore_ascii_seen == 1u,
-             "verified Unicore evidence must still win after an earlier noisy supported-name token");
+  ctx.Expect(
+      mixed_detected.protocol == DetectedStreamProtocol::kUnicoreAscii &&
+          mixed_result.detected_family == ReceiverDetectedFamily::kUnicore &&
+          mixed_result.confidence == ReceiverProbeConfidence::kHigh &&
+          mixed_result.evidence.unicore_ascii_seen == 1u,
+      "verified Unicore evidence must still win after an earlier noisy supported-name token");
 }
 
 void TestUnicorePvtslnAndRtkStatusScoring(TestContext& ctx)
@@ -496,17 +479,16 @@ void TestUnicorePvtslnAndRtkStatusScoring(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
 
-  const std::string lines = BuildUnicoreAsciiFrame(
-      "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-      "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0") +
+  const std::string lines =
+      BuildUnicoreAsciiFrame("#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+                             "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0") +
       BuildUnicoreAsciiFrame(
-      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
-      "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
-      "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
-      "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
-      "28,25,26");
-  const auto result = Analyze(
-      candidate, std::vector<std::uint8_t>(lines.begin(), lines.end()));
+          "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;"
+          "NARROW_INT,60.5060,40.07898130522,116.23663134427,0.2000,0.1500,0.1800,0.9000,"
+          "SINGLE,60.5060,40.07898130522,116.23663134427,4.3353,46,28,46,28,0.0009,-0.0031,-0.0032,"
+          "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
+          "28,25,26");
+  const auto result = Analyze(candidate, std::vector<std::uint8_t>(lines.begin(), lines.end()));
 
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnicore &&
                  result.confidence == ReceiverProbeConfidence::kHigh &&
@@ -548,11 +530,12 @@ void TestNmeaFallbackPolicy(TestContext& ctx)
   const auto enabled = Analyze(candidate, bytes, true);
   ctx.Expect(enabled.detected_family == ReceiverDetectedFamily::kNmea &&
                  enabled.confidence == ReceiverProbeConfidence::kMedium &&
-                 enabled.discovery_score == 20 &&
-                 enabled.evidence.nmea_sentences_seen == 1u && !enabled.identity.model.has_value() &&
+                 enabled.discovery_score == 20 && enabled.evidence.nmea_sentences_seen == 1u &&
+                 !enabled.identity.model.has_value() &&
                  !enabled.identity.receiver_identity.has_value() &&
                  !enabled.identity.firmware_version.has_value(),
-             "NMEA-only probing should remain metadata-unavailable rather than inventing receiver identity");
+             "NMEA-only probing should remain metadata-unavailable rather than inventing receiver "
+             "identity");
 }
 
 void TestNmeaFallbackRejectsNonRuntimeSentences(TestContext& ctx)
@@ -561,8 +544,7 @@ void TestNmeaFallbackRejectsNonRuntimeSentences(TestContext& ctx)
   candidate.path = "/dev/ttyUSB1";
 
   const std::string proprietary_or_text = "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50\r\n";
-  const std::vector<std::uint8_t> bytes(
-      proprietary_or_text.begin(), proprietary_or_text.end());
+  const std::vector<std::uint8_t> bytes(proprietary_or_text.begin(), proprietary_or_text.end());
 
   const auto result = Analyze(candidate, bytes, true);
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
@@ -585,11 +567,10 @@ void TestMavlinkAndGarbageRejected(TestContext& ctx)
              "MAVLink heartbeat streams should be explicitly rejected");
 
   const std::string garbage = "boot log: not a gnss receiver\nrandom serial text\n";
-  const auto text = Analyze(
-      candidate, std::vector<std::uint8_t>(garbage.begin(), garbage.end()), true);
+  const auto text =
+      Analyze(candidate, std::vector<std::uint8_t>(garbage.begin(), garbage.end()), true);
   ctx.Expect(text.detected_family == ReceiverDetectedFamily::kUnknown &&
-                 text.confidence == ReceiverProbeConfidence::kNone &&
-                 text.discovery_score == -50 &&
+                 text.confidence == ReceiverProbeConfidence::kNone && text.discovery_score == -50 &&
                  text.evidence.random_ascii_bytes_seen == garbage.size() &&
                  text.note == "random_ascii_text",
              "random serial text should be penalized and rejected");
@@ -603,8 +584,7 @@ void TestSilentProbeRejected(TestContext& ctx)
   const auto result = Analyze(candidate, {}, true);
   ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
                  result.confidence == ReceiverProbeConfidence::kNone &&
-                 result.discovery_score == 0 &&
-                 result.note == "no_data" &&
+                 result.discovery_score == 0 && result.note == "no_data" &&
                  result.reason == "no_data",
              "silent ports should report no_data with no confidence");
 }
@@ -612,8 +592,7 @@ void TestSilentProbeRejected(TestContext& ctx)
 void TestDefaultBaudOrder(TestContext& ctx)
 {
   ReceiverProbeConfig config;
-  const std::vector<std::uint32_t> expected = {
-      921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
+  const std::vector<std::uint32_t> expected = {921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
   ctx.Expect(config.baud_candidates == expected,
              "default auto-baud list should match Auto Discovery v2 order");
 }
@@ -672,14 +651,13 @@ void TestResultOrdering(TestContext& ctx)
   ublox.evidence.bytes_read = 256u;
 
   auto results = SortReceiverProbeResults({unknown, nmea, ublox});
-  ctx.Expect(results.size() == 3u &&
-                 results[0].detected_family == ReceiverDetectedFamily::kUblox &&
+  ctx.Expect(results.size() == 3u && results[0].detected_family == ReceiverDetectedFamily::kUblox &&
                  results[1].detected_family == ReceiverDetectedFamily::kNmea &&
                  results[2].detected_family == ReceiverDetectedFamily::kUnknown,
              "sorted probe results should keep the best-confidence result first");
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {

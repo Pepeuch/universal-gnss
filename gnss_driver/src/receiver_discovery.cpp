@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -22,11 +22,9 @@
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
 
-namespace universal_gnss_driver
-{
+namespace universal_gnss_driver {
 
-namespace
-{
+namespace {
 
 namespace fs = std::filesystem;
 
@@ -68,28 +66,25 @@ struct UnicoreAsciiDetectionCounts
 
 bool StartsWith(const std::string& text, const std::string_view prefix)
 {
-  return text.size() >= prefix.size() &&
-         std::equal(prefix.begin(), prefix.end(), text.begin());
+  return text.size() >= prefix.size() && std::equal(prefix.begin(), prefix.end(), text.begin());
 }
 
 bool IsVersionToken(const std::string_view value)
 {
-  return !value.empty() &&
-         std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
-           return std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.';
-         });
+  return !value.empty() && std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
+    return std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.';
+  });
 }
 
 bool IsReceiverIdentityValue(const std::string_view value)
 {
   return value != "-" && !value.empty() &&
-         std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
-           return ch >= 0x20u && ch <= 0x7Eu;
-         });
+         std::all_of(value.begin(), value.end(),
+                     [](const unsigned char ch) { return ch >= 0x20u && ch <= 0x7Eu; });
 }
 
 std::optional<std::string_view> ReadQuotedCsvField(const std::string_view fields,
-                                                    std::size_t& offset)
+                                                   std::size_t& offset)
 {
   if (offset >= fields.size() || fields[offset] != '"')
   {
@@ -111,8 +106,9 @@ std::optional<std::string_view> ReadQuotedCsvField(const std::string_view fields
   return value;
 }
 
-std::optional<std::string_view> ReadNulTerminatedAsciiField(
-    const std::vector<std::uint8_t>& bytes, const std::size_t offset, const std::size_t size)
+std::optional<std::string_view> ReadNulTerminatedAsciiField(const std::vector<std::uint8_t>& bytes,
+                                                            const std::size_t offset,
+                                                            const std::size_t size)
 {
   if (offset + size > bytes.size())
   {
@@ -127,9 +123,8 @@ std::optional<std::string_view> ReadNulTerminatedAsciiField(
     return std::nullopt;
   }
 
-  if (!std::all_of(begin, nul, [](const std::uint8_t byte) {
-        return byte >= 0x20u && byte <= 0x7Eu;
-      }))
+  if (!std::all_of(begin, nul,
+                   [](const std::uint8_t byte) { return byte >= 0x20u && byte <= 0x7Eu; }))
   {
     return std::nullopt;
   }
@@ -138,8 +133,8 @@ std::optional<std::string_view> ReadNulTerminatedAsciiField(
                           static_cast<std::size_t>(nul - begin));
 }
 
-std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(
-    const std::vector<std::uint8_t>& bytes)
+std::optional<ReceiverIdentityMetadata>
+FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
 {
   constexpr std::uint8_t kMonClass = 0x0Au;
   constexpr std::uint8_t kMonVerId = 0x04u;
@@ -192,18 +187,16 @@ std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(
         {
           metadata.model = std::string(model);
         }
-      }
-      else if (extension->size() >= kFirmwarePrefix.size() &&
-               extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
+      } else if (extension->size() >= kFirmwarePrefix.size() &&
+                 extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
       {
         const std::string_view firmware = extension->substr(kFirmwarePrefix.size());
         if (!firmware.empty())
         {
           metadata.firmware_version = std::string(firmware);
         }
-      }
-      else if (extension->size() >= kChipIdPrefix.size() &&
-               extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
+      } else if (extension->size() >= kChipIdPrefix.size() &&
+                 extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
       {
         const std::string_view chip_id = extension->substr(kChipIdPrefix.size());
         if (IsReceiverIdentityValue(chip_id))
@@ -232,8 +225,8 @@ void PopulateObservedUbloxIdentity(ReceiverProbeResult& result,
   }
 }
 
-std::optional<ReceiverIdentityMetadata> FindUnicoreVersionAMetadata(
-    const std::vector<std::uint8_t>& bytes)
+std::optional<ReceiverIdentityMetadata>
+FindUnicoreVersionAMetadata(const std::vector<std::uint8_t>& bytes)
 {
   constexpr std::string_view kPrefix = "VERSIONA,";
   UnicoreFrameFramer framer;
@@ -251,8 +244,8 @@ std::optional<ReceiverIdentityMetadata> FindUnicoreVersionAMetadata(
       continue;
     }
 
-    const std::string_view response(
-        reinterpret_cast<const char*>(frame.payload.data()), frame.payload.size());
+    const std::string_view response(reinterpret_cast<const char*>(frame.payload.data()),
+                                    frame.payload.size());
     if (response.substr(0u, kPrefix.size()) != kPrefix)
     {
       continue;
@@ -303,14 +296,12 @@ std::string CanonicalKey(const std::string& path)
   try
   {
     return fs::weakly_canonical(fs::path(path)).string();
-  }
-  catch (const fs::filesystem_error&)
+  } catch (const fs::filesystem_error&)
   {
     try
     {
       return fs::absolute(fs::path(path)).lexically_normal().string();
-    }
-    catch (const fs::filesystem_error&)
+    } catch (const fs::filesystem_error&)
     {
       return path;
     }
@@ -331,8 +322,7 @@ std::vector<std::string> ListDirectoryPaths(const std::string& directory)
     {
       entries.push_back(entry.path().string());
     }
-  }
-  catch (const fs::filesystem_error&)
+  } catch (const fs::filesystem_error&)
   {
     return {};
   }
@@ -362,16 +352,16 @@ int SourcePriority(const ReceiverPortSource source)
 {
   switch (source)
   {
-    case ReceiverPortSource::kSerialById:
-      return 0;
-    case ReceiverPortSource::kTtyAcm:
-      return 1;
-    case ReceiverPortSource::kTtyUsb:
-      return 2;
-    case ReceiverPortSource::kPlatformUart:
-      return 3;
-    case ReceiverPortSource::kExplicitPath:
-      return 4;
+  case ReceiverPortSource::kSerialById:
+    return 0;
+  case ReceiverPortSource::kTtyAcm:
+    return 1;
+  case ReceiverPortSource::kTtyUsb:
+    return 2;
+  case ReceiverPortSource::kPlatformUart:
+    return 3;
+  case ReceiverPortSource::kExplicitPath:
+    return 4;
   }
 
   return 5;
@@ -399,8 +389,8 @@ void MaybeInsertPreferredCandidate(std::map<std::string, ReceiverPortCandidate>&
 
 bool IsKnownGnssNmeaTalker(const std::string_view talker)
 {
-  return talker == "GP" || talker == "GL" || talker == "GA" || talker == "GB" ||
-         talker == "BD" || talker == "GQ" || talker == "GN";
+  return talker == "GP" || talker == "GL" || talker == "GA" || talker == "GB" || talker == "BD" ||
+         talker == "GQ" || talker == "GN";
 }
 
 bool IsRuntimeGnssNmeaSentenceType(const std::string_view sentence_type)
@@ -412,8 +402,7 @@ bool IsRuntimeGnssNmeaSentenceType(const std::string_view sentence_type)
 
 bool IsLikelyReceiverNmeaSentence(const NmeaSentence& sentence)
 {
-  return !sentence.talker.empty() &&
-         IsKnownGnssNmeaTalker(sentence.talker) &&
+  return !sentence.talker.empty() && IsKnownGnssNmeaTalker(sentence.talker) &&
          IsRuntimeGnssNmeaSentenceType(sentence.sentence_type) &&
          sentence.checksum_status == ChecksumStatus::kValid;
 }
@@ -451,8 +440,7 @@ NmeaDetectionCounts CountNmeaRecords(const std::vector<std::uint8_t>& bytes)
   return counts;
 }
 
-UnicoreAsciiDetectionCounts CountUnicoreAsciiRecords(
-    const std::vector<std::uint8_t>& bytes)
+UnicoreAsciiDetectionCounts CountUnicoreAsciiRecords(const std::vector<std::uint8_t>& bytes)
 {
   UnicoreAsciiDetectionCounts counts;
   UnicoreFrameFramer framer;
@@ -503,14 +491,12 @@ std::size_t CountMavlinkHeartbeats(const std::vector<std::uint8_t>& bytes)
       {
         ++count;
       }
-    }
-    else if (bytes[index] == 0xFDu && index + 9u < bytes.size())
+    } else if (bytes[index] == 0xFDu && index + 9u < bytes.size())
     {
       const std::uint8_t payload_length = bytes[index + 1u];
-      const std::uint32_t message_id =
-          static_cast<std::uint32_t>(bytes[index + 7u]) |
-          (static_cast<std::uint32_t>(bytes[index + 8u]) << 8u) |
-          (static_cast<std::uint32_t>(bytes[index + 9u]) << 16u);
+      const std::uint32_t message_id = static_cast<std::uint32_t>(bytes[index + 7u]) |
+                                       (static_cast<std::uint32_t>(bytes[index + 8u]) << 8u) |
+                                       (static_cast<std::uint32_t>(bytes[index + 9u]) << 16u);
       if (payload_length == 9u && message_id == 0u &&
           index + 10u + payload_length + 2u <= bytes.size())
       {
@@ -544,15 +530,13 @@ bool LooksLikeRandomAsciiText(const std::vector<std::uint8_t>& bytes)
     {
       ++gnss_leaders;
     }
-    if (std::isprint(static_cast<unsigned char>(byte)) != 0 ||
-        byte == '\t')
+    if (std::isprint(static_cast<unsigned char>(byte)) != 0 || byte == '\t')
     {
       ++printable;
     }
   }
 
-  return line_breaks > 0u && gnss_leaders == 0u &&
-         printable * 100u >= bytes.size() * 80u;
+  return line_breaks > 0u && gnss_leaders == 0u && printable * 100u >= bytes.size() * 80u;
 }
 
 ReceiverProbeConfidence ConfidenceFromScore(const int score)
@@ -616,8 +600,7 @@ ReceiverProbeConfidence MaxConfidence(const ReceiverProbeConfidence lhs,
 }
 
 void SetUnknownResultNote(const ReceiverProbeEvidence& evidence,
-                          const bool allow_generic_nmea_fallback,
-                          std::string& note,
+                          const bool allow_generic_nmea_fallback, std::string& note,
                           ReceiverProbeConfidence& confidence)
 {
   if (evidence.rtcm_frames_seen > 0u && evidence.ubx_frames_seen == 0u &&
@@ -647,8 +630,7 @@ bool IsHighConfidence(const ReceiverProbeResult& result)
   return result.confidence == ReceiverProbeConfidence::kHigh;
 }
 
-bool MeetsConfidenceThreshold(const ReceiverProbeResult& result,
-                              const ReceiverProbeConfig& config)
+bool MeetsConfidenceThreshold(const ReceiverProbeResult& result, const ReceiverProbeConfig& config)
 {
   return result.discovery_score >= config.confidence_threshold_score;
 }
@@ -662,13 +644,13 @@ int FamilyRank(const ReceiverDetectedFamily family)
 {
   switch (family)
   {
-    case ReceiverDetectedFamily::kUblox:
-    case ReceiverDetectedFamily::kUnicore:
-    case ReceiverDetectedFamily::kNmea:
-      return 1;
-    case ReceiverDetectedFamily::kUnknown:
-    default:
-      return 0;
+  case ReceiverDetectedFamily::kUblox:
+  case ReceiverDetectedFamily::kUnicore:
+  case ReceiverDetectedFamily::kNmea:
+    return 1;
+  case ReceiverDetectedFamily::kUnknown:
+  default:
+    return 0;
   }
 }
 
@@ -723,23 +705,23 @@ const char* ToString(const TransportError error)
 {
   switch (error)
   {
-    case TransportError::kNone:
-      return "none";
-    case TransportError::kClosed:
-      return "closed";
-    case TransportError::kInvalidArgument:
-      return "invalid_argument";
-    case TransportError::kOverflow:
-      return "overflow";
-    case TransportError::kReadFailure:
-      return "read_failure";
-    case TransportError::kWriteFailure:
-      return "write_failure";
-    case TransportError::kUnsupported:
-      return "unsupported";
-    case TransportError::kUnknown:
-    default:
-      return "unknown";
+  case TransportError::kNone:
+    return "none";
+  case TransportError::kClosed:
+    return "closed";
+  case TransportError::kInvalidArgument:
+    return "invalid_argument";
+  case TransportError::kOverflow:
+    return "overflow";
+  case TransportError::kReadFailure:
+    return "read_failure";
+  case TransportError::kWriteFailure:
+    return "write_failure";
+  case TransportError::kUnsupported:
+    return "unsupported";
+  case TransportError::kUnknown:
+  default:
+    return "unknown";
   }
 }
 
@@ -751,7 +733,8 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
   result.selected_baud = baud_rate;
 
 #if defined(__linux__)
-  const std::uint32_t effective_timeout_ms = config.read_timeout_ms > 0u ? config.read_timeout_ms : 250u;
+  const std::uint32_t effective_timeout_ms =
+      config.read_timeout_ms > 0u ? config.read_timeout_ms : 250u;
   PosixSerialTransport transport;
   const auto open_error = transport.Open(PosixSerialConfig{
       candidate.path,
@@ -765,9 +748,8 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
     return result;
   }
 
-  const auto deadline =
-      std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(static_cast<int>(effective_timeout_ms * 3u));
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(static_cast<int>(effective_timeout_ms * 3u));
 
   std::array<std::uint8_t, 512u> buffer{};
   std::vector<std::uint8_t> bytes;
@@ -775,7 +757,8 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
   std::size_t idle_reads = 0u;
   while (bytes.size() < config.max_probe_bytes && std::chrono::steady_clock::now() < deadline)
   {
-    const auto read = transport.Read(buffer.data(), std::min(buffer.size(), config.max_probe_bytes - bytes.size()));
+    const auto read = transport.Read(
+        buffer.data(), std::min(buffer.size(), config.max_probe_bytes - bytes.size()));
     if (read.status == TransportStatus::kError)
     {
       result.note = std::string("read_failed:") + ToString(read.error);
@@ -793,7 +776,8 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
     }
 
     idle_reads = 0u;
-    bytes.insert(bytes.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
+    bytes.insert(bytes.end(), buffer.begin(),
+                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
     result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
     if (IsHighConfidence(result))
     {
@@ -821,7 +805,7 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
 #endif
 }
 
-}  // namespace
+} // namespace
 
 std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPaths& paths)
 {
@@ -871,8 +855,7 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig
         {
           continue;
         }
-      }
-      catch (const fs::filesystem_error&)
+      } catch (const fs::filesystem_error&)
       {
         continue;
       }
@@ -904,16 +887,16 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig
     candidates.push_back(entry.second);
   }
 
-  std::sort(candidates.begin(), candidates.end(), [](const ReceiverPortCandidate& lhs,
-                                                     const ReceiverPortCandidate& rhs) {
-    const int lhs_priority = SourcePriority(lhs.source);
-    const int rhs_priority = SourcePriority(rhs.source);
-    if (lhs_priority != rhs_priority)
-    {
-      return lhs_priority < rhs_priority;
-    }
-    return lhs.path < rhs.path;
-  });
+  std::sort(candidates.begin(), candidates.end(),
+            [](const ReceiverPortCandidate& lhs, const ReceiverPortCandidate& rhs) {
+              const int lhs_priority = SourcePriority(lhs.source);
+              const int rhs_priority = SourcePriority(rhs.source);
+              if (lhs_priority != rhs_priority)
+              {
+                return lhs_priority < rhs_priority;
+              }
+              return lhs.path < rhs.path;
+            });
   return candidates;
 }
 
@@ -954,15 +937,11 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   result.evidence.nmea_sentences_seen = nmea_counts.runtime_sentences.count;
 
   const auto ubx_counts = CountDetectedRecords<UbxFrameFramer, UbxFrame>(
-      bytes,
-      [](const UbxFrame& frame) {
-        return frame.checksum_status == ChecksumStatus::kValid;
-      });
+      bytes, [](const UbxFrame& frame) { return frame.checksum_status == ChecksumStatus::kValid; });
   result.evidence.ubx_frames_seen = ubx_counts.count;
 
-  const auto rtcm_counts = CountDetectedRecords<RtcmFrameFramer, RtcmFrame>(
-      bytes,
-      [](const RtcmFrame& frame) {
+  const auto rtcm_counts =
+      CountDetectedRecords<RtcmFrameFramer, RtcmFrame>(bytes, [](const RtcmFrame& frame) {
         return frame.checksum_status == ChecksumStatus::kValid;
       });
   result.evidence.rtcm_frames_seen = rtcm_counts.count;
@@ -972,8 +951,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
 
   const auto unicore_binary_counts =
       CountDetectedRecords<UnicoreBinaryFrameFramer, UnicoreBinaryFrame>(
-          bytes,
-          [](const UnicoreBinaryFrame& frame) {
+          bytes, [](const UnicoreBinaryFrame& frame) {
             return frame.checksum_status == ChecksumStatus::kValid;
           });
   result.evidence.unicore_binary_seen = unicore_binary_counts.count;
@@ -987,22 +965,18 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
   const auto earliest_detection = detector.Detect(bytes);
 
   const int ubx_score = static_cast<int>(result.evidence.ubx_frames_seen) * 100;
-  const int unicore_score =
-      static_cast<int>(unicore_ascii_counts.rtkstatusa_records) * 100 +
-      static_cast<int>(unicore_ascii_counts.pvtslna_records) * 100 +
-      static_cast<int>(result.evidence.unicore_ascii_seen -
-                       unicore_ascii_counts.rtkstatusa_records -
-                       unicore_ascii_counts.pvtslna_records) *
-          100 +
-      static_cast<int>(result.evidence.unicore_binary_seen) * 100;
+  const int unicore_score = static_cast<int>(unicore_ascii_counts.rtkstatusa_records) * 100 +
+                            static_cast<int>(unicore_ascii_counts.pvtslna_records) * 100 +
+                            static_cast<int>(result.evidence.unicore_ascii_seen -
+                                             unicore_ascii_counts.rtkstatusa_records -
+                                             unicore_ascii_counts.pvtslna_records) *
+                                100 +
+                            static_cast<int>(result.evidence.unicore_binary_seen) * 100;
   const int nmea_score =
       static_cast<int>(nmea_counts.gga_sentences) * 20 +
-      static_cast<int>(result.evidence.nmea_sentences_seen - nmea_counts.gga_sentences) *
-          10;
-  const int mavlink_penalty =
-      static_cast<int>(result.evidence.mavlink_heartbeats_seen) * 200;
-  const int random_ascii_penalty =
-      result.evidence.random_ascii_bytes_seen > 0u ? 50 : 0;
+      static_cast<int>(result.evidence.nmea_sentences_seen - nmea_counts.gga_sentences) * 10;
+  const int mavlink_penalty = static_cast<int>(result.evidence.mavlink_heartbeats_seen) * 200;
+  const int random_ascii_penalty = result.evidence.random_ascii_bytes_seen > 0u ? 50 : 0;
 
   const int positive_score = std::max({ubx_score, unicore_score, nmea_score, 0});
   result.discovery_score = positive_score - mavlink_penalty - random_ascii_penalty;
@@ -1084,8 +1058,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     {
       result.detected_family = ReceiverDetectedFamily::kUblox;
       PopulateObservedUbloxIdentity(result, bytes);
-    }
-    else
+    } else
     {
       result.detected_family = ReceiverDetectedFamily::kUnicore;
       PopulateObservedUnicoreIdentity(result, bytes);
@@ -1113,9 +1086,7 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     return result;
   }
 
-  SetUnknownResultNote(result.evidence,
-                       config.allow_generic_nmea_fallback,
-                       result.note,
+  SetUnknownResultNote(result.evidence, config.allow_generic_nmea_fallback, result.note,
                        result.confidence);
   if (result.reason.empty())
   {
@@ -1164,8 +1135,7 @@ std::vector<ReceiverProbeResult> DiscoverReceivers(const ReceiverProbeConfig& co
   if (explicit_path.has_value())
   {
     candidates.push_back(MakeExplicitReceiverPortCandidate(*explicit_path, paths));
-  }
-  else
+  } else
   {
     candidates = DiscoverSerialPorts(config, paths);
   }
@@ -1182,37 +1152,37 @@ std::vector<ReceiverProbeResult> DiscoverReceivers(const ReceiverProbeConfig& co
 
 std::vector<ReceiverProbeResult> SortReceiverProbeResults(std::vector<ReceiverProbeResult> results)
 {
-  std::sort(results.begin(), results.end(), [](const ReceiverProbeResult& lhs,
-                                               const ReceiverProbeResult& rhs) {
-    if (ConfidenceRank(lhs.confidence) != ConfidenceRank(rhs.confidence))
-    {
-      return ConfidenceRank(lhs.confidence) > ConfidenceRank(rhs.confidence);
-    }
+  std::sort(results.begin(), results.end(),
+            [](const ReceiverProbeResult& lhs, const ReceiverProbeResult& rhs) {
+              if (ConfidenceRank(lhs.confidence) != ConfidenceRank(rhs.confidence))
+              {
+                return ConfidenceRank(lhs.confidence) > ConfidenceRank(rhs.confidence);
+              }
 
-    if (lhs.discovery_score != rhs.discovery_score)
-    {
-      return lhs.discovery_score > rhs.discovery_score;
-    }
+              if (lhs.discovery_score != rhs.discovery_score)
+              {
+                return lhs.discovery_score > rhs.discovery_score;
+              }
 
-    if (FamilyRank(lhs.detected_family) != FamilyRank(rhs.detected_family))
-    {
-      return FamilyRank(lhs.detected_family) > FamilyRank(rhs.detected_family);
-    }
+              if (FamilyRank(lhs.detected_family) != FamilyRank(rhs.detected_family))
+              {
+                return FamilyRank(lhs.detected_family) > FamilyRank(rhs.detected_family);
+              }
 
-    if (lhs.evidence.bytes_read != rhs.evidence.bytes_read)
-    {
-      return lhs.evidence.bytes_read > rhs.evidence.bytes_read;
-    }
+              if (lhs.evidence.bytes_read != rhs.evidence.bytes_read)
+              {
+                return lhs.evidence.bytes_read > rhs.evidence.bytes_read;
+              }
 
-    const int lhs_priority = SourcePriority(lhs.source);
-    const int rhs_priority = SourcePriority(rhs.source);
-    if (lhs_priority != rhs_priority)
-    {
-      return lhs_priority < rhs_priority;
-    }
+              const int lhs_priority = SourcePriority(lhs.source);
+              const int rhs_priority = SourcePriority(rhs.source);
+              if (lhs_priority != rhs_priority)
+              {
+                return lhs_priority < rhs_priority;
+              }
 
-    return lhs.path < rhs.path;
-  });
+              return lhs.path < rhs.path;
+            });
   return results;
 }
 
@@ -1220,9 +1190,9 @@ const char* ToString(const ReceiverTransportType transport_type)
 {
   switch (transport_type)
   {
-    case ReceiverTransportType::kSerial:
-    default:
-      return "serial";
+  case ReceiverTransportType::kSerial:
+  default:
+    return "serial";
   }
 }
 
@@ -1230,17 +1200,17 @@ const char* ToString(const ReceiverPortSource source)
 {
   switch (source)
   {
-    case ReceiverPortSource::kSerialById:
-      return "serial_by_id";
-    case ReceiverPortSource::kTtyAcm:
-      return "tty_acm";
-    case ReceiverPortSource::kTtyUsb:
-      return "tty_usb";
-    case ReceiverPortSource::kPlatformUart:
-      return "platform_uart";
-    case ReceiverPortSource::kExplicitPath:
-    default:
-      return "explicit_path";
+  case ReceiverPortSource::kSerialById:
+    return "serial_by_id";
+  case ReceiverPortSource::kTtyAcm:
+    return "tty_acm";
+  case ReceiverPortSource::kTtyUsb:
+    return "tty_usb";
+  case ReceiverPortSource::kPlatformUart:
+    return "platform_uart";
+  case ReceiverPortSource::kExplicitPath:
+  default:
+    return "explicit_path";
   }
 }
 
@@ -1248,15 +1218,15 @@ const char* ToString(const ReceiverDetectedFamily family)
 {
   switch (family)
   {
-    case ReceiverDetectedFamily::kUblox:
-      return "ublox";
-    case ReceiverDetectedFamily::kUnicore:
-      return "unicore";
-    case ReceiverDetectedFamily::kNmea:
-      return "nmea";
-    case ReceiverDetectedFamily::kUnknown:
-    default:
-      return "unknown";
+  case ReceiverDetectedFamily::kUblox:
+    return "ublox";
+  case ReceiverDetectedFamily::kUnicore:
+    return "unicore";
+  case ReceiverDetectedFamily::kNmea:
+    return "nmea";
+  case ReceiverDetectedFamily::kUnknown:
+  default:
+    return "unknown";
   }
 }
 
@@ -1264,16 +1234,16 @@ const char* ToString(const ReceiverProbeConfidence confidence)
 {
   switch (confidence)
   {
-    case ReceiverProbeConfidence::kLow:
-      return "low";
-    case ReceiverProbeConfidence::kMedium:
-      return "medium";
-    case ReceiverProbeConfidence::kHigh:
-      return "high";
-    case ReceiverProbeConfidence::kNone:
-    default:
-      return "none";
+  case ReceiverProbeConfidence::kLow:
+    return "low";
+  case ReceiverProbeConfidence::kMedium:
+    return "medium";
+  case ReceiverProbeConfidence::kHigh:
+    return "high";
+  case ReceiverProbeConfidence::kNone:
+  default:
+    return "none";
   }
 }
 
-}  // namespace universal_gnss_driver
+} // namespace universal_gnss_driver

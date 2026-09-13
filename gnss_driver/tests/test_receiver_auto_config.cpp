@@ -11,8 +11,7 @@
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_driver/receiver_capabilities.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::HasReceiverFeature;
@@ -50,8 +49,7 @@ struct TestContext
   }
 };
 
-ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
-                                        const std::uint32_t baud,
+ReceiverProbeResult MakeDiscoveryResult(const std::string& path, const std::uint32_t baud,
                                         const ReceiverDetectedFamily family)
 {
   ReceiverProbeResult result;
@@ -103,10 +101,10 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
   ctx.Expect(ParseReceiverAutoConfigProfile("runtime_only") ==
                  std::optional<ReceiverAutoConfigProfile>{ReceiverAutoConfigProfile::kRuntimeOnly},
              "runtime_only should parse to the new no-op portable profile");
-  ctx.Expect(ParseReceiverAutoConfigProfile("rover") ==
-                 std::optional<ReceiverAutoConfigProfile>{
-                     ReceiverAutoConfigProfile::kRoverHighPrecision},
-             "legacy rover alias should map to rover_high_precision");
+  ctx.Expect(
+      ParseReceiverAutoConfigProfile("rover") ==
+          std::optional<ReceiverAutoConfigProfile>{ReceiverAutoConfigProfile::kRoverHighPrecision},
+      "legacy rover alias should map to rover_high_precision");
   ctx.Expect(ParseReceiverAutoConfigProfile("diagnostics") ==
                  std::optional<ReceiverAutoConfigProfile>{
                      ReceiverAutoConfigProfile::kRoverHighPrecisionDebug},
@@ -118,10 +116,10 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
                  std::optional<ReceiverAutoConfigSignalProfile>{
                      ReceiverAutoConfigSignalProfile::kHighPrecision},
              "high-precision should parse as the canonical generic signal-profile alias");
-  ctx.Expect(ParseReceiverAutoConfigSignalProfile("low_bandwidth") ==
-                 std::optional<ReceiverAutoConfigSignalProfile>{
-                     ReceiverAutoConfigSignalProfile::kMinimal},
-             "low_bandwidth should remain accepted as a compatibility alias for minimal");
+  ctx.Expect(
+      ParseReceiverAutoConfigSignalProfile("low_bandwidth") ==
+          std::optional<ReceiverAutoConfigSignalProfile>{ReceiverAutoConfigSignalProfile::kMinimal},
+      "low_bandwidth should remain accepted as a compatibility alias for minimal");
   ctx.Expect(ParseReceiverAutoConfigOutputPort("usb") ==
                  std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kUsb},
              "usb should parse as the canonical u-blox output-port selector");
@@ -166,11 +164,9 @@ void TestProfileParsingAndFormatting(TestContext& ctx)
 
 void TestUbloxRuntimeOnlyPlan(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(MakeDiscoveryResult("/dev/serial/by-id/f9p",
-                                                                    921600u,
-                                                                    ReceiverDetectedFamily::kUblox),
-                                                ReceiverAutoConfigProfile::kRuntimeOnly,
-                                                ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
+      ReceiverAutoConfigProfile::kRuntimeOnly, ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk,
              "u-blox runtime_only planning should succeed");
@@ -187,8 +183,7 @@ void TestUbloxRoverHighPrecisionPlans(TestContext& ctx)
 {
   const auto rover_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kRoverHighPrecision,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRoverHighPrecision, ReceiverAutoConfigApplyMode::kRuntimeOnly);
   const auto debug_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox),
       ReceiverAutoConfigProfile::kRoverHighPrecisionDebug,
@@ -211,8 +206,7 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   ReceiverAutoConfigRequest request;
   request.receiver_family = ReceiverDetectedFamily::kUblox;
   request.discovery_result = MakeDiscoveryResult(
-      "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
-      921600u,
+      "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00", 921600u,
       ReceiverDetectedFamily::kUblox);
   request.transport_device_path = request.discovery_result->path;
   request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
@@ -228,26 +222,26 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   request.output_port = ReceiverAutoConfigOutputPort::kUsb;
   request.config_baud = 460800u;
   const auto usb_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(usb_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 usb_plan.validation.generated_command_count == 9u &&
-                 usb_plan.resolved_output_port ==
-                     std::optional<ReceiverAutoConfigOutputPort>{
-                         ReceiverAutoConfigOutputPort::kUsb} &&
-                 ContainsWarning(usb_plan, "does not apply to USB"),
-             "u-blox USB-only plans should drop UART baud commands and warn that config-baud is "
-             "ignored on USB");
+  ctx.Expect(
+      usb_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          usb_plan.validation.generated_command_count == 9u &&
+          usb_plan.resolved_output_port ==
+              std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kUsb} &&
+          ContainsWarning(usb_plan, "does not apply to USB"),
+      "u-blox USB-only plans should drop UART baud commands and warn that config-baud is "
+      "ignored on USB");
 
   request.output_port = ReceiverAutoConfigOutputPort::kAll;
   request.config_baud = 460800u;
   const auto all_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(all_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 all_plan.validation.generated_command_count == 19u &&
-                 all_plan.resolved_output_port ==
-                     std::optional<ReceiverAutoConfigOutputPort>{
-                         ReceiverAutoConfigOutputPort::kAll} &&
-                 ContainsWarning(all_plan, "both UART1 and UART2"),
-             "u-blox all-port plans should expand to USB, UART1, and UART2 outputs plus both UART "
-             "baud commands when config-baud is requested");
+  ctx.Expect(
+      all_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          all_plan.validation.generated_command_count == 19u &&
+          all_plan.resolved_output_port ==
+              std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kAll} &&
+          ContainsWarning(all_plan, "both UART1 and UART2"),
+      "u-blox all-port plans should expand to USB, UART1, and UART2 outputs plus both UART "
+      "baud commands when config-baud is requested");
 
   request.output_port = ReceiverAutoConfigOutputPort::kAuto;
   request.config_baud = std::nullopt;
@@ -261,8 +255,7 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
       "u-blox auto output-port plans should resolve USB-attached receivers to USB output keys");
 
   request.discovery_result =
-      MakeDiscoveryResult("/dev/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
-                          921600u,
+      MakeDiscoveryResult("/dev/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00", 921600u,
                           ReceiverDetectedFamily::kUblox);
   request.transport_device_path = request.discovery_result->path;
   const auto auto_usb_alias_plan = BuildReceiverAutoConfigPlan(request);
@@ -279,22 +272,20 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   request.transport_device_path = request.discovery_result->path;
   request.output_port = ReceiverAutoConfigOutputPort::kAuto;
   const auto auto_uart_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(auto_uart_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 auto_uart_plan.validation.generated_command_count == 9u &&
-                 auto_uart_plan.resolved_output_port ==
-                     std::optional<ReceiverAutoConfigOutputPort>{
-                         ReceiverAutoConfigOutputPort::kUart1} &&
-                 ContainsWarning(auto_uart_plan, "resolved to uart1"),
-             "u-blox auto output-port plans should resolve ttyUSB transports to UART1 output keys");
+  ctx.Expect(
+      auto_uart_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          auto_uart_plan.validation.generated_command_count == 9u &&
+          auto_uart_plan.resolved_output_port ==
+              std::optional<ReceiverAutoConfigOutputPort>{ReceiverAutoConfigOutputPort::kUart1} &&
+          ContainsWarning(auto_uart_plan, "resolved to uart1"),
+      "u-blox auto output-port plans should resolve ttyUSB transports to UART1 output keys");
 }
 
 void TestUbloxFactoryResetStub(TestContext& ctx)
 {
-  const auto plan = BuildReceiverAutoConfigPlan(MakeDiscoveryResult("/dev/serial/by-id/f9p",
-                                                                    921600u,
-                                                                    ReceiverDetectedFamily::kUblox),
-                                                ReceiverAutoConfigProfile::kFactoryReset,
-                                                ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto plan = BuildReceiverAutoConfigPlan(
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
+      ReceiverAutoConfigProfile::kFactoryReset, ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedProfile &&
                  !plan.validation.profile_supported &&
@@ -361,38 +352,38 @@ void TestUnicoreRoverHighPrecisionPlans(TestContext& ctx)
   ReceiverAutoConfigRequest um981_request = generic_request;
   um981_request.receiver_model = "UM981";
   const auto um981_plan = BuildReceiverAutoConfigPlan(um981_request);
-  ctx.Expect(um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um980_plan.validation.generated_command_count == 13u &&
-                 um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
-                 ContainsCommandText(um980_plan, "MODE ROVER UAV") &&
-                 !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
-                 !ContainsWarning(um980_plan, "Build7923+") &&
-                 ContainsWarning(um980_plan, "model UM980") &&
-                 !HasReceiverFeature(um980_plan.capabilities,
-                                     ReceiverFeature::kDualAntennaBaseline),
-             "known single-antenna Unicore models should not emit a dual-antenna signal-group "
-             "command and should keep baseline capability disabled");
-  ctx.Expect(um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um960_plan.validation.generated_command_count == 13u &&
-                 um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
-                 ContainsCommandText(um960_plan, "MODE ROVER SURVEY MOW") &&
-                 !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um960_plan, "model UM960") &&
-                 !ContainsWarning(um960_plan, "safe generic non-baseline fallback") &&
-                 !HasReceiverFeature(um960_plan.capabilities,
-                                     ReceiverFeature::kDualAntennaBaseline),
-             "UM960 should be treated as a known non-baseline Unicore model without a documented "
-             "automatic signal-group selection");
-  ctx.Expect(um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 um981_plan.validation.generated_command_count == 13u &&
-                 um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
-                 !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
-                 ContainsWarning(um981_plan, "model UM981") &&
-                 !ContainsWarning(um981_plan, "safe generic non-baseline fallback") &&
-                 !HasReceiverFeature(um981_plan.capabilities,
-                                     ReceiverFeature::kDualAntennaBaseline),
-             "UM981 should be treated as a known non-baseline Unicore model without a documented "
-             "automatic signal-group selection");
+  ctx.Expect(
+      um980_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          um980_plan.validation.generated_command_count == 13u &&
+          um980_plan.receiver_model == std::optional<std::string>{"UM980"} &&
+          ContainsCommandText(um980_plan, "MODE ROVER UAV") &&
+          !ContainsCommandText(um980_plan, "CONFIG SIGNALGROUP") &&
+          !ContainsWarning(um980_plan, "Build7923+") &&
+          ContainsWarning(um980_plan, "model UM980") &&
+          !HasReceiverFeature(um980_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
+      "known single-antenna Unicore models should not emit a dual-antenna signal-group "
+      "command and should keep baseline capability disabled");
+  ctx.Expect(
+      um960_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          um960_plan.validation.generated_command_count == 13u &&
+          um960_plan.receiver_model == std::optional<std::string>{"UM960"} &&
+          ContainsCommandText(um960_plan, "MODE ROVER SURVEY MOW") &&
+          !ContainsCommandText(um960_plan, "CONFIG SIGNALGROUP") &&
+          ContainsWarning(um960_plan, "model UM960") &&
+          !ContainsWarning(um960_plan, "safe generic non-baseline fallback") &&
+          !HasReceiverFeature(um960_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
+      "UM960 should be treated as a known non-baseline Unicore model without a documented "
+      "automatic signal-group selection");
+  ctx.Expect(
+      um981_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          um981_plan.validation.generated_command_count == 13u &&
+          um981_plan.receiver_model == std::optional<std::string>{"UM981"} &&
+          !ContainsCommandText(um981_plan, "CONFIG SIGNALGROUP") &&
+          ContainsWarning(um981_plan, "model UM981") &&
+          !ContainsWarning(um981_plan, "safe generic non-baseline fallback") &&
+          !HasReceiverFeature(um981_plan.capabilities, ReceiverFeature::kDualAntennaBaseline),
+      "UM981 should be treated as a known non-baseline Unicore model without a documented "
+      "automatic signal-group selection");
 }
 
 void TestUnicoreRoverPolicyOverrides(TestContext& ctx)
@@ -891,12 +882,10 @@ void TestNmeaProfiles(TestContext& ctx)
 {
   const auto runtime_only_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
-      ReceiverAutoConfigProfile::kRuntimeOnly,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRuntimeOnly, ReceiverAutoConfigApplyMode::kRuntimeOnly);
   const auto config_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
-      ReceiverAutoConfigProfile::kRoverHighPrecision,
-      ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRoverHighPrecision, ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(runtime_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  runtime_only_plan.validation.generated_command_count == 0u,
@@ -933,9 +922,9 @@ void TestUnknownReceiverRejected(TestContext& ctx)
   unknown.discovery_score = 0;
   unknown.reason = "no_data";
 
-  const auto plan = BuildReceiverAutoConfigPlan(unknown,
-                                                ReceiverAutoConfigProfile::kRoverHighPrecision,
-                                                ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto plan =
+      BuildReceiverAutoConfigPlan(unknown, ReceiverAutoConfigProfile::kRoverHighPrecision,
+                                  ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
                  plan.unsupported_reason == "no_data",
@@ -962,7 +951,7 @@ void TestExplicitFamilyIsRetainedWhenDiscoveryIsUnknown(TestContext& ctx)
              "an inconclusive discovery result must not override an explicit receiver family");
 }
 
-}  // namespace
+} // namespace
 
 void TestUnicoreSignalGroupOverride(TestContext& ctx)
 {
@@ -998,15 +987,15 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
   request.signal_group_override = std::vector<std::uint8_t>{3u, 6u};
 
   const auto override_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 3 6") &&
-                 !ContainsWarning(override_plan, "not validated for UM982") &&
-                 !ContainsWarning(override_plan,
-                                  "kept the current receiver signal-group configuration") &&
-                 !ContainsCommandText(override_plan, "FRESET") &&
-                 !ContainsCommandText(override_plan, "SAVECONFIG"),
-             "A documented UM982 signal-group override should emit CONFIG SIGNALGROUP 3 6 without "
-             "FRESET or SAVECONFIG during runtime-only apply");
+  ctx.Expect(
+      override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          ContainsCommandText(override_plan, "CONFIG SIGNALGROUP 3 6") &&
+          !ContainsWarning(override_plan, "not validated for UM982") &&
+          !ContainsWarning(override_plan, "kept the current receiver signal-group configuration") &&
+          !ContainsCommandText(override_plan, "FRESET") &&
+          !ContainsCommandText(override_plan, "SAVECONFIG"),
+      "A documented UM982 signal-group override should emit CONFIG SIGNALGROUP 3 6 without "
+      "FRESET or SAVECONFIG during runtime-only apply");
 
   // A documented UM982 override should win even when a signal_profile is also requested.
   request.signal_group_override = std::vector<std::uint8_t>{4u, 5u};
@@ -1019,19 +1008,19 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
 
   request.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
   const auto single_antenna_um982_override_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(single_antenna_um982_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 ContainsCommandText(single_antenna_um982_override_plan,
-                                     "CONFIG SIGNALGROUP 2 0") &&
-                 ContainsCommandText(single_antenna_um982_override_plan, "GPGGA 1") &&
-                 !ContainsCommandText(single_antenna_um982_override_plan, "GPGGA COM1") &&
-                 !ContainsCommandText(single_antenna_um982_override_plan, "GPGGAH") &&
-                 ContainsWarning(single_antenna_um982_override_plan, "not validated for UM982") &&
-                 ContainsWarning(single_antenna_um982_override_plan,
-                                 "known validated pairs are 4 5 and 3 6") &&
-                 ContainsWarning(single_antenna_um982_override_plan,
-                                 "may reject the command or keep its previous signal group"),
-             "A syntactically valid UM982 single-antenna override should be accepted with an "
-             "advanced-combination warning while keeping current-port single-antenna GPGGA only");
+  ctx.Expect(
+      single_antenna_um982_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          ContainsCommandText(single_antenna_um982_override_plan, "CONFIG SIGNALGROUP 2 0") &&
+          ContainsCommandText(single_antenna_um982_override_plan, "GPGGA 1") &&
+          !ContainsCommandText(single_antenna_um982_override_plan, "GPGGA COM1") &&
+          !ContainsCommandText(single_antenna_um982_override_plan, "GPGGAH") &&
+          ContainsWarning(single_antenna_um982_override_plan, "not validated for UM982") &&
+          ContainsWarning(single_antenna_um982_override_plan,
+                          "known validated pairs are 4 5 and 3 6") &&
+          ContainsWarning(single_antenna_um982_override_plan,
+                          "may reject the command or keep its previous signal group"),
+      "A syntactically valid UM982 single-antenna override should be accepted with an "
+      "advanced-combination warning while keeping current-port single-antenna GPGGA only");
 
   request.signal_group_override = std::vector<std::uint8_t>{4u, 0u};
   const auto master_only_um982_override_plan = BuildReceiverAutoConfigPlan(request);
@@ -1043,12 +1032,12 @@ void TestUnicoreSignalGroupOverride(TestContext& ctx)
 
   request.signal_group_override = std::vector<std::uint8_t>{7u, 0u};
   const auto documented_base_mode_override_plan = BuildReceiverAutoConfigPlan(request);
-  ctx.Expect(documented_base_mode_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
-                 ContainsCommandText(documented_base_mode_override_plan,
-                                     "CONFIG SIGNALGROUP 7 0") &&
-                 ContainsWarning(documented_base_mode_override_plan, "not validated for UM982"),
-             "UM982 overrides outside the validated 4 5 and 3 6 pairs should now warn even when "
-             "they are syntactically valid");
+  ctx.Expect(
+      documented_base_mode_override_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+          ContainsCommandText(documented_base_mode_override_plan, "CONFIG SIGNALGROUP 7 0") &&
+          ContainsWarning(documented_base_mode_override_plan, "not validated for UM982"),
+      "UM982 overrides outside the validated 4 5 and 3 6 pairs should now warn even when "
+      "they are syntactically valid");
 
   request.receiver_model = "UM981";
   request.signal_group_override = std::vector<std::uint8_t>{9u, 0u};

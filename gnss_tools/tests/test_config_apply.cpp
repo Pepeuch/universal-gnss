@@ -15,8 +15,7 @@
 #include "universal_gnss_tools/config_apply.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::ReceiverAutoConfigApplyMode;
 using universal_gnss_driver::ReceiverAutoConfigProfile;
@@ -53,8 +52,7 @@ struct TestContext
   }
 };
 
-ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
-                                        const std::uint32_t baud,
+ReceiverProbeResult MakeDiscoveryResult(const std::string& path, const std::uint32_t baud,
                                         const ReceiverDetectedFamily family)
 {
   ReceiverProbeResult result;
@@ -74,8 +72,7 @@ ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
   return result;
 }
 
-std::vector<std::uint8_t> BuildUbxFrame(std::uint8_t class_id,
-                                        std::uint8_t message_id,
+std::vector<std::uint8_t> BuildUbxFrame(std::uint8_t class_id, std::uint8_t message_id,
                                         const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> bytes;
@@ -95,8 +92,8 @@ std::vector<std::uint8_t> BuildUbxFrame(std::uint8_t class_id,
   return bytes;
 }
 
-std::vector<std::uint8_t> BuildAckFramesForPlan(
-    const universal_gnss_tools::ConfigApplyResult& prepared)
+std::vector<std::uint8_t>
+BuildAckFramesForPlan(const universal_gnss_tools::ConfigApplyResult& prepared)
 {
   std::vector<std::uint8_t> bytes;
   for (const auto& plan_command : prepared.plan.commands)
@@ -125,10 +122,7 @@ std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
   return text;
 }
 
-std::string BuildUnicoreVersionResponse()
-{
-  return "#VERSIONA,UM982*00\r\n";
-}
+std::string BuildUnicoreVersionResponse() { return "#VERSIONA,UM982*00\r\n"; }
 
 std::string BuildUnicoreConfigResponse(const std::string& signalgroup,
                                        const std::uint32_t com1_baud = 921600u)
@@ -163,8 +157,9 @@ std::string BuildUnicoreResponsesWithSingleError(const std::size_t count,
   return text;
 }
 
-std::optional<std::size_t> FindTextCommandIndex(
-    const universal_gnss_tools::ConfigApplyResult& prepared, const std::string& command_text)
+std::optional<std::size_t>
+FindTextCommandIndex(const universal_gnss_tools::ConfigApplyResult& prepared,
+                     const std::string& command_text)
 {
   for (std::size_t index = 0u; index < prepared.plan.commands.size(); ++index)
   {
@@ -195,13 +190,8 @@ bool ContainsProgressLine(const universal_gnss_tools::ConfigApplyResult& result,
 
 std::string ToLowerCopy(std::string text)
 {
-  std::transform(text.begin(),
-                 text.end(),
-                 text.begin(),
-                 [](const unsigned char c)
-                 {
-                   return static_cast<char>(std::tolower(c));
-                 });
+  std::transform(text.begin(), text.end(), text.begin(),
+                 [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return text;
 }
 
@@ -243,8 +233,8 @@ std::size_t CountUnicoreBaudPhaseCommands(const universal_gnss_tools::ConfigAppl
   std::exit(EXIT_FAILURE);
 }
 
-std::size_t CountUnicoreProfilePhaseCommands(
-    const universal_gnss_tools::ConfigApplyResult& prepared)
+std::size_t
+CountUnicoreProfilePhaseCommands(const universal_gnss_tools::ConfigApplyResult& prepared)
 {
   const auto baud_phase_commands = CountUnicoreBaudPhaseCommands(prepared);
   return prepared.plan.summary.commands_total - baud_phase_commands;
@@ -253,9 +243,7 @@ std::size_t CountUnicoreProfilePhaseCommands(
 class ScriptedByteDuplex final : public ByteDuplex
 {
 public:
-  explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {}) : input_(std::move(input))
-  {
-  }
+  explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {}) : input_(std::move(input)) {}
 
   ReadResult Read(std::uint8_t* destination, const std::size_t capacity) override
   {
@@ -278,8 +266,7 @@ public:
     {
       const auto bytes_to_copy = std::min(capacity, signalgroup_response_.size());
       std::copy_n(reinterpret_cast<const std::uint8_t*>(signalgroup_response_.data()),
-                  static_cast<std::ptrdiff_t>(bytes_to_copy),
-                  destination);
+                  static_cast<std::ptrdiff_t>(bytes_to_copy), destination);
       pending_signalgroup_disconnect_ = false;
       stale_after_signalgroup_ = true;
       open_ = false;
@@ -293,8 +280,7 @@ public:
         static constexpr std::string_view kTextOk = "<OK\r\n";
         const auto bytes_to_copy = std::min(capacity, kTextOk.size());
         std::copy_n(reinterpret_cast<const std::uint8_t*>(kTextOk.data()),
-                    static_cast<std::ptrdiff_t>(bytes_to_copy),
-                    destination);
+                    static_cast<std::ptrdiff_t>(bytes_to_copy), destination);
         return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
       }
       return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
@@ -303,8 +289,7 @@ public:
     const auto available = input_.size() - read_offset_;
     const auto bytes_to_copy = std::min(capacity, available);
     std::copy_n(input_.data() + static_cast<std::ptrdiff_t>(read_offset_),
-                static_cast<std::ptrdiff_t>(bytes_to_copy),
-                destination);
+                static_cast<std::ptrdiff_t>(bytes_to_copy), destination);
     read_offset_ += bytes_to_copy;
     return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
   }
@@ -340,15 +325,9 @@ public:
     return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
   }
 
-  bool IsOpen() const override
-  {
-    return open_;
-  }
+  bool IsOpen() const override { return open_; }
 
-  void Close() override
-  {
-    open_ = false;
-  }
+  void Close() override { open_ = false; }
 
   void Reopen(std::vector<std::uint8_t> input)
   {
@@ -359,30 +338,15 @@ public:
     stale_after_signalgroup_ = false;
   }
 
-  void DisconnectAfterSignalGroupResponse()
-  {
-    disconnect_after_signalgroup_response_ = true;
-  }
+  void DisconnectAfterSignalGroupResponse() { disconnect_after_signalgroup_response_ = true; }
 
-  void ProvideTextOkResponses()
-  {
-    auto_text_ok_responses_ = true;
-  }
+  void ProvideTextOkResponses() { auto_text_ok_responses_ = true; }
 
-  void SetSignalGroupResponse(std::string response)
-  {
-    signalgroup_response_ = std::move(response);
-  }
+  void SetSignalGroupResponse(std::string response) { signalgroup_response_ = std::move(response); }
 
-  bool stale_write_attempted() const
-  {
-    return stale_write_attempted_;
-  }
+  bool stale_write_attempted() const { return stale_write_attempted_; }
 
-  const std::vector<std::uint8_t>& written_bytes() const
-  {
-    return written_;
-  }
+  const std::vector<std::uint8_t>& written_bytes() const { return written_; }
 
 private:
   std::vector<std::uint8_t> input_{};
@@ -415,14 +379,11 @@ public:
     std::vector<std::uint8_t> input{};
   };
 
-  explicit ScriptedConfigApplyHooks(ScriptedByteDuplex& transport) : transport_(transport)
-  {
-  }
+  explicit ScriptedConfigApplyHooks(ScriptedByteDuplex& transport) : transport_(transport) {}
 
   bool ProbeReceiverPath(const std::string& device_path,
                          const std::vector<std::uint32_t>& baud_candidates,
-                         const std::uint32_t read_timeout_ms,
-                         ReceiverProbeResult& probe_result,
+                         const std::uint32_t read_timeout_ms, ReceiverProbeResult& probe_result,
                          std::string& error_message) override
   {
     (void)read_timeout_ms;
@@ -447,10 +408,8 @@ public:
     return true;
   }
 
-  bool ReopenTransport(ByteDuplex& transport,
-                       const std::string& device_path,
-                       const std::uint32_t baud_rate,
-                       const std::uint32_t read_timeout_ms,
+  bool ReopenTransport(ByteDuplex& transport, const std::string& device_path,
+                       const std::uint32_t baud_rate, const std::uint32_t read_timeout_ms,
                        std::string& error_message) override
   {
     if (&transport != &transport_)
@@ -481,25 +440,16 @@ public:
     return true;
   }
 
-  void AddProbeStep(ProbeStep step)
-  {
-    probe_steps_.push_back(std::move(step));
-  }
+  void AddProbeStep(ProbeStep step) { probe_steps_.push_back(std::move(step)); }
 
-  void AddReopenStep(ReopenStep step)
-  {
-    reopen_steps_.push_back(std::move(step));
-  }
+  void AddReopenStep(ReopenStep step) { reopen_steps_.push_back(std::move(step)); }
 
   bool AllStepsConsumed() const
   {
     return probe_index_ == probe_steps_.size() && reopen_index_ == reopen_steps_.size();
   }
 
-  const std::string& failure() const
-  {
-    return failure_;
-  }
+  const std::string& failure() const { return failure_; }
 
 private:
   ScriptedByteDuplex& transport_;
@@ -520,9 +470,7 @@ void AddUnicoreFactoryResetScanSteps(ScriptedConfigApplyHooks& hooks,
     {
       const std::string version_response = BuildUnicoreVersionResponse();
       hooks.AddReopenStep(
-          {device_path,
-           baud_rate,
-           100u,
+          {device_path, baud_rate, 100u,
            std::vector<std::uint8_t>(version_response.begin(), version_response.end())});
       return;
     }
@@ -532,8 +480,7 @@ void AddUnicoreFactoryResetScanSteps(ScriptedConfigApplyHooks& hooks,
 }
 
 void AddUm982SignalGroupProfileSteps(ScriptedConfigApplyHooks& hooks,
-                                     const std::string& device_path,
-                                     const std::uint32_t baud_rate,
+                                     const std::string& device_path, const std::uint32_t baud_rate,
                                      const std::string& current_signalgroup,
                                      const std::string& verified_signalgroup,
                                      const std::size_t pre_command_responses,
@@ -542,43 +489,31 @@ void AddUm982SignalGroupProfileSteps(ScriptedConfigApplyHooks& hooks,
   const std::string initial_phase_input =
       BuildUnicoreConfigResponse(current_signalgroup, baud_rate);
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(initial_phase_input.begin(), initial_phase_input.end())});
 
   const std::string signalgroup_apply_input = "<OK\r\n";
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(signalgroup_apply_input.begin(), signalgroup_apply_input.end())});
 
   const std::string verification_probe_input = BuildUnicoreVersionResponse();
-  hooks.AddReopenStep({device_path,
-                       baud_rate,
-                       100u,
+  hooks.AddReopenStep({device_path, baud_rate, 100u,
                        std::vector<std::uint8_t>(verification_probe_input.begin(),
                                                  verification_probe_input.end())});
 
   const std::string verification_input =
       BuildUnicoreConfigResponse(verified_signalgroup, baud_rate);
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(verification_input.begin(), verification_input.end())});
 
   const std::string pre_input = BuildRepeatedUnicoreOkResponses(pre_command_responses);
-  hooks.AddReopenStep({device_path,
-                       baud_rate,
-                       100u,
+  hooks.AddReopenStep({device_path, baud_rate, 100u,
                        std::vector<std::uint8_t>(pre_input.begin(), pre_input.end())});
 
   const std::string post_input = BuildRepeatedUnicoreOkResponses(post_command_responses);
-  hooks.AddReopenStep({device_path,
-                       baud_rate,
-                       100u,
+  hooks.AddReopenStep({device_path, baud_rate, 100u,
                        std::vector<std::uint8_t>(post_input.begin(), post_input.end())});
 }
 
@@ -591,35 +526,25 @@ void AddUnicoreSignalGroupRecoverySteps(ScriptedConfigApplyHooks& hooks,
 {
   const std::string signalgroup_apply_input = "<OK\r\n";
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(signalgroup_apply_input.begin(), signalgroup_apply_input.end())});
 
   const std::string active_probe_input = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(active_probe_input.begin(), active_probe_input.end())});
 
   const std::string verification_input = BuildUnicoreSignalGroupConfigDump(verified_signalgroup);
   hooks.AddReopenStep(
-      {device_path,
-       baud_rate,
-       100u,
+      {device_path, baud_rate, 100u,
        std::vector<std::uint8_t>(verification_input.begin(), verification_input.end())});
 
   const std::string pre_input = BuildRepeatedUnicoreOkResponses(pre_command_responses);
-  hooks.AddReopenStep({device_path,
-                       baud_rate,
-                       100u,
+  hooks.AddReopenStep({device_path, baud_rate, 100u,
                        std::vector<std::uint8_t>(pre_input.begin(), pre_input.end())});
 
   const std::string post_input = BuildRepeatedUnicoreOkResponses(post_command_responses);
-  hooks.AddReopenStep({device_path,
-                       baud_rate,
-                       100u,
+  hooks.AddReopenStep({device_path, baud_rate, 100u,
                        std::vector<std::uint8_t>(post_input.begin(), post_input.end())});
 }
 
@@ -1059,10 +984,8 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestCon
              "prepared runtime-only Unicore plans should keep telemetry optional without a "
              "default SIGNALGROUP command");
 
-  const std::string responses =
-      BuildUnicoreResponsesWithSingleError(prepared.plan.summary.commands_total,
-                                           *gpgga_index,
-                                           "PARSING FAILED GRAMMAR ERROR,*73");
+  const std::string responses = BuildUnicoreResponsesWithSingleError(
+      prepared.plan.summary.commands_total, *gpgga_index, "PARSING FAILED GRAMMAR ERROR,*73");
   MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
 
   const auto result = ExecuteConfigApply(transport, options);
@@ -1103,10 +1026,8 @@ void TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(TestContext& ctx
     std::exit(EXIT_FAILURE);
   }
 
-  const std::string responses =
-      BuildUnicoreResponsesWithSingleError(prepared.plan.summary.commands_total,
-                                           *mode_index,
-                                           "PARSING FAILED GRAMMAR ERROR,*73");
+  const std::string responses = BuildUnicoreResponsesWithSingleError(
+      prepared.plan.summary.commands_total, *mode_index, "PARSING FAILED GRAMMAR ERROR,*73");
   MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
 
   const auto result = ExecuteConfigApply(transport, options);
@@ -1153,33 +1074,23 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(Te
   ScriptedConfigApplyHooks hooks(transport);
 
   const std::string rejected_signalgroup_input = "PARSING FAILED GRAMMAR ERROR,*73\r\n";
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       921600u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
                        std::vector<std::uint8_t>(rejected_signalgroup_input.begin(),
                                                  rejected_signalgroup_input.end())});
   const std::string active_probe_input = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(active_probe_input.begin(), active_probe_input.end())});
   const std::string verification_input = BuildUnicoreSignalGroupConfigDump("4 5");
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(verification_input.begin(), verification_input.end())});
   const std::string pre_input = BuildRepeatedUnicoreOkResponses(*signalgroup_index);
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       921600u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
                        std::vector<std::uint8_t>(pre_input.begin(), pre_input.end())});
   const std::string post_input = BuildRepeatedUnicoreOkResponses(
       prepared.plan.summary.commands_total - *signalgroup_index - 1u);
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       921600u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
                        std::vector<std::uint8_t>(post_input.begin(), post_input.end())});
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
@@ -1230,11 +1141,7 @@ void TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(TestContext& ctx)
   transport.ProvideTextOkResponses();
   transport.DisconnectAfterSignalGroupResponse();
   ScriptedConfigApplyHooks hooks(transport);
-  AddUnicoreSignalGroupRecoverySteps(hooks,
-                                     "/dev/ttyUSB0",
-                                     921600u,
-                                     "2 0",
-                                     *signalgroup_index,
+  AddUnicoreSignalGroupRecoverySteps(hooks, "/dev/ttyUSB0", 921600u, "2 0", *signalgroup_index,
                                      prepared.plan.summary.commands_total - *signalgroup_index -
                                          1u);
 
@@ -1280,20 +1187,14 @@ void TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(TestConte
 
   const std::string signalgroup_apply_input = "<OK\r\n";
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(signalgroup_apply_input.begin(), signalgroup_apply_input.end())});
   const std::string active_probe_input = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(active_probe_input.begin(), active_probe_input.end())});
   const std::string missing_signalgroup_input = "$CONFIG,COM1,CONFIG COM1 921600 8 n 1*00\r\n";
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       921600u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
                        std::vector<std::uint8_t>(missing_signalgroup_input.begin(),
                                                  missing_signalgroup_input.end())});
 
@@ -1331,15 +1232,11 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
   hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u, {}});
   const std::string target_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(target_probe_response.begin(), target_probe_response.end())});
   const std::string target_profile_responses =
       BuildRepeatedUnicoreOkResponses(profile_phase_commands);
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       921600u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u,
                        std::vector<std::uint8_t>(target_profile_responses.begin(),
                                                  target_profile_responses.end())});
 
@@ -1382,16 +1279,12 @@ void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(Te
       std::vector<std::uint8_t>(first_phase_responses.begin(), first_phase_responses.end()));
   ScriptedConfigApplyHooks hooks(transport);
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(old_probe_response.begin(), old_probe_response.end())});
   hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
   const std::string remaining_profile_responses =
       BuildRepeatedUnicoreOkResponses(profile_phase_commands);
-  hooks.AddReopenStep({"/dev/ttyUSB0",
-                       115200u,
-                       100u,
+  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u,
                        std::vector<std::uint8_t>(remaining_profile_responses.begin(),
                                                  remaining_profile_responses.end())});
 
@@ -1475,21 +1368,15 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
   AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 8u);
 
@@ -1581,21 +1468,15 @@ void TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(TestConte
   AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 38400u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 8u);
 
@@ -1628,21 +1509,15 @@ void TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(TestCont
   AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 921600u);
   const std::string first_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(first_probe_response.begin(), first_probe_response.end())});
   const std::string baud_recovery_responses = BuildRepeatedUnicoreOkResponses(1u);
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       115200u,
-       100u,
+      {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(baud_recovery_responses.begin(), baud_recovery_responses.end())});
   const std::string second_probe_response = BuildUnicoreVersionResponse();
   hooks.AddReopenStep(
-      {"/dev/ttyUSB0",
-       921600u,
-       100u,
+      {"/dev/ttyUSB0", 921600u, 100u,
        std::vector<std::uint8_t>(second_probe_response.begin(), second_probe_response.end())});
   AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 8u);
 
@@ -1868,7 +1743,7 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
              "non-Unicore runtime apply should not use Unicore VERSIONA probing assumptions");
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {
