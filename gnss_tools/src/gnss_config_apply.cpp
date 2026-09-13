@@ -13,8 +13,7 @@
 #include "universal_gnss_transport/posix_serial_transport.hpp"
 #endif
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::DiscoverReceivers;
 using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
@@ -66,6 +65,7 @@ void PrintUsage(const char* program_name)
             << " [--model <UM960|UM980|UM981|UM982|UB9A0>]"
             << " [--output-port <usb|uart1|uart2|all|auto>] [--rate-hz <value>]\n"
             << "       [--timeout-ms <value>] [--confirm|--yes]\n"
+            << "       [--debug-unicore-signalgroup-trace]\n"
             << "Legacy aliases: --port, --execute, --persistent, --confirm-runtime,\n"
             << "                --confirm-persistent, and positional <family> <profile>\n"
             << "Examples:\n"
@@ -109,6 +109,8 @@ void PrintUsage(const char* program_name)
             << "  --baud selects the current transport baud; --config-baud selects the target "
                "receiver baud\n"
             << "  --probe-bauds overrides the auto-probe baud order used with --baud auto\n"
+            << "  --debug-unicore-signalgroup-trace records raw TX/RX and recovery events for the "
+               "dedicated Unicore SIGNALGROUP step\n"
             << "  prefer /dev/serial/by-id/* paths when available\n";
 }
 
@@ -124,8 +126,7 @@ bool ParseUnsigned(const std::string& text, std::uint32_t& value)
     }
     value = static_cast<std::uint32_t>(numeric);
     return true;
-  }
-  catch (...)
+  } catch (...)
   {
     return false;
   }
@@ -138,8 +139,7 @@ bool ParseDouble(const std::string& text, double& value)
   {
     value = std::stod(text, &parsed);
     return parsed == text.size();
-  }
-  catch (...)
+  } catch (...)
   {
     return false;
   }
@@ -147,13 +147,8 @@ bool ParseDouble(const std::string& text, double& value)
 
 std::string ToLowerCopy(std::string text)
 {
-  std::transform(text.begin(),
-                 text.end(),
-                 text.begin(),
-                 [](const unsigned char c)
-                 {
-                   return static_cast<char>(std::tolower(c));
-                 });
+  std::transform(text.begin(), text.end(), text.begin(),
+                 [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return text;
 }
 
@@ -277,8 +272,7 @@ void PrintResult(const universal_gnss_tools::ConfigApplyResult& result, const bo
   if (json_output)
   {
     std::cout << universal_gnss_tools::FormatConfigApplyJson(result);
-  }
-  else
+  } else
   {
     std::cout << universal_gnss_tools::FormatConfigApplyText(result);
   }
@@ -310,8 +304,7 @@ std::optional<ReceiverProbeResult> DiscoverRequestedReceiver(const CliOptions& c
   {
     config.baud_candidates = cli_options.probe_baud_candidates;
     DeduplicateBaudCandidates(config.baud_candidates);
-  }
-  else if (!cli_options.baud_auto && cli_options.apply.transport_baud_rate != 0u)
+  } else if (!cli_options.baud_auto && cli_options.apply.transport_baud_rate != 0u)
   {
     config.baud_candidates = {cli_options.apply.transport_baud_rate};
   }
@@ -352,8 +345,7 @@ class PosixSerialConfigApplyHooks final : public ConfigApplyTransportHooks
 public:
   bool ProbeReceiverPath(const std::string& device_path,
                          const std::vector<std::uint32_t>& baud_candidates,
-                         const std::uint32_t read_timeout_ms,
-                         ReceiverProbeResult& probe_result,
+                         const std::uint32_t read_timeout_ms, ReceiverProbeResult& probe_result,
                          std::string& error_message) override
   {
     ReceiverProbeConfig config;
@@ -365,10 +357,8 @@ public:
     return true;
   }
 
-  bool ReopenTransport(ByteDuplex& transport,
-                       const std::string& device_path,
-                       const std::uint32_t baud_rate,
-                       const std::uint32_t read_timeout_ms,
+  bool ReopenTransport(ByteDuplex& transport, const std::string& device_path,
+                       const std::uint32_t baud_rate, const std::uint32_t read_timeout_ms,
                        std::string& error_message) override
   {
     auto* posix_transport = dynamic_cast<PosixSerialTransport*>(&transport);
@@ -398,7 +388,7 @@ public:
 
 #endif
 
-}  // namespace
+} // namespace
 
 int main(int argc, char** argv)
 {
@@ -408,8 +398,7 @@ int main(int argc, char** argv)
   for (int index = 1; index < argc; ++index)
   {
     const std::string argument = argv[index];
-    auto require_value = [&](const char* flag_name) -> const char*
-    {
+    auto require_value = [&](const char* flag_name) -> const char* {
       if (index + 1 >= argc)
       {
         std::cerr << "error: missing value for " << flag_name << '\n';
@@ -549,6 +538,11 @@ int main(int argc, char** argv)
       }
       continue;
     }
+    if (argument == "--debug-unicore-signalgroup-trace")
+    {
+      cli_options.apply.debug_unicore_signalgroup_trace = true;
+      continue;
+    }
     if (argument == "--signal-profile")
     {
       const auto parsed = universal_gnss_driver::ParseReceiverAutoConfigSignalProfile(
@@ -606,8 +600,7 @@ int main(int argc, char** argv)
       if (argument == "--rtk-timeout-s")
       {
         cli_options.apply.unicore_rtk_timeout_s_override = *parsed;
-      }
-      else
+      } else
       {
         cli_options.apply.unicore_dgps_timeout_s_override = *parsed;
       }
@@ -694,8 +687,7 @@ int main(int argc, char** argv)
       PrintUsage(argv[0]);
       return EXIT_FAILURE;
     }
-  }
-  else
+  } else
   {
     cli_options.discover_receiver = true;
   }

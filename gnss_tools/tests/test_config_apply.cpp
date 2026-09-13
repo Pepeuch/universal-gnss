@@ -1125,6 +1125,7 @@ void TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(TestContext& ctx)
   options.receiver_model = "UM982";
   options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
   options.confirm = true;
+  options.debug_unicore_signalgroup_trace = true;
 
   const auto prepared = PrepareConfigApply(options);
   const auto signalgroup_index = FindTextCommandIndex(prepared, "CONFIG SIGNALGROUP 2 0\r\n");
@@ -1165,6 +1166,15 @@ void TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(TestContext& ctx)
              "(hooks=" +
                  std::to_string(hooks.AllStepsConsumed()) + ", hook_failure=" + hooks.failure() +
                  ", stale=" + std::to_string(transport.stale_write_attempted()) + ")");
+  ctx.Expect(ContainsProgressLine(result, "UNICORE_SIGNALGROUP_TRACE t_ns=") &&
+                 ContainsProgressLine(result, "event=tx_signalgroup hex=43 4F 4E 46 49 47") &&
+                 ContainsProgressLine(result, "bytes_written=24") &&
+                 ContainsProgressLine(result, "event=rx_signalgroup") &&
+                 ContainsProgressLine(result, "event=port_reopen_ok") &&
+                 ContainsProgressLine(result, "event=tx_versiona") &&
+                 ContainsProgressLine(result, "event=router_response kind=text_ok"),
+             "debug SIGNALGROUP trace should expose raw command/recovery bytes, port events, and "
+             "router outcomes");
 }
 
 void TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(TestContext& ctx)
