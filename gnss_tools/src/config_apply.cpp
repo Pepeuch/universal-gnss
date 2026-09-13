@@ -492,7 +492,9 @@ std::uint32_t ResolveRequestedTransportBaud(const ConfigApplyOptions& options)
     return options.transport_baud_rate;
   }
 
-  if (options.discovery_result.has_value() && options.discovery_result->selected_baud.has_value())
+  if (options.discovery_result.has_value() &&
+      options.discovery_result->detected_family != ReceiverDetectedFamily::kUnknown &&
+      options.discovery_result->selected_baud.has_value())
   {
     return *options.discovery_result->selected_baud;
   }
@@ -2447,6 +2449,18 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
   if (result.status != ConfigApplyStatus::kOk)
   {
     result.error_message = result.plan.error_message;
+    result.execution_summary.final_status = ToString(result.status);
+    return result;
+  }
+
+  if (ApplyModeRequestsExecution(options.apply_mode) && options.discovery_result.has_value() &&
+      options.discovery_result->detected_family == ReceiverDetectedFamily::kUnknown &&
+      result.transport_baud_rate == 0u)
+  {
+    result.status = ConfigApplyStatus::kTransportUnavailable;
+    result.plan.ready_to_execute = false;
+    result.error_message = "receiver discovery is inconclusive; refusing live apply without an "
+                           "explicit current transport baud";
     result.execution_summary.final_status = ToString(result.status);
     return result;
   }

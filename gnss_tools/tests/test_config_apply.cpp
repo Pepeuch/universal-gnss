@@ -692,6 +692,28 @@ void TestUnknownReceiverRejected(TestContext& ctx)
              "unknown discovery results should be rejected before any live apply");
 }
 
+void TestInconclusiveAutoDiscoveryRefusesLiveApply(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.receiver_family = ReceiverDetectedFamily::kUnicore;
+  options.discovery_result = ReceiverProbeResult{};
+  options.discovery_result->path = "/dev/ttyUSB99";
+  options.discovery_result->selected_baud = 921600u;
+  options.discovery_result->detected_family = ReceiverDetectedFamily::kUnknown;
+  options.discovery_result->confidence = ReceiverProbeConfidence::kNone;
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  const auto result = PrepareConfigApply(options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.transport_baud_rate == 0u && !result.plan.ready_to_execute &&
+                 !result.executed && result.execution_summary.commands_completed == 0u,
+             "inconclusive auto-discovery must refuse live apply without opening a trial baud");
+}
+
 void TestNmeaWriteProfileRejected(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -1856,6 +1878,7 @@ int main()
   TestRuntimeOnlyNoOpNeedsNoConfirmation(ctx);
   TestRuntimeOnlyRequiresConfirmation(ctx);
   TestUnknownReceiverRejected(ctx);
+  TestInconclusiveAutoDiscoveryRefusesLiveApply(ctx);
   TestNmeaWriteProfileRejected(ctx);
   TestPersistentWorkflowPreparesWithoutFactoryReset(ctx);
   TestPersistentWorkflowWithTargetBaudPreparesSuccessfully(ctx);

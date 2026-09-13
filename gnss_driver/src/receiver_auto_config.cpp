@@ -1341,13 +1341,17 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(const ReceiverAutoConfigReque
   {
     const auto& discovery = *request.discovery_result;
     if (request.receiver_family != ReceiverDetectedFamily::kUnknown &&
+        discovery.detected_family != ReceiverDetectedFamily::kUnknown &&
         request.receiver_family != discovery.detected_family)
     {
       plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
       plan.error_message = "receiver family request does not match the supplied discovery result";
       return plan;
     }
-    effective_family = discovery.detected_family;
+    if (discovery.detected_family != ReceiverDetectedFamily::kUnknown)
+    {
+      effective_family = discovery.detected_family;
+    }
   }
 
   plan.request.receiver_family = effective_family;

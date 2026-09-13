@@ -942,6 +942,26 @@ void TestUnknownReceiverRejected(TestContext& ctx)
              "unknown receiver planning should still be rejected with the discovery reason");
 }
 
+void TestExplicitFamilyIsRetainedWhenDiscoveryIsUnknown(TestContext& ctx)
+{
+  ReceiverAutoConfigRequest request;
+  request.receiver_family = ReceiverDetectedFamily::kUnicore;
+  request.discovery_result = ReceiverProbeResult{};
+  request.discovery_result->path = "/dev/ttyUSB99";
+  request.discovery_result->detected_family = ReceiverDetectedFamily::kUnknown;
+  request.discovery_result->confidence = ReceiverProbeConfidence::kNone;
+  request.discovery_result->reason = "no_data";
+  request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  request.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  request.receiver_model = "UM982";
+
+  const auto plan = BuildReceiverAutoConfigPlan(request);
+
+  ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk &&
+                 plan.request.receiver_family == ReceiverDetectedFamily::kUnicore,
+             "an inconclusive discovery result must not override an explicit receiver family");
+}
+
 }  // namespace
 
 void TestUnicoreSignalGroupOverride(TestContext& ctx)
@@ -1184,6 +1204,7 @@ int main()
   TestUnicorePersistentDefaultTargetBaud(ctx);
   TestNmeaProfiles(ctx);
   TestUnknownReceiverRejected(ctx);
+  TestExplicitFamilyIsRetainedWhenDiscoveryIsUnknown(ctx);
 
   if (ctx.failures != 0)
   {

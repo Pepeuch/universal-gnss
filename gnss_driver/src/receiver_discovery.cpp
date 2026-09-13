@@ -706,17 +706,6 @@ bool IsBetterProbeResult(const ReceiverProbeResult& candidate,
     return candidate.evidence.bytes_read > current_best.evidence.bytes_read;
   }
 
-  if (candidate.selected_baud.has_value() != current_best.selected_baud.has_value())
-  {
-    return candidate.selected_baud.has_value();
-  }
-
-  if (candidate.selected_baud.has_value() && current_best.selected_baud.has_value() &&
-      *candidate.selected_baud != *current_best.selected_baud)
-  {
-    return *candidate.selected_baud > *current_best.selected_baud;
-  }
-
   return false;
 }
 
@@ -1157,6 +1146,11 @@ ReceiverProbeResult ProbeReceiverPort(const ReceiverPortCandidate& candidate,
     {
       break;
     }
+  }
+
+  if (best_result.detected_family == ReceiverDetectedFamily::kUnknown)
+  {
+    best_result.selected_baud.reset();
   }
 
   return best_result;

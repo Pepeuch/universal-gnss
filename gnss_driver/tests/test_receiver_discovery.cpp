@@ -618,6 +618,21 @@ void TestDefaultBaudOrder(TestContext& ctx)
              "default auto-baud list should match Auto Discovery v2 order");
 }
 
+void TestFailedBaudProbesDoNotSelectABaud(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/universal-gnss-no-such-port";
+
+  ReceiverProbeConfig config;
+  config.baud_candidates = {460800u, 115200u, 230400u, 921600u};
+  const auto result = ProbeReceiverPort(candidate, config);
+
+  ctx.Expect(result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 result.confidence == ReceiverProbeConfidence::kNone &&
+                 !result.selected_baud.has_value(),
+             "all failed baud probes must not report a selected baud");
+}
+
 void TestUnknownAndRtcmOnlyStreams(TestContext& ctx)
 {
   ReceiverPortCandidate candidate;
@@ -687,6 +702,7 @@ int main()
   TestMavlinkAndGarbageRejected(ctx);
   TestSilentProbeRejected(ctx);
   TestDefaultBaudOrder(ctx);
+  TestFailedBaudProbesDoNotSelectABaud(ctx);
   TestUnknownAndRtcmOnlyStreams(ctx);
   TestResultOrdering(ctx);
 
