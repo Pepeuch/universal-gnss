@@ -6,8 +6,13 @@
 #include <string>
 #include <vector>
 
-namespace universal_gnss_driver
-{
+namespace universal_gnss_transport {
+
+class ByteDuplex;
+
+} // namespace universal_gnss_transport
+
+namespace universal_gnss_driver {
 
 enum class ReceiverTransportType : std::uint8_t
 {
@@ -55,8 +60,7 @@ struct ReceiverDiscoveryPaths
 
 struct ReceiverProbeConfig
 {
-  std::vector<std::uint32_t> baud_candidates{
-      921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
+  std::vector<std::uint32_t> baud_candidates{921600u, 460800u, 230400u, 115200u, 38400u, 9600u};
   int confidence_threshold_score{100};
   std::uint32_t read_timeout_ms{250u};
   std::size_t max_probe_bytes{4096u};
@@ -99,40 +103,45 @@ struct ReceiverProbeResult
   int discovery_score{0};
   ReceiverProbeEvidence evidence{};
   ReceiverIdentityMetadata identity{};
+  bool versiona_verified{false};
   std::string reason{};
   std::string note{};
 };
 
-std::vector<ReceiverPortCandidate> DiscoverSerialPorts(
-    const ReceiverProbeConfig& config,
-    const ReceiverDiscoveryPaths& paths = {});
+std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig& config,
+                                                       const ReceiverDiscoveryPaths& paths = {});
 
-std::vector<ReceiverPortCandidate> DiscoverSerialPorts(
-    const ReceiverDiscoveryPaths& paths = {});
+std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPaths& paths = {});
 
-ReceiverPortCandidate MakeExplicitReceiverPortCandidate(
-    const std::string& path,
-    const ReceiverDiscoveryPaths& paths = {});
+ReceiverPortCandidate MakeExplicitReceiverPortCandidate(const std::string& path,
+                                                        const ReceiverDiscoveryPaths& paths = {});
 
 ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candidate,
                                               std::uint32_t baud_rate,
                                               const std::vector<std::uint8_t>& bytes,
                                               const ReceiverProbeConfig& config = {});
 
+std::optional<ReceiverIdentityMetadata>
+ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes);
+
+ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& candidate,
+                                                 std::uint32_t baud_rate,
+                                                 universal_gnss_transport::ByteDuplex& transport,
+                                                 const ReceiverProbeConfig& config = {});
+
 ReceiverProbeResult ProbeReceiverPort(const ReceiverPortCandidate& candidate,
                                       const ReceiverProbeConfig& config = {});
 
-std::vector<ReceiverProbeResult> DiscoverReceivers(
-    const ReceiverProbeConfig& config = {},
-    const std::optional<std::string>& explicit_path = std::nullopt,
-    const ReceiverDiscoveryPaths& paths = {});
+std::vector<ReceiverProbeResult>
+DiscoverReceivers(const ReceiverProbeConfig& config = {},
+                  const std::optional<std::string>& explicit_path = std::nullopt,
+                  const ReceiverDiscoveryPaths& paths = {});
 
-std::vector<ReceiverProbeResult> SortReceiverProbeResults(
-    std::vector<ReceiverProbeResult> results);
+std::vector<ReceiverProbeResult> SortReceiverProbeResults(std::vector<ReceiverProbeResult> results);
 
 const char* ToString(ReceiverTransportType transport_type);
 const char* ToString(ReceiverPortSource source);
 const char* ToString(ReceiverDetectedFamily family);
 const char* ToString(ReceiverProbeConfidence confidence);
 
-}  // namespace universal_gnss_driver
+} // namespace universal_gnss_driver

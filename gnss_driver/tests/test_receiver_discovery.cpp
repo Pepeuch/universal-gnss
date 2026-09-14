@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -13,6 +14,7 @@
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
+#include "universal_gnss_transport/byte_stream.hpp"
 
 namespace {
 
@@ -21,6 +23,7 @@ namespace fs = std::filesystem;
 using universal_gnss_driver::DetectedStreamProtocol;
 using universal_gnss_driver::DiscoverSerialPorts;
 using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
+using universal_gnss_driver::ProbeReceiverTransportAtBaud;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverDiscoveryPaths;
 using universal_gnss_driver::ReceiverPortCandidate;
@@ -30,6 +33,11 @@ using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
 using universal_gnss_driver::SortReceiverProbeResults;
 using universal_gnss_driver::StreamDetector;
+using universal_gnss_transport::ByteDuplex;
+using universal_gnss_transport::ReadResult;
+using universal_gnss_transport::TransportError;
+using universal_gnss_transport::TransportStatus;
+using universal_gnss_transport::WriteResult;
 
 struct TestContext
 {
@@ -43,6 +51,53 @@ struct TestContext
       std::cerr << "FAILED: " << message << '\n';
     }
   }
+};
+
+class ScriptedProbeTransport final : public ByteDuplex
+{
+public:
+  explicit ScriptedProbeTransport(std::vector<std::vector<std::uint8_t>> chunks)
+      : chunks_(std::move(chunks))
+  {
+  }
+
+  ReadResult Read(std::uint8_t* destination, const std::size_t capacity) override
+  {
+    if (!open_)
+    {
+      return {0u, TransportStatus::kClosed, TransportError::kClosed};
+    }
+    if (next_chunk_ >= chunks_.size())
+    {
+      return {0u, TransportStatus::kEndOfStream, TransportError::kNone};
+    }
+
+    const auto& chunk = chunks_[next_chunk_++];
+    const auto copied = std::min(capacity, chunk.size());
+    std::memcpy(destination, chunk.data(), copied);
+    return {copied, TransportStatus::kOk, TransportError::kNone};
+  }
+
+  WriteResult Write(const std::uint8_t* data, const std::size_t size) override
+  {
+    if (!open_)
+    {
+      return {0u, TransportStatus::kClosed, TransportError::kClosed};
+    }
+    written_.insert(written_.end(), data, data + size);
+    return {size, TransportStatus::kOk, TransportError::kNone};
+  }
+
+  bool IsOpen() const override { return open_; }
+  void Close() override { open_ = false; }
+
+  const std::vector<std::uint8_t>& written() const { return written_; }
+
+private:
+  bool open_{true};
+  std::vector<std::vector<std::uint8_t>> chunks_{};
+  std::size_t next_chunk_{0u};
+  std::vector<std::uint8_t> written_{};
 };
 
 std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id, const std::uint8_t message_id,
@@ -589,6 +644,68 @@ void TestSilentProbeRejected(TestContext& ctx)
              "silent ports should report no_data with no confidence");
 }
 
+std::vector<std::uint8_t> Bytes(const std::string& text) { return {text.begin(), text.end()}; }
+
+std::string BuildUm982VersionA()
+{
+  return BuildUnicoreAsciiFrame(
+      "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;"
+      "\"UM982\",\"R4.10Build13495\",\"HRPT00-S10C-P\","
+      "\"2310415000012-LR23A2225208904\",\"ffff48ffff0fffff\",\"2021/11/26\"");
+}
+
+void TestActiveUnicoreProbeWaitsPastAckForVersionA(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB0";
+  ScriptedProbeTransport transport(
+      {Bytes("$command,VERSIONA,response: OK*00\r\n"), Bytes(BuildUm982VersionA())});
+
+  const auto result = ProbeReceiverTransportAtBaud(candidate, 115200u, transport);
+  const std::string written(transport.written().begin(), transport.written().end());
+  ctx.Expect(written == "VERSIONA\r\n", "active discovery must transmit the exact VERSIONA query");
+  ctx.Expect(result.selected_baud == std::optional<std::uint32_t>{115200u} &&
+                 result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 result.identity.model == std::optional<std::string>{"UM982"} &&
+                 result.identity.firmware_version ==
+                     std::optional<std::string>{"R4.10Build13495"} &&
+                 result.versiona_verified && result.confidence == ReceiverProbeConfidence::kHigh,
+             "generic ACK must remain intermediate until a valid VERSIONA identifies the UM982");
+}
+
+void TestActiveUnicoreProbeRejectsAckOnlyAndNoise(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB0";
+  ScriptedProbeTransport ack_only({Bytes("$command,VERSIONA,response: OK*00\r\n")});
+  const auto ack_result = ProbeReceiverTransportAtBaud(candidate, 460800u, ack_only);
+  ScriptedProbeTransport noise({{0x10u, 0x20u, 0x30u, 0x40u}});
+  const auto noise_result = ProbeReceiverTransportAtBaud(candidate, 460800u, noise);
+
+  ctx.Expect(ack_result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 !ack_result.versiona_verified,
+             "a VERSIONA command ACK alone must not validate receiver identity or baud");
+  ctx.Expect(noise_result.detected_family == ReceiverDetectedFamily::kUnknown &&
+                 !noise_result.versiona_verified,
+             "noise at a wrong baud must not validate receiver identity or baud");
+}
+
+void TestActiveUnicoreProbeReassemblesFragmentedVersionA(TestContext& ctx)
+{
+  ReceiverPortCandidate candidate;
+  candidate.path = "/dev/ttyUSB0";
+  const auto version = BuildUm982VersionA();
+  ScriptedProbeTransport transport({Bytes(version.substr(0u, 17u)), Bytes(version.substr(17u, 31u)),
+                                    Bytes(version.substr(48u))});
+
+  const auto result = ProbeReceiverTransportAtBaud(candidate, 460800u, transport);
+  ctx.Expect(result.selected_baud == std::optional<std::uint32_t>{460800u} &&
+                 result.detected_family == ReceiverDetectedFamily::kUnicore &&
+                 result.versiona_verified &&
+                 result.identity.model == std::optional<std::string>{"UM982"},
+             "fragmented VERSIONA must be reassembled and validate the active 460800 baud");
+}
+
 void TestDefaultBaudOrder(TestContext& ctx)
 {
   ReceiverProbeConfig config;
@@ -679,6 +796,9 @@ int main()
   TestNmeaFallbackRejectsNonRuntimeSentences(ctx);
   TestMavlinkAndGarbageRejected(ctx);
   TestSilentProbeRejected(ctx);
+  TestActiveUnicoreProbeWaitsPastAckForVersionA(ctx);
+  TestActiveUnicoreProbeRejectsAckOnlyAndNoise(ctx);
+  TestActiveUnicoreProbeReassemblesFragmentedVersionA(ctx);
   TestDefaultBaudOrder(ctx);
   TestFailedBaudProbesDoNotSelectABaud(ctx);
   TestUnknownAndRtcmOnlyStreams(ctx);

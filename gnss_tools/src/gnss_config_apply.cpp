@@ -287,10 +287,7 @@ ReceiverProbeResult MakeUnknownDiscoveryResult(const std::optional<std::string>&
   {
     result.path = *explicit_device;
   }
-  if (explicit_baud.has_value())
-  {
-    result.selected_baud = *explicit_baud;
-  }
+  (void)explicit_baud;
   result.detected_family = ReceiverDetectedFamily::kUnknown;
   result.note = reason;
   result.reason = reason;
@@ -688,6 +685,11 @@ int main(int argc, char** argv)
       return EXIT_FAILURE;
     }
   } else
+  {
+    cli_options.discover_receiver = true;
+  }
+
+  if (LiveApplyRequested(cli_options.apply) && cli_options.apply.transport_baud_rate != 0u)
   {
     cli_options.discover_receiver = true;
   }

@@ -506,6 +506,15 @@ ConfigApplyResult MakeBaseResult(const ConfigApplyOptions& options)
   result.executed = false;
   result.device_path = ResolveRequestedDevicePath(options);
   result.transport_baud_rate = ResolveRequestedTransportBaud(options);
+  result.current_transport_baud_rate = result.transport_baud_rate;
+  result.current_baud_verified =
+      options.discovery_result.has_value() && options.discovery_result->versiona_verified &&
+      options.discovery_result->selected_baud ==
+          std::optional<std::uint32_t>{result.current_transport_baud_rate};
+  if (options.discovery_result.has_value())
+  {
+    result.detected_family = options.discovery_result->detected_family;
+  }
   result.timeout_ms = options.timeout_ms;
   return result;
 }
@@ -902,6 +911,7 @@ ProbeUnicoreActiveResponse(ByteDuplex& transport, const std::uint32_t baud_rate,
 
   UnicoreResponseRouter router;
   std::vector<std::uint8_t> read_buffer(256u, 0u);
+  std::vector<std::uint8_t> received_bytes;
   const auto deadline = Clock::now() + std::chrono::milliseconds(static_cast<int>(window_ms));
   auto next_query_time = Clock::now();
   const auto max_read_attempts = ComputeProbeReadAttemptLimit(window_ms);
@@ -969,13 +979,17 @@ ProbeUnicoreActiveResponse(ByteDuplex& transport, const std::uint32_t baud_rate,
     router.FeedBytes(
         std::string_view(reinterpret_cast<const char*>(read_buffer.data()), read_result.bytes_read),
         NowTimestampNs());
+    received_bytes.insert(received_bytes.end(), read_buffer.begin(),
+                          read_buffer.begin() +
+                              static_cast<std::ptrdiff_t>(read_result.bytes_read));
 
     ReceiverCommandResponse response;
     while (router.PopResponse(response))
     {
       TraceUnicoreRouterResponse(trace_result, response);
       if (response.kind == ReceiverCommandResponseKind::kTextOk &&
-          response.message.rfind("#VERSIONA", 0u) == 0u)
+          response.message.rfind("#VERSIONA", 0u) == 0u &&
+          universal_gnss_driver::ParseVerifiedUnicoreVersionAIdentity(received_bytes).has_value())
       {
         outcome.status = UnicoreActiveProbeStatus::kResponsive;
         return outcome;
@@ -2218,6 +2232,7 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   }
 
   result.transport_baud_rate = recovery_baud;
+  result.active_verified_baud = recovery_baud;
   result.status = SuccessfulCompletionStatus(result.execution_summary);
   result.execution_summary.final_status = ToString(result.status);
   result.progress_log.push_back("Verified receiver is reachable again at " +
@@ -2274,7 +2289,6 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
 
   std::uint32_t active_baud = current_baud;
   bool continue_at_target = false;
-  bool continue_at_old = false;
   std::string last_error = "no receiver response on probed baud rates after CONFIG COM1: old " +
                            std::to_string(current_baud) + " bps, target " +
                            std::to_string(*target_baud) + " bps";
@@ -2331,38 +2345,10 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
 
     if (old_baud_responsive)
     {
-      static_cast<universal_gnss_transport::ByteSource&>(transport).Close();
-      std::string old_reopen_error;
-      if (hooks.ReopenTransport(transport, result.device_path, current_baud,
-                                transport_read_timeout_ms, old_reopen_error))
-      {
-        active_baud = current_baud;
-        if (options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent)
-        {
-          last_error = "configured baud " + std::to_string(*target_baud) +
-                       " bps did not become active live; refusing SAVECONFIG on the previous " +
-                       std::to_string(current_baud) + " bps transport";
-          result.progress_log.push_back(last_error);
-        } else
-        {
-          continue_at_old = true;
-          result.progress_log.push_back(
-              "Configured baud " + std::to_string(*target_baud) +
-              " bps did not become active live; continuing at the previously detected " +
-              std::to_string(current_baud) + " bps transport");
-          result.plan.warnings.push_back(
-              "configured baud " + std::to_string(*target_baud) +
-              " bps did not become active live after CONFIG COM1; continuing at the previously "
-              "detected " +
-              std::to_string(current_baud) +
-              " bps transport until a persistent/save workflow or reboot makes the new baud "
-              "active");
-          break;
-        }
-      } else
-      {
-        last_error = old_reopen_error;
-      }
+      last_error = "configured baud " + std::to_string(*target_baud) +
+                   " bps did not answer VERSIONA; the receiver still answers at the previous " +
+                   std::to_string(current_baud) + " bps transport";
+      result.progress_log.push_back(last_error);
     }
 
     if (attempt < kUnicoreRuntimeBaudSwitchMaxAttempts)
@@ -2371,15 +2357,10 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
     }
   }
 
-  if (!continue_at_target && !continue_at_old)
+  if (!continue_at_target)
   {
     result.status = ConfigApplyStatus::kTransportUnavailable;
-    result.error_message =
-        options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
-            ? last_error
-            : "no receiver response on probed baud rates after CONFIG COM1: old " +
-                  std::to_string(current_baud) + " bps, target " + std::to_string(*target_baud) +
-                  " bps";
+    result.error_message = last_error;
     result.execution_summary.final_status = "transport_unavailable";
     return result;
   }
@@ -2424,20 +2405,14 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   }
 
   result.transport_baud_rate = active_baud;
+  result.active_verified_baud = active_baud;
   result.status = SuccessfulCompletionStatus(result.execution_summary);
   result.execution_summary.final_status = ToString(result.status);
-  if (continue_at_target)
-  {
-    const std::string apply_mode = options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
-                                       ? "persistent"
-                                       : "runtime-only";
-    result.progress_log.push_back("Continuing " + apply_mode + " profile apply at target baud " +
-                                  std::to_string(active_baud) + " bps");
-  } else
-  {
-    result.progress_log.push_back("Continuing runtime-only profile apply at previous live baud " +
-                                  std::to_string(active_baud) + " bps");
-  }
+  const std::string apply_mode = options.apply_mode == ReceiverAutoConfigApplyMode::kPersistent
+                                     ? "persistent"
+                                     : "runtime-only";
+  result.progress_log.push_back("Continuing " + apply_mode + " profile apply at target baud " +
+                                std::to_string(active_baud) + " bps");
   result.error_message = result.status == ConfigApplyStatus::kPartialSuccess
                              ? "one or more optional commands failed during apply"
                              : std::string{};
@@ -2549,6 +2524,9 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
   }
 
   result.plan = BuildConfigPlan(BuildAutoConfigRequest(options));
+  result.target_config_baud = options.config_baud.has_value()
+                                  ? options.config_baud
+                                  : ExtractPlannedUnicoreConfigBaud(result.plan.commands);
   result.status = MapPlanStatus(result.plan.status);
   PopulateExecutionSummaryFromPlan(result);
 
@@ -2559,14 +2537,14 @@ ConfigApplyResult PrepareConfigApply(const ConfigApplyOptions& options)
     return result;
   }
 
-  if (ApplyModeRequestsExecution(options.apply_mode) && options.discovery_result.has_value() &&
-      options.discovery_result->detected_family == ReceiverDetectedFamily::kUnknown &&
-      result.transport_baud_rate == 0u)
+  if (ApplyModeRequestsExecution(options.apply_mode) && IsUnicorePlan(result.plan) &&
+      !result.current_baud_verified)
   {
     result.status = ConfigApplyStatus::kTransportUnavailable;
     result.plan.ready_to_execute = false;
-    result.error_message = "receiver discovery is inconclusive; refusing live apply without an "
-                           "explicit current transport baud";
+    result.error_message =
+        "current Unicore transport baud has not been validated by a VERSIONA response; refusing "
+        "live apply";
     result.execution_summary.final_status = ToString(result.status);
     return result;
   }
@@ -2596,6 +2574,10 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     result.execution_summary.final_status = ToString(ConfigApplyStatus::kOk);
     result.progress_log.push_back(
         "No receiver configuration commands were required for this profile");
+    if (result.current_baud_verified)
+    {
+      result.active_verified_baud = result.current_transport_baud_rate;
+    }
     return result;
   }
 
@@ -2663,6 +2645,10 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     {
       result.error_message = "one or more optional commands failed during apply";
     }
+    if (IsSuccessfulApplyStatus(result.status))
+    {
+      result.active_verified_baud = result.current_transport_baud_rate;
+    }
     return result;
   }
 
@@ -2680,6 +2666,10 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
   if (FinalizeIfApplicationStopped(result, application, application_result))
   {
     UpdateExecutionSummary(result, application);
+    if (IsSuccessfulApplyStatus(result.status) && result.current_baud_verified)
+    {
+      result.active_verified_baud = result.current_transport_baud_rate;
+    }
     return result;
   }
 
@@ -2767,6 +2757,11 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     {
       result.error_message = "one or more optional commands failed during apply";
     }
+  }
+
+  if (IsSuccessfulApplyStatus(result.status) && result.current_baud_verified)
+  {
+    result.active_verified_baud = result.current_transport_baud_rate;
   }
 
   return result;
@@ -2982,10 +2977,9 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   }
   output << ",\n";
   output << "    \"target_configured_baud\": ";
-  if (const auto target_baud = ExtractPlannedUnicoreConfigBaud(result.plan.commands);
-      target_baud.has_value())
+  if (result.target_config_baud.has_value())
   {
-    output << *target_baud;
+    output << *result.target_config_baud;
   } else
   {
     output << "null";
@@ -3011,6 +3005,28 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "\n";
   output << "  },\n";
   output << "  \"discovery\": {\n";
+  output << "    \"family\": \""
+         << EscapeJson(universal_gnss_driver::ToString(result.detected_family)) << "\",\n";
+  output << "    \"model\": ";
+  if (result.plan.detected_receiver_model.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.detected_receiver_model) << "\"";
+  } else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"firmware_version\": ";
+  if (result.plan.detected_receiver_firmware_version.has_value())
+  {
+    output << "\"" << EscapeJson(*result.plan.detected_receiver_firmware_version) << "\"";
+  } else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"versiona_verified\": " << (result.current_baud_verified ? "true" : "false")
+         << ",\n";
   output << "    \"device\": ";
   if (result.plan.detected_device.has_value())
   {
@@ -3060,6 +3076,27 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "  \"transport\": {\n";
   output << "    \"device\": \"" << EscapeJson(result.device_path) << "\",\n";
   output << "    \"baud\": " << result.transport_baud_rate << ",\n";
+  output << "    \"current_baud\": " << result.current_transport_baud_rate << ",\n";
+  output << "    \"target_baud\": ";
+  if (result.target_config_baud.has_value())
+  {
+    output << *result.target_config_baud;
+  } else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"active_verified_baud\": ";
+  if (result.active_verified_baud.has_value())
+  {
+    output << *result.active_verified_baud;
+  } else
+  {
+    output << "null";
+  }
+  output << ",\n";
+  output << "    \"current_baud_verified\": " << (result.current_baud_verified ? "true" : "false")
+         << ",\n";
   output << "    \"timeout_ms\": " << result.timeout_ms << "\n";
   output << "  },\n";
   output << "  \"safety\": {\n";

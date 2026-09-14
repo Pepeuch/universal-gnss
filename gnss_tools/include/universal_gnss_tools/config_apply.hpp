@@ -102,7 +102,13 @@ struct ConfigApplyResult
   bool requires_persistent_confirmation{false};
   bool execution_confirmed{false};
   std::string device_path{};
+  std::uint32_t current_transport_baud_rate{0u};
   std::uint32_t transport_baud_rate{0u};
+  std::optional<std::uint32_t> target_config_baud{};
+  std::optional<std::uint32_t> active_verified_baud{};
+  bool current_baud_verified{false};
+  universal_gnss_driver::ReceiverDetectedFamily detected_family{
+      universal_gnss_driver::ReceiverDetectedFamily::kUnknown};
   std::uint32_t timeout_ms{0u};
   ConfigPlanResult plan{};
   ConfigApplyExecutionSummary execution_summary{};

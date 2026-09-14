@@ -40,6 +40,7 @@ using universal_gnss_protocols::UnicoreBinaryFrame;
 using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
+using universal_gnss_transport::ByteDuplex;
 using universal_gnss_transport::PosixSerialConfig;
 using universal_gnss_transport::PosixSerialTransport;
 using universal_gnss_transport::TransportError;
@@ -748,52 +749,7 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
     return result;
   }
 
-  const auto deadline = std::chrono::steady_clock::now() +
-                        std::chrono::milliseconds(static_cast<int>(effective_timeout_ms * 3u));
-
-  std::array<std::uint8_t, 512u> buffer{};
-  std::vector<std::uint8_t> bytes;
-  bytes.reserve(config.max_probe_bytes);
-  std::size_t idle_reads = 0u;
-  while (bytes.size() < config.max_probe_bytes && std::chrono::steady_clock::now() < deadline)
-  {
-    const auto read = transport.Read(
-        buffer.data(), std::min(buffer.size(), config.max_probe_bytes - bytes.size()));
-    if (read.status == TransportStatus::kError)
-    {
-      result.note = std::string("read_failed:") + ToString(read.error);
-      break;
-    }
-
-    if (read.bytes_read == 0u)
-    {
-      ++idle_reads;
-      if (idle_reads >= 2u && !bytes.empty())
-      {
-        break;
-      }
-      continue;
-    }
-
-    idle_reads = 0u;
-    bytes.insert(bytes.end(), buffer.begin(),
-                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
-    result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
-    if (IsHighConfidence(result))
-    {
-      break;
-    }
-  }
-
-  if (result.evidence.bytes_read == 0u)
-  {
-    result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
-    if (result.note.empty())
-    {
-      result.note = bytes.empty() ? "no_data" : result.note;
-      result.reason = result.note;
-    }
-  }
+  result = ProbeReceiverTransportAtBaud(candidate, baud_rate, transport, config);
 
   transport.Close();
   return result;
@@ -1090,6 +1046,91 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
                        result.confidence);
   if (result.reason.empty())
   {
+    result.reason = result.note;
+  }
+  return result;
+}
+
+std::optional<ReceiverIdentityMetadata>
+ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes)
+{
+  return FindUnicoreVersionAMetadata(bytes);
+}
+
+ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& candidate,
+                                                 const std::uint32_t baud_rate,
+                                                 ByteDuplex& transport,
+                                                 const ReceiverProbeConfig& config)
+{
+  ReceiverProbeResult result = MakeBaseProbeResult(candidate);
+  result.selected_baud = baud_rate;
+
+  constexpr std::string_view kVersionQuery = "VERSIONA\r\n";
+  const auto write = transport.Write(reinterpret_cast<const std::uint8_t*>(kVersionQuery.data()),
+                                     kVersionQuery.size());
+  if (write.status == TransportStatus::kClosed || write.status == TransportStatus::kError ||
+      write.bytes_written != kVersionQuery.size())
+  {
+    result.note = std::string("active_probe_write_failed:") + ToString(write.error);
+    result.reason = result.note;
+    return result;
+  }
+
+  const std::uint32_t effective_timeout_ms =
+      config.read_timeout_ms > 0u ? config.read_timeout_ms : 250u;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(static_cast<int>(effective_timeout_ms * 3u));
+  std::array<std::uint8_t, 512u> buffer{};
+  std::vector<std::uint8_t> bytes;
+  bytes.reserve(config.max_probe_bytes);
+
+  while (bytes.size() < config.max_probe_bytes && std::chrono::steady_clock::now() < deadline)
+  {
+    const auto read = transport.Read(
+        buffer.data(), std::min(buffer.size(), config.max_probe_bytes - bytes.size()));
+    if (read.status == TransportStatus::kError || read.status == TransportStatus::kClosed)
+    {
+      result.note = std::string("read_failed:") + ToString(read.error);
+      result.reason = result.note;
+      break;
+    }
+    if (read.status == TransportStatus::kEndOfStream && read.bytes_read == 0u)
+    {
+      break;
+    }
+    if (read.bytes_read == 0u)
+    {
+      continue;
+    }
+
+    bytes.insert(bytes.end(), buffer.begin(),
+                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
+    result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
+    if (const auto version_metadata = ParseVerifiedUnicoreVersionAIdentity(bytes);
+        version_metadata.has_value())
+    {
+      result.detected_family = ReceiverDetectedFamily::kUnicore;
+      result.confidence = ReceiverProbeConfidence::kHigh;
+      result.discovery_score = std::max(result.discovery_score, 100);
+      result.identity = *version_metadata;
+      result.versiona_verified = true;
+      result.reason = "VERSIONA:+100";
+      result.note.clear();
+    }
+    if (result.versiona_verified ||
+        (IsHighConfidence(result) && result.detected_family != ReceiverDetectedFamily::kUnicore))
+    {
+      break;
+    }
+  }
+
+  if (result.evidence.bytes_read == 0u)
+  {
+    result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
+  }
+  if (result.note.empty() && bytes.empty())
+  {
+    result.note = "no_data";
     result.reason = result.note;
   }
   return result;

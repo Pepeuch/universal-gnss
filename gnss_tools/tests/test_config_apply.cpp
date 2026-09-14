@@ -2,8 +2,10 @@
 #include <array>
 #include <cctype>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,6 +14,7 @@
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_driver/ubx_command_response_mapper.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_tools/config_apply.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
@@ -64,6 +67,7 @@ ReceiverProbeResult MakeDiscoveryResult(const std::string& path, const std::uint
   result.confidence = family == ReceiverDetectedFamily::kNmea ? ReceiverProbeConfidence::kMedium
                                                               : ReceiverProbeConfidence::kHigh;
   result.discovery_score = family == ReceiverDetectedFamily::kNmea ? 20 : 100;
+  result.versiona_verified = family == ReceiverDetectedFamily::kUnicore;
   result.reason = family == ReceiverDetectedFamily::kUblox     ? "valid_ubx_frame:+100"
                   : family == ReceiverDetectedFamily::kUnicore ? "PVTSLNA:+100"
                   : family == ReceiverDetectedFamily::kNmea    ? "valid_GGA:+20"
@@ -122,7 +126,17 @@ std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
   return text;
 }
 
-std::string BuildUnicoreVersionResponse() { return "#VERSIONA,UM982*00\r\n"; }
+std::string BuildUnicoreVersionResponse()
+{
+  const std::string body = "#VERSIONA,94,GPS,FINE,2190,117325000,0,0,18,160;"
+                           "\"UM982\",\"R4.10Build13495\",\"HRPT00-S10C-P\","
+                           "\"2310415000012-LR23A2225208904\",\"ffff48ffff0fffff\",\"2021/11/26\"";
+  const std::uint32_t crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(body.data() + 1u), body.size() - 1u);
+  std::ostringstream stream;
+  stream << body << '*' << std::hex << std::setfill('0') << std::setw(8) << crc << "\r\n";
+  return stream.str();
+}
 
 std::string BuildUnicoreConfigResponse(const std::string& signalgroup,
                                        const std::uint32_t com1_baud = 921600u)
@@ -799,6 +813,8 @@ void TestRuntimeOnlyUnicoreSameBaudOverrideSkipsConfigCom1(TestContext& ctx)
   const std::string text = universal_gnss_tools::FormatConfigApplyText(result);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.plan.summary.commands_total == 14u &&
+                 result.current_baud_verified && result.current_transport_baud_rate == 460800u &&
+                 result.target_config_baud == std::optional<std::uint32_t>{460800u} &&
                  FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") == std::nullopt &&
                  FindTextCommandIndex(result, "CONFIG SIGNALGROUP 3 6\r\n") != std::nullopt,
              "runtime-only Unicore apply preparation should skip CONFIG COM1 when the requested "
@@ -827,7 +843,7 @@ void TestRuntimeOnlyUnicoreDifferentBaudOverrideKeepsConfigCom1(TestContext& ctx
              "requested config baud differs from the live transport baud");
 }
 
-void TestRuntimeOnlyUnicoreExplicitCurrentBaudSkipsConfigCom1WithoutDiscovery(TestContext& ctx)
+void TestRuntimeOnlyUnicoreExplicitCurrentBaudRequiresValidation(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.receiver_family = ReceiverDetectedFamily::kUnicore;
@@ -840,13 +856,12 @@ void TestRuntimeOnlyUnicoreExplicitCurrentBaudSkipsConfigCom1WithoutDiscovery(Te
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") == std::nullopt,
-             "runtime-only Unicore apply preparation should skip CONFIG COM1 when explicit "
-             "--baud matches --config-baud even without discovery");
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 !result.plan.ready_to_execute && !result.executed,
+             "an explicit current baud must be validated by VERSIONA before live writes");
 }
 
-void TestRuntimeOnlyUnicoreExplicitCurrentBaudEmitsConfigCom1WhenDifferent(TestContext& ctx)
+void TestRuntimeOnlyUnicoreIncorrectManualBaudIsRejected(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.receiver_family = ReceiverDetectedFamily::kUnicore;
@@ -859,10 +874,9 @@ void TestRuntimeOnlyUnicoreExplicitCurrentBaudEmitsConfigCom1WhenDifferent(TestC
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") != std::nullopt,
-             "runtime-only Unicore apply preparation should emit CONFIG COM1 when explicit "
-             "--baud differs from --config-baud without discovery");
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 !result.plan.ready_to_execute && !result.executed,
+             "an incorrect unvalidated manual baud must be rejected before CONFIG COM1");
 }
 
 void TestRuntimeOnlyUnicoreUnknownCurrentBaudKeepsConservativeConfigCom1(TestContext& ctx)
@@ -877,10 +891,9 @@ void TestRuntimeOnlyUnicoreUnknownCurrentBaudKeepsConservativeConfigCom1(TestCon
 
   const auto result = PrepareConfigApply(options);
 
-  ctx.Expect(result.status == ConfigApplyStatus::kOk &&
-                 FindTextCommandIndex(result, "CONFIG COM1 460800 8 n 1\r\n") != std::nullopt,
-             "runtime-only Unicore apply preparation should keep CONFIG COM1 when no current "
-             "baud source is known");
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.transport_baud_rate == 0u && !result.plan.ready_to_execute,
+             "live Unicore apply must refuse an unknown current baud");
 }
 
 void TestKnownNonBaselineUnicoreModelPreparation(TestContext& ctx)
@@ -1297,9 +1310,11 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
   ConfigApplyOptions options;
   options.discovery_result =
       MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.discovery_result->identity.model = "UM982";
+  options.discovery_result->identity.firmware_version = "R4.10Build13495";
   options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
   options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
-  options.receiver_model = "UM981";
+  options.receiver_model = "UM982";
   options.config_baud = 921600u;
   options.confirm = true;
 
@@ -1323,8 +1338,12 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  const std::string json = universal_gnss_tools::FormatConfigApplyJson(result);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 921600u &&
+                 result.current_transport_baud_rate == 115200u &&
+                 result.target_config_baud == std::optional<std::uint32_t>{921600u} &&
+                 result.active_verified_baud == std::optional<std::uint32_t>{921600u} &&
                  result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
                  result.execution_summary.commands_completed ==
                      prepared.plan.summary.commands_total &&
@@ -1338,9 +1357,17 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
           written.find("VERSIONA\r\n") != std::string::npos &&
           written.find("SAVECONFIG\r\n") == std::string::npos,
       "runtime-only Unicore live baud-switch recovery should probe VERSIONA and avoid SAVECONFIG");
+  ctx.Expect(json.find("\"family\": \"unicore\"") != std::string::npos &&
+                 json.find("\"model\": \"UM982\"") != std::string::npos &&
+                 json.find("\"firmware_version\": \"R4.10Build13495\"") != std::string::npos &&
+                 json.find("\"current_baud\": 115200") != std::string::npos &&
+                 json.find("\"target_baud\": 921600") != std::string::npos &&
+                 json.find("\"active_verified_baud\": 921600") != std::string::npos,
+             "apply JSON must keep detected identity and current, target, and verified active "
+             "baud values distinct");
 }
 
-void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(TestContext& ctx)
+void TestUnicoreRuntimeApplyStopsWhenConfigCom1DoesNotSwitchLive(TestContext& ctx)
 {
   ConfigApplyOptions options;
   options.discovery_result =
@@ -1353,7 +1380,6 @@ void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(Te
 
   const auto prepared = PrepareConfigApply(options);
   const auto baud_phase_commands = CountUnicoreBaudPhaseCommands(prepared);
-  const auto profile_phase_commands = CountUnicoreProfilePhaseCommands(prepared);
   const std::string first_phase_responses = BuildRepeatedUnicoreOkResponses(baud_phase_commands);
   const std::string old_probe_response = BuildUnicoreVersionResponse();
   ScriptedByteDuplex transport(
@@ -1363,38 +1389,28 @@ void TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(Te
       {"/dev/ttyUSB0", 115200u, 100u,
        std::vector<std::uint8_t>(old_probe_response.begin(), old_probe_response.end())});
   hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
-  const std::string remaining_profile_responses =
-      BuildRepeatedUnicoreOkResponses(profile_phase_commands);
-  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u,
-                       std::vector<std::uint8_t>(remaining_profile_responses.begin(),
-                                                 remaining_profile_responses.end())});
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0", 115200u, 100u,
+       std::vector<std::uint8_t>(old_probe_response.begin(), old_probe_response.end())});
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0", 115200u, 100u,
+       std::vector<std::uint8_t>(old_probe_response.begin(), old_probe_response.end())});
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
-  bool warning_found = false;
-  for (const auto& warning : result.plan.warnings)
-  {
-    if (warning.find("did not become active live") != std::string::npos)
-    {
-      warning_found = true;
-      break;
-    }
-  }
-
-  ctx.Expect(result.status == ConfigApplyStatus::kOk && result.transport_baud_rate == 115200u &&
-                 result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
-                 result.execution_summary.commands_completed ==
-                     prepared.plan.summary.commands_total &&
-                 result.execution_summary.commands_failed == 0u &&
-                 result.execution_summary.final_status == "ok",
-             "runtime-only Unicore apply should continue at the old baud when CONFIG COM1 does not "
-             "switch the live transport");
-  ctx.Expect(
-      hooks.AllStepsConsumed() && hooks.failure().empty() && warning_found &&
-          written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
-          written.find("VERSIONA\r\n") != std::string::npos &&
-          written.find("SAVECONFIG\r\n") == std::string::npos,
-      "runtime-only Unicore fallback should warn, keep the old live baud, and avoid SAVECONFIG");
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
+                 result.transport_baud_rate == 115200u &&
+                 !result.active_verified_baud.has_value() &&
+                 result.execution_summary.final_status == "transport_unavailable",
+             "runtime-only Unicore apply must stop when the target baud cannot be verified");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("CONFIG COM1 921600 8 n 1\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos,
+             "an unverified target baud must prevent profile writes after CONFIG COM1");
 }
 
 void TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(TestContext& ctx)
@@ -1425,8 +1441,7 @@ void TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(Test
 
   ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
                  result.execution_summary.final_status == "transport_unavailable" &&
-                 result.error_message.find("no receiver response on probed baud rates") !=
-                     std::string::npos,
+                 result.error_message.find("did not answer VERSIONA") != std::string::npos,
              "runtime-only Unicore apply should fail fast when neither the old nor target baud "
              "responds after CONFIG COM1");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty(),
@@ -1780,14 +1795,13 @@ void TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(TestContex
         {"/dev/ttyUSB0", 921600u, 100u,
          std::vector<std::uint8_t>(old_baud_response.begin(), old_baud_response.end())});
     hooks.AddReopenStep({"/dev/ttyUSB0", 460800u, 100u, {}});
-    hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
   }
 
   const auto result = ExecuteConfigApply(transport, options, &hooks);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable &&
-                 result.error_message.find("refusing SAVECONFIG") != std::string::npos,
+                 result.error_message.find("did not answer VERSIONA") != std::string::npos,
              "persistent apply should fail when the requested target baud never becomes active");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("CONFIG COM1 460800 8 n 1\r\n") != std::string::npos &&
@@ -1842,8 +1856,8 @@ int main()
   TestRoverPolicyPreparationMatchesPlanSemantics(ctx);
   TestRuntimeOnlyUnicoreSameBaudOverrideSkipsConfigCom1(ctx);
   TestRuntimeOnlyUnicoreDifferentBaudOverrideKeepsConfigCom1(ctx);
-  TestRuntimeOnlyUnicoreExplicitCurrentBaudSkipsConfigCom1WithoutDiscovery(ctx);
-  TestRuntimeOnlyUnicoreExplicitCurrentBaudEmitsConfigCom1WhenDifferent(ctx);
+  TestRuntimeOnlyUnicoreExplicitCurrentBaudRequiresValidation(ctx);
+  TestRuntimeOnlyUnicoreIncorrectManualBaudIsRejected(ctx);
   TestRuntimeOnlyUnicoreUnknownCurrentBaudKeepsConservativeConfigCom1(ctx);
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
@@ -1856,7 +1870,7 @@ int main()
   TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(ctx);
   TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(ctx);
   TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
-  TestUnicoreRuntimeApplyContinuesAtOldBaudWhenConfigCom1DoesNotSwitchLive(ctx);
+  TestUnicoreRuntimeApplyStopsWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
   TestUnicoreFactoryResetPersistentApplySavesAfterReplay(ctx);

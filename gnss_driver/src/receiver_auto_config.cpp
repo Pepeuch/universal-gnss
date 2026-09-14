@@ -1307,6 +1307,18 @@ ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(const ReceiverAutoConfigReque
     {
       effective_family = discovery.detected_family;
     }
+    if (effective_family == ReceiverDetectedFamily::kUnicore &&
+        discovery.identity.model.has_value())
+    {
+      const std::string detected_model = NormalizeUnicoreModelName(*discovery.identity.model);
+      if (request.receiver_model.has_value() &&
+          NormalizeUnicoreModelName(*request.receiver_model) != detected_model)
+      {
+        plan.status = ReceiverAutoConfigPlanStatus::kInvalidArgument;
+        plan.error_message = "receiver model request does not match the supplied discovery result";
+        return plan;
+      }
+    }
   }
 
   plan.request.receiver_family = effective_family;
