@@ -10,8 +10,7 @@
 #include "universal_gnss_driver/receiver_config_application.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandFailurePolicy;
@@ -128,15 +127,14 @@ void TestOneCommandSuccess(TestContext& ctx)
                  application.transaction_engine().completed_transaction()->response.kind ==
                      ReceiverCommandResponseKind::kTextOk,
              "text_ok should complete a one-command application successfully");
-  ctx.Expect(application.metrics().commands_total == 1u &&
-                 application.metrics().commands_started == 1u &&
-                 application.metrics().commands_completed == 1u &&
-                 application.metrics().commands_failed == 0u &&
-                 application.metrics().responses_applied == 1u &&
-                 sink.written_bytes() ==
-                     std::vector<std::uint8_t>(
-                         {'M', 'O', 'D', 'E', ' ', 'R', 'O', 'V', 'E', 'R', '\r', '\n'}),
-             "successful one-command applications should update metrics and write payload bytes");
+  ctx.Expect(
+      application.metrics().commands_total == 1u && application.metrics().commands_started == 1u &&
+          application.metrics().commands_completed == 1u &&
+          application.metrics().commands_failed == 0u &&
+          application.metrics().responses_applied == 1u &&
+          sink.written_bytes() == std::vector<std::uint8_t>({'M', 'O', 'D', 'E', ' ', 'R', 'O', 'V',
+                                                             'E', 'R', '\r', '\n'}),
+      "successful one-command applications should update metrics and write payload bytes");
 }
 
 void TestMultiCommandSuccess(TestContext& ctx)
@@ -253,10 +251,10 @@ void TestOptionalCommandFailureContinuesByDefault(TestContext& ctx)
   MemoryByteSink sink;
   ReceiverConfigApplication application(sink);
 
-  application.Start({MakeTextCommand("GPGGA 1\r\n",
-                                     ReceiverCommandFailurePolicy::kContinueOnFailure),
-                     MakeBinaryCommand({0x55u, 0x66u})},
-                    5400);
+  application.Start(
+      {MakeTextCommand("GPGGA 1\r\n", ReceiverCommandFailurePolicy::kContinueOnFailure),
+       MakeBinaryCommand({0x55u, 0x66u})},
+      5400);
   const auto first = application.ApplyResponse(
       MakeResponse(ReceiverCommandResponseKind::kTextError, 5500, "grammar error"));
 
@@ -324,11 +322,34 @@ void TestRetryExhaustionFails(TestContext& ctx)
                  application.transaction_engine().current_transaction()->state ==
                      universal_gnss_driver::ReceiverCommandTransactionState::kTimedOut,
              "retry exhaustion should fail the application after the final timeout");
-  ctx.Expect(application.metrics().commands_started == 1u &&
-                 application.metrics().commands_failed == 1u &&
-                 application.metrics().commands_retried == 1u &&
-                 application.metrics().timeouts_seen == 2u,
-             "retry exhaustion should update timeout, retry, and failure counters");
+  ctx.Expect(
+      application.metrics().commands_started == 1u && application.metrics().commands_failed == 1u &&
+          application.metrics().commands_retried == 1u && application.metrics().timeouts_seen == 2u,
+      "retry exhaustion should update timeout, retry, and failure counters");
+}
+
+void TestOptionalCommandTimeoutStopsIndeterminateApply(TestContext& ctx)
+{
+  MemoryByteSink sink;
+  ReceiverConfigApplication application(sink);
+
+  application.Start({MakeTextCommand("CONFIG SIGNALGROUP 3 6\r\n",
+                                     ReceiverCommandFailurePolicy::kContinueOnFailure),
+                     MakeTextCommand("GPGGA 1\r\n")},
+                    8300);
+  const auto timed_out = application.MarkTimeout(8900);
+
+  ctx.Expect(timed_out.state == ReceiverConfigApplicationState::kFailed &&
+                 timed_out.command_finished && timed_out.command_failed &&
+                 !timed_out.command_required && !timed_out.failure_ignored &&
+                 !timed_out.advanced_to_next_command && application.current_index() == 0u,
+             "an optional command timeout after dispatch must stop the indeterminate apply");
+  ctx.Expect(timed_out.error_message.find("indeterminate") != std::string::npos &&
+                 sink.written_bytes() ==
+                     std::vector<std::uint8_t>({'C', 'O', 'N', 'F', 'I', 'G', ' ',  'S',
+                                                'I', 'G', 'N', 'A', 'L', 'G', 'R',  'O',
+                                                'U', 'P', ' ', '3', ' ', '6', '\r', '\n'}),
+             "an indeterminate timeout must not dispatch the next command");
 }
 
 void TestSafetyRejectionFailsApplication(TestContext& ctx)
@@ -375,7 +396,7 @@ void TestResetClearsStateAndMetrics(TestContext& ctx)
              "reset should clear both application metrics and underlying transaction state");
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {
@@ -390,6 +411,7 @@ int main()
   TestOptionalCommandFailureContinuesByDefault(ctx);
   TestTimeoutThenRetry(ctx);
   TestRetryExhaustionFails(ctx);
+  TestOptionalCommandTimeoutStopsIndeterminateApply(ctx);
   TestSafetyRejectionFailsApplication(ctx);
   TestResetClearsStateAndMetrics(ctx);
 

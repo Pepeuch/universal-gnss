@@ -974,7 +974,8 @@ ProbeUnicoreActiveResponse(ByteDuplex& transport, const std::uint32_t baud_rate,
     while (router.PopResponse(response))
     {
       TraceUnicoreRouterResponse(trace_result, response);
-      if (response.kind == ReceiverCommandResponseKind::kTextOk)
+      if (response.kind == ReceiverCommandResponseKind::kTextOk &&
+          response.message.rfind("#VERSIONA", 0u) == 0u)
       {
         outcome.status = UnicoreActiveProbeStatus::kResponsive;
         return outcome;

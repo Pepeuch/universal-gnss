@@ -9,8 +9,7 @@
 #include "universal_gnss_driver/receiver_command_transaction_engine.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace universal_gnss_driver
-{
+namespace universal_gnss_driver {
 
 enum class ReceiverConfigApplicationState : std::uint8_t
 {
@@ -63,19 +62,19 @@ public:
   ReceiverConfigApplication(universal_gnss_transport::ByteSink& sink,
                             ReceiverConfigApplicationConfig config = {});
 
-  ReceiverConfigApplicationResult Start(
-      std::vector<ReceiverCommand> commands,
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  ReceiverConfigApplicationResult
+  Start(std::vector<ReceiverCommand> commands,
+        std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
-  ReceiverConfigApplicationResult Step(
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  ReceiverConfigApplicationResult
+  Step(std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
-  ReceiverConfigApplicationResult ApplyResponse(
-      const ReceiverCommandResponse& response,
-      const ReceiverCommandResponseMatchMetadata& match_metadata = {});
+  ReceiverConfigApplicationResult
+  ApplyResponse(const ReceiverCommandResponse& response,
+                const ReceiverCommandResponseMatchMetadata& match_metadata = {});
 
-  ReceiverConfigApplicationResult MarkTimeout(
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  ReceiverConfigApplicationResult
+  MarkTimeout(std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
   ReceiverConfigApplicationResult CheckTimeout(ReceiverCommandTimestampNs now_timestamp_ns);
 
@@ -98,20 +97,19 @@ public:
 private:
   ReceiverConfigApplicationResult BuildResult() const;
 
-  ReceiverConfigApplicationResult CompleteCurrentCommand(const EngineStepResult& engine_result,
-                                                         bool command_succeeded,
-                                                         bool response_applied,
-                                                         const char* fallback_error_message,
-                                                         std::string error_message = {});
+  ReceiverConfigApplicationResult
+  CompleteCurrentCommand(const EngineStepResult& engine_result, bool command_succeeded,
+                         bool response_applied, const char* fallback_error_message,
+                         std::string error_message = {}, bool allow_continuation = true);
 
   ReceiverConfigApplicationResult HandleCommandFailure(const EngineStepResult& engine_result,
                                                        bool response_applied,
                                                        const char* fallback_error_message,
                                                        std::string error_message = {});
 
-  ReceiverConfigApplicationResult HandleTimeoutResult(
-      const EngineStepResult& timeout_result,
-      std::optional<ReceiverCommandTimestampNs> retry_timestamp_ns);
+  ReceiverConfigApplicationResult
+  HandleTimeoutResult(const EngineStepResult& timeout_result,
+                      std::optional<ReceiverCommandTimestampNs> retry_timestamp_ns);
 
   void ResetRunState();
 
@@ -123,4 +121,4 @@ private:
   std::size_t current_index_{0u};
 };
 
-}  // namespace universal_gnss_driver
+} // namespace universal_gnss_driver

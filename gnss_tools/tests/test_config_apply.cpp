@@ -1115,6 +1115,77 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(Te
              "and verification boundary");
 }
 
+void TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.timeout_ms = 1u;
+  options.confirm = true;
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 1u, {}});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTimedOut && result.executed &&
+                 result.execution_summary.optional_commands_failed == 1u &&
+                 result.error_message.find("indeterminate") != std::string::npos,
+             "an optional SIGNALGROUP timeout must stop with an indeterminate result");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("CONFIG SIGNALGROUP 2 0\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") == std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos,
+             "an optional SIGNALGROUP timeout must not enter recovery or dispatch later commands");
+}
+
+void TestUnicoreRecoveryProbeRejectsGenericAck(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.confirm = true;
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.ProvideTextOkResponses();
+  transport.DisconnectAfterSignalGroupResponse();
+  ScriptedConfigApplyHooks hooks(transport);
+
+  const std::string signalgroup_input = "<OK\r\n";
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0", 921600u, 100u,
+       std::vector<std::uint8_t>(signalgroup_input.begin(), signalgroup_input.end())});
+  const std::string generic_ack_input = "<OK\r\n";
+  hooks.AddReopenStep(
+      {"/dev/ttyUSB0", 921600u, 100u,
+       std::vector<std::uint8_t>(generic_ack_input.begin(), generic_ack_input.end())});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTransportUnavailable && result.executed &&
+                 result.error_message.find("did not answer VERSIONA") != std::string::npos,
+             "a generic ACK must not prove that the VERSIONA recovery probe succeeded");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("VERSIONA\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos,
+             "a generic recovery ACK must not allow verification or later profile commands");
+}
+
 void TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -1780,6 +1851,8 @@ int main()
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(ctx);
   TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(ctx);
+  TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(ctx);
+  TestUnicoreRecoveryProbeRejectsGenericAck(ctx);
   TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(ctx);
   TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(ctx);
   TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
