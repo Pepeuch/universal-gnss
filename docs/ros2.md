@@ -629,8 +629,10 @@ ros2 launch universal_gnss_ros2 receiver_and_ntrip.launch.py \
 ```
 
 The combined launch accepts `parameters_file` plus optional `fix_topic`,
-`status_topic`, and `rtcm_topic` arguments. Their defaults preserve the
-existing graph: `/fix`, `/status`, and `/rtcm`.
+`status_topic`, `rtcm_topic`, and `ntrip_enabled` arguments. Topic defaults
+preserve the existing graph: `/fix`, `/status`, and `/rtcm`. `ntrip_enabled`
+defaults to `true`; setting it to `false` leaves the receiver running without
+starting the NTRIP node.
 
 For an integration that needs isolated Universal GNSS topics, use launch
 arguments rather than trailing `--ros-args`:

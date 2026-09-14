@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from launch import LaunchContext, LaunchDescription, LaunchService
 from launch.actions import DeclareLaunchArgument, EmitEvent, ExecuteProcess, TimerAction
+from launch.conditions import IfCondition
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch.utilities import perform_substitutions
@@ -91,7 +92,7 @@ def launch_argument_defaults() -> dict[str, str]:
         action.name: perform_substitutions(context, action.default_value)
         for action in launch_entities()
         if isinstance(action, DeclareLaunchArgument)
-        and action.name in {"fix_topic", "status_topic", "rtcm_topic"}
+        and action.name in {"fix_topic", "status_topic", "rtcm_topic", "ntrip_enabled"}
     }
 
 
@@ -118,7 +119,26 @@ def test_combined_launch_declares_topic_arguments_with_compatible_defaults():
     assert defaults["fix_topic"] == "/fix"
     assert defaults["status_topic"] == "/status"
     assert defaults["rtcm_topic"] == "/rtcm"
+    assert defaults["ntrip_enabled"] == "true"
     assert "parameters_file" in launch_argument_names()
+
+
+def test_ntrip_node_is_conditioned_by_the_explicit_launch_argument():
+    _, ntrip = combined_nodes()
+
+    assert isinstance(ntrip.condition, IfCondition)
+    predicate = ntrip.condition._IfCondition__predicate_expression
+    assert len(predicate) == 1
+    assert isinstance(predicate[0], LaunchConfiguration)
+    assert perform_substitutions(LaunchContext(), predicate[0].variable_name) == "ntrip_enabled"
+
+    disabled_context = LaunchContext()
+    disabled_context.launch_configurations["ntrip_enabled"] = "false"
+    assert ntrip.condition.evaluate(disabled_context) is False
+
+    enabled_context = LaunchContext()
+    enabled_context.launch_configurations["ntrip_enabled"] = "true"
+    assert ntrip.condition.evaluate(enabled_context) is True
 
 
 def test_combined_launch_keeps_parameters_file_on_both_nodes():

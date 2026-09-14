@@ -2,6 +2,7 @@ import uuid
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, EmitEvent
+from launch.conditions import IfCondition
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -39,6 +40,7 @@ def generate_launch_description() -> LaunchDescription:
     gga_enabled = LaunchConfiguration("gga_enabled")
     gga_interval_s = LaunchConfiguration("gga_interval_s")
     tls_enabled = LaunchConfiguration("tls_enabled")
+    ntrip_enabled = LaunchConfiguration("ntrip_enabled")
     parameters_file = LaunchConfiguration("parameters_file")
     fix_topic = LaunchConfiguration("fix_topic")
     status_topic = LaunchConfiguration("status_topic")
@@ -62,6 +64,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("gga_enabled", default_value="false"),
             DeclareLaunchArgument("gga_interval_s", default_value="10"),
             DeclareLaunchArgument("tls_enabled", default_value="false"),
+            DeclareLaunchArgument("ntrip_enabled", default_value="true"),
             DeclareLaunchArgument(
                 "parameters_file",
                 default_value=PathJoinSubstitution(
@@ -101,6 +104,7 @@ def generate_launch_description() -> LaunchDescription:
                 package="universal_gnss_ros2",
                 executable="ntrip_node",
                 name="universal_gnss_ntrip",
+                condition=IfCondition(ntrip_enabled),
                 output="screen",
                 parameters=[
                     {
