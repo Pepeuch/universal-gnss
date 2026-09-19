@@ -27,6 +27,7 @@ RUN apt-get update \
     ros-${ROS_DISTRO}-std-srvs \
     ros-${ROS_DISTRO}-service-msgs \
     ros-${ROS_DISTRO}-std-msgs \
+    ros-${ROS_DISTRO}-geometry-msgs \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -88,6 +89,7 @@ RUN apt-get update \
     ros-${ROS_DISTRO}-std-srvs \
     ros-${ROS_DISTRO}-service-msgs \
     ros-${ROS_DISTRO}-std-msgs \
+    ros-${ROS_DISTRO}-geometry-msgs \
  && if apt-cache show libssl3 > /dev/null 2>&1; then apt-get install -y --no-install-recommends libssl3; else apt-get install -y --no-install-recommends libssl3t64; fi \
  && rm -rf /var/lib/apt/lists/* \
  && install --directory --owner=${APP_UID} --group=${APP_GID} \
