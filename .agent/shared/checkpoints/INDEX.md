@@ -1,5 +1,9 @@
 # Shared checkpoint index
 
+- `active/UG-PRE-RELEASE-001_CHECKPOINT.md` — release-blocker audit at
+  `5c50f6c`: five HIGH software findings, three MEDIUM findings, source/PTY
+  evidence and exact remediation entry points. Engine quarantine is implemented;
+  this audit records apply-layer gaps separately from hardware recovery limits.
 - `retained/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
   `retained/REPOSITORY_BASELINE_AUDIT_LEDGER.md` — frozen audit baseline,
   stable IDs, duplicate graph, and reusable evidence; current classifications
