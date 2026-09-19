@@ -285,31 +285,11 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::HandleTimeoutResult(
 
   ++metrics_.timeouts_seen;
 
-  if (!engine_.current_transaction().has_value() || !engine_.current_transaction()->can_retry())
-  {
-    return CompleteCurrentCommand(
-        timeout_result, false, false,
-        "configuration command timed out after dispatch; receiver state is indeterminate", {},
-        false);
-  }
-
-  const auto retry_result = engine_.RetryPending(retry_timestamp_ns);
-  if (retry_result.status != ReceiverCommandTransactionEngineStepStatus::kRetryDispatched)
-  {
-    return CompleteCurrentCommand(
-        retry_result, false, false,
-        "configuration command retry dispatch failed after a timeout; receiver state is "
-        "indeterminate",
-        {}, false);
-  }
-
-  ++metrics_.commands_retried;
-  state_ = ReceiverConfigApplicationState::kWaitingForResponse;
-
-  ReceiverConfigApplicationResult retried = BuildResult();
-  retried.retry_dispatched = true;
-  retried.engine_result = retry_result;
-  return retried;
+  (void)retry_timestamp_ns;
+  return CompleteCurrentCommand(
+      timeout_result, false, false,
+      "configuration command timed out after dispatch; receiver session is indeterminate", {},
+      false);
 }
 
 void ReceiverConfigApplication::ResetRunState()

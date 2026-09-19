@@ -281,7 +281,7 @@ void TestOptionalCommandFailureContinuesByDefault(TestContext& ctx)
              "optional command failures should be tracked separately from required failures");
 }
 
-void TestTimeoutThenRetry(TestContext& ctx)
+void TestTimeoutQuarantinesApplication(TestContext& ctx)
 {
   MemoryByteSink sink;
   ReceiverConfigApplication application(sink);
@@ -289,21 +289,17 @@ void TestTimeoutThenRetry(TestContext& ctx)
   application.Start({MakeBinaryCommand({0xA0u, 0xA1u}, 1u, 500u)}, 6000);
   const auto timeout = application.MarkTimeout(6600);
 
-  ctx.Expect(timeout.state == ReceiverConfigApplicationState::kWaitingForResponse &&
-                 timeout.retry_dispatched &&
+  ctx.Expect(timeout.state == ReceiverConfigApplicationState::kFailed &&
+                 !timeout.retry_dispatched &&
                  application.transaction_engine().current_transaction().has_value() &&
-                 application.transaction_engine().current_transaction()->attempt_count == 2u,
-             "timeouts with remaining retry budget should redispatch the current command");
-
-  const auto finished =
-      application.ApplyResponse(MakeResponse(ReceiverCommandResponseKind::kAck, 6700, "ACK"));
-
-  ctx.Expect(finished.state == ReceiverConfigApplicationState::kCompleted &&
-                 application.metrics().commands_retried == 1u &&
+                 application.transaction_engine().current_transaction()->attempt_count == 1u &&
+                 application.transaction_engine().session_indeterminate(),
+             "timeouts after dispatch must quarantine the configuration application");
+  ctx.Expect(application.metrics().commands_retried == 0u &&
                  application.metrics().timeouts_seen == 1u &&
-                 application.metrics().commands_failed == 0u &&
-                 sink.written_bytes() == std::vector<std::uint8_t>({0xA0u, 0xA1u, 0xA0u, 0xA1u}),
-             "successful retries should preserve completion metrics and duplicate the write");
+                 application.metrics().commands_failed == 1u &&
+                 sink.written_bytes() == std::vector<std::uint8_t>({0xA0u, 0xA1u}),
+             "quarantine must not duplicate a command after timeout");
 }
 
 void TestRetryExhaustionFails(TestContext& ctx)
@@ -312,8 +308,7 @@ void TestRetryExhaustionFails(TestContext& ctx)
   ReceiverConfigApplication application(sink);
 
   application.Start({MakeBinaryCommand({0xB0u}, 1u, 500u)}, 7000);
-  application.MarkTimeout(7600);
-  const auto exhausted = application.MarkTimeout(8200);
+  const auto exhausted = application.MarkTimeout(7600);
 
   ctx.Expect(exhausted.state == ReceiverConfigApplicationState::kFailed &&
                  exhausted.command_finished && exhausted.command_failed &&
@@ -321,11 +316,11 @@ void TestRetryExhaustionFails(TestContext& ctx)
                  application.transaction_engine().current_transaction().has_value() &&
                  application.transaction_engine().current_transaction()->state ==
                      universal_gnss_driver::ReceiverCommandTransactionState::kTimedOut,
-             "retry exhaustion should fail the application after the final timeout");
+             "a timeout should fail and quarantine the application immediately");
   ctx.Expect(
       application.metrics().commands_started == 1u && application.metrics().commands_failed == 1u &&
-          application.metrics().commands_retried == 1u && application.metrics().timeouts_seen == 2u,
-      "retry exhaustion should update timeout, retry, and failure counters");
+          application.metrics().commands_retried == 0u && application.metrics().timeouts_seen == 1u,
+      "quarantine should update timeout and failure counters without a retry");
 }
 
 void TestOptionalCommandTimeoutStopsIndeterminateApply(TestContext& ctx)
@@ -384,16 +379,22 @@ void TestResetClearsStateAndMetrics(TestContext& ctx)
                  application.command_count() == 0u && application.current_index() == 0u &&
                  application.current_command() == nullptr,
              "reset should clear the loaded command sequence and return to idle");
-  ctx.Expect(!application.transaction_engine().current_transaction().has_value() &&
-                 !application.transaction_engine().completed_transaction().has_value() &&
-                 application.metrics().commands_total == 0u &&
-                 application.metrics().commands_started == 0u &&
+  const auto blocked = application.Start({MakeBinaryCommand({0xD1u})}, 11000);
+  ctx.Expect(application.transaction_engine().current_transaction().has_value() &&
+                 application.transaction_engine().session_indeterminate() &&
+                 blocked.engine_result.has_value() &&
+                 blocked.engine_result->status ==
+                     universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::
+                         kSessionIndeterminate &&
+                 sink.written_bytes() == std::vector<std::uint8_t>({0xD0u}) &&
+                 application.metrics().commands_total == 1u &&
+                 application.metrics().commands_started == 1u &&
                  application.metrics().commands_completed == 0u &&
-                 application.metrics().commands_failed == 0u &&
+                 application.metrics().commands_failed == 1u &&
                  application.metrics().commands_retried == 0u &&
                  application.metrics().responses_applied == 0u &&
                  application.metrics().timeouts_seen == 0u,
-             "reset should clear both application metrics and underlying transaction state");
+             "application Reset must not clear the engine quarantine or dispatch another command");
 }
 
 } // namespace
@@ -409,7 +410,7 @@ int main()
   TestTextErrorFailsByDefault(ctx);
   TestContinueOnErrorAdvancesToNextCommand(ctx);
   TestOptionalCommandFailureContinuesByDefault(ctx);
-  TestTimeoutThenRetry(ctx);
+  TestTimeoutQuarantinesApplication(ctx);
   TestRetryExhaustionFails(ctx);
   TestOptionalCommandTimeoutStopsIndeterminateApply(ctx);
   TestSafetyRejectionFailsApplication(ctx);

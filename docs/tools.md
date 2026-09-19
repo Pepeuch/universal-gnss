@@ -787,6 +787,9 @@ Current behavior:
   change is not saved unless `VERSIONA` confirms the requested baud is active
 - supports a simple per-command `--timeout-ms` loop without threads
 - stops on the first rejected command, dispatch failure, read failure, or timeout
+- never retries a command after bytes were dispatched: that session is
+  indeterminate until an external, qualified receiver/session recovery boundary
+  is established
 
 Current scope:
 

@@ -2,11 +2,9 @@
 
 #include <cstdint>
 
-namespace universal_gnss_driver
-{
+namespace universal_gnss_driver {
 
-namespace
-{
+namespace {
 
 constexpr std::int64_t kNanosecondsPerMillisecond = 1000000LL;
 
@@ -32,19 +30,23 @@ bool HasTimedOutAt(const ReceiverCommandTransaction& transaction,
   return now_timestamp_ns >= (*transaction.sent_timestamp_ns + timeout_ns);
 }
 
-}  // namespace
+} // namespace
 
 ReceiverCommandTransactionEngine::ReceiverCommandTransactionEngine(
-    universal_gnss_transport::ByteSink& sink,
-    ReceiverCommandTransactionEngineConfig config)
+    universal_gnss_transport::ByteSink& sink, ReceiverCommandTransactionEngineConfig config)
     : dispatcher_(sink, config.dispatcher_config), config_(config)
 {
 }
 
 EngineStepResult ReceiverCommandTransactionEngine::StartTransaction(
-    const ReceiverCommand& command,
-    const std::optional<ReceiverCommandTimestampNs> timestamp_ns)
+    const ReceiverCommand& command, const std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
+  if (session_indeterminate_)
+  {
+    return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate,
+                          "receiver session is indeterminate after a dispatched command");
+  }
+
   if (current_transaction_.has_value())
   {
     return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kBusy,
@@ -65,6 +67,10 @@ EngineStepResult ReceiverCommandTransactionEngine::StartTransaction(
   {
     MarkFailed(transaction, dispatch_result, timestamp_ns);
     completed_transaction_ = transaction;
+    if (dispatch_result.bytes_written > 0u)
+    {
+      QuarantineSession();
+    }
     ++metrics_.dispatch_failures;
     result.status = ReceiverCommandTransactionEngineStepStatus::kDispatchFailed;
     result.error_message = dispatch_result.error_message;
@@ -93,6 +99,13 @@ EngineStepResult ReceiverCommandTransactionEngine::ApplyResponse(
     const ReceiverCommandResponse& response,
     const ReceiverCommandResponseMatchMetadata& match_metadata)
 {
+  if (session_indeterminate_)
+  {
+    ++metrics_.responses_unmatched;
+    return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kResponseUnmatched,
+                          "receiver session is indeterminate; response is not eligible");
+  }
+
   if (!current_transaction_.has_value())
   {
     ++metrics_.responses_unmatched;
@@ -162,12 +175,19 @@ EngineStepResult ReceiverCommandTransactionEngine::MarkTimeout(
 
   current_transaction_->mark_timeout(timestamp_ns);
   ++metrics_.transactions_timed_out;
+  QuarantineSession();
   return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kTimedOut);
 }
 
-EngineStepResult ReceiverCommandTransactionEngine::CheckTimeout(
-    const ReceiverCommandTimestampNs now_timestamp_ns)
+EngineStepResult
+ReceiverCommandTransactionEngine::CheckTimeout(const ReceiverCommandTimestampNs now_timestamp_ns)
 {
+  if (session_indeterminate_)
+  {
+    return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate,
+                          "receiver session is indeterminate after a dispatched command");
+  }
+
   if (!current_transaction_.has_value())
   {
     return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kNoCurrentTransaction,
@@ -186,6 +206,12 @@ EngineStepResult ReceiverCommandTransactionEngine::CheckTimeout(
 EngineStepResult ReceiverCommandTransactionEngine::RetryPending(
     const std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
+  if (session_indeterminate_)
+  {
+    return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate,
+                          "receiver session is indeterminate after a dispatched command");
+  }
+
   if (!current_transaction_.has_value())
   {
     return MakeStepResult(ReceiverCommandTransactionEngineStepStatus::kNoCurrentTransaction,
@@ -220,10 +246,21 @@ EngineStepResult ReceiverCommandTransactionEngine::RetryPending(
 
 void ReceiverCommandTransactionEngine::Reset()
 {
+  if (session_indeterminate_)
+  {
+    return;
+  }
+  if (current_transaction_.has_value() &&
+      current_transaction_->state == ReceiverCommandTransactionState::kSent)
+  {
+    QuarantineSession();
+    return;
+  }
   dispatcher_.ResetMetrics();
   metrics_ = ReceiverCommandTransactionEngineMetrics{};
   current_transaction_.reset();
   completed_transaction_.reset();
+  session_indeterminate_ = false;
   next_transaction_id_ = 1u;
 }
 
@@ -254,14 +291,27 @@ const ReceiverCommandDispatcher& ReceiverCommandTransactionEngine::dispatcher() 
   return dispatcher_;
 }
 
+bool ReceiverCommandTransactionEngine::session_indeterminate() const
+{
+  return session_indeterminate_;
+}
+
+void ReceiverCommandTransactionEngine::QuarantineSession()
+{
+  if (!session_indeterminate_)
+  {
+    session_indeterminate_ = true;
+    ++metrics_.sessions_quarantined;
+  }
+}
+
 DispatchResult ReceiverCommandTransactionEngine::DispatchCommand(const ReceiverCommand& command)
 {
   return dispatcher_.Dispatch(command);
 }
 
 void ReceiverCommandTransactionEngine::MarkFailed(
-    ReceiverCommandTransaction& transaction,
-    const DispatchResult& dispatch_result,
+    ReceiverCommandTransaction& transaction, const DispatchResult& dispatch_result,
     const std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
   transaction.state = ReceiverCommandTransactionState::kFailed;
@@ -284,8 +334,7 @@ bool ReceiverCommandTransactionEngine::ResponseMatchesCurrent(
     return false;
   }
 
-  const auto command_identity =
-      TryGetUbxCommandMessageIdentity(current_transaction_->command);
+  const auto command_identity = TryGetUbxCommandMessageIdentity(current_transaction_->command);
   if (!command_identity.has_value())
   {
     return true;
@@ -295,13 +344,11 @@ bool ReceiverCommandTransactionEngine::ResponseMatchesCurrent(
          command_identity->message_id == match_metadata.ubx_target->message_id;
 }
 
-bool ReceiverCommandTransactionEngine::CanApplyResponseKind(
-    const ReceiverCommandResponseKind kind)
+bool ReceiverCommandTransactionEngine::CanApplyResponseKind(const ReceiverCommandResponseKind kind)
 {
-  return kind == ReceiverCommandResponseKind::kAck ||
-         kind == ReceiverCommandResponseKind::kNak ||
+  return kind == ReceiverCommandResponseKind::kAck || kind == ReceiverCommandResponseKind::kNak ||
          kind == ReceiverCommandResponseKind::kTextOk ||
          kind == ReceiverCommandResponseKind::kTextError;
 }
 
-}  // namespace universal_gnss_driver
+} // namespace universal_gnss_driver

@@ -10,8 +10,7 @@
 #include "universal_gnss_driver/ubx_command_response_mapper.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace universal_gnss_driver
-{
+namespace universal_gnss_driver {
 
 struct ReceiverCommandResponseMatchMetadata
 {
@@ -32,6 +31,7 @@ enum class ReceiverCommandTransactionEngineStepStatus : std::uint8_t
   kRetryUnavailable = 9,
   kNoCurrentTransaction = 10,
   kNotTimedOut = 11,
+  kSessionIndeterminate = 12,
 };
 
 struct EngineStepResult
@@ -59,6 +59,7 @@ struct ReceiverCommandTransactionEngineMetrics
   std::size_t transactions_rejected{0u};
   std::size_t transactions_timed_out{0u};
   std::size_t dispatch_failures{0u};
+  std::size_t sessions_quarantined{0u};
 };
 
 class ReceiverCommandTransactionEngine
@@ -67,21 +68,20 @@ public:
   ReceiverCommandTransactionEngine(universal_gnss_transport::ByteSink& sink,
                                    ReceiverCommandTransactionEngineConfig config = {});
 
-  EngineStepResult StartTransaction(
-      const ReceiverCommand& command,
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  EngineStepResult
+  StartTransaction(const ReceiverCommand& command,
+                   std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
-  EngineStepResult ApplyResponse(
-      const ReceiverCommandResponse& response,
-      const ReceiverCommandResponseMatchMetadata& match_metadata = {});
+  EngineStepResult ApplyResponse(const ReceiverCommandResponse& response,
+                                 const ReceiverCommandResponseMatchMetadata& match_metadata = {});
 
-  EngineStepResult MarkTimeout(
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  EngineStepResult
+  MarkTimeout(std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
   EngineStepResult CheckTimeout(ReceiverCommandTimestampNs now_timestamp_ns);
 
-  EngineStepResult RetryPending(
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  EngineStepResult
+  RetryPending(std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
   void Reset();
 
@@ -95,24 +95,30 @@ public:
 
   const ReceiverCommandDispatcher& dispatcher() const;
 
+  // A timeout or partial dispatch has no protocol-level response fence. Reset()
+  // cannot clear this state; the owner must create a new engine only after a
+  // proven new receiver session has been established.
+  bool session_indeterminate() const;
+
 private:
   DispatchResult DispatchCommand(const ReceiverCommand& command);
 
-  void MarkFailed(ReceiverCommandTransaction& transaction,
-                  const DispatchResult& dispatch_result,
+  void MarkFailed(ReceiverCommandTransaction& transaction, const DispatchResult& dispatch_result,
                   std::optional<ReceiverCommandTimestampNs> timestamp_ns);
 
-  bool ResponseMatchesCurrent(
-      const ReceiverCommandResponseMatchMetadata& match_metadata) const;
+  bool ResponseMatchesCurrent(const ReceiverCommandResponseMatchMetadata& match_metadata) const;
 
   static bool CanApplyResponseKind(ReceiverCommandResponseKind kind);
+
+  void QuarantineSession();
 
   ReceiverCommandDispatcher dispatcher_;
   ReceiverCommandTransactionEngineConfig config_{};
   ReceiverCommandTransactionEngineMetrics metrics_{};
   std::optional<ReceiverCommandTransaction> current_transaction_{};
   std::optional<ReceiverCommandTransaction> completed_transaction_{};
+  bool session_indeterminate_{false};
   ReceiverCommandTransactionId next_transaction_id_{1u};
 };
 
-}  // namespace universal_gnss_driver
+} // namespace universal_gnss_driver

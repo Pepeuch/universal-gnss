@@ -148,8 +148,7 @@ bool IsVerifiedUbloxMonVerFrame(const UbxFrame& frame)
          ReadNulTerminatedAsciiField(frame.payload, 30u, 10u).has_value();
 }
 
-std::optional<ReceiverIdentityMetadata>
-FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
+std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(const UbxFrame& frame)
 {
   constexpr std::size_t kFixedPayloadSize = 40u;
   constexpr std::size_t kExtensionSize = 30u;
@@ -157,6 +156,62 @@ FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
   constexpr std::string_view kFirmwarePrefix = "FWVER=";
   constexpr std::string_view kChipIdPrefix = "CHIPID=";
 
+  if (!IsVerifiedUbloxMonVerFrame(frame))
+  {
+    return std::nullopt;
+  }
+
+  ReceiverIdentityMetadata metadata;
+  bool valid_extensions = true;
+  for (std::size_t offset = kFixedPayloadSize; offset < frame.payload.size();
+       offset += kExtensionSize)
+  {
+    const auto extension = ReadNulTerminatedAsciiField(frame.payload, offset, kExtensionSize);
+    if (!extension.has_value())
+    {
+      valid_extensions = false;
+      break;
+    }
+
+    if (extension->size() >= kModulePrefix.size() &&
+        extension->substr(0u, kModulePrefix.size()) == kModulePrefix)
+    {
+      const std::string_view model = extension->substr(kModulePrefix.size());
+      if (IsVersionToken(model))
+      {
+        metadata.model = std::string(model);
+      }
+    } else if (extension->size() >= kFirmwarePrefix.size() &&
+               extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
+    {
+      const std::string_view firmware = extension->substr(kFirmwarePrefix.size());
+      if (!firmware.empty())
+      {
+        metadata.firmware_version = std::string(firmware);
+      }
+    } else if (extension->size() >= kChipIdPrefix.size() &&
+               extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
+    {
+      const std::string_view chip_id = extension->substr(kChipIdPrefix.size());
+      if (IsReceiverIdentityValue(chip_id))
+      {
+        metadata.receiver_identity = std::string(chip_id);
+      }
+    }
+  }
+
+  if (valid_extensions && (metadata.receiver_identity.has_value() || metadata.model.has_value() ||
+                           metadata.firmware_version.has_value()))
+  {
+    return metadata;
+  }
+
+  return std::nullopt;
+}
+
+std::optional<ReceiverIdentityMetadata>
+FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
+{
   UbxFrameFramer framer;
   for (const auto byte : bytes)
   {
@@ -166,53 +221,7 @@ FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
       continue;
     }
 
-    const UbxFrame& frame = *result.record;
-    if (!IsVerifiedUbloxMonVerFrame(frame))
-    {
-      continue;
-    }
-
-    ReceiverIdentityMetadata metadata;
-    bool valid_extensions = true;
-    for (std::size_t offset = kFixedPayloadSize; offset < frame.payload.size();
-         offset += kExtensionSize)
-    {
-      const auto extension = ReadNulTerminatedAsciiField(frame.payload, offset, kExtensionSize);
-      if (!extension.has_value())
-      {
-        valid_extensions = false;
-        break;
-      }
-
-      if (extension->size() >= kModulePrefix.size() &&
-          extension->substr(0u, kModulePrefix.size()) == kModulePrefix)
-      {
-        const std::string_view model = extension->substr(kModulePrefix.size());
-        if (IsVersionToken(model))
-        {
-          metadata.model = std::string(model);
-        }
-      } else if (extension->size() >= kFirmwarePrefix.size() &&
-                 extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
-      {
-        const std::string_view firmware = extension->substr(kFirmwarePrefix.size());
-        if (!firmware.empty())
-        {
-          metadata.firmware_version = std::string(firmware);
-        }
-      } else if (extension->size() >= kChipIdPrefix.size() &&
-                 extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
-      {
-        const std::string_view chip_id = extension->substr(kChipIdPrefix.size());
-        if (IsReceiverIdentityValue(chip_id))
-        {
-          metadata.receiver_identity = std::string(chip_id);
-        }
-      }
-    }
-
-    if (valid_extensions && (metadata.receiver_identity.has_value() || metadata.model.has_value() ||
-                             metadata.firmware_version.has_value()))
+    if (const auto metadata = FindUbloxMonVerMetadata(*result.record); metadata.has_value())
     {
       return metadata;
     }
@@ -1064,18 +1073,47 @@ ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes)
 bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_timeout_ms,
                                const std::size_t max_response_bytes)
 {
+  return QueryReceiverModel(ReceiverDetectedFamily::kUblox, transport, read_timeout_ms,
+                            max_response_bytes)
+      .transport_verified;
+}
+
+ReceiverModelQueryResult QueryReceiverModel(const ReceiverDetectedFamily family,
+                                            ByteDuplex& transport,
+                                            const std::uint32_t read_timeout_ms,
+                                            const std::size_t max_response_bytes)
+{
+  ReceiverModelQueryResult result;
   constexpr std::array<std::uint8_t, 8u> kMonVerPoll{0xB5u, 0x62u, 0x0Au, 0x04u,
                                                      0x00u, 0x00u, 0x0Eu, 0x34u};
   if (max_response_bytes == 0u)
   {
-    return false;
+    return result;
   }
 
-  const auto write = transport.Write(kMonVerPoll.data(), kMonVerPoll.size());
-  if (write.status == TransportStatus::kClosed || write.status == TransportStatus::kError ||
-      write.bytes_written != kMonVerPoll.size())
+  std::string_view query;
+  switch (family)
   {
-    return false;
+  case ReceiverDetectedFamily::kUblox:
+    result.method = ReceiverModelQueryMethod::kUbloxMonVer;
+    break;
+  case ReceiverDetectedFamily::kUnicore:
+    result.method = ReceiverModelQueryMethod::kUnicoreVersionA;
+    query = "VERSIONA\r\n";
+    break;
+  default:
+    return result;
+  }
+
+  const auto write =
+      family == ReceiverDetectedFamily::kUblox
+          ? transport.Write(kMonVerPoll.data(), kMonVerPoll.size())
+          : transport.Write(reinterpret_cast<const std::uint8_t*>(query.data()), query.size());
+  if (write.status == TransportStatus::kClosed || write.status == TransportStatus::kError ||
+      write.bytes_written !=
+          (family == ReceiverDetectedFamily::kUblox ? kMonVerPoll.size() : query.size()))
+  {
+    return result;
   }
 
   const std::uint32_t effective_timeout_ms = read_timeout_ms > 0u ? read_timeout_ms : 1000u;
@@ -1083,6 +1121,8 @@ bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_t
                         std::chrono::milliseconds(static_cast<int>(effective_timeout_ms));
   std::array<std::uint8_t, 512u> buffer{};
   UbxFrameFramer framer;
+  std::vector<std::uint8_t> bytes;
+  bytes.reserve(max_response_bytes);
   std::size_t bytes_read = 0u;
   while (bytes_read < max_response_bytes && std::chrono::steady_clock::now() < deadline)
   {
@@ -1091,7 +1131,7 @@ bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_t
     if (read.status == TransportStatus::kError || read.status == TransportStatus::kClosed ||
         (read.status == TransportStatus::kEndOfStream && read.bytes_read == 0u))
     {
-      return false;
+      return result;
     }
     if (read.bytes_read == 0u)
     {
@@ -1099,17 +1139,36 @@ bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_t
     }
 
     bytes_read += read.bytes_read;
+    bytes.insert(bytes.end(), buffer.begin(),
+                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
+    if (family == ReceiverDetectedFamily::kUnicore)
+    {
+      if (const auto metadata = FindUnicoreVersionAMetadata(bytes); metadata.has_value())
+      {
+        result.transport_verified = true;
+        result.model_verified = true;
+        result.identity = *metadata;
+        return result;
+      }
+      continue;
+    }
     for (std::size_t index = 0u; index < read.bytes_read; ++index)
     {
       const auto framed = framer.PushByte(buffer[index]);
       if (framed.status == ParserStatus::kRecordReady && framed.record.has_value() &&
           IsVerifiedUbloxMonVerFrame(*framed.record))
       {
-        return true;
+        result.transport_verified = true;
+        if (const auto metadata = FindUbloxMonVerMetadata(*framed.record); metadata.has_value())
+        {
+          result.identity = *metadata;
+        }
+        result.model_verified = result.identity.model.has_value();
+        return result;
       }
     }
   }
-  return false;
+  return result;
 }
 
 ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& candidate,
@@ -1168,11 +1227,12 @@ ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& ca
       result.confidence = ReceiverProbeConfidence::kHigh;
       result.discovery_score = std::max(result.discovery_score, 100);
       result.identity = *version_metadata;
-      result.versiona_verified = true;
+      result.model_verified = true;
+      result.model_query_method = ReceiverModelQueryMethod::kUnicoreVersionA;
       result.reason = "VERSIONA:+100";
       result.note.clear();
     }
-    if (result.versiona_verified ||
+    if (result.model_verified ||
         (IsHighConfidence(result) && result.detected_family != ReceiverDetectedFamily::kUnicore))
     {
       break;
@@ -1339,6 +1399,20 @@ const char* ToString(const ReceiverProbeConfidence confidence)
   case ReceiverProbeConfidence::kNone:
   default:
     return "none";
+  }
+}
+
+const char* ToString(const ReceiverModelQueryMethod method)
+{
+  switch (method)
+  {
+  case ReceiverModelQueryMethod::kUbloxMonVer:
+    return "ublox_mon_ver";
+  case ReceiverModelQueryMethod::kUnicoreVersionA:
+    return "unicore_versiona";
+  case ReceiverModelQueryMethod::kUnsupported:
+  default:
+    return "unsupported";
   }
 }
 

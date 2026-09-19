@@ -11,7 +11,33 @@ Upstream: `origin/main` at the same commit
 
 Define the smallest protocol-safe response fencing or recovery contract for
 `UG-DRIVER-RESPONSE-FENCE-001`, the dependency limiting `UGA-126` live runtime
-arbitration. Analysis only; do not implement `ReceiverTrafficArbiter`.
+arbitration. Do not implement `ReceiverTrafficArbiter` or automatic recovery.
+
+## Implemented hard-quarantine slice (2026-09-19)
+
+On `fix/ublox-active-baud-verification` at
+`b46da5f2fcc37b7ca1431aa839601368b171fcfa` plus the uncommitted MODEL patch,
+`ReceiverCommandTransactionEngine` now enters an explicit indeterminate session
+after a dispatched-command timeout or a write error after one or more bytes.
+It rejects late responses and refuses retry or later dispatch from that engine.
+`ReceiverConfigApplication` consequently fails the apply immediately and never
+retries a command merely because its retry policy permits it. This is a bounded
+software safety improvement, not a recovery fence: `Reset()` cannot clear the
+quarantine. Its lifecycle owner may create a new engine only after it has
+established a separately proven new session.
+
+Focused deterministic evidence added on this branch:
+
+- `A -> timeout -> late A ACK -> B` rejects the late ACK and refuses B before
+  it writes;
+- a partial write quarantines before a later command can be sent;
+- the existing u-blox and Unicore config-apply paths pass their focused tests.
+
+The MODEL work adds generic `QueryReceiverModel`; it intentionally does not
+release this quarantine. A valid post-query `MON-VER`/`VERSIONA` proves an
+active transport response, while `model_verified` additionally requires an
+actual extracted model (for u-blox, `MOD=`). Neither is causal ownership of a
+prior configuration response.
 
 ## Evidence cache
 

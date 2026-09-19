@@ -276,7 +276,7 @@ Current role:
 - keep one active transaction slot at a time
 - expose the current transaction plus the last completed transaction
 - accept externally supplied responses and apply them to the active transaction
-- support manual timeout checks and manual retry requests
+- support manual timeout checks and report an indeterminate session
 - expose lightweight transaction-engine metrics
 
 Current policy:
@@ -287,7 +287,14 @@ Current policy:
 - no automatic serial read loop exists
 - no background timeout or retry thread exists
 - no multi-command queue exists
-- timeouts stay in the active slot so the caller can retry or reset explicitly
+- any timeout after dispatch, or write failure after one or more bytes, quarantines
+  the engine session. Late responses are rejected and no retry or subsequent
+  command can be dispatched from that engine instance.
+- `Reset()` cannot clear a quarantined engine; calling it with an outstanding
+  sent command enters quarantine. A new engine may be created only by a
+  lifecycle owner that has established a proven new receiver session;
+  close/reopen, parser clearing, a delay, or a model poll alone are not
+  sufficient evidence.
 - live receiver-configuration orchestration remains deferred
 
 ### Receiver config application
@@ -302,8 +309,7 @@ Current role:
 - keep a single active command/transaction at a time
 - advance the internal command index after `ack` / `text_ok`
 - optionally advance past `nak` / `text_error` when `continue_on_error=true`
-- support manual timeout checks plus retry dispatch through the underlying
-  transaction engine
+- support manual timeout checks through the underlying transaction engine
 - expose current command index, current command, state, and lightweight
   application metrics
 
@@ -323,6 +329,9 @@ Current policy:
   are expected to supply `ReceiverCommandResponse` values
 - no protocol parsing happens inside the application
 - no serial read loop or parser ownership exists here
+- a post-dispatch timeout fails the whole application immediately; optional
+  commands do not continue and configured retry budgets are intentionally not
+  used because a late response cannot be correlated safely
 - no threading, async I/O, or background timers exist here
 - one command is active at a time
 - caller-driven `Step()` dispatches the next prepared command after the prior

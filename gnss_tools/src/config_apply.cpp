@@ -507,12 +507,14 @@ ConfigApplyResult MakeBaseResult(const ConfigApplyOptions& options)
   result.device_path = ResolveRequestedDevicePath(options);
   result.transport_baud_rate = ResolveRequestedTransportBaud(options);
   result.current_transport_baud_rate = result.transport_baud_rate;
-  result.current_baud_verified =
-      options.discovery_result.has_value() && options.discovery_result->versiona_verified &&
-      options.discovery_result->selected_baud ==
-          std::optional<std::uint32_t>{result.current_transport_baud_rate};
+  result.model_verified = options.discovery_result.has_value() &&
+                          options.discovery_result->model_verified &&
+                          options.discovery_result->selected_baud ==
+                              std::optional<std::uint32_t>{result.current_transport_baud_rate};
+  result.current_baud_verified = result.model_verified;
   if (options.discovery_result.has_value())
   {
+    result.model_query_method = options.discovery_result->model_query_method;
     result.detected_family = options.discovery_result->detected_family;
   }
   result.timeout_ms = options.timeout_ms;
@@ -537,10 +539,28 @@ void FinalizeSuccessfulUbloxActiveBaudVerification(ByteDuplex& transport,
     return;
   }
 
-  result.current_baud_verified =
-      universal_gnss_driver::VerifyUbloxMonVerResponse(transport, options.timeout_ms);
-  if (result.current_baud_verified)
+  const auto model_query = universal_gnss_driver::QueryReceiverModel(ReceiverDetectedFamily::kUblox,
+                                                                     transport, options.timeout_ms);
+  result.model_verified = model_query.model_verified;
+  result.model_query_method = model_query.method;
+  result.current_baud_verified = model_query.transport_verified;
+  if (model_query.transport_verified)
   {
+    if (model_query.model_verified)
+    {
+      if (model_query.identity.receiver_identity.has_value())
+      {
+        result.plan.detected_receiver_identity = model_query.identity.receiver_identity;
+      }
+      if (model_query.identity.model.has_value())
+      {
+        result.plan.detected_receiver_model = model_query.identity.model;
+      }
+      if (model_query.identity.firmware_version.has_value())
+      {
+        result.plan.detected_receiver_firmware_version = model_query.identity.firmware_version;
+      }
+    }
     result.active_verified_baud = result.current_transport_baud_rate;
     result.progress_log.push_back(
         "Verified active u-blox transport with a UBX-MON-VER response at " +
@@ -1476,11 +1496,22 @@ bool FinalizeIfApplicationStopped(ConfigApplyResult& result,
   {
     result.status = MapApplicationFailureStatus(application_result);
     result.execution_summary.final_status = ToString(result.status);
-    result.error_message = !application_result.error_message.empty()
-                               ? application_result.error_message
-                               : (application_result.engine_result.has_value()
-                                      ? application_result.engine_result->error_message
-                                      : std::string{"configuration apply failed"});
+    const std::string failure = !application_result.error_message.empty()
+                                    ? application_result.error_message
+                                    : (application_result.engine_result.has_value()
+                                           ? application_result.engine_result->error_message
+                                           : std::string{"configuration apply failed"});
+    result.receiver_state_indeterminate = application.transaction_engine().session_indeterminate();
+    result.error_message =
+        result.receiver_state_indeterminate
+            ? "receiver state indeterminate: command may have been applied; " + failure
+            : failure;
+    if (result.receiver_state_indeterminate)
+    {
+      result.progress_log.push_back(
+          "Receiver state indeterminate: the timed-out command may have been applied; "
+          "further configuration is quarantined");
+    }
     return true;
   }
 
@@ -2661,6 +2692,15 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     result.execution_summary = phase.summary;
     result.status = phase.status;
     result.error_message = phase.error_message;
+    result.receiver_state_indeterminate = result.status == ConfigApplyStatus::kTimedOut;
+    if (result.receiver_state_indeterminate)
+    {
+      result.error_message =
+          "receiver state indeterminate: command may have been applied; " + result.error_message;
+      result.progress_log.push_back(
+          "Receiver state indeterminate: the timed-out command may have been applied; "
+          "further configuration is quarantined");
+    }
     if (result.execution_summary.final_status.empty())
     {
       result.execution_summary.final_status = ToString(result.status);
@@ -2807,6 +2847,10 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result)
   output << "Dry run: " << (result.dry_run ? "yes" : "no") << "\n";
   output << "Live apply requested: " << (result.execute_requested ? "yes" : "no") << "\n";
   output << "Executed: " << (result.executed ? "yes" : "no") << "\n";
+  if (result.receiver_state_indeterminate)
+  {
+    output << "Receiver state: INDETERMINATE (the last command may have been applied)\n";
+  }
   output << "Production ready: " << (result.plan.production_ready ? "yes" : "no") << "\n";
   output << "Ready to execute: " << (result.plan.ready_to_execute ? "yes" : "no") << "\n";
   output << "Runtime confirmation required: "
@@ -3051,8 +3095,9 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
     output << "null";
   }
   output << ",\n";
-  output << "    \"versiona_verified\": " << (result.current_baud_verified ? "true" : "false")
-         << ",\n";
+  output << "    \"model_verified\": " << (result.model_verified ? "true" : "false") << ",\n";
+  output << "    \"model_query_method\": \""
+         << EscapeJson(universal_gnss_driver::ToString(result.model_query_method)) << "\",\n";
   output << "    \"device\": ";
   if (result.plan.detected_device.has_value())
   {
@@ -3126,6 +3171,8 @@ std::string FormatConfigApplyJson(const ConfigApplyResult& result)
   output << "    \"timeout_ms\": " << result.timeout_ms << "\n";
   output << "  },\n";
   output << "  \"safety\": {\n";
+  output << "    \"receiver_state_indeterminate\": "
+         << (result.receiver_state_indeterminate ? "true" : "false") << ",\n";
   output << "    \"runtime_confirmation_required\": "
          << (result.requires_runtime_confirmation ? "true" : "false") << ",\n";
   output << "    \"persistent_confirmation_required\": "

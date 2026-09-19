@@ -67,7 +67,7 @@ ReceiverProbeResult MakeDiscoveryResult(const std::string& path, const std::uint
   result.confidence = family == ReceiverDetectedFamily::kNmea ? ReceiverProbeConfidence::kMedium
                                                               : ReceiverProbeConfidence::kHigh;
   result.discovery_score = family == ReceiverDetectedFamily::kNmea ? 20 : 100;
-  result.versiona_verified = family == ReceiverDetectedFamily::kUnicore;
+  result.model_verified = family == ReceiverDetectedFamily::kUnicore;
   result.reason = family == ReceiverDetectedFamily::kUblox     ? "valid_ubx_frame:+100"
                   : family == ReceiverDetectedFamily::kUnicore ? "PVTSLNA:+100"
                   : family == ReceiverDetectedFamily::kNmea    ? "valid_GGA:+20"
@@ -118,11 +118,13 @@ BuildAckFramesForPlan(const universal_gnss_tools::ConfigApplyResult& prepared)
 
 std::vector<std::uint8_t> BuildUbloxMonVerResponse()
 {
-  std::vector<std::uint8_t> payload(40u, 0u);
+  std::vector<std::uint8_t> payload(70u, 0u);
   const std::string software_version = "EXT HPG 1.32";
   const std::string hardware_version = "00080000";
   std::copy(software_version.begin(), software_version.end(), payload.begin());
   std::copy(hardware_version.begin(), hardware_version.end(), payload.begin() + 30);
+  const std::string model = "MOD=ZED-F9P";
+  std::copy(model.begin(), model.end(), payload.begin() + 40);
   return BuildUbxFrame(0x0Au, 0x04u, payload);
 }
 
@@ -1175,7 +1177,12 @@ void TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(TestContext& ct
 
   ctx.Expect(result.status == ConfigApplyStatus::kTimedOut && result.executed &&
                  result.execution_summary.optional_commands_failed == 1u &&
-                 result.error_message.find("indeterminate") != std::string::npos,
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos &&
+                 universal_gnss_tools::FormatConfigApplyText(result).find(
+                     "Receiver state: INDETERMINATE") != std::string::npos &&
+                 universal_gnss_tools::FormatConfigApplyJson(result).find(
+                     "\"receiver_state_indeterminate\": true") != std::string::npos,
              "an optional SIGNALGROUP timeout must stop with an indeterminate result");
   ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
                  written.find("CONFIG SIGNALGROUP 2 0\r\n") != std::string::npos &&
@@ -1864,8 +1871,12 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
              "non-Unicore runtime apply should not use Unicore VERSIONA probing assumptions");
   const std::string json = universal_gnss_tools::FormatConfigApplyJson(result);
   ctx.Expect(json.find("\"active_verified_baud\": 921600") != std::string::npos &&
-                 json.find("\"current_baud_verified\": true") != std::string::npos,
-             "u-blox active verification must be exposed through config-apply JSON");
+                 json.find("\"current_baud_verified\": true") != std::string::npos &&
+                 json.find("\"model_verified\": true") != std::string::npos &&
+                 json.find("\"model_query_method\": \"ublox_mon_ver\"") != std::string::npos &&
+                 json.find("\"model\": \"ZED-F9P\"") != std::string::npos &&
+                 json.find("versiona_verified") == std::string::npos,
+             "u-blox JSON must expose generic MODEL proof without a Unicore-specific field");
 }
 
 void TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(TestContext& ctx)

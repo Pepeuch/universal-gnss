@@ -91,6 +91,27 @@ struct ReceiverIdentityMetadata
   std::optional<std::string> firmware_version{};
 };
 
+// The generic proof that a receiver answered an active model query. Protocol
+// names stay vendor-specific; callers use this result rather than inferring a
+// model proof from ordinary traffic or a command acknowledgement.
+enum class ReceiverModelQueryMethod : std::uint8_t
+{
+  kUnsupported = 0,
+  kUbloxMonVer = 1,
+  kUnicoreVersionA = 2,
+};
+
+struct ReceiverModelQueryResult
+{
+  // A protocol-valid answer to the active query proves the active transport,
+  // even when that answer does not identify a concrete receiver model.
+  bool transport_verified{false};
+  // True only when a validated response contains a concrete model value.
+  bool model_verified{false};
+  ReceiverModelQueryMethod method{ReceiverModelQueryMethod::kUnsupported};
+  ReceiverIdentityMetadata identity{};
+};
+
 struct ReceiverProbeResult
 {
   std::string path{};
@@ -103,7 +124,8 @@ struct ReceiverProbeResult
   int discovery_score{0};
   ReceiverProbeEvidence evidence{};
   ReceiverIdentityMetadata identity{};
-  bool versiona_verified{false};
+  bool model_verified{false};
+  ReceiverModelQueryMethod model_query_method{ReceiverModelQueryMethod::kUnsupported};
   std::string reason{};
   std::string note{};
 };
@@ -124,8 +146,16 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
 std::optional<ReceiverIdentityMetadata>
 ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes);
 
+// Performs the family-specific active model query. Generic NMEA has no
+// reliable model query and returns kUnsupported without writing transport data.
+ReceiverModelQueryResult QueryReceiverModel(ReceiverDetectedFamily family,
+                                            universal_gnss_transport::ByteDuplex& transport,
+                                            std::uint32_t read_timeout_ms = 1000u,
+                                            std::size_t max_response_bytes = 4096u);
+
 // Sends a UBX-MON-VER poll and accepts only a checksum-valid, structurally valid
-// UBX-MON-VER response read after that poll.
+// UBX-MON-VER response read after that poll. This verifies the transport; a
+// model additionally requires a valid MOD= extension in QueryReceiverModel().
 bool VerifyUbloxMonVerResponse(universal_gnss_transport::ByteDuplex& transport,
                                std::uint32_t read_timeout_ms = 1000u,
                                std::size_t max_response_bytes = 4096u);
@@ -149,5 +179,6 @@ const char* ToString(ReceiverTransportType transport_type);
 const char* ToString(ReceiverPortSource source);
 const char* ToString(ReceiverDetectedFamily family);
 const char* ToString(ReceiverProbeConfidence confidence);
+const char* ToString(ReceiverModelQueryMethod method);
 
 } // namespace universal_gnss_driver

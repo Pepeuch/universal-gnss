@@ -12,22 +12,47 @@
 #include "universal_gnss_transport/memory_stream.hpp"
 #include "universal_gnss_transport/transport_error.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
 using universal_gnss_driver::ReceiverCommandResponse;
 using universal_gnss_driver::ReceiverCommandResponseKind;
-using universal_gnss_driver::ReceiverResponseKind;
+using universal_gnss_driver::ReceiverCommandResponseMatchMetadata;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverCommandTransactionEngine;
 using universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus;
 using universal_gnss_driver::ReceiverCommandTransactionState;
-using universal_gnss_driver::ReceiverCommandResponseMatchMetadata;
+using universal_gnss_driver::ReceiverResponseKind;
 using universal_gnss_driver::UbxMessageIdentity;
 using universal_gnss_transport::MemoryByteSink;
 using universal_gnss_transport::TransportError;
+using universal_gnss_transport::TransportStatus;
+using universal_gnss_transport::WriteResult;
+
+class PartiallyFailingByteSink final : public universal_gnss_transport::ByteSink
+{
+public:
+  WriteResult Write(const std::uint8_t* data, const std::size_t size) override
+  {
+    if (first_write_ && size > 0u)
+    {
+      first_write_ = false;
+      written_.push_back(data[0]);
+      return {1u, TransportStatus::kError, TransportError::kWriteFailure};
+    }
+    return {0u, TransportStatus::kError, TransportError::kWriteFailure};
+  }
+
+  bool IsOpen() const override { return true; }
+  void Close() override {}
+
+  const std::vector<std::uint8_t>& written_bytes() const { return written_; }
+
+private:
+  bool first_write_{true};
+  std::vector<std::uint8_t> written_{};
+};
 
 struct TestContext
 {
@@ -58,8 +83,7 @@ ReceiverCommand MakeBinaryRuntimeCommand(const std::vector<std::uint8_t>& payloa
 ReceiverCommand MakeUbxCfgCommand(const std::uint8_t max_retries = 0u,
                                   const std::uint32_t timeout_ms = 500u)
 {
-  const auto builder_result =
-      universal_gnss_protocols::BuildUart1BaudrateFrame(115200u);
+  const auto builder_result = universal_gnss_protocols::BuildUart1BaudrateFrame(115200u);
   if (builder_result.status != universal_gnss_protocols::UbxCfgBuilderStatus::kOk)
   {
     std::cerr << "FAILED: test setup could not build a UBX CFG frame\n";
@@ -85,21 +109,20 @@ void TestSuccessfulDispatchCreatesCurrentTransaction(TestContext& ctx)
   MemoryByteSink sink;
   ReceiverCommandTransactionEngine engine(sink);
 
-  const auto result = engine.StartTransaction(
-      MakeBinaryRuntimeCommand({0xAAu, 0x55u, 0x10u}), 1000);
+  const auto result =
+      engine.StartTransaction(MakeBinaryRuntimeCommand({0xAAu, 0x55u, 0x10u}), 1000);
 
   ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kDispatched &&
                  result.dispatch_result.has_value(),
              "successful dispatch should report a dispatched engine step");
-  ctx.Expect(engine.current_transaction().has_value() &&
-                 engine.current_transaction()->transaction_id == 1u &&
-                 engine.current_transaction()->state == ReceiverCommandTransactionState::kSent &&
-                 engine.current_transaction()->attempt_count == 1u &&
-                 engine.current_transaction()->created_timestamp_ns ==
-                     std::optional<std::int64_t>(1000) &&
-                 engine.current_transaction()->sent_timestamp_ns ==
-                     std::optional<std::int64_t>(1000),
-             "successful dispatch should keep a current sent transaction with timestamps");
+  ctx.Expect(
+      engine.current_transaction().has_value() &&
+          engine.current_transaction()->transaction_id == 1u &&
+          engine.current_transaction()->state == ReceiverCommandTransactionState::kSent &&
+          engine.current_transaction()->attempt_count == 1u &&
+          engine.current_transaction()->created_timestamp_ns == std::optional<std::int64_t>(1000) &&
+          engine.current_transaction()->sent_timestamp_ns == std::optional<std::int64_t>(1000),
+      "successful dispatch should keep a current sent transaction with timestamps");
   ctx.Expect(sink.written_bytes() == std::vector<std::uint8_t>({0xAAu, 0x55u, 0x10u}) &&
                  engine.metrics().transactions_created == 1u &&
                  engine.metrics().commands_dispatched == 1u &&
@@ -122,14 +145,12 @@ void TestAckResponseMarksTransactionAcknowledged(TestContext& ctx)
   ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kAcknowledged &&
                  result.response_matched,
              "ACK responses should be accepted by a sent transaction");
-  ctx.Expect(!engine.current_transaction().has_value() &&
-                 engine.completed_transaction().has_value() &&
-                 engine.completed_transaction()->state ==
-                     ReceiverCommandTransactionState::kAcknowledged &&
-                 engine.completed_transaction()->response.kind ==
-                     ReceiverCommandResponseKind::kAck &&
-                 engine.completed_transaction()->response.message == "ACK",
-             "accepted ACK responses should complete the transaction successfully");
+  ctx.Expect(
+      !engine.current_transaction().has_value() && engine.completed_transaction().has_value() &&
+          engine.completed_transaction()->state == ReceiverCommandTransactionState::kAcknowledged &&
+          engine.completed_transaction()->response.kind == ReceiverCommandResponseKind::kAck &&
+          engine.completed_transaction()->response.message == "ACK",
+      "accepted ACK responses should complete the transaction successfully");
   ctx.Expect(engine.metrics().responses_accepted == 1u &&
                  engine.metrics().transactions_acknowledged == 1u &&
                  engine.metrics().responses_unmatched == 0u,
@@ -146,18 +167,15 @@ void TestNoResponseCommandsAcknowledgeImmediately(TestContext& ctx)
   ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kAcknowledged &&
                  result.dispatch_result.has_value(),
              "no-response commands should acknowledge immediately after dispatch");
-  ctx.Expect(!engine.current_transaction().has_value() &&
-                 engine.completed_transaction().has_value() &&
-                 engine.completed_transaction()->state ==
-                     ReceiverCommandTransactionState::kAcknowledged &&
-                 engine.completed_transaction()->sent_timestamp_ns ==
-                     std::optional<std::int64_t>(1150),
-             "immediate-ack commands should complete without leaving a current transaction pending");
+  ctx.Expect(
+      !engine.current_transaction().has_value() && engine.completed_transaction().has_value() &&
+          engine.completed_transaction()->state == ReceiverCommandTransactionState::kAcknowledged &&
+          engine.completed_transaction()->sent_timestamp_ns == std::optional<std::int64_t>(1150),
+      "immediate-ack commands should complete without leaving a current transaction pending");
   ctx.Expect(engine.metrics().transactions_created == 1u &&
                  engine.metrics().transactions_acknowledged == 1u &&
                  sink.written_bytes() ==
-                     std::vector<std::uint8_t>(
-                         {'F', 'R', 'E', 'S', 'E', 'T', '\r', '\n'}),
+                     std::vector<std::uint8_t>({'F', 'R', 'E', 'S', 'E', 'T', '\r', '\n'}),
              "immediate-ack commands should still write bytes and update acknowledgement metrics");
 }
 
@@ -176,13 +194,11 @@ void TestNakResponseMarksTransactionRejected(TestContext& ctx)
   ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kRejected &&
                  result.response_matched,
              "NAK responses should be accepted by a sent transaction");
-  ctx.Expect(!engine.current_transaction().has_value() &&
-                 engine.completed_transaction().has_value() &&
-                 engine.completed_transaction()->state ==
-                     ReceiverCommandTransactionState::kRejected &&
-                 engine.completed_transaction()->response.kind ==
-                     ReceiverCommandResponseKind::kNak,
-             "accepted NAK responses should complete the transaction as rejected");
+  ctx.Expect(
+      !engine.current_transaction().has_value() && engine.completed_transaction().has_value() &&
+          engine.completed_transaction()->state == ReceiverCommandTransactionState::kRejected &&
+          engine.completed_transaction()->response.kind == ReceiverCommandResponseKind::kNak,
+      "accepted NAK responses should complete the transaction as rejected");
   ctx.Expect(engine.metrics().responses_accepted == 1u &&
                  engine.metrics().transactions_rejected == 1u,
              "NAK acceptance should update rejection counters");
@@ -226,13 +242,14 @@ void TestTimeoutMarksTransactionTimedOut(TestContext& ctx)
   const auto timed_out = engine.CheckTimeout(500004000LL);
   ctx.Expect(timed_out.status == ReceiverCommandTransactionEngineStepStatus::kTimedOut,
              "timeout checks at or after the configured deadline should time out the transaction");
-  ctx.Expect(engine.current_transaction().has_value() &&
-                 engine.current_transaction()->state ==
-                     ReceiverCommandTransactionState::kTimedOut &&
-                 engine.current_transaction()->response.kind ==
-                     ReceiverCommandResponseKind::kTimeout &&
-                 engine.metrics().transactions_timed_out == 1u,
-             "timed out transactions should remain current for possible manual retry");
+  ctx.Expect(
+      engine.current_transaction().has_value() &&
+          engine.current_transaction()->state == ReceiverCommandTransactionState::kTimedOut &&
+          engine.current_transaction()->response.kind == ReceiverCommandResponseKind::kTimeout &&
+          engine.metrics().transactions_timed_out == 1u,
+      "timed out transactions should remain current while the session is quarantined");
+  ctx.Expect(engine.session_indeterminate() && engine.metrics().sessions_quarantined == 1u,
+             "a timeout after dispatch must quarantine the transaction engine session");
 }
 
 void TestRetryAllowedWithinRetryBudget(TestContext& ctx)
@@ -244,19 +261,17 @@ void TestRetryAllowedWithinRetryBudget(TestContext& ctx)
   engine.MarkTimeout(5600);
 
   const auto retry = engine.RetryPending(5700);
-  ctx.Expect(retry.status == ReceiverCommandTransactionEngineStepStatus::kRetryDispatched &&
-                 retry.dispatch_result.has_value(),
-             "retryable timed out transactions should be redispatched explicitly");
-  ctx.Expect(engine.current_transaction().has_value() &&
-                 engine.current_transaction()->state == ReceiverCommandTransactionState::kSent &&
-                 engine.current_transaction()->attempt_count == 2u &&
-                 engine.current_transaction()->sent_timestamp_ns ==
-                     std::optional<std::int64_t>(5700),
-             "manual retry should increment attempts and return the transaction to sent state");
-  ctx.Expect(sink.written_bytes() ==
-                 std::vector<std::uint8_t>({0x45u, 0x46u, 0x45u, 0x46u}) &&
-                 engine.metrics().commands_dispatched == 2u,
-             "manual retry should write the command bytes again and update dispatch counters");
+  ctx.Expect(retry.status == ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate &&
+                 !retry.dispatch_result.has_value(),
+             "a timed-out command must not be redispatched without a proven recovery boundary");
+  ctx.Expect(
+      engine.current_transaction().has_value() &&
+          engine.current_transaction()->state == ReceiverCommandTransactionState::kTimedOut &&
+          engine.current_transaction()->attempt_count == 1u && engine.session_indeterminate(),
+      "quarantine must preserve the timed-out command rather than creating a new attempt");
+  ctx.Expect(sink.written_bytes() == std::vector<std::uint8_t>({0x45u, 0x46u}) &&
+                 engine.metrics().commands_dispatched == 1u,
+             "quarantine must not write a retry after timeout");
 }
 
 void TestRetryStopsAfterMaxRetries(TestContext& ctx)
@@ -265,18 +280,54 @@ void TestRetryStopsAfterMaxRetries(TestContext& ctx)
   ReceiverCommandTransactionEngine engine(sink);
   engine.StartTransaction(MakeBinaryRuntimeCommand({0x47u}, 1u), 6000);
   engine.MarkTimeout(6500);
-  engine.RetryPending(6600);
-  engine.MarkTimeout(7100);
+  const auto retry = engine.RetryPending(6600);
+  const auto repeated_timeout = engine.MarkTimeout(7100);
+  ctx.Expect(retry.status == ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate &&
+                 repeated_timeout.status ==
+                     ReceiverCommandTransactionEngineStepStatus::kNotTimedOut,
+             "quarantine must reject retries and leave the original timeout terminal");
+  ctx.Expect(
+      engine.current_transaction().has_value() &&
+          engine.current_transaction()->state == ReceiverCommandTransactionState::kTimedOut &&
+          engine.current_transaction()->attempt_count == 1u && engine.session_indeterminate(),
+      "quarantine should retain the single indeterminate transaction");
+}
 
-  const auto retry = engine.RetryPending(7200);
-  ctx.Expect(retry.status == ReceiverCommandTransactionEngineStepStatus::kRetryUnavailable,
-             "retry should stop once the configured retry budget is exhausted");
-  ctx.Expect(engine.current_transaction().has_value() &&
-                 engine.current_transaction()->state ==
-                     ReceiverCommandTransactionState::kTimedOut &&
-                 engine.current_transaction()->attempt_count == 2u &&
-                 !engine.current_transaction()->can_retry(),
-             "exhausted retries should leave the transaction timed out and non-retryable");
+void TestLateResponseCannotPermitNextTransaction(TestContext& ctx)
+{
+  MemoryByteSink sink;
+  ReceiverCommandTransactionEngine engine(sink);
+  engine.StartTransaction(MakeUbxCfgCommand(), 8000);
+  const auto sent_a = sink.written_bytes();
+  engine.MarkTimeout(8500);
+
+  ReceiverCommandResponse late_ack;
+  late_ack.kind = ReceiverCommandResponseKind::kAck;
+  late_ack.timestamp_ns = 8600;
+  ReceiverCommandResponseMatchMetadata target;
+  target.ubx_target = UbxMessageIdentity{0x06u, 0x8Au};
+  const auto late = engine.ApplyResponse(late_ack, target);
+  const auto next = engine.StartTransaction(MakeUbxCfgCommand(), 8700);
+
+  ctx.Expect(late.status == ReceiverCommandTransactionEngineStepStatus::kResponseUnmatched &&
+                 next.status == ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate &&
+                 sink.written_bytes() == sent_a,
+             "a late response for A must not be accepted or permit dispatch of B");
+}
+
+void TestPartialWriteQuarantinesSession(TestContext& ctx)
+{
+  PartiallyFailingByteSink sink;
+  ReceiverCommandTransactionEngine engine(sink);
+  const auto failed = engine.StartTransaction(MakeBinaryRuntimeCommand({0x51u, 0x52u}), 8800);
+  const auto next = engine.StartTransaction(MakeBinaryRuntimeCommand({0x53u}), 8900);
+
+  ctx.Expect(failed.status == ReceiverCommandTransactionEngineStepStatus::kDispatchFailed &&
+                 failed.dispatch_result.has_value() &&
+                 failed.dispatch_result->bytes_written == 1u && engine.session_indeterminate() &&
+                 next.status == ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate &&
+                 sink.written_bytes() == std::vector<std::uint8_t>({0x51u}),
+             "a partial write must quarantine the session before any later command can be sent");
 }
 
 void TestDispatchFailureMarksTransactionFailed(TestContext& ctx)
@@ -290,14 +341,12 @@ void TestDispatchFailureMarksTransactionFailed(TestContext& ctx)
                  result.dispatch_result.has_value() &&
                  result.dispatch_result->transport_error == TransportError::kWriteFailure,
              "dispatch failures should be surfaced through the engine");
-  ctx.Expect(!engine.current_transaction().has_value() &&
-                 engine.completed_transaction().has_value() &&
-                 engine.completed_transaction()->state ==
-                     ReceiverCommandTransactionState::kFailed &&
-                 engine.completed_transaction()->response.message == "transport write failed",
-             "dispatch failures should complete the transaction as failed");
-  ctx.Expect(engine.metrics().dispatch_failures == 1u &&
-                 engine.metrics().commands_dispatched == 0u,
+  ctx.Expect(
+      !engine.current_transaction().has_value() && engine.completed_transaction().has_value() &&
+          engine.completed_transaction()->state == ReceiverCommandTransactionState::kFailed &&
+          engine.completed_transaction()->response.message == "transport write failed",
+      "dispatch failures should complete the transaction as failed");
+  ctx.Expect(engine.metrics().dispatch_failures == 1u && engine.metrics().commands_dispatched == 0u,
              "dispatch failures should increment engine failure counters without sent counts");
 }
 
@@ -313,8 +362,7 @@ void TestSafetyRejectionPreventsDispatch(TestContext& ctx)
   ctx.Expect(result.status == ReceiverCommandTransactionEngineStepStatus::kDispatchFailed &&
                  result.dispatch_result.has_value(),
              "unsafe commands should be rejected by the engine through dispatcher failure");
-  ctx.Expect(sink.written_bytes().empty() &&
-                 !engine.current_transaction().has_value() &&
+  ctx.Expect(sink.written_bytes().empty() && !engine.current_transaction().has_value() &&
                  engine.completed_transaction().has_value() &&
                  engine.completed_transaction()->state ==
                      ReceiverCommandTransactionState::kFailed &&
@@ -327,22 +375,40 @@ void TestResetClearsStateAndMetrics(TestContext& ctx)
   MemoryByteSink sink;
   ReceiverCommandTransactionEngine engine(sink);
   engine.StartTransaction(MakeBinaryRuntimeCommand({0x50u}), 10000);
-  engine.MarkTimeout(10500);
+  ReceiverCommandResponse ack;
+  ack.kind = ReceiverCommandResponseKind::kAck;
+  ack.timestamp_ns = 10500;
+  ack.message = "ACK";
+  engine.ApplyResponse(ack);
   engine.Reset();
 
   ctx.Expect(!engine.current_transaction().has_value() &&
                  !engine.completed_transaction().has_value(),
              "engine reset should clear both current and completed transaction state");
-  ctx.Expect(engine.metrics().transactions_created == 0u &&
-                 engine.metrics().commands_dispatched == 0u &&
-                 engine.metrics().responses_accepted == 0u &&
-                 engine.metrics().responses_unmatched == 0u &&
-                 engine.metrics().transactions_timed_out == 0u &&
-                 engine.metrics().dispatch_failures == 0u,
-             "engine reset should clear metrics");
+  ctx.Expect(
+      engine.metrics().transactions_created == 0u && engine.metrics().commands_dispatched == 0u &&
+          engine.metrics().responses_accepted == 0u && engine.metrics().responses_unmatched == 0u &&
+          engine.metrics().transactions_timed_out == 0u && engine.metrics().dispatch_failures == 0u,
+      "engine reset should clear metrics");
 }
 
-}  // namespace
+void TestResetCannotReleaseQuarantine(TestContext& ctx)
+{
+  MemoryByteSink sink;
+  ReceiverCommandTransactionEngine engine(sink);
+  engine.StartTransaction(MakeBinaryRuntimeCommand({0x54u}), 11000);
+  engine.MarkTimeout(11500);
+  const auto sent_a = sink.written_bytes();
+  engine.Reset();
+  const auto next = engine.StartTransaction(MakeBinaryRuntimeCommand({0x55u}), 12000);
+
+  ctx.Expect(engine.session_indeterminate() &&
+                 next.status == ReceiverCommandTransactionEngineStepStatus::kSessionIndeterminate &&
+                 sink.written_bytes() == sent_a,
+             "Reset must not clear a post-write quarantine or allow a new command");
+}
+
+} // namespace
 
 int main()
 {
@@ -356,9 +422,12 @@ int main()
   TestTimeoutMarksTransactionTimedOut(ctx);
   TestRetryAllowedWithinRetryBudget(ctx);
   TestRetryStopsAfterMaxRetries(ctx);
+  TestLateResponseCannotPermitNextTransaction(ctx);
+  TestPartialWriteQuarantinesSession(ctx);
   TestDispatchFailureMarksTransactionFailed(ctx);
   TestSafetyRejectionPreventsDispatch(ctx);
   TestResetClearsStateAndMetrics(ctx);
+  TestResetCannotReleaseQuarantine(ctx);
 
   if (ctx.failures != 0)
   {

@@ -25,8 +25,10 @@ using universal_gnss_driver::DetectedStreamProtocol;
 using universal_gnss_driver::DiscoverSerialPorts;
 using universal_gnss_driver::MakeExplicitReceiverPortCandidate;
 using universal_gnss_driver::ProbeReceiverTransportAtBaud;
+using universal_gnss_driver::QueryReceiverModel;
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverDiscoveryPaths;
+using universal_gnss_driver::ReceiverModelQueryMethod;
 using universal_gnss_driver::ReceiverPortCandidate;
 using universal_gnss_driver::ReceiverPortSource;
 using universal_gnss_driver::ReceiverProbeConfidence;
@@ -671,7 +673,7 @@ void TestActiveUnicoreProbeWaitsPastAckForVersionA(TestContext& ctx)
                  result.identity.model == std::optional<std::string>{"UM982"} &&
                  result.identity.firmware_version ==
                      std::optional<std::string>{"R4.10Build13495"} &&
-                 result.versiona_verified && result.confidence == ReceiverProbeConfidence::kHigh,
+                 result.model_verified && result.confidence == ReceiverProbeConfidence::kHigh,
              "generic ACK must remain intermediate until a valid VERSIONA identifies the UM982");
 }
 
@@ -685,10 +687,10 @@ void TestActiveUnicoreProbeRejectsAckOnlyAndNoise(TestContext& ctx)
   const auto noise_result = ProbeReceiverTransportAtBaud(candidate, 460800u, noise);
 
   ctx.Expect(ack_result.detected_family == ReceiverDetectedFamily::kUnknown &&
-                 !ack_result.versiona_verified,
+                 !ack_result.model_verified,
              "a VERSIONA command ACK alone must not validate receiver identity or baud");
   ctx.Expect(noise_result.detected_family == ReceiverDetectedFamily::kUnknown &&
-                 !noise_result.versiona_verified,
+                 !noise_result.model_verified,
              "noise at a wrong baud must not validate receiver identity or baud");
 }
 
@@ -703,16 +705,27 @@ void TestActiveUnicoreProbeReassemblesFragmentedVersionA(TestContext& ctx)
   const auto result = ProbeReceiverTransportAtBaud(candidate, 460800u, transport);
   ctx.Expect(result.selected_baud == std::optional<std::uint32_t>{460800u} &&
                  result.detected_family == ReceiverDetectedFamily::kUnicore &&
-                 result.versiona_verified &&
+                 result.model_verified &&
                  result.identity.model == std::optional<std::string>{"UM982"},
              "fragmented VERSIONA must be reassembled and validate the active 460800 baud");
+}
+
+void TestGenericUnicoreModelQuery(TestContext& ctx)
+{
+  ScriptedProbeTransport transport({Bytes(BuildUm982VersionA())});
+  const auto result = QueryReceiverModel(ReceiverDetectedFamily::kUnicore, transport, 10u);
+  const std::string written(transport.written().begin(), transport.written().end());
+  ctx.Expect(result.model_verified && result.method == ReceiverModelQueryMethod::kUnicoreVersionA &&
+                 result.identity.model == std::optional<std::string>{"UM982"} &&
+                 written == "VERSIONA\r\n",
+             "the generic MODEL query must map Unicore to a verified VERSIONA response");
 }
 
 void TestActiveUbloxMonVerVerification(TestContext& ctx)
 {
   const auto mon_ver = BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9P"}));
   ScriptedProbeTransport verified({mon_ver});
-  const bool verified_result = VerifyUbloxMonVerResponse(verified, 10u);
+  const auto verified_result = QueryReceiverModel(ReceiverDetectedFamily::kUblox, verified, 10u);
 
   const auto ack = BuildUbxFrame(0x05u, 0x01u, {0x06u, 0x8Au});
   ScriptedProbeTransport ack_only({ack});
@@ -723,15 +736,50 @@ void TestActiveUbloxMonVerVerification(TestContext& ctx)
   ScriptedProbeTransport corrupted({corrupted_mon_ver});
   const bool corrupted_result = VerifyUbloxMonVerResponse(corrupted, 10u);
 
+  ScriptedProbeTransport malformed(
+      {BuildUbxFrame(0x0Au, 0x04u, std::vector<std::uint8_t>(39u, 0u))});
+  const bool malformed_result = VerifyUbloxMonVerResponse(malformed, 10u);
+
+  ScriptedProbeTransport fragmented(
+      {{mon_ver.begin(), mon_ver.begin() + 7}, {mon_ver.begin() + 7, mon_ver.end()}});
+  const auto fragmented_result =
+      QueryReceiverModel(ReceiverDetectedFamily::kUblox, fragmented, 10u);
+
+  const auto mon_ver_without_model = BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({}));
+  ScriptedProbeTransport no_model({mon_ver_without_model});
+  const auto no_model_result = QueryReceiverModel(ReceiverDetectedFamily::kUblox, no_model, 10u);
+  ScriptedProbeTransport no_model_legacy({mon_ver_without_model});
+  const bool no_model_transport_verified = VerifyUbloxMonVerResponse(no_model_legacy, 10u);
+
+  const auto first_mon_ver_without_model = BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({}));
+  const auto later_mon_ver_with_model =
+      BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9R"}));
+  auto multiple_mon_ver_bytes = first_mon_ver_without_model;
+  multiple_mon_ver_bytes.insert(multiple_mon_ver_bytes.end(), later_mon_ver_with_model.begin(),
+                                later_mon_ver_with_model.end());
+  ScriptedProbeTransport multiple_mon_ver({multiple_mon_ver_bytes});
+  const auto multiple_mon_ver_result =
+      QueryReceiverModel(ReceiverDetectedFamily::kUblox, multiple_mon_ver, 10u);
+
   constexpr std::array<std::uint8_t, 8u> expected_poll{0xB5u, 0x62u, 0x0Au, 0x04u,
                                                        0x00u, 0x00u, 0x0Eu, 0x34u};
-  ctx.Expect(
-      verified_result && verified.written() ==
-                             std::vector<std::uint8_t>(expected_poll.begin(), expected_poll.end()),
-      "a valid UBX-MON-VER response after the exact poll must verify active u-blox transport");
-  ctx.Expect(
-      !ack_result && !corrupted_result,
-      "UBX ACKs and invalid-checksum MON-VER frames must not verify active u-blox transport");
+  ctx.Expect(verified_result.transport_verified && verified_result.model_verified &&
+                 verified_result.method == ReceiverModelQueryMethod::kUbloxMonVer &&
+                 verified_result.identity.model == std::optional<std::string>{"ZED-F9P"} &&
+                 verified.written() ==
+                     std::vector<std::uint8_t>(expected_poll.begin(), expected_poll.end()),
+             "the generic MODEL query must map u-blox to a strict UBX-MON-VER response");
+  ctx.Expect(!ack_result && !corrupted_result && !malformed_result &&
+                 fragmented_result.model_verified,
+             "ACK-only, bad-checksum, and malformed MON-VER replies must fail while fragmented "
+             "MODEL replies pass");
+  ctx.Expect(no_model_result.transport_verified && !no_model_result.model_verified &&
+                 !no_model_result.identity.model.has_value() && no_model_transport_verified,
+             "a valid MON-VER without MOD= must verify transport but not claim a receiver model");
+  ctx.Expect(multiple_mon_ver_result.transport_verified &&
+                 !multiple_mon_ver_result.model_verified &&
+                 !multiple_mon_ver_result.identity.model.has_value(),
+             "a MODEL query must not take metadata from a later MON-VER frame in the same read");
 }
 
 void TestDefaultBaudOrder(TestContext& ctx)
@@ -827,6 +875,7 @@ int main()
   TestActiveUnicoreProbeWaitsPastAckForVersionA(ctx);
   TestActiveUnicoreProbeRejectsAckOnlyAndNoise(ctx);
   TestActiveUnicoreProbeReassemblesFragmentedVersionA(ctx);
+  TestGenericUnicoreModelQuery(ctx);
   TestActiveUbloxMonVerVerification(ctx);
   TestDefaultBaudOrder(ctx);
   TestFailedBaudProbesDoNotSelectABaud(ctx);

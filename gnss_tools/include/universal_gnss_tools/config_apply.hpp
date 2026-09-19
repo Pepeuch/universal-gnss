@@ -98,6 +98,7 @@ struct ConfigApplyResult
   bool dry_run{true};
   bool execute_requested{false};
   bool executed{false};
+  bool receiver_state_indeterminate{false};
   bool requires_runtime_confirmation{false};
   bool requires_persistent_confirmation{false};
   bool execution_confirmed{false};
@@ -106,6 +107,9 @@ struct ConfigApplyResult
   std::uint32_t transport_baud_rate{0u};
   std::optional<std::uint32_t> target_config_baud{};
   std::optional<std::uint32_t> active_verified_baud{};
+  bool model_verified{false};
+  universal_gnss_driver::ReceiverModelQueryMethod model_query_method{
+      universal_gnss_driver::ReceiverModelQueryMethod::kUnsupported};
   bool current_baud_verified{false};
   universal_gnss_driver::ReceiverDetectedFamily detected_family{
       universal_gnss_driver::ReceiverDetectedFamily::kUnknown};

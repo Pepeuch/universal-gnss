@@ -444,6 +444,56 @@ for mutating commands.
 Each reconnect or physical receiver replacement produces a fresh discovery
 result, so unavailable metadata cannot retain authority from a prior receiver.
 
+### Generic MODEL verification
+
+The generic contract for an active receiver identity check is `MODEL`, exposed
+by `QueryReceiverModel`. Its result separates `transport_verified` from
+`model_verified`: the latter is true only when a validated response contains a
+concrete model value. The result also carries optional receiver
+identity/firmware metadata and a diagnostic query-method tag.
+The tag records the backend mechanism but does not drive generic logic:
+
+- u-blox uses an active `UBX-MON-VER` poll and accepts only the matching,
+  checksum-valid, structurally valid response received after the poll;
+- Unicore uses active `VERSIONA` and accepts only a checksum-valid response
+  with documented model and firmware fields;
+- generic NMEA reports MODEL query unsupported rather than inventing an
+  identity from traffic.
+
+`gnss_config_apply` JSON exposes `model_verified` and
+`model_query_method`; the obsolete vendor-specific `versiona_verified` field
+is not emitted. This is an intentional source and JSON schema migration:
+downstream consumers must rename `versiona_verified` to `model_verified` and
+must not treat the method tag as generic control flow.
+`current_baud_verified` and `active_verified_baud` remain transport facts: a
+protocol-valid active response proves the currently selected transport baud
+even if a u-blox response has no `MOD=` extension. It is not a
+transaction-response correlation token.
+
+### Post-timeout configuration quarantine
+
+After any dispatched configuration command times out, or a write fails after
+one or more bytes, the transaction engine marks its session indeterminate. It
+rejects late responses and refuses retries or any subsequent command. This
+prevents a delayed response for command A from satisfying A again or a later
+command B.
+
+`Reset()` cannot clear a quarantined engine, nor can it discard an outstanding
+sent command: that latter call first enters quarantine. The higher lifecycle
+owner must create a new engine only after it has independently established a
+qualified recovery boundary. Apply text/JSON makes this explicit with
+`receiver_state_indeterminate=true` and the warning that the timed-out command
+may have been applied.
+
+An active MODEL query is deliberately not used to lift this quarantine. Neither
+`UBX-MON-VER` nor `VERSIONA` carries a host transaction nonce, and the current
+POSIX serial interface cannot prove that a response already queued at the
+receiver/bridge/kernel belongs to a new session. `tcflush`, close/reopen,
+sleeping, parser reset, and a local epoch therefore do not release the
+quarantine. A future recovery provider must attest an end-to-end old-byte
+cutoff before a new transaction epoch can be trusted; this remains
+`UGA-126` / `HARDWARE_REQUIRED` work.
+
 Current policy:
 
 - Unicore uses an optional model selector seam for capability and

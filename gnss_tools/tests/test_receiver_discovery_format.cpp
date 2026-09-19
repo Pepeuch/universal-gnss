@@ -3,14 +3,14 @@
 #include <string>
 #include <vector>
 
+#include "testdata_utils.hpp"
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_tools/receiver_discovery_format.hpp"
-#include "testdata_utils.hpp"
 
-namespace
-{
+namespace {
 
 using universal_gnss_driver::ReceiverDetectedFamily;
+using universal_gnss_driver::ReceiverModelQueryMethod;
 using universal_gnss_driver::ReceiverPortSource;
 using universal_gnss_driver::ReceiverProbeConfidence;
 using universal_gnss_driver::ReceiverProbeResult;
@@ -31,8 +31,7 @@ struct TestContext
   }
 };
 
-ReceiverProbeResult MakeResult(const std::string& path,
-                               const ReceiverDetectedFamily family,
+ReceiverProbeResult MakeResult(const std::string& path, const ReceiverDetectedFamily family,
                                const ReceiverProbeConfidence confidence)
 {
   ReceiverProbeResult result;
@@ -43,22 +42,33 @@ ReceiverProbeResult MakeResult(const std::string& path,
   result.detected_family = family;
   result.confidence = confidence;
   result.discovery_score = 100;
-  result.evidence.ubx_frames_seen = 2u;
-  result.evidence.mavlink_heartbeats_seen = 1u;
   result.evidence.bytes_read = 512u;
-  result.identity.receiver_identity = "receiver-serial-42";
-  result.identity.model = "UM982";
-  result.identity.firmware_version = "R4.10";
+  if (family == ReceiverDetectedFamily::kUblox)
+  {
+    result.evidence.ubx_frames_seen = 2u;
+    result.identity.receiver_identity = "000000D0D69D0F7A54";
+    result.identity.model = "ZED-F9P";
+    result.identity.firmware_version = "HPG 1.32";
+    result.model_verified = true;
+    result.model_query_method = ReceiverModelQueryMethod::kUbloxMonVer;
+    result.reason = "valid_ubx_frame:+100";
+  } else if (family == ReceiverDetectedFamily::kUnicore)
+  {
+    result.identity.receiver_identity = "receiver-serial-42";
+    result.identity.model = "UM982";
+    result.identity.firmware_version = "R4.10";
+    result.model_verified = true;
+    result.model_query_method = ReceiverModelQueryMethod::kUnicoreVersionA;
+    result.reason = "VERSIONA:+100";
+  }
   result.note = "ok";
-  result.reason = "valid_ubx_frame:+100";
   return result;
 }
 
 void TestTextFormatting(TestContext& ctx)
 {
-  const std::string text = FormatReceiverDiscoveryText(
-      {MakeResult("/dev/serial/by-id/f9p", ReceiverDetectedFamily::kUblox,
-                  ReceiverProbeConfidence::kHigh)});
+  const std::string text = FormatReceiverDiscoveryText({MakeResult(
+      "/dev/serial/by-id/f9p", ReceiverDetectedFamily::kUblox, ReceiverProbeConfidence::kHigh)});
 
   ctx.Expect(text.find("/dev/serial/by-id/f9p") != std::string::npos &&
                  text.find("baud=921600") != std::string::npos &&
@@ -66,27 +76,31 @@ void TestTextFormatting(TestContext& ctx)
                  text.find("confidence=high") != std::string::npos &&
                  text.find("score=100") != std::string::npos &&
                  text.find("evidence=ubx:2") != std::string::npos &&
-                 text.find("receiver_identity=receiver-serial-42") != std::string::npos &&
-                 text.find("model=UM982") != std::string::npos &&
-                 text.find("firmware=R4.10") != std::string::npos,
-             "text discovery output should include receiver-incarnation metadata when observed");
+                 text.find("receiver_identity=000000D0D69D0F7A54") != std::string::npos &&
+                 text.find("model=ZED-F9P") != std::string::npos &&
+                 text.find("firmware=HPG 1.32") != std::string::npos &&
+                 text.find("model_verified=true") != std::string::npos &&
+                 text.find("model_query_method=ublox_mon_ver") != std::string::npos,
+             "text discovery output should include generic MODEL verification when observed");
 }
 
 void TestJsonFormatting(TestContext& ctx)
 {
-  const std::string json = FormatReceiverDiscoveryJson(
-      {MakeResult("/dev/ttyUSB0", ReceiverDetectedFamily::kUnicore,
-                  ReceiverProbeConfidence::kHigh)});
+  const std::string json = FormatReceiverDiscoveryJson({MakeResult(
+      "/dev/ttyUSB0", ReceiverDetectedFamily::kUnicore, ReceiverProbeConfidence::kHigh)});
 
   ctx.Expect(json.find("\"path\": \"/dev/ttyUSB0\"") != std::string::npos &&
                  json.find("\"detected_family\": \"unicore\"") != std::string::npos &&
                  json.find("\"confidence\": \"high\"") != std::string::npos &&
                  json.find("\"score\": 100") != std::string::npos &&
-                 json.find("\"ubx_frames_seen\": 2") != std::string::npos &&
+                 json.find("\"ubx_frames_seen\": 0") != std::string::npos &&
                  json.find("\"receiver_identity\": \"receiver-serial-42\"") != std::string::npos &&
                  json.find("\"receiver_model\": \"UM982\"") != std::string::npos &&
-                 json.find("\"receiver_firmware_version\": \"R4.10\"") != std::string::npos,
-             "JSON discovery output should include stable receiver-incarnation metadata keys");
+                 json.find("\"receiver_firmware_version\": \"R4.10\"") != std::string::npos &&
+                 json.find("\"model_verified\": true") != std::string::npos &&
+                 json.find("\"model_query_method\": \"unicore_versiona\"") != std::string::npos &&
+                 json.find("versiona_verified") == std::string::npos,
+             "JSON discovery output should expose generic MODEL verification only");
 }
 
 void TestEmptyFormatting(TestContext& ctx)
@@ -94,14 +108,11 @@ void TestEmptyFormatting(TestContext& ctx)
   const std::string text = FormatReceiverDiscoveryText({});
   const std::string json = FormatReceiverDiscoveryJson({});
 
-  ctx.Expect(text == "No receiver candidates found\n",
-             "empty text output should stay readable");
-  ctx.Expect(json == "[\n]\n",
-             "empty JSON output should still be a valid list");
+  ctx.Expect(text == "No receiver candidates found\n", "empty text output should stay readable");
+  ctx.Expect(json == "[\n]\n", "empty JSON output should still be a valid list");
 }
 
-ReceiverProbeResult AnalyzeFixture(const std::string& relative_path,
-                                   const bool allow_nmea = true)
+ReceiverProbeResult AnalyzeFixture(const std::string& relative_path, const bool allow_nmea = true)
 {
   universal_gnss_driver::ReceiverPortCandidate candidate;
   candidate.path = "replay:" + relative_path;
@@ -110,34 +121,28 @@ ReceiverProbeResult AnalyzeFixture(const std::string& relative_path,
   universal_gnss_driver::ReceiverProbeConfig config;
   config.allow_generic_nmea_fallback = allow_nmea;
   return universal_gnss_driver::AnalyzeReceiverProbeBytes(
-      candidate,
-      921600u,
-      universal_gnss_tools::test::ReadBinaryFile(relative_path),
-      config);
+      candidate, 921600u, universal_gnss_tools::test::ReadBinaryFile(relative_path), config);
 }
 
 void TestFileBackedDiscoveryReplaySamples(TestContext& ctx)
 {
   const auto f9p = AnalyzeFixture("ubx/nav_pvt_sat_monrf.ubx");
   ctx.Expect(f9p.detected_family == ReceiverDetectedFamily::kUblox &&
-                 f9p.confidence == ReceiverProbeConfidence::kHigh &&
-                 f9p.discovery_score >= 100,
+                 f9p.confidence == ReceiverProbeConfidence::kHigh && f9p.discovery_score >= 100,
              "F9P-style UBX replay should classify as high-confidence u-blox");
 
   const auto um982 = AnalyzeFixture("unicore/basic_ascii.log");
   ctx.Expect(um982.detected_family == ReceiverDetectedFamily::kUnicore &&
-                 um982.confidence == ReceiverProbeConfidence::kHigh &&
-                 um982.discovery_score >= 100,
+                 um982.confidence == ReceiverProbeConfidence::kHigh && um982.discovery_score >= 100,
              "UM982-style Unicore replay should classify as high-confidence Unicore");
 
   const auto nmea = AnalyzeFixture("nmea/basic_fix.nmea");
   ctx.Expect(nmea.detected_family == ReceiverDetectedFamily::kNmea &&
-                 nmea.confidence == ReceiverProbeConfidence::kMedium &&
-                 nmea.discovery_score >= 20,
+                 nmea.confidence == ReceiverProbeConfidence::kMedium && nmea.discovery_score >= 20,
              "generic NMEA replay should classify as medium-confidence NMEA");
 }
 
-}  // namespace
+} // namespace
 
 int main()
 {
