@@ -107,6 +107,11 @@ void UbxFrameFramer::Reset()
   expected_frame_size_ = 0u;
 }
 
+bool UbxFrameFramer::has_buffered_data() const
+{
+  return !buffer_.empty();
+}
+
 ParserResult<UbxFrame> UbxFrameFramer::StartSync(std::uint8_t byte,
                                                  std::optional<ProtocolTimestampNs> timestamp_ns)
 {

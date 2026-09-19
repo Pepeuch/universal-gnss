@@ -153,19 +153,23 @@ bool IsIgnoredTelemetryLine(std::string_view line)
 
 ReceiverCommandResponse BuildResponse(const ReceiverCommandResponseKind kind,
                                       const std::optional<ReceiverCommandTimestampNs> timestamp_ns,
+                                      const std::optional<std::uint64_t> capture_generation,
                                       const std::string& message)
 {
   ReceiverCommandResponse response;
   response.kind = kind;
   response.timestamp_ns = timestamp_ns;
+  response.capture_generation = capture_generation;
   response.message = message;
   return response;
 }
 
 }  // namespace
 
-bool UnicoreResponseRouter::ProcessLine(std::string_view line,
-                                        std::optional<ReceiverCommandTimestampNs> timestamp_ns)
+bool UnicoreResponseRouter::ProcessLine(
+    std::string_view line,
+    const std::optional<ReceiverCommandTimestampNs> timestamp_ns,
+    const std::optional<std::uint64_t> capture_generation)
 {
   ++metrics_.lines_seen;
 
@@ -179,8 +183,8 @@ bool UnicoreResponseRouter::ProcessLine(std::string_view line,
 
   if (MatchesNegativeResponse(normalized))
   {
-    queued_responses_.push_back(
-        BuildResponse(ReceiverCommandResponseKind::kTextError, timestamp_ns, normalized));
+    queued_responses_.push_back(BuildResponse(
+        ReceiverCommandResponseKind::kTextError, timestamp_ns, capture_generation, normalized));
     ++metrics_.error_responses_seen;
     ++metrics_.responses_generated;
     return true;
@@ -189,8 +193,8 @@ bool UnicoreResponseRouter::ProcessLine(std::string_view line,
   if (MatchesOkResponse(normalized) || MatchesCommandAcceptedResponse(normalized) ||
       MatchesVersionResponse(normalized))
   {
-    queued_responses_.push_back(
-        BuildResponse(ReceiverCommandResponseKind::kTextOk, timestamp_ns, normalized));
+    queued_responses_.push_back(BuildResponse(
+        ReceiverCommandResponseKind::kTextOk, timestamp_ns, capture_generation, normalized));
     ++metrics_.ok_responses_seen;
     ++metrics_.responses_generated;
     return true;
@@ -213,22 +217,28 @@ bool UnicoreResponseRouter::ProcessLine(std::string_view line,
 }
 
 void UnicoreResponseRouter::FeedBytes(std::string_view data,
-                                      std::optional<ReceiverCommandTimestampNs> timestamp_ns)
+                                      const std::optional<ReceiverCommandTimestampNs> timestamp_ns,
+                                      const std::optional<std::uint64_t> capture_generation)
 {
   for (const char c : data)
   {
     if (buffered_line_.empty() && c != '\n')
     {
       buffered_line_timestamp_ns_ = timestamp_ns;
+      buffered_line_capture_generation_ = capture_generation;
     }
 
     if (c == '\n')
     {
       const auto line_timestamp =
           buffered_line_timestamp_ns_.has_value() ? buffered_line_timestamp_ns_ : timestamp_ns;
-      ProcessLine(buffered_line_, line_timestamp);
+      const auto line_capture_generation = buffered_line_capture_generation_.has_value()
+                                               ? buffered_line_capture_generation_
+                                               : capture_generation;
+      ProcessLine(buffered_line_, line_timestamp, line_capture_generation);
       buffered_line_.clear();
       buffered_line_timestamp_ns_.reset();
+      buffered_line_capture_generation_.reset();
       continue;
     }
 
@@ -264,6 +274,7 @@ void UnicoreResponseRouter::Reset()
   queued_responses_.clear();
   buffered_line_.clear();
   buffered_line_timestamp_ns_.reset();
+  buffered_line_capture_generation_.reset();
   metrics_ = UnicoreResponseRouterMetrics{};
 }
 

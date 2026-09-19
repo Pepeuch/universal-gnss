@@ -25,7 +25,7 @@ class RepoStatusTests(unittest.TestCase):
         self.assertIn("OPEN: 99", result.stdout)
         self.assertIn("PARTIAL: 20", result.stdout)
         self.assertIn("Remaining: 172", result.stdout)
-        self.assertIn("ACTIVE:   2", result.stdout)
+        self.assertIn("ACTIVE:   3", result.stdout)
         self.assertIn("BLOCKED:  2", result.stdout)
         self.assertIn("RETAINED: 3", result.stdout)
         self.assertIn("CLOSED:   1", result.stdout)

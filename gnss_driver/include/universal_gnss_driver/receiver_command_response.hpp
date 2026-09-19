@@ -23,6 +23,9 @@ struct ReceiverCommandResponse
 {
   ReceiverCommandResponseKind kind{ReceiverCommandResponseKind::kNone};
   std::optional<ReceiverCommandTimestampNs> timestamp_ns{};
+  // Monotonic software-observation generation assigned by the apply layer.
+  // This is not a wall-clock timestamp and is used only for causal eligibility.
+  std::optional<std::uint64_t> capture_generation{};
   std::string message{};
 };
 

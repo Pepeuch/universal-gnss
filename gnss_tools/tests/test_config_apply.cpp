@@ -2,6 +2,7 @@
 #include <array>
 #include <cctype>
 #include <cstdlib>
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <optional>
@@ -275,6 +276,7 @@ class ScriptedByteDuplex final : public ByteDuplex
 public:
   explicit ScriptedByteDuplex(std::vector<std::uint8_t> input = {}) : input_(std::move(input))
   {
+    ConvertRepeatedOkInputToCausalResponses();
   }
 
   ReadResult Read(std::uint8_t* destination, const std::size_t capacity) override
@@ -308,15 +310,23 @@ public:
 
     if (read_offset_ >= input_.size())
     {
-      if (auto_text_ok_responses_)
+      if (write_response_credit_ > 0u && !queued_text_responses_.empty())
+      {
+        const auto& response = queued_text_responses_.front();
+        input_.insert(input_.end(), response.begin(), response.end());
+        queued_text_responses_.pop_front();
+        --write_response_credit_;
+      }
+      else if (write_response_credit_ > 0u && auto_text_ok_responses_)
       {
         static constexpr std::string_view kTextOk = "<OK\r\n";
-        const auto bytes_to_copy = std::min(capacity, kTextOk.size());
-        std::copy_n(reinterpret_cast<const std::uint8_t*>(kTextOk.data()),
-                    static_cast<std::ptrdiff_t>(bytes_to_copy),
-                    destination);
-        return ReadResult{bytes_to_copy, TransportStatus::kOk, TransportError::kNone};
+        input_.insert(input_.end(), kTextOk.begin(), kTextOk.end());
+        --write_response_credit_;
       }
+    }
+
+    if (read_offset_ >= input_.size())
+    {
       return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
     }
 
@@ -368,6 +378,10 @@ public:
     }
 
     written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
+    if (text.find("\r\n") != std::string_view::npos && read_offset_ >= input_.size())
+    {
+      ++write_response_credit_;
+    }
     if (disconnect_after_signalgroup_response_ &&
         text.find("CONFIG SIGNALGROUP ") != std::string_view::npos)
     {
@@ -380,6 +394,12 @@ public:
     {
       input_.insert(input_.end(), ublox_mon_ver_response_.begin(), ublox_mon_ver_response_.end());
       ublox_mon_ver_response_.clear();
+    }
+    if (auto_ublox_ack_responses_ && size >= 4u && data[0] == 0xB5u && data[1] == 0x62u &&
+        !(data[2] == 0x0Au && data[3] == 0x04u))
+    {
+      const auto ack = BuildUbxFrame(0x05u, 0x01u, {data[2], data[3]});
+      input_.insert(input_.end(), ack.begin(), ack.end());
     }
     return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
   }
@@ -401,6 +421,7 @@ public:
     open_ = true;
     pending_signalgroup_disconnect_ = false;
     stale_after_signalgroup_ = false;
+    ConvertRepeatedOkInputToCausalResponses();
   }
 
   void DisconnectAfterSignalGroupResponse()
@@ -411,6 +432,18 @@ public:
   void ProvideTextOkResponses()
   {
     auto_text_ok_responses_ = true;
+  }
+
+  void QueueTextResponsesForWrites(std::vector<std::string> responses)
+  {
+    queued_text_responses_.insert(queued_text_responses_.end(),
+                                  std::make_move_iterator(responses.begin()),
+                                  std::make_move_iterator(responses.end()));
+  }
+
+  void ProvideUbloxAckResponses()
+  {
+    auto_ublox_ack_responses_ = true;
   }
 
   void RespondToUbloxMonVerPoll(std::vector<std::uint8_t> response)
@@ -439,6 +472,29 @@ public:
   }
 
 private:
+  void ConvertRepeatedOkInputToCausalResponses()
+  {
+    static constexpr std::string_view kTextOk = "<OK\r\n";
+    if (input_.empty() || input_.size() % kTextOk.size() != 0u)
+    {
+      return;
+    }
+    for (std::size_t offset = 0u; offset < input_.size(); offset += kTextOk.size())
+    {
+      if (!std::equal(
+              kTextOk.begin(), kTextOk.end(), input_.begin() + static_cast<std::ptrdiff_t>(offset)))
+      {
+        return;
+      }
+    }
+    for (std::size_t offset = 0u; offset < input_.size(); offset += kTextOk.size())
+    {
+      queued_text_responses_.emplace_back(kTextOk);
+    }
+    input_.clear();
+    read_offset_ = 0u;
+  }
+
   std::vector<std::uint8_t> input_{};
   std::vector<std::uint8_t> written_{};
   std::size_t read_offset_{0u};
@@ -448,6 +504,9 @@ private:
   bool stale_after_signalgroup_{false};
   bool stale_write_attempted_{false};
   bool auto_text_ok_responses_{false};
+  bool auto_ublox_ack_responses_{false};
+  std::size_t write_response_credit_{0u};
+  std::deque<std::string> queued_text_responses_{};
   std::optional<std::size_t> partial_signalgroup_write_bytes_{};
   bool partial_signalgroup_write_pending_{false};
   std::string signalgroup_response_{"<OK\r\n"};
@@ -1068,9 +1127,8 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
-  const std::string responses =
-      BuildRepeatedUnicoreOkResponses(prepared.plan.summary.commands_total);
-  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+  ScriptedByteDuplex transport;
+  transport.ProvideTextOkResponses();
 
   const auto result = ExecuteConfigApply(transport, options);
 
@@ -1090,6 +1148,33 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(written.find("CONFIG SIGNALGROUP") == std::string::npos,
              "runtime-only Unicore apply should not emit CONFIG SIGNALGROUP without an explicit "
              "override");
+}
+
+void TestUnicorePreDispatchQueuedResponseCannotAcknowledgeNextCommand(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.timeout_ms = 1u;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  MemoryByteDuplex transport(
+      std::vector<std::uint8_t>{'<', 'O', 'K', '\r', '\n', '<', 'O', 'K', '\r', '\n'});
+  const auto result = ExecuteConfigApply(transport, options);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTimedOut &&
+                 result.execution_summary.commands_completed == 1u &&
+                 result.execution_summary.responses_applied == 1u &&
+                 result.execution_summary.commands_failed == 1u,
+             "a queued Unicore response captured for command A must not acknowledge command B");
+  ctx.Expect(prepared.plan.commands.size() > 1u &&
+                 written.find(prepared.plan.commands[1u].command.payload.text) != std::string::npos,
+             "the Unicore regression must dispatch command B before its normal timeout");
 }
 
 void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestContext& ctx)
@@ -1115,9 +1200,10 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestCon
              "prepared runtime-only Unicore plans should keep telemetry optional without a "
              "default SIGNALGROUP command");
 
-  const std::string responses = BuildUnicoreResponsesWithSingleError(
-      prepared.plan.summary.commands_total, *gpgga_index, "PARSING FAILED GRAMMAR ERROR,*73");
-  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+  std::vector<std::string> responses(prepared.plan.summary.commands_total, "<OK\r\n");
+  responses[*gpgga_index] = "PARSING FAILED GRAMMAR ERROR,*73\r\n";
+  ScriptedByteDuplex transport;
+  transport.QueueTextResponsesForWrites(std::move(responses));
 
   const auto result = ExecuteConfigApply(transport, options);
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
@@ -1157,9 +1243,10 @@ void TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(TestContext& ctx
     std::exit(EXIT_FAILURE);
   }
 
-  const std::string responses = BuildUnicoreResponsesWithSingleError(
-      prepared.plan.summary.commands_total, *mode_index, "PARSING FAILED GRAMMAR ERROR,*73");
-  MemoryByteDuplex transport(std::vector<std::uint8_t>(responses.begin(), responses.end()));
+  std::vector<std::string> responses(prepared.plan.summary.commands_total, "<OK\r\n");
+  responses[*mode_index] = "PARSING FAILED GRAMMAR ERROR,*73\r\n";
+  ScriptedByteDuplex transport;
+  transport.QueueTextResponsesForWrites(std::move(responses));
 
   const auto result = ExecuteConfigApply(transport, options);
 
@@ -2042,7 +2129,8 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
-  ScriptedByteDuplex transport(BuildAckFramesForPlan(prepared));
+  ScriptedByteDuplex transport;
+  transport.ProvideUbloxAckResponses();
   transport.RespondToUbloxMonVerPoll(BuildUbloxMonVerResponse());
 
   const auto result = ExecuteConfigApply(transport, options);
@@ -2070,6 +2158,34 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
              "u-blox JSON must expose generic MODEL proof without a Unicore-specific field");
 }
 
+void TestUbloxPreDispatchQueuedAckCannotAcknowledgeNextCommand(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.timeout_ms = 1u;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  const auto all_acks = BuildAckFramesForPlan(prepared);
+  const std::size_t one_ack_size = 10u;
+  MemoryByteDuplex transport(std::vector<std::uint8_t>(
+      all_acks.begin(), all_acks.begin() + static_cast<std::ptrdiff_t>(2u * one_ack_size)));
+
+  const auto result = ExecuteConfigApply(transport, options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTimedOut &&
+                 result.execution_summary.commands_completed == 1u &&
+                 result.execution_summary.responses_applied == 1u &&
+                 result.execution_summary.commands_failed == 1u,
+             "a queued u-blox ACK captured for command A must not acknowledge command B");
+  ctx.Expect(transport.written_bytes().size() >
+                 prepared.plan.commands.front().command.payload.binary.size(),
+             "the u-blox regression must dispatch command B before its normal timeout");
+}
+
 void TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -2080,7 +2196,8 @@ void TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(TestContext& ctx)
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
-  MemoryByteDuplex transport(BuildAckFramesForPlan(prepared));
+  ScriptedByteDuplex transport;
+  transport.ProvideUbloxAckResponses();
   const auto result = ExecuteConfigApply(transport, options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && !result.current_baud_verified &&
@@ -2112,6 +2229,7 @@ int main()
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUnicorePreDispatchQueuedResponseCannotAcknowledgeNextCommand(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(ctx);
   TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(ctx);
@@ -2133,6 +2251,7 @@ int main()
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
   TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
+  TestUbloxPreDispatchQueuedAckCannotAcknowledgeNextCommand(ctx);
   TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(ctx);
 
   if (ctx.failures != 0)

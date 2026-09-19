@@ -26,10 +26,12 @@ class UnicoreResponseRouter
 {
 public:
   bool ProcessLine(std::string_view line,
-                   std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+                   std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
+                   std::optional<std::uint64_t> capture_generation = std::nullopt);
 
   void FeedBytes(std::string_view data,
-                 std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+                 std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
+                 std::optional<std::uint64_t> capture_generation = std::nullopt);
 
   bool TryGetResponse(ReceiverCommandResponse& response) const;
 
@@ -45,6 +47,7 @@ private:
   std::deque<ReceiverCommandResponse> queued_responses_{};
   std::string buffered_line_{};
   std::optional<ReceiverCommandTimestampNs> buffered_line_timestamp_ns_{};
+  std::optional<std::uint64_t> buffered_line_capture_generation_{};
   UnicoreResponseRouterMetrics metrics_{};
 };
 

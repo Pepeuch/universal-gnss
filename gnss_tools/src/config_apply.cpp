@@ -1573,10 +1573,46 @@ void UpdateExecutionSummary(ConfigApplyResult& result, const ReceiverConfigAppli
   result.execution_summary.responses_applied = application.metrics().responses_applied;
 }
 
+class ResponseCausalityFence
+{
+public:
+  std::uint64_t BeginCapture()
+  {
+    return ++last_capture_generation_;
+  }
+
+  void NoteDispatch(const ReceiverConfigApplicationResult& application_result)
+  {
+    if (!application_result.engine_result.has_value())
+    {
+      return;
+    }
+
+    const auto status = application_result.engine_result->status;
+    if (status == universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::kDispatched ||
+        status ==
+            universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::kRetryDispatched)
+    {
+      minimum_eligible_capture_generation_ = last_capture_generation_;
+    }
+  }
+
+  bool IsEligible(const ReceiverCommandResponse& response) const
+  {
+    return response.capture_generation.has_value() &&
+           *response.capture_generation > minimum_eligible_capture_generation_;
+  }
+
+private:
+  std::uint64_t last_capture_generation_{0u};
+  std::uint64_t minimum_eligible_capture_generation_{0u};
+};
+
 bool ApplyQueuedUbloxResponses(ConfigApplyResult& result,
                                const ConfigPlanResult& plan,
                                ReceiverConfigApplication& application,
-                               UbloxResponseRouter& router)
+                               UbloxResponseRouter& router,
+                               const ResponseCausalityFence& causality_fence)
 {
   while (application.state() == ReceiverConfigApplicationState::kWaitingForResponse &&
          router.pending_response_count() > 0u)
@@ -1585,6 +1621,13 @@ bool ApplyQueuedUbloxResponses(ConfigApplyResult& result,
     if (!router.PopResponse(routed_response))
     {
       break;
+    }
+
+    if (!causality_fence.IsEligible(routed_response.response))
+    {
+      result.progress_log.push_back(
+          "Discarded u-blox response captured before the current command dispatch");
+      continue;
     }
 
     ReceiverCommandResponseMatchMetadata match_metadata;
@@ -1605,7 +1648,8 @@ bool ApplyQueuedUbloxResponses(ConfigApplyResult& result,
 bool ApplyQueuedUnicoreResponses(ConfigApplyResult& result,
                                  const ConfigPlanResult& plan,
                                  ReceiverConfigApplication& application,
-                                 UnicoreResponseRouter& router)
+                                 UnicoreResponseRouter& router,
+                                 const ResponseCausalityFence& causality_fence)
 {
   while (application.state() == ReceiverConfigApplicationState::kWaitingForResponse &&
          router.pending_response_count() > 0u)
@@ -1614,6 +1658,13 @@ bool ApplyQueuedUnicoreResponses(ConfigApplyResult& result,
     if (!router.PopResponse(response))
     {
       break;
+    }
+
+    if (!causality_fence.IsEligible(response))
+    {
+      result.progress_log.push_back(
+          "Discarded Unicore response captured before the current command dispatch");
+      continue;
     }
 
     const auto application_result = application.ApplyResponse(response);
@@ -1633,17 +1684,29 @@ bool ProcessUbloxBytes(ConfigApplyResult& result,
                        ReceiverConfigApplication& application,
                        UbxFrameFramer& framer,
                        UbloxResponseRouter& router,
+                       ResponseCausalityFence& causality_fence,
+                       std::optional<std::uint64_t>& frame_capture_generation,
                        const std::uint8_t* data,
                        const std::size_t size,
                        const ProtocolTimestampNs timestamp_ns)
 {
   for (std::size_t index = 0; index < size; ++index)
   {
+    const bool had_buffered_data = framer.has_buffered_data();
     const auto framed = framer.PushByte(data[index], timestamp_ns);
+    if (!had_buffered_data && framer.has_buffered_data())
+    {
+      frame_capture_generation = causality_fence.BeginCapture();
+    }
     if (framed.status == ParserStatus::kRecordReady && framed.record.has_value())
     {
-      router.ProcessUbxFrame(*framed.record);
-      if (ApplyQueuedUbloxResponses(result, plan, application, router))
+      const auto capture_generation =
+          frame_capture_generation.has_value()
+              ? frame_capture_generation
+              : std::optional<std::uint64_t>{causality_fence.BeginCapture()};
+      router.ProcessUbxFrame(*framed.record, capture_generation);
+      frame_capture_generation.reset();
+      if (ApplyQueuedUbloxResponses(result, plan, application, router, causality_fence))
       {
         return true;
       }
@@ -1657,13 +1720,14 @@ bool ProcessUnicoreBytes(ConfigApplyResult& result,
                          const ConfigPlanResult& plan,
                          ReceiverConfigApplication& application,
                          UnicoreResponseRouter& router,
+                         ResponseCausalityFence& causality_fence,
                          const std::uint8_t* data,
                          const std::size_t size,
                          const ProtocolTimestampNs timestamp_ns)
 {
   const std::string_view text(reinterpret_cast<const char*>(data), size);
-  router.FeedBytes(text, timestamp_ns);
-  return ApplyQueuedUnicoreResponses(result, plan, application, router);
+  router.FeedBytes(text, timestamp_ns, causality_fence.BeginCapture());
+  return ApplyQueuedUnicoreResponses(result, plan, application, router, causality_fence);
 }
 
 struct CommandPhaseOutcome
@@ -1709,6 +1773,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
   ReceiverConfigApplicationConfig application_config;
   ReceiverConfigApplication application(transport, application_config);
   UnicoreResponseRouter unicore_router;
+  ResponseCausalityFence causality_fence;
   const bool trace_signalgroup_command = options.debug_unicore_signalgroup_trace &&
                                          commands.size() == 1u &&
                                          IsUnicoreSignalGroupCommand(commands.front());
@@ -1754,6 +1819,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
 
   auto executable_commands = BuildExecutableCommands(commands, options);
   auto application_result = application.Start(executable_commands, NowTimestampNs());
+  causality_fence.NoteDispatch(application_result);
   trace_dispatch(application_result);
   NoteApplicationProgress(result,
                           commands,
@@ -1768,6 +1834,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
     if (application.state() == ReceiverConfigApplicationState::kRunning)
     {
       application_result = application.Step(NowTimestampNs());
+      causality_fence.NoteDispatch(application_result);
       trace_dispatch(application_result);
       NoteApplicationProgress(result,
                               commands,
@@ -1794,6 +1861,13 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
       if (!unicore_router.PopResponse(response))
       {
         break;
+      }
+
+      if (!causality_fence.IsEligible(response))
+      {
+        result.progress_log.push_back(
+            "Discarded Unicore response captured before the current command dispatch");
+        continue;
       }
 
       if (trace_signalgroup_command)
@@ -1841,7 +1915,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
       const auto timestamp_ns = NowTimestampNs();
       const std::string_view text(reinterpret_cast<const char*>(read_buffer.data()),
                                   read_result.bytes_read);
-      unicore_router.FeedBytes(text, timestamp_ns);
+      unicore_router.FeedBytes(text, timestamp_ns, causality_fence.BeginCapture());
 
       while (application.state() == ReceiverConfigApplicationState::kWaitingForResponse &&
              unicore_router.pending_response_count() > 0u)
@@ -1850,6 +1924,13 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
         if (!unicore_router.PopResponse(response))
         {
           break;
+        }
+
+        if (!causality_fence.IsEligible(response))
+        {
+          result.progress_log.push_back(
+              "Discarded Unicore response captured before the current command dispatch");
+          continue;
         }
 
         if (trace_signalgroup_command)
@@ -2916,9 +2997,12 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
   UbxFrameFramer ubx_framer;
   UbloxResponseRouter ublox_router;
   UnicoreResponseRouter unicore_router;
+  ResponseCausalityFence causality_fence;
+  std::optional<std::uint64_t> ubx_frame_capture_generation{};
 
   std::vector<ReceiverCommand> commands = BuildExecutableCommands(result.plan, options);
   auto application_result = application.Start(commands, NowTimestampNs());
+  causality_fence.NoteDispatch(application_result);
   NoteApplicationProgress(result, result.plan, application_result);
   UpdateExecutionSummary(result, application);
 
@@ -2941,6 +3025,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
     if (application.state() == ReceiverConfigApplicationState::kRunning)
     {
       application_result = application.Step(NowTimestampNs());
+      causality_fence.NoteDispatch(application_result);
       NoteApplicationProgress(result, result.plan, application_result);
       UpdateExecutionSummary(result, application);
       if (FinalizeIfApplicationStopped(result, application, application_result))
@@ -2955,14 +3040,15 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
     }
 
     if (result.plan.vendor == "ublox" &&
-        ApplyQueuedUbloxResponses(result, result.plan, application, ublox_router))
+        ApplyQueuedUbloxResponses(result, result.plan, application, ublox_router, causality_fence))
     {
       UpdateExecutionSummary(result, application);
       break;
     }
 
     if (result.plan.vendor == "unicore" &&
-        ApplyQueuedUnicoreResponses(result, result.plan, application, unicore_router))
+        ApplyQueuedUnicoreResponses(
+            result, result.plan, application, unicore_router, causality_fence))
     {
       UpdateExecutionSummary(result, application);
       break;
@@ -2989,6 +3075,8 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
                                                    application,
                                                    ubx_framer,
                                                    ublox_router,
+                                                   causality_fence,
+                                                   ubx_frame_capture_generation,
                                                    read_buffer.data(),
                                                    read_result.bytes_read,
                                                    timestamp_ns)
@@ -2996,6 +3084,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
                                                      result.plan,
                                                      application,
                                                      unicore_router,
+                                                     causality_fence,
                                                      read_buffer.data(),
                                                      read_result.bytes_read,
                                                      timestamp_ns);

@@ -22,6 +22,8 @@ public:
 
   void Reset() override;
 
+  bool has_buffered_data() const;
+
 private:
   ParserResult<UbxFrame> StartSync(std::uint8_t byte,
                                    std::optional<ProtocolTimestampNs> timestamp_ns);

@@ -74,7 +74,7 @@ class CheckpointAuditTests(unittest.TestCase):
     def test_shared_index_covers_every_checkpoint_and_lifecycle(self) -> None:
         entries, problems, warnings = MODULE.audit_shared_index()
 
-        self.assertEqual(8, len(entries))
+        self.assertEqual(9, len(entries))
         self.assertEqual([], problems)
         self.assertEqual([], warnings)
 

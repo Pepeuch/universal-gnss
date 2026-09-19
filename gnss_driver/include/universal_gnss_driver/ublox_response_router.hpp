@@ -31,7 +31,8 @@ struct UbloxResponseRouterMetrics
 class UbloxResponseRouter
 {
 public:
-  bool ProcessUbxFrame(const universal_gnss_protocols::UbxFrame& frame);
+  bool ProcessUbxFrame(const universal_gnss_protocols::UbxFrame& frame,
+                       std::optional<std::uint64_t> capture_generation = std::nullopt);
 
   bool TryGetResponse(UbloxRoutedResponse& response) const;
 

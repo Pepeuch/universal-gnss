@@ -22,10 +22,10 @@ It does not authorize implementing the proposed corrections.
 
 Audit recommendation: do not merge/tag the audited HEAD until the HIGH
 software findings below are resolved and regression-tested. F01 is remediated
-in the current uncommitted worktree; F02-F05 remain unresolved at the audited
-HEAD. The three MEDIUM findings were reported as non-blocking. This is a
-software assessment, not a claim that every release qualification gate is
-satisfied.
+in the current baseline HEAD; F02 is remediated in the current uncommitted
+worktree; F03-F05 remain unresolved. The three MEDIUM findings were reported
+as non-blocking. This is a software assessment, not a claim that every release
+qualification gate is satisfied.
 
 Finding references `F01` through `F08` are stable within this audit only, not
 new UGA IDs or replacements for canonical backlog items. All remain unresolved.
@@ -111,7 +111,7 @@ Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
 HARDWARE_REQUIRED`; this software containment does not establish an automatic
 recovery/incarnation cutoff.
 
-### F02 — HIGH — Already-received responses can acknowledge later commands
+### F02 — IMPLEMENTED IN CURRENT WORKTREE — Already-received responses can acknowledge later commands
 
 Scope: TOOLS / DRIVER. Related backlog: `UGA-126`. Evidence: source trace and PTY
 reproduction; deterministic for a pre-dispatch response batch.
@@ -136,10 +136,41 @@ Coverage: `TestUbloxRuntimeApplyStillWorks` and
 `TestUnicoreRuntimeApplyStillWorks` preload the complete response sequence and
 therefore accept the defective behavior rather than prove causal acknowledgment.
 
-Smallest correction direction: associate captured responses with eligible
-operations and reject records captured before the current dispatch. Update
-fixtures to emit replies in reaction to writes. This only excludes already
-captured stale records; it does not prove freshness of bytes still in hardware.
+Implemented in the current uncommitted worktree based on
+`b9fd3abf8fead45ecd8330dade0d090bb9fd5c73`:
+
+- Apply-layer `ResponseCausalityFence` assigns monotonic software observation
+  generations and snapshots the last observed generation at every dispatch.
+- A response must have a capture generation strictly later than that dispatch
+  boundary before the existing semantic transaction matching is evaluated.
+- UBX and Unicore routers preserve the capture generation. A fragmented UBX
+  frame or Unicore line retains the generation of its first observed fragment,
+  so a response begun before a new dispatch is conservatively ineligible.
+- Same-read future responses are discarded, not held for a later command.
+- Healthy apply fixtures now emit ACK/OK responses in reaction to command
+  writes rather than preloading a future response batch.
+
+Regression evidence:
+
+- `TestUbloxPreDispatchQueuedAckCannotAcknowledgeNextCommand` and
+  `TestUnicorePreDispatchQueuedResponseCannotAcknowledgeNextCommand` preload
+  A plus future B acknowledgement data. They prove only A completes, B is
+  dispatched, then normally times out with its stale response discarded.
+- `TestUbloxRuntimeApplyStillWorks` and `TestUnicoreRuntimeApplyStillWorks`
+  remain successful with write-triggered replies.
+
+Retry policy: the config application currently never retries after a sent
+command because timeout quarantine is terminal (F01). If a future application
+path emits `kRetryDispatched`, the same fence records that new physical
+dispatch and conservatively rejects observations captured before it.
+
+Validation at the current worktree: full build PASS; direct engine/application/
+config-apply tests PASS; CTest 62/67 with the known sandbox loopback/SIGPIPE
+failures unrelated to F02; clang-format and `git diff --check` PASS.
+
+Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
+HARDWARE_REQUIRED`; this filters software-already-captured responses only and
+does not prove cutoff of kernel, bridge, UART, firmware, or device queues.
 
 ### F03 — HIGH — Native supervisor stop hangs on a silent serial receiver
 
