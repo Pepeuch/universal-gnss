@@ -124,6 +124,12 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
 std::optional<ReceiverIdentityMetadata>
 ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes);
 
+// Sends a UBX-MON-VER poll and accepts only a checksum-valid, structurally valid
+// UBX-MON-VER response read after that poll.
+bool VerifyUbloxMonVerResponse(universal_gnss_transport::ByteDuplex& transport,
+                               std::uint32_t read_timeout_ms = 1000u,
+                               std::size_t max_response_bytes = 4096u);
+
 ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& candidate,
                                                  std::uint32_t baud_rate,
                                                  universal_gnss_transport::ByteDuplex& transport,

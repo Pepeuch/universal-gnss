@@ -134,11 +134,23 @@ std::optional<std::string_view> ReadNulTerminatedAsciiField(const std::vector<st
                           static_cast<std::size_t>(nul - begin));
 }
 
-std::optional<ReceiverIdentityMetadata>
-FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
+bool IsVerifiedUbloxMonVerFrame(const UbxFrame& frame)
 {
   constexpr std::uint8_t kMonClass = 0x0Au;
   constexpr std::uint8_t kMonVerId = 0x04u;
+  constexpr std::size_t kFixedPayloadSize = 40u;
+  constexpr std::size_t kExtensionSize = 30u;
+
+  return frame.checksum_status == ChecksumStatus::kValid && frame.class_id == kMonClass &&
+         frame.message_id == kMonVerId && frame.payload.size() >= kFixedPayloadSize &&
+         (frame.payload.size() - kFixedPayloadSize) % kExtensionSize == 0u &&
+         ReadNulTerminatedAsciiField(frame.payload, 0u, 30u).has_value() &&
+         ReadNulTerminatedAsciiField(frame.payload, 30u, 10u).has_value();
+}
+
+std::optional<ReceiverIdentityMetadata>
+FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
+{
   constexpr std::size_t kFixedPayloadSize = 40u;
   constexpr std::size_t kExtensionSize = 30u;
   constexpr std::string_view kModulePrefix = "MOD=";
@@ -155,15 +167,7 @@ FindUbloxMonVerMetadata(const std::vector<std::uint8_t>& bytes)
     }
 
     const UbxFrame& frame = *result.record;
-    if (frame.checksum_status != ChecksumStatus::kValid || frame.class_id != kMonClass ||
-        frame.message_id != kMonVerId || frame.payload.size() < kFixedPayloadSize ||
-        (frame.payload.size() - kFixedPayloadSize) % kExtensionSize != 0u)
-    {
-      continue;
-    }
-
-    if (!ReadNulTerminatedAsciiField(frame.payload, 0u, 30u).has_value() ||
-        !ReadNulTerminatedAsciiField(frame.payload, 30u, 10u).has_value())
+    if (!IsVerifiedUbloxMonVerFrame(frame))
     {
       continue;
     }
@@ -1055,6 +1059,57 @@ std::optional<ReceiverIdentityMetadata>
 ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes)
 {
   return FindUnicoreVersionAMetadata(bytes);
+}
+
+bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_timeout_ms,
+                               const std::size_t max_response_bytes)
+{
+  constexpr std::array<std::uint8_t, 8u> kMonVerPoll{0xB5u, 0x62u, 0x0Au, 0x04u,
+                                                     0x00u, 0x00u, 0x0Eu, 0x34u};
+  if (max_response_bytes == 0u)
+  {
+    return false;
+  }
+
+  const auto write = transport.Write(kMonVerPoll.data(), kMonVerPoll.size());
+  if (write.status == TransportStatus::kClosed || write.status == TransportStatus::kError ||
+      write.bytes_written != kMonVerPoll.size())
+  {
+    return false;
+  }
+
+  const std::uint32_t effective_timeout_ms = read_timeout_ms > 0u ? read_timeout_ms : 1000u;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(static_cast<int>(effective_timeout_ms));
+  std::array<std::uint8_t, 512u> buffer{};
+  UbxFrameFramer framer;
+  std::size_t bytes_read = 0u;
+  while (bytes_read < max_response_bytes && std::chrono::steady_clock::now() < deadline)
+  {
+    const auto read =
+        transport.Read(buffer.data(), std::min(buffer.size(), max_response_bytes - bytes_read));
+    if (read.status == TransportStatus::kError || read.status == TransportStatus::kClosed ||
+        (read.status == TransportStatus::kEndOfStream && read.bytes_read == 0u))
+    {
+      return false;
+    }
+    if (read.bytes_read == 0u)
+    {
+      continue;
+    }
+
+    bytes_read += read.bytes_read;
+    for (std::size_t index = 0u; index < read.bytes_read; ++index)
+    {
+      const auto framed = framer.PushByte(buffer[index]);
+      if (framed.status == ParserStatus::kRecordReady && framed.record.has_value() &&
+          IsVerifiedUbloxMonVerFrame(*framed.record))
+      {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& candidate,

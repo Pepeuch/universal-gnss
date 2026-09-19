@@ -526,6 +526,33 @@ void PopulateExecutionSummaryFromPlan(ConfigApplyResult& result)
 
 bool IsUnicorePlan(const ConfigPlanResult& plan) { return plan.vendor == "unicore"; }
 
+bool IsSuccessfulApplyStatus(ConfigApplyStatus status);
+
+void FinalizeSuccessfulUbloxActiveBaudVerification(ByteDuplex& transport,
+                                                   const ConfigApplyOptions& options,
+                                                   ConfigApplyResult& result)
+{
+  if (!IsSuccessfulApplyStatus(result.status) || result.plan.vendor != "ublox")
+  {
+    return;
+  }
+
+  result.current_baud_verified =
+      universal_gnss_driver::VerifyUbloxMonVerResponse(transport, options.timeout_ms);
+  if (result.current_baud_verified)
+  {
+    result.active_verified_baud = result.current_transport_baud_rate;
+    result.progress_log.push_back(
+        "Verified active u-blox transport with a UBX-MON-VER response at " +
+        std::to_string(result.current_transport_baud_rate) + " bps");
+  } else
+  {
+    result.active_verified_baud.reset();
+    result.progress_log.push_back(
+        "Could not verify active u-blox transport with a UBX-MON-VER response");
+  }
+}
+
 bool PlanUsesUnicoreRecoveryWorkflow(const ConfigPlanResult& plan)
 {
   return IsUnicorePlan(plan) && plan.summary.factory_reset_commands > 0u;
@@ -2574,10 +2601,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     result.execution_summary.final_status = ToString(ConfigApplyStatus::kOk);
     result.progress_log.push_back(
         "No receiver configuration commands were required for this profile");
-    if (result.current_baud_verified)
-    {
-      result.active_verified_baud = result.current_transport_baud_rate;
-    }
+    FinalizeSuccessfulUbloxActiveBaudVerification(transport, options, result);
     return result;
   }
 
@@ -2670,6 +2694,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
     {
       result.active_verified_baud = result.current_transport_baud_rate;
     }
+    FinalizeSuccessfulUbloxActiveBaudVerification(transport, options, result);
     return result;
   }
 
@@ -2763,6 +2788,7 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport, const ConfigApplyOpt
   {
     result.active_verified_baud = result.current_transport_baud_rate;
   }
+  FinalizeSuccessfulUbloxActiveBaudVerification(transport, options, result);
 
   return result;
 }

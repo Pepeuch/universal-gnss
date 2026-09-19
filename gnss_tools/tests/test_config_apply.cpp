@@ -116,6 +116,16 @@ BuildAckFramesForPlan(const universal_gnss_tools::ConfigApplyResult& prepared)
   return bytes;
 }
 
+std::vector<std::uint8_t> BuildUbloxMonVerResponse()
+{
+  std::vector<std::uint8_t> payload(40u, 0u);
+  const std::string software_version = "EXT HPG 1.32";
+  const std::string hardware_version = "00080000";
+  std::copy(software_version.begin(), software_version.end(), payload.begin());
+  std::copy(hardware_version.begin(), hardware_version.end(), payload.begin() + 30);
+  return BuildUbxFrame(0x0Au, 0x04u, payload);
+}
+
 std::string BuildRepeatedUnicoreOkResponses(const std::size_t count)
 {
   std::string text;
@@ -336,6 +346,14 @@ public:
     {
       pending_signalgroup_disconnect_ = true;
     }
+    static constexpr std::array<std::uint8_t, 8u> kMonVerPoll{0xB5u, 0x62u, 0x0Au, 0x04u,
+                                                              0x00u, 0x00u, 0x0Eu, 0x34u};
+    if (!ublox_mon_ver_response_.empty() && size == kMonVerPoll.size() &&
+        std::equal(data, data + static_cast<std::ptrdiff_t>(size), kMonVerPoll.begin()))
+    {
+      input_.insert(input_.end(), ublox_mon_ver_response_.begin(), ublox_mon_ver_response_.end());
+      ublox_mon_ver_response_.clear();
+    }
     return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
   }
 
@@ -356,6 +374,11 @@ public:
 
   void ProvideTextOkResponses() { auto_text_ok_responses_ = true; }
 
+  void RespondToUbloxMonVerPoll(std::vector<std::uint8_t> response)
+  {
+    ublox_mon_ver_response_ = std::move(response);
+  }
+
   void SetSignalGroupResponse(std::string response) { signalgroup_response_ = std::move(response); }
 
   bool stale_write_attempted() const { return stale_write_attempted_; }
@@ -373,6 +396,7 @@ private:
   bool stale_write_attempted_{false};
   bool auto_text_ok_responses_{false};
   std::string signalgroup_response_{"<OK\r\n"};
+  std::vector<std::uint8_t> ublox_mon_ver_response_{};
 };
 
 class ScriptedConfigApplyHooks final : public ConfigApplyTransportHooks
@@ -1820,7 +1844,8 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
   options.confirm = true;
 
   const auto prepared = PrepareConfigApply(options);
-  MemoryByteDuplex transport(BuildAckFramesForPlan(prepared));
+  ScriptedByteDuplex transport(BuildAckFramesForPlan(prepared));
+  transport.RespondToUbloxMonVerPoll(BuildUbloxMonVerResponse());
 
   const auto result = ExecuteConfigApply(transport, options);
 
@@ -1829,13 +1854,36 @@ void TestUbloxRuntimeApplyStillWorks(TestContext& ctx)
                  result.execution_summary.commands_completed == 13u &&
                  result.execution_summary.commands_failed == 0u &&
                  result.execution_summary.responses_applied == 13u &&
-                 result.execution_summary.final_status == "ok",
-             "confirmed runtime-only u-blox apply should complete through the UBX router path");
+                 result.execution_summary.final_status == "ok" && result.current_baud_verified &&
+                 result.active_verified_baud == std::optional<std::uint32_t>{921600u},
+             "confirmed runtime-only u-blox apply should complete and actively verify MON-VER");
   ctx.Expect(!transport.written_bytes().empty(),
              "runtime-only u-blox apply should write the planned UBX commands");
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
   ctx.Expect(written.find("VERSIONA\r\n") == std::string::npos,
              "non-Unicore runtime apply should not use Unicore VERSIONA probing assumptions");
+  const std::string json = universal_gnss_tools::FormatConfigApplyJson(result);
+  ctx.Expect(json.find("\"active_verified_baud\": 921600") != std::string::npos &&
+                 json.find("\"current_baud_verified\": true") != std::string::npos,
+             "u-blox active verification must be exposed through config-apply JSON");
+}
+
+void TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  MemoryByteDuplex transport(BuildAckFramesForPlan(prepared));
+  const auto result = ExecuteConfigApply(transport, options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kOk && !result.current_baud_verified &&
+                 !result.active_verified_baud.has_value(),
+             "successful u-blox apply without MON-VER must not claim active baud verification");
 }
 
 } // namespace
@@ -1882,6 +1930,7 @@ int main()
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
   TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
+  TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(ctx);
 
   if (ctx.failures != 0)
   {

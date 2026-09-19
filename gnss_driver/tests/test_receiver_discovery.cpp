@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -33,6 +34,7 @@ using universal_gnss_driver::ReceiverProbeConfig;
 using universal_gnss_driver::ReceiverProbeResult;
 using universal_gnss_driver::SortReceiverProbeResults;
 using universal_gnss_driver::StreamDetector;
+using universal_gnss_driver::VerifyUbloxMonVerResponse;
 using universal_gnss_transport::ByteDuplex;
 using universal_gnss_transport::ReadResult;
 using universal_gnss_transport::TransportError;
@@ -706,6 +708,32 @@ void TestActiveUnicoreProbeReassemblesFragmentedVersionA(TestContext& ctx)
              "fragmented VERSIONA must be reassembled and validate the active 460800 baud");
 }
 
+void TestActiveUbloxMonVerVerification(TestContext& ctx)
+{
+  const auto mon_ver = BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9P"}));
+  ScriptedProbeTransport verified({mon_ver});
+  const bool verified_result = VerifyUbloxMonVerResponse(verified, 10u);
+
+  const auto ack = BuildUbxFrame(0x05u, 0x01u, {0x06u, 0x8Au});
+  ScriptedProbeTransport ack_only({ack});
+  const bool ack_result = VerifyUbloxMonVerResponse(ack_only, 10u);
+
+  auto corrupted_mon_ver = mon_ver;
+  corrupted_mon_ver.back() ^= 0xFFu;
+  ScriptedProbeTransport corrupted({corrupted_mon_ver});
+  const bool corrupted_result = VerifyUbloxMonVerResponse(corrupted, 10u);
+
+  constexpr std::array<std::uint8_t, 8u> expected_poll{0xB5u, 0x62u, 0x0Au, 0x04u,
+                                                       0x00u, 0x00u, 0x0Eu, 0x34u};
+  ctx.Expect(
+      verified_result && verified.written() ==
+                             std::vector<std::uint8_t>(expected_poll.begin(), expected_poll.end()),
+      "a valid UBX-MON-VER response after the exact poll must verify active u-blox transport");
+  ctx.Expect(
+      !ack_result && !corrupted_result,
+      "UBX ACKs and invalid-checksum MON-VER frames must not verify active u-blox transport");
+}
+
 void TestDefaultBaudOrder(TestContext& ctx)
 {
   ReceiverProbeConfig config;
@@ -799,6 +827,7 @@ int main()
   TestActiveUnicoreProbeWaitsPastAckForVersionA(ctx);
   TestActiveUnicoreProbeRejectsAckOnlyAndNoise(ctx);
   TestActiveUnicoreProbeReassemblesFragmentedVersionA(ctx);
+  TestActiveUbloxMonVerVerification(ctx);
   TestDefaultBaudOrder(ctx);
   TestFailedBaudProbesDoNotSelectABaud(ctx);
   TestUnknownAndRtcmOnlyStreams(ctx);
