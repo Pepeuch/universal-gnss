@@ -3,9 +3,9 @@
 Lifecycle: BLOCKED
 
 Repository: `/workspaces/universal-gnss`
-Branch: `main`
-HEAD: `179159e864b38204bba02b7375e04fb824ab0a2d`
-Upstream: `origin/main` at the same commit
+Branch: `fix/ublox-active-baud-verification`
+HEAD: `5309b579af86e89567a8eebd598fe171578ae742`
+Upstream: `origin/fix/ublox-active-baud-verification` at the same commit
 
 ## Objective
 
@@ -13,31 +13,40 @@ Define the smallest protocol-safe response fencing or recovery contract for
 `UG-DRIVER-RESPONSE-FENCE-001`, the dependency limiting `UGA-126` live runtime
 arbitration. Do not implement `ReceiverTrafficArbiter` or automatic recovery.
 
-## Implemented hard-quarantine slice (2026-09-19)
+## Current implemented boundary (2026-09-19)
 
-On `fix/ublox-active-baud-verification` at
-`b46da5f2fcc37b7ca1431aa839601368b171fcfa` plus the uncommitted MODEL patch,
-`ReceiverCommandTransactionEngine` now enters an explicit indeterminate session
-after a dispatched-command timeout or a write error after one or more bytes.
-It rejects late responses and refuses retry or later dispatch from that engine.
-`ReceiverConfigApplication` consequently fails the apply immediately and never
-retries a command merely because its retry policy permits it. This is a bounded
-software safety improvement, not a recovery fence: `Reset()` cannot clear the
-quarantine. Its lifecycle owner may create a new engine only after it has
-established a separately proven new session.
+Commit `5309b579af86e89567a8eebd598fe171578ae742`
+(`fix(driver): add generic MODEL verification and timeout quarantine`) implements
+the following bounded software contract.
 
-Focused deterministic evidence added on this branch:
+### SOFTWARE IMPLEMENTED
 
-- `A -> timeout -> late A ACK -> B` rejects the late ACK and refuses B before
-  it writes;
-- a partial write quarantines before a later command can be sent;
-- the existing u-blox and Unicore config-apply paths pass their focused tests.
+- Generic MODEL contract: `QueryReceiverModel` uses u-blox `MON-VER` and
+  Unicore `VERSIONA`; generic NMEA is explicitly unsupported.
+- A protocol-valid active answer sets `transport_verified`; `model_verified`
+  additionally requires an extracted, validated model (`MOD=` for u-blox).
+  For u-blox, the identity metadata and both flags come from the same validated
+  `MON-VER` frame.
+- A dispatched-command timeout or a write error after one or more bytes enters
+  hard quarantine. Late responses are rejected; retry and later command B
+  dispatch are refused before write.
+- `Reset()` cannot release quarantine. `ConfigApplyResult` exposes
+  `receiver_state_indeterminate` and reports that the timed-out command may
+  have been applied.
 
-The MODEL work adds generic `QueryReceiverModel`; it intentionally does not
-release this quarantine. A valid post-query `MON-VER`/`VERSIONA` proves an
-active transport response, while `model_verified` additionally requires an
-actual extracted model (for u-blox, `MOD=`). Neither is causal ownership of a
-prior configuration response.
+Focused deterministic evidence at this commit covers `A -> timeout -> late A
+ACK -> B` (late A rejected, B refused before write), partial-write quarantine,
+and the u-blox/Unicore config-apply paths.
+
+### STILL BLOCKED / HARDWARE_REQUIRED
+
+- Deterministic automatic recovery from `Indeterminate`.
+- A proven transport/receiver-incarnation cutoff.
+- Any mechanism allowed to release quarantine automatically.
+
+MODEL is not a recovery fence. A later `MON-VER`/`VERSIONA` response has no
+causal ownership of a prior configuration response and must not release the
+quarantine.
 
 ## Evidence cache
 

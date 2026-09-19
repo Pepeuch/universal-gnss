@@ -3,9 +3,9 @@
 Lifecycle: BLOCKED
 
 Repository: `/workspaces/universal-gnss`
-Branch: `main`
-HEAD: `179159e864b38204bba02b7375e04fb824ab0a2d`
-Upstream: `origin/main` at the same commit
+Branch: `fix/ublox-active-baud-verification`
+HEAD: `5309b579af86e89567a8eebd598fe171578ae742`
+Upstream: `origin/fix/ublox-active-baud-verification` at the same commit
 
 ## Objective
 
@@ -13,13 +13,29 @@ Determine whether the concrete POSIX serial transport can prove a receive
 incarnation / prior-byte cutoff after an indeterminate configuration request.
 Analysis only; do not implement `ReceiverTrafficArbiter`.
 
+## Current implementation boundary
+
+Commit `5309b579af86e89567a8eebd598fe171578ae742` implements hard quarantine,
+not recovery. The generic MODEL contract (`MON-VER` / `VERSIONA`, with
+`transport_verified` distinct from `model_verified`) and the post-write
+timeout/partial-write quarantine are software implemented. Late responses,
+retries, and command B dispatch are rejected while quarantined; `Reset()`
+cannot release it; `ConfigApplyResult::receiver_state_indeterminate` reports
+that the last command may have been applied.
+
+Still BLOCKED / HARDWARE_REQUIRED: deterministic automatic recovery from
+`Indeterminate`, a proven transport/receiver-incarnation cutoff, and any
+automatic quarantine-release mechanism. MODEL remains a probe only; it is not
+a recovery fence and cannot release quarantine.
+
 ## Evidence cache
 
 - `UGA-126_RUNTIME_ARBITRATION_CHECKPOINT.md`: CURRENT; ownership and
   same-target stale-response invariant are established.
 - `UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md`: CURRENT; neither u-blox nor
-  Unicore supplies a protocol-level response fence, and an indeterminate
-  post-write request must be quarantined until a proven recovery boundary.
+  Unicore supplies a protocol-level response fence. At `5309b579`, an
+  indeterminate post-write request is hard-quarantined until a proven recovery
+  boundary; the implemented MODEL probe cannot change that state.
 - `UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md`, Phase F (2026-09-05): CURRENT
   physical evidence now includes actual u-blox tty/major:minor renumbering,
   stale-state detection, container recreation, and safe wrong-receiver refusal.

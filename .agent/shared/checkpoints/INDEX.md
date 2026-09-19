@@ -6,11 +6,12 @@
   and counts come from the manifest/TODO.
 - `closed/UG-DOCS-STATUS-001_CHECKPOINT.md` — completed generated UGA status
   dashboard and CI validation contract.
-- `blocked/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` — protocol response
-  fencing is blocked pending a qualified cutoff/recovery contract.
+- `blocked/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` — hard quarantine is
+  implemented; a qualified cutoff/recovery contract is still required before
+  any automatic release.
 - `blocked/UG-DRIVER-TRANSPORT-INCARNATION-001_CHECKPOINT.md` — POSIX serial
-  cannot prove an end-to-end prior-byte cutoff; automatic recovery remains
-  blocked pending a qualified provider.
+  cannot prove an end-to-end prior-byte cutoff; implemented quarantine remains
+  blocked from automatic recovery pending a qualified provider.
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
 - `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and

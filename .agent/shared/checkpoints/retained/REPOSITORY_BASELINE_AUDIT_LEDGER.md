@@ -147,8 +147,8 @@ Adjacent groundwork was otherwise downgraded to OPEN.
 | `UGA-070` | `docs/devcontainer.md` offers a Docker/devcontainer quick path. | Production quick-start. |
 | `UGA-072` | Existing device-permission guidance covers the direct Docker path. | Production deployment-specific guidance. |
 | `UGA-074` | ROS2/devcontainer docs cover a limited Docker integration path. | Supported production ROS2/container guide. |
-| `UGA-127` | Auto-config plan/apply has guarded rollback/reporting. | Complete production failure contract across deployment lifecycle. |
-| `UGA-128` | Discovery projects fresh receiver-incarnation metadata from documented passive Unicore `VERSIONA` and u-blox `MON-VER` responses; plan/report tests cover the copied output. | Implemented at `b16ae8c` plus the current uncommitted passive physical-identity increment. |
+| `UGA-127` | Auto-config plan/apply has guarded rollback/reporting and explicitly reports `receiver_state_indeterminate` when a command may have been applied. | Complete production failure contract across deployment lifecycle. |
+| `UGA-128` | Discovery projects fresh receiver-incarnation metadata from documented passive Unicore `VERSIONA` and u-blox `MON-VER` responses; plan/report tests cover the copied output. | Implemented; passive physical-identity projection is present in current repository history. |
 | `UGA-130` | Built-in profiles declare generated config-profile support and focused driver regressions prove capability-subset and exact config-support consistency for each concrete driver. | No remaining work within this finding's scope. |
 | `UGA-131` | Native Unicore correction-age fields are mapped. | Portable estimation for other sources. |
 | `UGA-139` | `docs/terminology.md` contains a compatibility/deprecation plan. | Final removal decision and execution after `v0.6.x`. |
