@@ -22,7 +22,8 @@
 
 #include "universal_gnss_runtime/receiver_supervisor.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_runtime::ReceiverSupervisor;
 using universal_gnss_runtime::ReceiverSupervisorConfig;
@@ -60,19 +61,51 @@ struct FakeTransportWriteRecord
   }
 };
 
+struct FakeTransportControl
+{
+  void MarkAvailable()
+  {
+    available.store(true, std::memory_order_release);
+  }
+
+  bool IsAvailable() const
+  {
+    return available.load(std::memory_order_acquire);
+  }
+
+  void RequestClose()
+  {
+    close_requested.store(true, std::memory_order_release);
+  }
+
+  bool CloseRequested() const
+  {
+    return close_requested.load(std::memory_order_acquire);
+  }
+
+  std::atomic<bool> available{false};
+  std::atomic<bool> close_requested{false};
+};
+
 class FakeTransport final : public ByteDuplex
 {
 public:
-  explicit FakeTransport(std::vector<ReadResult> results, std::vector<std::uint8_t> bytes = {},
-                         std::shared_ptr<FakeTransportWriteRecord> write_record = {})
+  explicit FakeTransport(std::vector<ReadResult> results,
+                         std::vector<std::uint8_t> bytes = {},
+                         std::shared_ptr<FakeTransportWriteRecord> write_record = {},
+                         std::shared_ptr<FakeTransportControl> control = {})
       : results_(std::move(results)), bytes_(std::move(bytes)),
-        write_record_(std::move(write_record))
+        write_record_(std::move(write_record)), control_(std::move(control))
   {
   }
 
   ReadResult Read(std::uint8_t* destination, const std::size_t capacity) override
   {
     std::unique_lock<std::mutex> lock(mutex_);
+    if (control_)
+    {
+      control_->MarkAvailable();
+    }
     if (result_index_ < results_.size())
     {
       const ReadResult result = results_[result_index_++];
@@ -84,7 +117,21 @@ public:
       }
       return result;
     }
-    condition_.wait(lock, [this] { return !open_; });
+    if (control_)
+    {
+      while (open_ && !control_->CloseRequested())
+      {
+        condition_.wait_for(lock, std::chrono::milliseconds(2));
+      }
+      if (control_->CloseRequested())
+      {
+        open_ = false;
+      }
+    }
+    else
+    {
+      condition_.wait(lock, [this] { return !open_; });
+    }
     return ReadResult{0u, TransportStatus::kClosed, TransportError::kClosed};
   }
 
@@ -99,8 +146,8 @@ public:
     if (write_record_)
     {
       std::lock_guard<std::mutex> write_record_lock(write_record_->mutex);
-      write_record_->bytes.insert(write_record_->bytes.end(), data,
-                                  data + static_cast<std::ptrdiff_t>(accepted));
+      write_record_->bytes.insert(
+          write_record_->bytes.end(), data, data + static_cast<std::ptrdiff_t>(accepted));
     }
     return result;
   }
@@ -121,7 +168,7 @@ public:
   bool IsOpen() const override
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    return open_;
+    return open_ && (!control_ || !control_->CloseRequested());
   }
 
   void Close() override
@@ -142,6 +189,7 @@ private:
   std::vector<WriteResult> write_results_;
   std::vector<std::uint8_t> written_;
   std::shared_ptr<FakeTransportWriteRecord> write_record_;
+  std::shared_ptr<FakeTransportControl> control_;
   std::size_t result_index_{0u};
   std::size_t write_index_{0u};
 };
@@ -333,7 +381,10 @@ private:
 
 std::vector<std::uint8_t> Rtcm(const std::uint16_t type)
 {
-  std::vector<std::uint8_t> bytes = {0xD3u, 0u, 2u, static_cast<std::uint8_t>(type >> 4u),
+  std::vector<std::uint8_t> bytes = {0xD3u,
+                                     0u,
+                                     2u,
+                                     static_cast<std::uint8_t>(type >> 4u),
                                      static_cast<std::uint8_t>((type & 0x0Fu) << 4u)};
   const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>(crc >> 16u));
@@ -496,28 +547,23 @@ void TestNtripForwardingAndIndependentReconnects(TestContext& ctx)
   ctx.Expect(first_ntrip.Open() && second_ntrip.Open(), "NTRIP socketpair fixtures should open");
   const auto first_frame = Rtcm(1077u);
   const auto second_frame = Rtcm(1087u);
-  ctx.Expect(first_ntrip.Write(AcceptedResponse(first_frame)),
-             "first caster response should be writable");
   std::vector<int> ntrip_fds = {first_ntrip.ReleaseClient(), second_ntrip.ReleaseClient()};
   std::size_t ntrip_fd_index = 0u;
-  FakeTransport* first_receiver = nullptr;
-  FakeTransport* second_receiver = nullptr;
+  const auto first_receiver_control = std::make_shared<FakeTransportControl>();
+  const auto second_receiver_control = std::make_shared<FakeTransportControl>();
   const auto first_receiver_writes = std::make_shared<FakeTransportWriteRecord>();
   const auto second_receiver_writes = std::make_shared<FakeTransportWriteRecord>();
   std::size_t receiver_opens = 0u;
   auto config = BaseConfig();
   config.transport_factory = [&] {
     const auto write_record = receiver_opens == 0u ? first_receiver_writes : second_receiver_writes;
-    auto transport = std::make_unique<FakeTransport>(std::vector<ReadResult>{},
-                                                     std::vector<std::uint8_t>{}, write_record);
+    const auto control = receiver_opens == 0u ? first_receiver_control : second_receiver_control;
+    auto transport = std::make_unique<FakeTransport>(
+        std::vector<ReadResult>{}, std::vector<std::uint8_t>{}, write_record, control);
     if (receiver_opens++ == 0u)
     {
-      first_receiver = transport.get();
-      first_receiver->SetWriteResults({{3u, TransportStatus::kOk, TransportError::kNone},
-                                       {0u, TransportStatus::kOk, TransportError::kNone}});
-    } else
-    {
-      second_receiver = transport.get();
+      transport->SetWriteResults({{3u, TransportStatus::kOk, TransportError::kNone},
+                                  {0u, TransportStatus::kOk, TransportError::kNone}});
     }
     return TransportFactoryResult{std::move(transport), {}};
   };
@@ -534,12 +580,23 @@ void TestNtripForwardingAndIndependentReconnects(TestContext& ctx)
   ReceiverSupervisor supervisor(std::move(config));
   ctx.Expect(supervisor.Start(), "NTRIP-enabled supervisor should start");
   ctx.Expect(WaitFor([&] {
-               return first_receiver != nullptr &&
-                      supervisor.Snapshot().ntrip_metrics.response_received;
+               const auto snapshot = supervisor.Snapshot();
+               return snapshot.connected && snapshot.session_incarnation == 1u &&
+                      first_receiver_control->IsAvailable();
              }),
+             "the initial receiver incarnation must be active before receiving RTCM");
+  ctx.Expect(first_ntrip.Write(AcceptedResponse(first_frame)),
+             "first caster response should be writable after the receiver is active");
+  ctx.Expect(WaitFor([&] { return supervisor.Snapshot().ntrip_metrics.response_received; }),
              "NtripClient should accept the first response without restarting the receiver");
   ctx.Expect(WaitFor([&] { return first_receiver_writes->Snapshot() == first_frame; }),
              "partial receiver writes should flush the complete RTCM frame in order");
+  ctx.Expect(WaitFor([&] {
+               const auto snapshot = supervisor.Snapshot();
+               return snapshot.rtcm_forward_queue_depth == 0u &&
+                      snapshot.rtcm_forwarded_frames == 1u;
+             }),
+             "the first RTCM frame should leave no pending forwarding queue");
   const auto forwarding_snapshot = supervisor.Snapshot();
   ctx.Expect(forwarding_snapshot.ntrip_enabled && forwarding_snapshot.ntrip_metrics.connected &&
                  forwarding_snapshot.ntrip_correction_flow.response_accepted &&
@@ -550,9 +607,10 @@ void TestNtripForwardingAndIndependentReconnects(TestContext& ctx)
                  forwarding_snapshot.session_incarnation == 1u,
              "supervisor status must retain distinct NTRIP connection, response, flow, forwarding, "
              "queue, and incarnation state");
-  first_receiver->Close();
+  first_receiver_control->RequestClose();
   ctx.Expect(WaitFor([&] {
-               return supervisor.Snapshot().session_incarnation == 2u && second_receiver != nullptr;
+               return supervisor.Snapshot().session_incarnation == 2u &&
+                      second_receiver_control->IsAvailable();
              }),
              "receiver reconnect should create a new incarnation without restarting NTRIP");
   const auto first_sink_after_replacement = first_receiver_writes->Snapshot();
@@ -579,7 +637,7 @@ void TestNtripForwardingAndIndependentReconnects(TestContext& ctx)
 }
 #endif
 
-} // namespace
+}  // namespace
 
 int main()
 {

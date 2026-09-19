@@ -647,6 +647,11 @@ public:
     repeated_read_action_ = std::move(action);
   }
 
+  void ClearRepeatedReadAction()
+  {
+    repeated_read_action_.reset();
+  }
+
   void SetDefaultWriteAction(WriteAction action)
   {
     default_write_action_ = std::move(action);
@@ -989,6 +994,9 @@ TEST_F(ReceiverNodeTest, SnapshotServiceProjectsCurrentRuntimeAndDiagnosticsWith
   executor.add_node(client_node);
 
   ASSERT_TRUE(receiver->StepOnce());
+  const auto expected_timestamp = receiver->current_state().timestamp_ns;
+  ASSERT_TRUE(expected_timestamp.has_value());
+  duplex_observer->ClearRepeatedReadAction();
   const auto writes_before = duplex_observer->write_call_count();
   const auto response = CallReceiverSnapshotService(executor, client);
 
@@ -996,8 +1004,7 @@ TEST_F(ReceiverNodeTest, SnapshotServiceProjectsCurrentRuntimeAndDiagnosticsWith
   EXPECT_TRUE(response->status.fix_valid);
   EXPECT_NEAR(response->status.latitude_deg, 48.1173, 1e-6);
   EXPECT_NEAR(response->status.longitude_deg, 11.516666667, 1e-6);
-  EXPECT_EQ(RosTimeToNanoseconds(response->status.stamp),
-            receiver->current_state().timestamp_ns.value_or(0));
+  EXPECT_EQ(RosTimeToNanoseconds(response->status.stamp), *expected_timestamp);
   EXPECT_NE(FindDiagnosticStatusByName(response->diagnostics, "universal_gnss/summary"), nullptr);
   EXPECT_EQ(duplex_observer->write_call_count(), writes_before);
 }
