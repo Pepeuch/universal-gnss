@@ -42,11 +42,10 @@ struct GgaSentenceBuildResult
   bool ok() const;
 };
 
-universal_gnss_protocols::NmeaGgaFixQuality MapRuntimeStateToGgaFixQuality(
-    const universal_gnss::GnssRuntimeState& state);
+universal_gnss_protocols::NmeaGgaFixQuality
+MapRuntimeStateToGgaFixQuality(const universal_gnss::GnssRuntimeState& state);
 
-GgaSentenceBuildResult BuildNmeaGgaSentence(
-    const universal_gnss::GnssRuntimeState& state,
-    const GgaSentenceBuilderOptions& options = {});
+GgaSentenceBuildResult BuildNmeaGgaSentence(const universal_gnss::GnssRuntimeState& state,
+                                            const GgaSentenceBuilderOptions& options = {});
 
 }  // namespace universal_gnss_ntrip

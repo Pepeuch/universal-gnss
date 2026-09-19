@@ -45,8 +45,7 @@ ReceiverCommand MakeUbxCommand(const std::vector<std::uint8_t>& frame)
 
 ReceiverCommand MakeCfgValsetCommand()
 {
-  const auto result =
-      universal_gnss_protocols::BuildUart1BaudrateFrame(115200u);
+  const auto result = universal_gnss_protocols::BuildUart1BaudrateFrame(115200u);
   if (result.status != universal_gnss_protocols::UbxCfgBuilderStatus::kOk)
   {
     std::cerr << "FAILED: test setup could not build UBX CFG-VALSET frame\n";
@@ -65,8 +64,7 @@ void TestAckMapping(TestContext& ctx)
       0x8Au,
   };
 
-  const auto response =
-      universal_gnss_driver::MapUbxAckRecordToReceiverCommandResponse(record);
+  const auto response = universal_gnss_driver::MapUbxAckRecordToReceiverCommandResponse(record);
   ctx.Expect(response.kind == ReceiverCommandResponseKind::kAck &&
                  response.timestamp_ns == std::optional<std::int64_t>(1111),
              "ACK-ACK records should map to generic ACK responses");
@@ -85,8 +83,7 @@ void TestNakMapping(TestContext& ctx)
       0x8Bu,
   };
 
-  const auto response =
-      universal_gnss_driver::MapUbxAckRecordToReceiverCommandResponse(record);
+  const auto response = universal_gnss_driver::MapUbxAckRecordToReceiverCommandResponse(record);
   ctx.Expect(response.kind == ReceiverCommandResponseKind::kNak &&
                  response.timestamp_ns == std::optional<std::int64_t>(2222),
              "ACK-NAK records should map to generic NAK responses");
@@ -99,12 +96,9 @@ void TestNakMapping(TestContext& ctx)
 void TestCommandIdentityExtraction(TestContext& ctx)
 {
   const ReceiverCommand command = MakeCfgValsetCommand();
-  const auto identity =
-      universal_gnss_driver::TryGetUbxCommandMessageIdentity(command);
+  const auto identity = universal_gnss_driver::TryGetUbxCommandMessageIdentity(command);
 
-  ctx.Expect(identity.has_value() &&
-                 identity->class_id == 0x06u &&
-                 identity->message_id == 0x8Au,
+  ctx.Expect(identity.has_value() && identity->class_id == 0x06u && identity->message_id == 0x8Au,
              "UBX command identity extraction should decode the outbound class/id");
 }
 
@@ -143,9 +137,9 @@ void TestInvalidCommandPayloadDoesNotMatch(TestContext& ctx)
       0x8Au,
   };
 
-  ctx.Expect(
-      !universal_gnss_driver::TryGetUbxCommandMessageIdentity(invalid_command).has_value(),
-      "non-UBX or structurally incomplete binary payloads should not expose a UBX command identity");
+  ctx.Expect(!universal_gnss_driver::TryGetUbxCommandMessageIdentity(invalid_command).has_value(),
+             "non-UBX or structurally incomplete binary payloads should not expose a UBX command "
+             "identity");
   ctx.Expect(!universal_gnss_driver::DoesUbxAckRecordMatchCommand(record, invalid_command),
              "ACK target matching should fail when the command payload is not a valid UBX frame");
 }

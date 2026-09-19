@@ -30,8 +30,7 @@ constexpr bool HasDirectValueFlag(GnssDirectValueFlags flags, GnssDirectValue va
   return (flags & ToFlag(value)) != 0u;
 }
 
-constexpr GnssDirectValueFlags SetDirectValueFlag(GnssDirectValueFlags flags,
-                                                   GnssDirectValue value)
+constexpr GnssDirectValueFlags SetDirectValueFlag(GnssDirectValueFlags flags, GnssDirectValue value)
 {
   return static_cast<GnssDirectValueFlags>(flags | ToFlag(value));
 }
@@ -158,9 +157,8 @@ inline bool SetOptionalValue(GnssRuntimeState& state,
 }
 
 template <typename T>
-inline void ClearOptionalValue(GnssRuntimeState& state,
-                               GnssCapability capability,
-                               std::optional<T>& field)
+inline void
+ClearOptionalValue(GnssRuntimeState& state, GnssCapability capability, std::optional<T>& field)
 {
   field.reset();
   ClearValueAvailable(state, capability);
@@ -171,9 +169,8 @@ inline void ClearOptionalValue(GnssRuntimeState& state,
 }
 
 template <typename T>
-inline void OmitOptionalValue(GnssRuntimeState& state,
-                              GnssCapability capability,
-                              std::optional<T>& field)
+inline void
+OmitOptionalValue(GnssRuntimeState& state, GnssCapability capability, std::optional<T>& field)
 {
   field.reset();
   ClearValueAvailable(state, capability);
@@ -181,9 +178,8 @@ inline void OmitOptionalValue(GnssRuntimeState& state,
 }
 
 template <typename T>
-inline void ClearDirectValue(GnssRuntimeState& state,
-                             GnssDirectValue value_kind,
-                             std::optional<T>& field)
+inline void
+ClearDirectValue(GnssRuntimeState& state, GnssDirectValue value_kind, std::optional<T>& field)
 {
   field.reset();
   state.clear_direct_value_flags = SetDirectValueFlag(state.clear_direct_value_flags, value_kind);
@@ -222,8 +218,7 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kVdop);
   }
-  if (HasCapability(state, GnssCapability::kSatellitesUsed) &&
-      state.satellites_used.has_value())
+  if (HasCapability(state, GnssCapability::kSatellitesUsed) && state.satellites_used.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kSatellitesUsed);
   }
@@ -245,8 +240,7 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kMaxCn0);
   }
-  if (HasCapability(state, GnssCapability::kCorrectionAge) &&
-      state.correction_age_s.has_value())
+  if (HasCapability(state, GnssCapability::kCorrectionAge) && state.correction_age_s.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kCorrectionAge);
   }
@@ -302,13 +296,11 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kBaselineAzimuth);
   }
-  if (HasCapability(state, GnssCapability::kBaselinePitch) &&
-      state.baseline_pitch_deg.has_value())
+  if (HasCapability(state, GnssCapability::kBaselinePitch) && state.baseline_pitch_deg.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kBaselinePitch);
   }
-  if (HasCapability(state, GnssCapability::kBaselineLength) &&
-      state.baseline_length_m.has_value())
+  if (HasCapability(state, GnssCapability::kBaselineLength) && state.baseline_length_m.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kBaselineLength);
   }
@@ -322,8 +314,7 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kInterferenceState);
   }
-  if (HasCapability(state, GnssCapability::kJammingState) &&
-      state.jamming_detected.has_value())
+  if (HasCapability(state, GnssCapability::kJammingState) && state.jamming_detected.has_value())
   {
     flags = SetCapabilityFlag(flags, GnssCapability::kJammingState);
   }
@@ -334,8 +325,8 @@ inline GnssValueFlags ComputeValueFlagsFromFields(const GnssRuntimeState& state)
 inline void RefreshValueFlagsFromFields(GnssRuntimeState& state)
 {
   state.value_flags = ComputeValueFlagsFromFields(state);
-  state.clear_value_flags = static_cast<GnssValueFlags>(
-      state.clear_value_flags & ~state.value_flags);
+  state.clear_value_flags =
+      static_cast<GnssValueFlags>(state.clear_value_flags & ~state.value_flags);
 }
 
 }  // namespace universal_gnss

@@ -39,11 +39,11 @@ struct ProbeResult
 };
 
 template <typename FramerT, typename RecordT, typename AcceptFn>
-std::optional<VendorDetectionCandidate> DetectVendorCandidate(
-    FramerT& framer,
-    const std::vector<ReceiverSession::BufferedByte>& bytes,
-    const ReceiverSessionKind kind,
-    AcceptFn&& accept)
+std::optional<VendorDetectionCandidate>
+DetectVendorCandidate(FramerT& framer,
+                      const std::vector<ReceiverSession::BufferedByte>& bytes,
+                      const ReceiverSessionKind kind,
+                      AcceptFn&& accept)
 {
   framer.Reset();
   for (std::size_t index = 0u; index < bytes.size(); ++index)
@@ -89,9 +89,7 @@ bool IsSupportedUnicoreBinaryCandidate(const UnicoreBinaryFrame& frame)
 }  // namespace
 
 ReceiverSession::ReceiverSession(ReceiverSessionConfig config)
-    : config_(config),
-      nmea_session_(config.nmea),
-      ublox_session_(config.ublox),
+    : config_(config), nmea_session_(config.nmea), ublox_session_(config.ublox),
       unicore_session_(config.unicore)
 {
   InitializeSelectionFromConfig();
@@ -330,8 +328,7 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
       ubx_framer,
       pending_auto_detect_bytes_,
       ReceiverSessionKind::kUblox,
-      [](const UbxFrame& frame)
-      {
+      [](const UbxFrame& frame) {
         return frame.checksum_status == universal_gnss_protocols::ChecksumStatus::kValid;
       });
 

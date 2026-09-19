@@ -41,13 +41,16 @@ void PrintUsage(const char* program_name)
       << " [--chunk-size <bytes>] [--max-bytes <bytes>] [--summary] [--json]\n"
       << "Examples:\n"
       << "  " << program_name
-      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor auto\n"
+      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 "
+         "--baud 921600 --vendor auto\n"
       << "  " << program_name
-      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 --baud 921600 --vendor ublox\n"
+      << " --port /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 "
+         "--baud 921600 --vendor ublox\n"
       << "  " << program_name
       << " --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor unicore\n"
       << "  " << program_name
-      << " --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor auto --max-bytes 200000\n"
+      << " --port /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0 --baud 921600 --vendor auto "
+         "--max-bytes 200000\n"
       << "Notes:\n"
       << "  prefer /dev/serial/by-id/* paths when available\n";
 }
@@ -150,28 +153,26 @@ std::string FormatSummaryText(const MonitorOptions& options,
                               const ReceiverSessionRunner& runner)
 {
   std::ostringstream stream;
-  stream
-      << "Summary:\n"
-      << "  port=" << options.port
-      << " baud=" << options.baud_rate
-      << " vendor=" << universal_gnss_driver::ToString(options.vendor) << '\n'
-      << "  selected_session="
-      << (session.metrics().selected_session_kind.has_value()
-              ? universal_gnss_driver::ToString(*session.metrics().selected_session_kind)
-              : "undecided")
-      << " bytes_read=" << runner.metrics().bytes_read
-      << " chunks_read=" << runner.metrics().chunks_read
-      << " runtime_updates=" << session.metrics().runtime_updates << '\n'
-      << "  eof_seen=" << std::boolalpha << runner.metrics().eof_seen
-      << " read_errors=" << runner.metrics().read_errors
-      << " malformed_records=" << session.metrics().malformed_records
-      << " unknown_records=" << session.metrics().unknown_records
-      << " last_status=" << ToString(runner.metrics().last_status)
-      << " last_error=" << ToString(runner.metrics().last_error) << '\n'
-      << "  final_state: "
-      << universal_gnss_tools::FormatRuntimeStateCompact(
-             session.current_state(), session.metrics().selected_session_kind)
-      << '\n';
+  stream << "Summary:\n"
+         << "  port=" << options.port << " baud=" << options.baud_rate
+         << " vendor=" << universal_gnss_driver::ToString(options.vendor) << '\n'
+         << "  selected_session="
+         << (session.metrics().selected_session_kind.has_value()
+                 ? universal_gnss_driver::ToString(*session.metrics().selected_session_kind)
+                 : "undecided")
+         << " bytes_read=" << runner.metrics().bytes_read
+         << " chunks_read=" << runner.metrics().chunks_read
+         << " runtime_updates=" << session.metrics().runtime_updates << '\n'
+         << "  eof_seen=" << std::boolalpha << runner.metrics().eof_seen
+         << " read_errors=" << runner.metrics().read_errors
+         << " malformed_records=" << session.metrics().malformed_records
+         << " unknown_records=" << session.metrics().unknown_records
+         << " last_status=" << ToString(runner.metrics().last_status)
+         << " last_error=" << ToString(runner.metrics().last_error) << '\n'
+         << "  final_state: "
+         << universal_gnss_tools::FormatRuntimeStateCompact(session.current_state(),
+                                                            session.metrics().selected_session_kind)
+         << '\n';
   return stream.str();
 }
 
@@ -180,13 +181,12 @@ std::string FormatSummaryJson(const MonitorOptions& options,
                               const ReceiverSessionRunner& runner)
 {
   std::ostringstream stream;
-  stream
-      << "{"
-      << "\"type\":\"summary\","
-      << "\"port\":\"" << options.port << "\","
-      << "\"baud\":" << options.baud_rate << ','
-      << "\"configured_vendor\":\"" << universal_gnss_driver::ToString(options.vendor) << "\","
-      << "\"selected_session\":";
+  stream << "{"
+         << "\"type\":\"summary\","
+         << "\"port\":\"" << options.port << "\","
+         << "\"baud\":" << options.baud_rate << ',' << "\"configured_vendor\":\""
+         << universal_gnss_driver::ToString(options.vendor) << "\","
+         << "\"selected_session\":";
   if (session.metrics().selected_session_kind.has_value())
   {
     stream << '"' << universal_gnss_driver::ToString(*session.metrics().selected_session_kind)
@@ -196,21 +196,19 @@ std::string FormatSummaryJson(const MonitorOptions& options,
   {
     stream << "null";
   }
-  stream
-      << ','
-      << "\"bytes_read\":" << runner.metrics().bytes_read << ','
-      << "\"chunks_read\":" << runner.metrics().chunks_read << ','
-      << "\"eof_seen\":" << (runner.metrics().eof_seen ? "true" : "false") << ','
-      << "\"read_errors\":" << runner.metrics().read_errors << ','
-      << "\"runtime_updates\":" << session.metrics().runtime_updates << ','
-      << "\"malformed_records\":" << session.metrics().malformed_records << ','
-      << "\"unknown_records\":" << session.metrics().unknown_records << ','
-      << "\"last_status\":\"" << ToString(runner.metrics().last_status) << "\","
-      << "\"last_error\":\"" << ToString(runner.metrics().last_error) << "\","
-      << "\"final_state\":"
-      << universal_gnss_tools::FormatRuntimeStateJson(
-             session.current_state(), session.metrics().selected_session_kind)
-      << "}\n";
+  stream << ',' << "\"bytes_read\":" << runner.metrics().bytes_read << ','
+         << "\"chunks_read\":" << runner.metrics().chunks_read << ','
+         << "\"eof_seen\":" << (runner.metrics().eof_seen ? "true" : "false") << ','
+         << "\"read_errors\":" << runner.metrics().read_errors << ','
+         << "\"runtime_updates\":" << session.metrics().runtime_updates << ','
+         << "\"malformed_records\":" << session.metrics().malformed_records << ','
+         << "\"unknown_records\":" << session.metrics().unknown_records << ','
+         << "\"last_status\":\"" << ToString(runner.metrics().last_status) << "\","
+         << "\"last_error\":\"" << ToString(runner.metrics().last_error) << "\","
+         << "\"final_state\":"
+         << universal_gnss_tools::FormatRuntimeStateJson(session.current_state(),
+                                                         session.metrics().selected_session_kind)
+         << "}\n";
   return stream.str();
 }
 
@@ -314,11 +312,12 @@ int main(int argc, char** argv)
   }
 
   PosixSerialTransport serial;
-  const auto open_error = serial.Open(PosixSerialConfig{options.port, options.baud_rate, false, 0u});
+  const auto open_error =
+      serial.Open(PosixSerialConfig{options.port, options.baud_rate, false, 0u});
   if (open_error != TransportError::kNone)
   {
-    std::cerr << "error: failed to open serial port " << options.port
-              << ": " << ToString(open_error) << '\n';
+    std::cerr << "error: failed to open serial port " << options.port << ": "
+              << ToString(open_error) << '\n';
     return EXIT_FAILURE;
   }
 
@@ -344,14 +343,12 @@ int main(int argc, char** argv)
     {
       if (options.json_output)
       {
-        std::cout
-            << "{\"type\":\"update\",\"runtime_updates\":"
-            << session.metrics().runtime_updates
-            << ",\"bytes_read\":" << runner.metrics().bytes_read
-            << ",\"state\":"
-            << universal_gnss_tools::FormatRuntimeStateJson(
-                   session.current_state(), session.metrics().selected_session_kind)
-            << "}\n";
+        std::cout << "{\"type\":\"update\",\"runtime_updates\":"
+                  << session.metrics().runtime_updates
+                  << ",\"bytes_read\":" << runner.metrics().bytes_read << ",\"state\":"
+                  << universal_gnss_tools::FormatRuntimeStateJson(
+                         session.current_state(), session.metrics().selected_session_kind)
+                  << "}\n";
       }
       else
       {

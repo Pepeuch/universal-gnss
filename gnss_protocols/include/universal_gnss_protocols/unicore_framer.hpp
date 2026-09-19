@@ -13,9 +13,9 @@ class UnicoreFrameFramer : public StreamParserBase<UnicoreFrame>
 public:
   explicit UnicoreFrameFramer(std::size_t max_frame_length = 2048);
 
-  ParserResult<UnicoreFrame> PushByte(
-      std::uint8_t byte,
-      std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
+  ParserResult<UnicoreFrame>
+  PushByte(std::uint8_t byte,
+           std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
 
   ParserResult<UnicoreFrame> Finalize() override;
 

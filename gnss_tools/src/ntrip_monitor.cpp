@@ -44,12 +44,8 @@ std::string EscapeJsonString(const std::string_view text)
       default:
         if (static_cast<unsigned char>(ch) < 0x20u)
         {
-          stream << "\\u"
-                 << std::hex
-                 << std::setw(4)
-                 << std::setfill('0')
-                 << static_cast<int>(static_cast<unsigned char>(ch))
-                 << std::dec
+          stream << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+                 << static_cast<int>(static_cast<unsigned char>(ch)) << std::dec
                  << std::setfill(' ');
         }
         else
@@ -101,8 +97,7 @@ bool NtripMonitorValidationResult::ok() const
   return error == NtripMonitorValidationError::kNone;
 }
 
-NtripMonitorValidationResult ValidateNtripMonitorOptions(
-    const NtripMonitorOptions& options)
+NtripMonitorValidationResult ValidateNtripMonitorOptions(const NtripMonitorOptions& options)
 {
   if (options.host.empty())
   {
@@ -133,8 +128,7 @@ NtripMonitorValidationResult ValidateNtripMonitorOptions(
   }
   if (options.max_bytes.has_value() && *options.max_bytes == 0u)
   {
-    return {NtripMonitorValidationError::kInvalidMaxBytes,
-            "--max-bytes must be greater than zero"};
+    return {NtripMonitorValidationError::kInvalidMaxBytes, "--max-bytes must be greater than zero"};
   }
   if (options.max_seconds.has_value() && *options.max_seconds == 0u)
   {
@@ -151,8 +145,7 @@ NtripMonitorValidationResult ValidateNtripMonitorOptions(
   return {};
 }
 
-universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(
-    const NtripMonitorOptions& options)
+universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(const NtripMonitorOptions& options)
 {
   universal_gnss_ntrip::NtripConfig config;
   config.host = options.host;
@@ -160,9 +153,8 @@ universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(
   config.mountpoint = options.mountpoint;
   config.username = options.username;
   config.password = options.password;
-  config.user_agent =
-      options.user_agent.empty() ? universal_gnss_ntrip::kDefaultNtripUserAgent
-                                 : options.user_agent;
+  config.user_agent = options.user_agent.empty() ? universal_gnss_ntrip::kDefaultNtripUserAgent
+                                                 : options.user_agent;
   config.send_gga = options.gga_interval_s.has_value();
   if (options.gga_interval_s.has_value())
   {
@@ -171,8 +163,8 @@ universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(
   return config;
 }
 
-std::optional<universal_gnss::GnssRuntimeState> BuildNtripMonitorRuntimeState(
-    const NtripMonitorOptions& options)
+std::optional<universal_gnss::GnssRuntimeState>
+BuildNtripMonitorRuntimeState(const NtripMonitorOptions& options)
 {
   if (!options.latitude_deg.has_value() || !options.longitude_deg.has_value())
   {
@@ -188,16 +180,16 @@ std::optional<universal_gnss::GnssRuntimeState> BuildNtripMonitorRuntimeState(
   return state;
 }
 
-NtripMonitorSnapshot BuildNtripMonitorSnapshot(
-    const NtripMonitorOptions& options,
-    const std::string& client_state,
-    const universal_gnss_ntrip::NtripConnectionMetrics& metrics,
-    const universal_gnss_protocols::RtcmCorrectionMonitor& correction_monitor,
-    universal_gnss::GnssHealthSummary correction_health,
-    const NtripMonitorStopReason stop_reason,
-    const std::optional<std::int64_t> elapsed_time_ns,
-    std::string response_header,
-    const std::optional<universal_gnss::GnssTimestampNs> now_timestamp_ns)
+NtripMonitorSnapshot
+BuildNtripMonitorSnapshot(const NtripMonitorOptions& options,
+                          const std::string& client_state,
+                          const universal_gnss_ntrip::NtripConnectionMetrics& metrics,
+                          const universal_gnss_protocols::RtcmCorrectionMonitor& correction_monitor,
+                          universal_gnss::GnssHealthSummary correction_health,
+                          const NtripMonitorStopReason stop_reason,
+                          const std::optional<std::int64_t> elapsed_time_ns,
+                          std::string response_header,
+                          const std::optional<universal_gnss::GnssTimestampNs> now_timestamp_ns)
 {
   NtripMonitorSnapshot snapshot;
   snapshot.options = options;
@@ -218,8 +210,7 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
   snapshot.base_position_1006_seen = correction_monitor.HasSeenBasePosition1006();
   snapshot.glonass_bias_1230_seen = correction_monitor.HasSeenGlonassBias1230();
   snapshot.semantic_observations =
-      universal_gnss_protocols::BuildRtcmSemanticObservations(
-          correction_monitor, now_timestamp_ns);
+      universal_gnss_protocols::BuildRtcmSemanticObservations(correction_monitor, now_timestamp_ns);
   snapshot.last_rtcm_message_type = metrics.last_rtcm_message_type;
   snapshot.last_gga_sent_timestamp_ns = metrics.last_gga_sent_timestamp_ns;
   snapshot.elapsed_time_ns = elapsed_time_ns;
@@ -239,8 +230,7 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
   return snapshot;
 }
 
-std::string DescribeGnssDiagnosticSeverity(
-    const universal_gnss::GnssDiagnosticSeverity severity)
+std::string DescribeGnssDiagnosticSeverity(const universal_gnss::GnssDiagnosticSeverity severity)
 {
   using universal_gnss::GnssDiagnosticSeverity;
 
@@ -263,8 +253,7 @@ std::string DescribeGnssDiagnosticSeverity(
   return "unknown";
 }
 
-std::string DescribeNtripClientError(
-    const universal_gnss_ntrip::NtripClientError error)
+std::string DescribeNtripClientError(const universal_gnss_ntrip::NtripClientError error)
 {
   using universal_gnss_ntrip::NtripClientError;
 
@@ -291,8 +280,7 @@ std::string DescribeNtripClientError(
   return "unknown";
 }
 
-std::string DescribeNtripMonitorStopReason(
-    const NtripMonitorStopReason stop_reason)
+std::string DescribeNtripMonitorStopReason(const NtripMonitorStopReason stop_reason)
 {
   switch (stop_reason)
   {
@@ -325,11 +313,9 @@ std::string FormatNtripMonitorStatusLine(const NtripMonitorSnapshot& snapshot)
 {
   std::ostringstream stream;
   stream << "status"
-         << " state=" << snapshot.client_state
-         << " bytes_received=" << snapshot.bytes_received
+         << " state=" << snapshot.client_state << " bytes_received=" << snapshot.bytes_received
          << " rtcm_frames=" << snapshot.rtcm_frames_received
-         << " invalid_rtcm=" << snapshot.invalid_rtcm_frames
-         << " health="
+         << " invalid_rtcm=" << snapshot.invalid_rtcm_frames << " health="
          << DescribeGnssDiagnosticSeverity(snapshot.correction_health.overall_severity)
          << " base_position_seen=" << std::boolalpha << snapshot.base_position_seen;
   if (snapshot.last_rtcm_message_type.has_value())
@@ -348,14 +334,11 @@ std::string FormatNtripMonitorSummaryText(const NtripMonitorSnapshot& snapshot)
   std::ostringstream stream;
   stream << std::boolalpha;
   stream << "Summary:\n"
-         << "  endpoint=" << snapshot.options.host
-         << ':' << snapshot.options.port
-         << '/' << snapshot.options.mountpoint
-         << " state=" << snapshot.client_state
+         << "  endpoint=" << snapshot.options.host << ':' << snapshot.options.port << '/'
+         << snapshot.options.mountpoint << " state=" << snapshot.client_state
          << " stop_reason=" << DescribeNtripMonitorStopReason(snapshot.stop_reason) << '\n';
 
-  stream << "  bytes_received=" << snapshot.bytes_received
-         << " bytes_sent=" << snapshot.bytes_sent
+  stream << "  bytes_received=" << snapshot.bytes_received << " bytes_sent=" << snapshot.bytes_sent
          << " request_sent=" << snapshot.request_sent
          << " response_received=" << snapshot.response_received;
   if (snapshot.elapsed_time_ns.has_value())
@@ -428,8 +411,8 @@ std::string FormatNtripMonitorSummaryJson(const NtripMonitorSnapshot& snapshot)
   stream << "{"
          << "\"type\":\"summary\","
          << "\"host\":\"" << EscapeJsonString(snapshot.options.host) << "\","
-         << "\"port\":" << snapshot.options.port << ','
-         << "\"mountpoint\":\"" << EscapeJsonString(snapshot.options.mountpoint) << "\","
+         << "\"port\":" << snapshot.options.port << ',' << "\"mountpoint\":\""
+         << EscapeJsonString(snapshot.options.mountpoint) << "\","
          << "\"client_state\":\"" << EscapeJsonString(snapshot.client_state) << "\","
          << "\"stop_reason\":\""
          << EscapeJsonString(DescribeNtripMonitorStopReason(snapshot.stop_reason)) << "\","
@@ -443,15 +426,13 @@ std::string FormatNtripMonitorSummaryJson(const NtripMonitorSnapshot& snapshot)
          << "\"gga_sent_count\":" << snapshot.gga_sent_count << ','
          << "\"gga_send_errors\":" << snapshot.gga_send_errors << ','
          << "\"reconnect_count\":" << snapshot.reconnect_count << ','
-         << "\"base_position_seen\":" << (snapshot.base_position_seen ? "true" : "false")
+         << "\"base_position_seen\":" << (snapshot.base_position_seen ? "true" : "false") << ','
+         << "\"base_position_1005_seen\":" << (snapshot.base_position_1005_seen ? "true" : "false")
          << ','
-         << "\"base_position_1005_seen\":"
-         << (snapshot.base_position_1005_seen ? "true" : "false") << ','
-         << "\"base_position_1006_seen\":"
-         << (snapshot.base_position_1006_seen ? "true" : "false") << ','
-         << "\"glonass_bias_1230_seen\":"
-         << (snapshot.glonass_bias_1230_seen ? "true" : "false") << ','
-         << "\"last_error\":\""
+         << "\"base_position_1006_seen\":" << (snapshot.base_position_1006_seen ? "true" : "false")
+         << ','
+         << "\"glonass_bias_1230_seen\":" << (snapshot.glonass_bias_1230_seen ? "true" : "false")
+         << ',' << "\"last_error\":\""
          << EscapeJsonString(DescribeNtripClientError(snapshot.last_error)) << "\",";
 
   stream << "\"elapsed_time_ns\":";
@@ -492,20 +473,16 @@ std::string FormatNtripMonitorSummaryJson(const NtripMonitorSnapshot& snapshot)
          << EscapeJsonString(
                 DescribeGnssDiagnosticSeverity(snapshot.correction_health.overall_severity))
          << "\","
-         << "\"fix_valid\":"
-         << (snapshot.correction_health.fix_valid ? "true" : "false") << ','
-         << "\"rtk_available\":"
-         << (snapshot.correction_health.rtk_available ? "true" : "false") << ','
-         << "\"correction_available\":"
+         << "\"fix_valid\":" << (snapshot.correction_health.fix_valid ? "true" : "false") << ','
+         << "\"rtk_available\":" << (snapshot.correction_health.rtk_available ? "true" : "false")
+         << ',' << "\"correction_available\":"
          << (snapshot.correction_health.correction_available ? "true" : "false") << ','
          << "\"receiver_healthy\":"
          << (snapshot.correction_health.receiver_healthy ? "true" : "false") << ','
          << "\"transport_healthy\":"
          << (snapshot.correction_health.transport_healthy ? "true" : "false") << ','
-         << "\"parser_healthy\":"
-         << (snapshot.correction_health.parser_healthy ? "true" : "false") << ','
-         << "\"stale_data\":"
-         << (snapshot.correction_health.stale_data ? "true" : "false")
+         << "\"parser_healthy\":" << (snapshot.correction_health.parser_healthy ? "true" : "false")
+         << ',' << "\"stale_data\":" << (snapshot.correction_health.stale_data ? "true" : "false")
          << "},";
 
   stream << "\"message_type_counts\":{";
@@ -522,8 +499,7 @@ std::string FormatNtripMonitorSummaryJson(const NtripMonitorSnapshot& snapshot)
   for (const auto& entry : snapshot.msm_constellation_counts)
   {
     AppendJsonFieldSeparator(stream, first_field);
-    stream << '"'
-           << EscapeJsonString(DescribeRtcmConstellation(entry.first))
+    stream << '"' << EscapeJsonString(DescribeRtcmConstellation(entry.first))
            << "\":" << entry.second;
   }
   stream << "},";

@@ -46,8 +46,7 @@ void TestDefaultPendingTransaction(TestContext& ctx)
                  transaction.state == ReceiverCommandTransactionState::kPending &&
                  transaction.response.kind == ReceiverCommandResponseKind::kNone,
              "default transaction should start pending with no response");
-  ctx.Expect(transaction.attempt_count == 0u &&
-                 transaction.max_retries() == 0u &&
+  ctx.Expect(transaction.attempt_count == 0u && transaction.max_retries() == 0u &&
                  !transaction.created_timestamp_ns.has_value() &&
                  !transaction.sent_timestamp_ns.has_value() &&
                  !transaction.completed_timestamp_ns.has_value(),
@@ -72,10 +71,8 @@ void TestSentToAckTransition(TestContext& ctx)
   transaction.mark_ack(1200);
   ctx.Expect(transaction.state == ReceiverCommandTransactionState::kAcknowledged &&
                  transaction.response.kind == ReceiverCommandResponseKind::kAck &&
-                 transaction.response.timestamp_ns ==
-                     std::optional<std::int64_t>(1200) &&
-                 transaction.completed_timestamp_ns ==
-                     std::optional<std::int64_t>(1200) &&
+                 transaction.response.timestamp_ns == std::optional<std::int64_t>(1200) &&
+                 transaction.completed_timestamp_ns == std::optional<std::int64_t>(1200) &&
                  !transaction.can_retry(),
              "mark_ack should complete the transaction successfully");
 }
@@ -91,8 +88,7 @@ void TestSentToNakTransition(TestContext& ctx)
   ctx.Expect(transaction.state == ReceiverCommandTransactionState::kRejected &&
                  transaction.attempt_count == 1u &&
                  transaction.response.kind == ReceiverCommandResponseKind::kNak &&
-                 transaction.completed_timestamp_ns ==
-                     std::optional<std::int64_t>(2100) &&
+                 transaction.completed_timestamp_ns == std::optional<std::int64_t>(2100) &&
                  !transaction.can_retry(),
              "mark_nak should reject the transaction without turning it into a retryable timeout");
 }
@@ -108,8 +104,7 @@ void TestTimeoutRetryPolicy(TestContext& ctx)
 
   ctx.Expect(transaction.state == ReceiverCommandTransactionState::kTimedOut &&
                  transaction.response.kind == ReceiverCommandResponseKind::kTimeout &&
-                 transaction.completed_timestamp_ns ==
-                     std::optional<std::int64_t>(3500) &&
+                 transaction.completed_timestamp_ns == std::optional<std::int64_t>(3500) &&
                  transaction.can_retry(),
              "timed out transactions should become retryable when retry budget remains");
 
@@ -130,15 +125,13 @@ void TestMaxRetryEnforcement(TestContext& ctx)
 
   transaction.mark_sent(4000);
   transaction.mark_timeout(4100);
-  ctx.Expect(transaction.can_retry(),
-             "first timeout should still allow one configured retry");
+  ctx.Expect(transaction.can_retry(), "first timeout should still allow one configured retry");
 
   transaction.reset_for_retry();
   transaction.mark_sent(4200);
   transaction.mark_timeout(4300);
 
-  ctx.Expect(transaction.attempt_count == 2u &&
-                 !transaction.can_retry() &&
+  ctx.Expect(transaction.attempt_count == 2u && !transaction.can_retry() &&
                  transaction.state == ReceiverCommandTransactionState::kTimedOut,
              "retry budget should be exhausted after the configured extra attempt");
 

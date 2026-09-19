@@ -92,9 +92,8 @@ public:
     std::size_t offset = 0u;
     while (offset < size)
     {
-      const ssize_t bytes_read = ::read(master_fd_,
-                                        buffer.data() + static_cast<std::ptrdiff_t>(offset),
-                                        size - offset);
+      const ssize_t bytes_read =
+          ::read(master_fd_, buffer.data() + static_cast<std::ptrdiff_t>(offset), size - offset);
       if (bytes_read <= 0)
       {
         buffer.resize(offset);
@@ -151,8 +150,7 @@ void TestOpenReadWriteClose(TestContext& ctx)
   std::vector<std::uint8_t> read_buffer(3u, 0u);
   const auto read_result = serial.Read(read_buffer.data(), read_buffer.size());
   ctx.Expect(read_result.status == TransportStatus::kOk &&
-                 read_result.bytes_read == inbound.size() &&
-                 read_buffer == inbound,
+                 read_result.bytes_read == inbound.size() && read_buffer == inbound,
              "serial transport should read bytes written to the pseudo-terminal master");
 
   const std::vector<std::uint8_t> outbound = {0xAAu, 0xBBu};
@@ -182,8 +180,7 @@ void TestNonblockingReadWithoutData(TestContext& ctx)
 
   std::vector<std::uint8_t> buffer(4u, 0u);
   const auto read_result = serial.Read(buffer.data(), buffer.size());
-  ctx.Expect(read_result.status == TransportStatus::kOk &&
-                 read_result.bytes_read == 0u &&
+  ctx.Expect(read_result.status == TransportStatus::kOk && read_result.bytes_read == 0u &&
                  serial.metrics().bytes_read == 0u,
              "nonblocking read without data should return zero bytes without error");
 }
@@ -243,8 +240,7 @@ void TestOpenClearsInheritedRawModeFlags(TestContext& ctx)
 #else
     const bool hardware_flow_control_disabled = true;
 #endif
-    ctx.Expect(software_flow_control_disabled && framing_is_8n1 &&
-                   hardware_flow_control_disabled,
+    ctx.Expect(software_flow_control_disabled && framing_is_8n1 && hardware_flow_control_disabled,
                "serial raw mode should clear inherited stop-bit and flow-control flags");
   }
 
@@ -281,8 +277,8 @@ void TestReadTimeoutConversionRejectsUnrepresentableValues(TestContext& ctx)
     }
 
     PosixSerialTransport serial;
-    const auto open_error = serial.Open(
-        PosixSerialConfig{pty.slave_path(), 115200u, false, test_case.timeout_ms});
+    const auto open_error =
+        serial.Open(PosixSerialConfig{pty.slave_path(), 115200u, false, test_case.timeout_ms});
     if (!test_case.expect_open)
     {
       ctx.Expect(open_error == TransportError::kInvalidArgument && !serial.IsOpen() &&

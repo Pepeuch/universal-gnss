@@ -43,8 +43,9 @@ bool HasTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
   return false;
 }
 
-const universal_gnss_tools::ConfigPlanCommand* FindTextCommand(
-    const universal_gnss_tools::ConfigPlanResult& result, const std::string& command_text)
+const universal_gnss_tools::ConfigPlanCommand*
+FindTextCommand(const universal_gnss_tools::ConfigPlanResult& result,
+                const std::string& command_text)
 {
   for (const auto& command : result.commands)
   {
@@ -114,7 +115,8 @@ void TestDiscoveryMetadataProjection(TestContext& ctx)
                  !result.receiver_model.has_value() &&
                  text.find("Detected receiver model: UM982") != std::string::npos &&
                  json.find("\"receiver_model\": \"UM982\"") != std::string::npos,
-             "discovery metadata should project into reports without becoming an operator planning selector");
+             "discovery metadata should project into reports without becoming an operator planning "
+             "selector");
 }
 
 void TestUnicoreDebugPlan(TestContext& ctx)

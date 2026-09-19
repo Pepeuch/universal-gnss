@@ -12,9 +12,8 @@ namespace
 
 constexpr std::string_view kUnicoreFamily = "UM98x";
 
-ReceiverDriverProfileBuildResult MakeUnsupportedSafetyResult(
-    const ReceiverConfigProfileKind profile_kind,
-    const char* error_message)
+ReceiverDriverProfileBuildResult
+MakeUnsupportedSafetyResult(const ReceiverConfigProfileKind profile_kind, const char* error_message)
 {
   ReceiverDriverProfileBuildResult result;
   result.status = ReceiverDriverProfileBuildStatus::kUnsupportedSafetyLevel;
@@ -23,9 +22,9 @@ ReceiverDriverProfileBuildResult MakeUnsupportedSafetyResult(
   return result;
 }
 
-ReceiverDriverProfileBuildResult ConvertBuildResult(
-    const ReceiverConfigProfileKind profile_kind,
-    const UnicoreConfigProfileBuildResult& build_result)
+ReceiverDriverProfileBuildResult
+ConvertBuildResult(const ReceiverConfigProfileKind profile_kind,
+                   const UnicoreConfigProfileBuildResult& build_result)
 {
   ReceiverDriverProfileBuildResult result;
   result.profile_kind = profile_kind;
@@ -55,8 +54,7 @@ UnicoreDriver::UnicoreDriver(UnicoreSessionConfig session_config)
 {
 }
 
-UnicoreDriver::UnicoreDriver(std::string_view receiver_model,
-                             UnicoreSessionConfig session_config)
+UnicoreDriver::UnicoreDriver(std::string_view receiver_model, UnicoreSessionConfig session_config)
     : session_(std::move(session_config)),
       model_profile_(&ResolveUnicoreModelProfile(receiver_model))
 {
@@ -110,14 +108,14 @@ void UnicoreDriver::Reset()
   session_.Reset();
 }
 
-ReceiverDriverProfileBuildResult UnicoreDriver::BuildRoverProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UnicoreDriver::BuildRoverProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   return BuildProfile(ReceiverConfigProfileKind::kRover, safety_level);
 }
 
-ReceiverDriverProfileBuildResult UnicoreDriver::BuildDiagnosticsProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UnicoreDriver::BuildDiagnosticsProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   return BuildProfile(ReceiverConfigProfileKind::kDiagnosticsOutput, safety_level);
 }
@@ -136,15 +134,14 @@ const std::vector<ReceiverConfigProfileKind>& UnicoreDriver::SupportedProfileKin
   return supported;
 }
 
-ReceiverDriverProfileBuildResult UnicoreDriver::BuildProfile(
-    const ReceiverConfigProfileKind profile_kind,
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UnicoreDriver::BuildProfile(const ReceiverConfigProfileKind profile_kind,
+                            const ReceiverCommandSafetyLevel safety_level) const
 {
   if (safety_level == ReceiverCommandSafetyLevel::kFactoryReset)
   {
     return MakeUnsupportedSafetyResult(
-        profile_kind,
-        "Unicore driver does not support factory-reset profile generation");
+        profile_kind, "Unicore driver does not support factory-reset profile generation");
   }
 
   UnicoreConfigProfile profile;
@@ -152,15 +149,13 @@ ReceiverDriverProfileBuildResult UnicoreDriver::BuildProfile(
   switch (profile_kind)
   {
     case ReceiverConfigProfileKind::kRover:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(*model_profile_,
-                                                                      persistence);
+      profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(*model_profile_, persistence);
       break;
     case ReceiverConfigProfileKind::kDiagnosticsOutput:
-      profile = UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(*model_profile_,
-                                                                            persistence);
+      profile =
+          UnicoreConfigProfileBuilder::BuildUnicoreDiagnosticsProfile(*model_profile_, persistence);
       break;
-    default:
-    {
+    default: {
       ReceiverDriverProfileBuildResult result;
       result.status = ReceiverDriverProfileBuildStatus::kUnsupportedProfile;
       result.profile_kind = profile_kind;

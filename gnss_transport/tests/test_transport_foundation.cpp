@@ -10,7 +10,8 @@
 #include "universal_gnss_transport/rtcm_frame_writer.hpp"
 #include "universal_gnss_transport/transport_metrics.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_transport::ByteRingBuffer;
 using universal_gnss_transport::MemoryByteDuplex;
@@ -186,8 +187,14 @@ public:
     bytes_.insert(bytes_.end(), data, data + std::min(size, result.bytes_written));
     return result;
   }
-  bool IsOpen() const override { return open_; }
-  void Close() override { open_ = false; }
+  bool IsOpen() const override
+  {
+    return open_;
+  }
+  void Close() override
+  {
+    open_ = false;
+  }
   std::vector<std::uint8_t> bytes_{};
 
 private:
@@ -238,7 +245,7 @@ void TestRtcmFrameWriterUga009(TestContext& ctx)
   ctx.Expect(writer.empty(), "explicit abandon prevents data crossing receiver incarnations");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

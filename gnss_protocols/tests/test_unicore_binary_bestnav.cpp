@@ -24,16 +24,16 @@ using universal_gnss::HasCapability;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ComputeUnicoreBinaryCrc32;
-using universal_gnss_protocols::ParseUnicoreBestNavB;
-using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreBestNavBToRuntimeState;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::kUnicoreBinaryCrcSize;
 using universal_gnss_protocols::kUnicoreBinaryHeaderSize;
 using universal_gnss_protocols::kUnicoreBinarySync1;
 using universal_gnss_protocols::kUnicoreBinarySync2;
 using universal_gnss_protocols::kUnicoreBinarySync3;
+using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::ParseUnicoreBestNavB;
+using universal_gnss_protocols::UnicoreBestNavBToRuntimeState;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 
 struct TestContext
 {
@@ -169,8 +169,7 @@ std::vector<std::uint8_t> MakeBestNavPayload(const std::uint32_t solution_status
 
 void TestValidBestNavBParseAndMapping(TestContext& ctx)
 {
-  const UnicoreBinaryFrame frame =
-      BuildBinaryFrame(2118u, MakeBestNavPayload(0u, 34u), 123456);
+  const UnicoreBinaryFrame frame = BuildBinaryFrame(2118u, MakeBestNavPayload(0u, 34u), 123456);
   ctx.Expect(frame.checksum_status == ChecksumStatus::kValid,
              "BESTNAVB test frame should have a valid CRC");
 
@@ -184,27 +183,23 @@ void TestValidBestNavBParseAndMapping(TestContext& ctx)
 
   const auto& record = *result.record;
   ctx.Expect(record.header.timestamp_ns == std::optional<std::int64_t>(123456) &&
-                 record.header.message_id == 2118u &&
-                 record.header.payload_length == 120u,
+                 record.header.message_id == 2118u && record.header.payload_length == 120u,
              "BESTNAVB should preserve binary header metadata");
-  ctx.Expect(record.solution_status ==
-                 universal_gnss_protocols::UnicoreSolutionStatus::kSolComputed &&
-                 record.position_type ==
-                     universal_gnss_protocols::UnicorePositionType::kNarrowFloat,
-             "BESTNAVB should decode documented solution and position types");
+  ctx.Expect(
+      record.solution_status == universal_gnss_protocols::UnicoreSolutionStatus::kSolComputed &&
+          record.position_type == universal_gnss_protocols::UnicorePositionType::kNarrowFloat,
+      "BESTNAVB should decode documented solution and position types");
   ctx.Expect(NearlyEqual(record.latitude_deg, 40.0789588272) &&
                  NearlyEqual(record.longitude_deg, 116.2365102982) &&
                  NearlyEqual(record.altitude_m, 65.8312),
              "BESTNAVB should decode latitude, longitude, and altitude");
   ctx.Expect(record.datum_is_wgs84.has_value() && *record.datum_is_wgs84 &&
-                 record.diff_age_s == 0.4f &&
-                 record.tracked_satellites == 50u &&
+                 record.diff_age_s == 0.4f && record.tracked_satellites == 50u &&
                  record.used_satellites == 28u,
              "BESTNAVB should decode documented age and satellite counters");
 
   const auto state = UnicoreBestNavBToRuntimeState(record);
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFloat &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFloat &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
              "BESTNAVB runtime mapping should expose RTK float from NARROW_FLOAT");
   ctx.Expect(HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
@@ -226,8 +221,8 @@ void TestValidBestNavBParseAndMapping(TestContext& ctx)
 
 void TestFixedMappingAndNoHeadingInference(TestContext& ctx)
 {
-  const auto result = ParseUnicoreBestNavB(
-      BuildBinaryFrame(2118u, MakeBestNavPayload(0u, 50u), 9876));
+  const auto result =
+      ParseUnicoreBestNavB(BuildBinaryFrame(2118u, MakeBestNavPayload(0u, 50u), 9876));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
              "second BESTNAVB frame should parse successfully");
   if (!result.record.has_value())
@@ -236,8 +231,7 @@ void TestFixedMappingAndNoHeadingInference(TestContext& ctx)
   }
 
   const auto state = UnicoreBestNavBToRuntimeState(*result.record);
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFixed &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "BESTNAVB should expose RTK fixed from NARROW_INT");
   ctx.Expect(!HasCapability(state, GnssCapability::kHeading),

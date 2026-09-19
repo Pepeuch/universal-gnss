@@ -8,7 +8,8 @@
 
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace universal_gnss_transport {
+namespace universal_gnss_transport
+{
 
 // Bounded FIFO for complete RTCM frames. A partially written head remains at
 // the front until it completes or the owning receiver incarnation abandons it.
@@ -59,4 +60,4 @@ private:
   std::deque<PendingFrame> pending_{};
 };
 
-} // namespace universal_gnss_transport
+}  // namespace universal_gnss_transport

@@ -66,16 +66,15 @@ constexpr std::uint8_t DiagnosticSeverityRank(GnssDiagnosticSeverity severity)
   return 0;
 }
 
-constexpr GnssDiagnosticSeverity CombineDiagnosticSeverities(
-    GnssDiagnosticSeverity lhs,
-    GnssDiagnosticSeverity rhs)
+constexpr GnssDiagnosticSeverity CombineDiagnosticSeverities(GnssDiagnosticSeverity lhs,
+                                                             GnssDiagnosticSeverity rhs)
 {
   return DiagnosticSeverityRank(lhs) >= DiagnosticSeverityRank(rhs) ? lhs : rhs;
 }
 
-inline GnssDiagnosticSeverity ComputeOverallDiagnosticSeverity(
-    const GnssDiagnosticEvents& events,
-    GnssDiagnosticSeverity base_severity = GnssDiagnosticSeverity::kOk)
+inline GnssDiagnosticSeverity
+ComputeOverallDiagnosticSeverity(const GnssDiagnosticEvents& events,
+                                 GnssDiagnosticSeverity base_severity = GnssDiagnosticSeverity::kOk)
 {
   GnssDiagnosticSeverity overall = base_severity;
   for (const auto& event : events)

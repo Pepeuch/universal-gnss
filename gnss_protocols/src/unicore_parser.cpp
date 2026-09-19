@@ -64,14 +64,12 @@ bool TokenizeCsv(std::string_view text,
 
 std::string_view TrimField(std::string_view text)
 {
-  while (!text.empty() &&
-         (text.front() == ' ' || text.front() == '\t' || text.front() == '"'))
+  while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '"'))
   {
     text.remove_prefix(1u);
   }
 
-  while (!text.empty() &&
-         (text.back() == ' ' || text.back() == '\t' || text.back() == '"'))
+  while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '"'))
   {
     text.remove_suffix(1u);
   }
@@ -168,8 +166,7 @@ bool TryParseSigned(std::string_view text, int& value)
   char* end = nullptr;
   errno = 0;
   const long parsed = std::strtol(buffer.c_str(), &end, 10);
-  if (errno != 0 || end == nullptr || *end != '\0' ||
-      parsed < std::numeric_limits<int>::min() ||
+  if (errno != 0 || end == nullptr || *end != '\0' || parsed < std::numeric_limits<int>::min() ||
       parsed > std::numeric_limits<int>::max())
   {
     return false;
@@ -347,16 +344,13 @@ OptionalFieldStatus ParseOptionalAgcRegister(std::string_view text,
 
 std::uint16_t ReadLittleEndian16(const std::uint8_t* data)
 {
-  return static_cast<std::uint16_t>(data[0]) |
-         (static_cast<std::uint16_t>(data[1]) << 8);
+  return static_cast<std::uint16_t>(data[0]) | (static_cast<std::uint16_t>(data[1]) << 8);
 }
 
 std::uint32_t ReadLittleEndian32(const std::uint8_t* data)
 {
-  return static_cast<std::uint32_t>(data[0]) |
-         (static_cast<std::uint32_t>(data[1]) << 8) |
-         (static_cast<std::uint32_t>(data[2]) << 16) |
-         (static_cast<std::uint32_t>(data[3]) << 24);
+  return static_cast<std::uint32_t>(data[0]) | (static_cast<std::uint32_t>(data[1]) << 8) |
+         (static_cast<std::uint32_t>(data[2]) << 16) | (static_cast<std::uint32_t>(data[3]) << 24);
 }
 
 float ReadLittleEndianFloat32(const std::uint8_t* data)
@@ -370,14 +364,10 @@ float ReadLittleEndianFloat32(const std::uint8_t* data)
 double ReadLittleEndianFloat64(const std::uint8_t* data)
 {
   const std::uint64_t bits =
-      static_cast<std::uint64_t>(data[0]) |
-      (static_cast<std::uint64_t>(data[1]) << 8) |
-      (static_cast<std::uint64_t>(data[2]) << 16) |
-      (static_cast<std::uint64_t>(data[3]) << 24) |
-      (static_cast<std::uint64_t>(data[4]) << 32) |
-      (static_cast<std::uint64_t>(data[5]) << 40) |
-      (static_cast<std::uint64_t>(data[6]) << 48) |
-      (static_cast<std::uint64_t>(data[7]) << 56);
+      static_cast<std::uint64_t>(data[0]) | (static_cast<std::uint64_t>(data[1]) << 8) |
+      (static_cast<std::uint64_t>(data[2]) << 16) | (static_cast<std::uint64_t>(data[3]) << 24) |
+      (static_cast<std::uint64_t>(data[4]) << 32) | (static_cast<std::uint64_t>(data[5]) << 40) |
+      (static_cast<std::uint64_t>(data[6]) << 48) | (static_cast<std::uint64_t>(data[7]) << 56);
   double value = 0.0;
   std::memcpy(&value, &bits, sizeof(value));
   return value;
@@ -634,9 +624,8 @@ bool ParseBestSatSatelliteId(std::string_view text,
     return false;
   }
 
-  const int signed_channel =
-      text[suffix_offset] == '-' ? -static_cast<int>(parsed_channel)
-                                 : static_cast<int>(parsed_channel);
+  const int signed_channel = text[suffix_offset] == '-' ? -static_cast<int>(parsed_channel)
+                                                        : static_cast<int>(parsed_channel);
   if (signed_channel < static_cast<int>(std::numeric_limits<std::int16_t>::min()) ||
       signed_channel > static_cast<int>(std::numeric_limits<std::int16_t>::max()))
   {
@@ -744,9 +733,8 @@ std::optional<ParsedUnicoreMessage> ParseAsciiHeader(const UnicoreFrame& frame,
     return std::nullopt;
   }
 
-  const std::string_view payload_text(
-      reinterpret_cast<const char*>(frame.payload.data()),
-      frame.payload.size());
+  const std::string_view payload_text(reinterpret_cast<const char*>(frame.payload.data()),
+                                      frame.payload.size());
   const std::size_t semicolon = payload_text.find(';');
   if (semicolon == std::string_view::npos)
   {
@@ -755,10 +743,9 @@ std::optional<ParsedUnicoreMessage> ParseAsciiHeader(const UnicoreFrame& frame,
 
   const std::size_t star = payload_text.find('*', semicolon + 1u);
   const std::string_view header_text = payload_text.substr(0, semicolon);
-  const std::string_view body_text =
-      payload_text.substr(semicolon + 1u,
-                          star == std::string_view::npos ? std::string_view::npos
-                                                         : (star - semicolon - 1u));
+  const std::string_view body_text = payload_text.substr(
+      semicolon + 1u,
+      star == std::string_view::npos ? std::string_view::npos : (star - semicolon - 1u));
 
   std::array<std::string_view, MaxHeaderFields> header_fields{};
   std::size_t header_field_count = 0u;
@@ -778,8 +765,7 @@ std::optional<ParsedUnicoreMessage> ParseAsciiHeader(const UnicoreFrame& frame,
   unsigned int format_version = 0u;
   unsigned int leap_seconds = 0u;
   unsigned int output_delay = 0u;
-  if (!TryParseUnsigned(header_fields[1], cpu_idle) ||
-      !TryParseUnsigned(header_fields[4], week) ||
+  if (!TryParseUnsigned(header_fields[1], cpu_idle) || !TryParseUnsigned(header_fields[4], week) ||
       !TryParseUnsigned(header_fields[5], tow_ms) ||
       !TryParseUnsigned(header_fields[6], format_version) ||
       !TryParseUnsigned(header_fields[8], leap_seconds) ||
@@ -945,21 +931,18 @@ void ClearPositionSolutionValues(universal_gnss::GnssRuntimeState& state)
   universal_gnss::ClearPositionValues(state);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
-  universal_gnss::ClearOptionalValue(state,
-                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
-                                     state.horizontal_accuracy_m);
-  universal_gnss::ClearOptionalValue(state,
-                                     universal_gnss::GnssCapability::kVerticalAccuracy,
-                                     state.vertical_accuracy_m);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kVerticalAccuracy, state.vertical_accuracy_m);
 }
 
 void ApplyFixType(universal_gnss::GnssRuntimeState& state, const UnicorePositionType type)
 {
   const auto fix_type = MapFixType(type);
   state.fix_type = fix_type;
-  state.fix_valid =
-      fix_type != universal_gnss::GnssFixType::kUnknown &&
-      fix_type != universal_gnss::GnssFixType::kNoFix;
+  state.fix_valid = fix_type != universal_gnss::GnssFixType::kUnknown &&
+                    fix_type != universal_gnss::GnssFixType::kNoFix;
 
   if (fix_type == universal_gnss::GnssFixType::kNoFix)
   {
@@ -1007,25 +990,22 @@ void SetHorizontalAccuracyFromSigmas(universal_gnss::GnssRuntimeState& state,
   if (first_sigma.has_value() && second_sigma.has_value())
   {
     const float horizontal_accuracy = std::max(*first_sigma, *second_sigma);
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kHorizontalAccuracy,
-        state.horizontal_accuracy_m,
-        horizontal_accuracy);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                     state.horizontal_accuracy_m,
+                                     horizontal_accuracy);
   }
 }
 
-void SetVerticalAccuracy(universal_gnss::GnssRuntimeState& state,
-                         const std::optional<float> sigma)
+void SetVerticalAccuracy(universal_gnss::GnssRuntimeState& state, const std::optional<float> sigma)
 {
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
   if (sigma.has_value())
   {
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kVerticalAccuracy,
-        state.vertical_accuracy_m,
-        *sigma);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kVerticalAccuracy,
+                                     state.vertical_accuracy_m,
+                                     *sigma);
   }
 }
 
@@ -1035,11 +1015,10 @@ void SetCorrectionAge(universal_gnss::GnssRuntimeState& state,
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionAge);
   if (correction_age_s.has_value())
   {
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kCorrectionAge,
-        state.correction_age_s,
-        *correction_age_s);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kCorrectionAge,
+                                     state.correction_age_s,
+                                     *correction_age_s);
   }
 }
 
@@ -1051,24 +1030,20 @@ void SetTrackedAndUsedSatellites(universal_gnss::GnssRuntimeState& state,
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesUsed);
   if (tracked.has_value())
   {
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kSatellitesTracked,
-        state.satellites_tracked,
-        *tracked);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kSatellitesTracked,
+                                     state.satellites_tracked,
+                                     *tracked);
   }
   if (used.has_value())
   {
     universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kSatellitesUsed,
-        state.satellites_used,
-        *used);
+        state, universal_gnss::GnssCapability::kSatellitesUsed, state.satellites_used, *used);
   }
 }
 
-std::optional<universal_gnss::GnssBaselineSolutionStatus> ToBaselineSolutionStatus(
-    const UnicoreSolutionStatus status)
+std::optional<universal_gnss::GnssBaselineSolutionStatus>
+ToBaselineSolutionStatus(const UnicoreSolutionStatus status)
 {
   switch (status)
   {
@@ -1086,8 +1061,8 @@ std::optional<universal_gnss::GnssBaselineSolutionStatus> ToBaselineSolutionStat
   }
 }
 
-std::optional<universal_gnss::GnssBaselineSolutionStatus> ToBaselineSolutionStatus(
-    const UnicoreDualAntennaStatus status)
+std::optional<universal_gnss::GnssBaselineSolutionStatus>
+ToBaselineSolutionStatus(const UnicoreDualAntennaStatus status)
 {
   switch (status)
   {
@@ -1190,15 +1165,12 @@ void SetBaselineGeometryAndCompatibilityHeading(
     {
       universal_gnss::ClearOptionalValue(
           state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
-      universal_gnss::ClearOptionalValue(state,
-                                         universal_gnss::GnssCapability::kBaselineAzimuth,
-                                         state.baseline_azimuth_deg);
-      universal_gnss::ClearOptionalValue(state,
-                                         universal_gnss::GnssCapability::kBaselinePitch,
-                                         state.baseline_pitch_deg);
-      universal_gnss::ClearOptionalValue(state,
-                                         universal_gnss::GnssCapability::kBaselineLength,
-                                         state.baseline_length_m);
+      universal_gnss::ClearOptionalValue(
+          state, universal_gnss::GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg);
+      universal_gnss::ClearOptionalValue(
+          state, universal_gnss::GnssCapability::kBaselinePitch, state.baseline_pitch_deg);
+      universal_gnss::ClearOptionalValue(
+          state, universal_gnss::GnssCapability::kBaselineLength, state.baseline_length_m);
     }
     return;
   }
@@ -1216,10 +1188,8 @@ void SetBaselineGeometryAndCompatibilityHeading(
                                      universal_gnss::GnssCapability::kBaselineAzimuth,
                                      state.baseline_azimuth_deg,
                                      *baseline_azimuth_deg);
-    universal_gnss::SetOptionalValue(state,
-                                     universal_gnss::GnssCapability::kHeading,
-                                     state.heading_deg,
-                                     *baseline_azimuth_deg);
+    universal_gnss::SetOptionalValue(
+        state, universal_gnss::GnssCapability::kHeading, state.heading_deg, *baseline_azimuth_deg);
   }
   if (baseline_pitch_deg.has_value())
   {
@@ -1236,8 +1206,7 @@ void SetCanonicalBaselineStatus(universal_gnss::GnssRuntimeState& state,
   SetCanonicalBaselineStatus(state, ToBaselineSolutionStatus(status));
 }
 
-void ApplyJammingState(universal_gnss::GnssRuntimeState& state,
-                       const UnicoreJammingState status)
+void ApplyJammingState(universal_gnss::GnssRuntimeState& state, const UnicoreJammingState status)
 {
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kJammingState);
@@ -1249,10 +1218,8 @@ void ApplyJammingState(universal_gnss::GnssRuntimeState& state,
                                        universal_gnss::GnssCapability::kInterferenceState,
                                        state.interference_detected,
                                        false);
-      universal_gnss::SetOptionalValue(state,
-                                       universal_gnss::GnssCapability::kJammingState,
-                                       state.jamming_detected,
-                                       false);
+      universal_gnss::SetOptionalValue(
+          state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected, false);
       break;
     case UnicoreJammingState::kJamming:
     case UnicoreJammingState::kStrongJamming:
@@ -1260,10 +1227,8 @@ void ApplyJammingState(universal_gnss::GnssRuntimeState& state,
                                        universal_gnss::GnssCapability::kInterferenceState,
                                        state.interference_detected,
                                        true);
-      universal_gnss::SetOptionalValue(state,
-                                       universal_gnss::GnssCapability::kJammingState,
-                                       state.jamming_detected,
-                                       true);
+      universal_gnss::SetOptionalValue(
+          state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected, true);
       break;
     case UnicoreJammingState::kUnknown:
     default:
@@ -1287,12 +1252,12 @@ const char* DescribeJammingState(const UnicoreJammingState state)
   }
 }
 
-universal_gnss::GnssDiagnosticEvent BuildReceiverDiagnostic(
-    const universal_gnss::GnssDiagnosticSeverity severity,
-    const std::string& code,
-    const std::string& message,
-    const std::optional<ProtocolTimestampNs> timestamp_ns,
-    const char* source)
+universal_gnss::GnssDiagnosticEvent
+BuildReceiverDiagnostic(const universal_gnss::GnssDiagnosticSeverity severity,
+                        const std::string& code,
+                        const std::string& message,
+                        const std::optional<ProtocolTimestampNs> timestamp_ns,
+                        const char* source)
 {
   universal_gnss::GnssDiagnosticEvent event;
   event.severity = severity;
@@ -1380,29 +1345,33 @@ ParserResult<UnicorePvtslnRecord> ParseUnicorePvtsln(const UnicoreFrame& frame)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 25u &&
-      ParseOptionalUnsigned16(fields[25], record.baseline_used_satellites) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 25u && ParseOptionalUnsigned16(fields[25], record.baseline_used_satellites) ==
+                               OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 28u && ParseOptionalFloat(fields[28], record.gdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 28u &&
+      ParseOptionalFloat(fields[28], record.gdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 29u && ParseOptionalFloat(fields[29], record.pdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 29u &&
+      ParseOptionalFloat(fields[29], record.pdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 30u && ParseOptionalFloat(fields[30], record.hdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 30u &&
+      ParseOptionalFloat(fields[30], record.hdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 31u && ParseOptionalFloat(fields[31], record.htdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 31u &&
+      ParseOptionalFloat(fields[31], record.htdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
-  if (field_count > 32u && ParseOptionalFloat(fields[32], record.tdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 32u &&
+      ParseOptionalFloat(fields[32], record.tdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidResult<UnicorePvtslnRecord>();
   }
@@ -1443,13 +1412,12 @@ ParserResult<UnicoreBestNavRecord> ParseUnicoreBestNav(const UnicoreFrame& frame
       ParseOptionalFloat(fields[8], record.longitude_std_m) == OptionalFieldStatus::kInvalid ||
       ParseOptionalFloat(fields[9], record.altitude_std_m) == OptionalFieldStatus::kInvalid ||
       ParseOptionalFloat(fields[11], record.diff_age_s) == OptionalFieldStatus::kInvalid)
-   {
-     return InvalidResult<UnicoreBestNavRecord>();
-   }
+  {
+    return InvalidResult<UnicoreBestNavRecord>();
+  }
 
   const bool has_shifted_um98x_satellite_tail =
-      field_count > 21u &&
-      LooksUnsignedIntegerField(fields[12]) &&
+      field_count > 21u && LooksUnsignedIntegerField(fields[12]) &&
       LooksUnsignedIntegerField(fields[13]) &&
       ParseSolutionStatus(fields[20]) != UnicoreSolutionStatus::kUnknown &&
       ParsePositionType(fields[21]) != UnicorePositionType::kUnknown;
@@ -1467,8 +1435,7 @@ ParserResult<UnicoreBestNavRecord> ParseUnicoreBestNav(const UnicoreFrame& frame
   }
   else
   {
-    if (ParseOptionalFloat(fields[12], record.solution_age_s) ==
-            OptionalFieldStatus::kInvalid ||
+    if (ParseOptionalFloat(fields[12], record.solution_age_s) == OptionalFieldStatus::kInvalid ||
         ParseOptionalUnsigned16(fields[13], record.tracked_satellites) ==
             OptionalFieldStatus::kInvalid ||
         ParseOptionalUnsigned16(fields[14], record.used_satellites) ==
@@ -1538,17 +1505,12 @@ ParserResult<UnicoreRtcmStatusRecord> ParseUnicoreRtcmStatus(const UnicoreFrame&
   unsigned int l4 = 0u;
   unsigned int l5 = 0u;
   unsigned int l6 = 0u;
-  if (!TryParseUnsigned(fields[0], message_type) ||
-      !TryParseUnsigned(fields[1], message_count) ||
+  if (!TryParseUnsigned(fields[0], message_type) || !TryParseUnsigned(fields[1], message_count) ||
       !TryParseUnsigned(fields[2], base_station_id) ||
-      !TryParseUnsigned(fields[3], satellites_in_message) ||
-      !TryParseUnsigned(fields[4], l1) ||
-      !TryParseUnsigned(fields[5], l2) ||
-      !TryParseUnsigned(fields[6], l3) ||
-      !TryParseUnsigned(fields[7], l4) ||
-      !TryParseUnsigned(fields[8], l5) ||
-      !TryParseUnsigned(fields[9], l6) ||
-      l1 > std::numeric_limits<std::uint8_t>::max() ||
+      !TryParseUnsigned(fields[3], satellites_in_message) || !TryParseUnsigned(fields[4], l1) ||
+      !TryParseUnsigned(fields[5], l2) || !TryParseUnsigned(fields[6], l3) ||
+      !TryParseUnsigned(fields[7], l4) || !TryParseUnsigned(fields[8], l5) ||
+      !TryParseUnsigned(fields[9], l6) || l1 > std::numeric_limits<std::uint8_t>::max() ||
       l2 > std::numeric_limits<std::uint8_t>::max() ||
       l3 > std::numeric_limits<std::uint8_t>::max() ||
       l4 > std::numeric_limits<std::uint8_t>::max() ||
@@ -1682,7 +1644,8 @@ ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& fra
   record.version = static_cast<std::uint8_t>(version);
   record.frequency_flag = static_cast<std::uint8_t>(frequency_flag);
 
-  for (unsigned int satellite_index = 0u; satellite_index < tracked_satellite_count; ++satellite_index)
+  for (unsigned int satellite_index = 0u; satellite_index < tracked_satellite_count;
+       ++satellite_index)
   {
     unsigned int satellite_id = 0u;
     int azimuth_deg = 0;
@@ -1705,8 +1668,7 @@ ParserResult<UnicoreSatsInfoRecord> ParseUnicoreSatsInfo(const UnicoreFrame& fra
         elevation_deg > std::numeric_limits<std::int16_t>::max() ||
         system_id > std::numeric_limits<std::uint8_t>::max() ||
         snr > std::numeric_limits<std::uint8_t>::max() ||
-        frequency_status > std::numeric_limits<std::uint8_t>::max() ||
-        frequency_count == 0u ||
+        frequency_status > std::numeric_limits<std::uint8_t>::max() || frequency_count == 0u ||
         frequency_count > std::numeric_limits<std::uint8_t>::max())
     {
       return InvalidResult<UnicoreSatsInfoRecord>();
@@ -1851,15 +1813,11 @@ ParserResult<UnicoreHwStatusRecord> ParseUnicoreHwStatus(const UnicoreFrame& fra
   double clock_drift_mps = 0.0;
   unsigned int hw_flag = 0u;
   unsigned int pll_lock = 0u;
-  if (!TryParseSigned(fields[0], reserved_counter) ||
-      !TryParseDouble(fields[1], dc09_v) ||
-      !TryParseDouble(fields[2], dc10_v) ||
-      !TryParseDouble(fields[3], dc18_v) ||
-      !TryParseUnsigned(fields[4], clock_flag) ||
-      !TryParseDouble(fields[5], clock_drift_mps) ||
+  if (!TryParseSigned(fields[0], reserved_counter) || !TryParseDouble(fields[1], dc09_v) ||
+      !TryParseDouble(fields[2], dc10_v) || !TryParseDouble(fields[3], dc18_v) ||
+      !TryParseUnsigned(fields[4], clock_flag) || !TryParseDouble(fields[5], clock_drift_mps) ||
       !TryParseUnsignedAutoBase(fields[7], hw_flag) ||
-      !TryParseUnsignedAutoBase(fields[9], pll_lock) ||
-      clock_flag > 1u ||
+      !TryParseUnsignedAutoBase(fields[9], pll_lock) || clock_flag > 1u ||
       hw_flag > std::numeric_limits<std::uint8_t>::max() ||
       pll_lock > std::numeric_limits<std::uint16_t>::max())
   {
@@ -1915,8 +1873,7 @@ ParserResult<UnicoreBestNavBRecord> ParseUnicoreBestNavB(const UnicoreBinaryFram
   constexpr std::size_t kBestNavBPayloadLength = 120u;
   constexpr std::uint32_t kWgs84DatumId = 61u;
 
-  if (frame.protocol != ProtocolType::kUnicore ||
-      frame.message_id != kBestNavBMessageId ||
+  if (frame.protocol != ProtocolType::kUnicore || frame.message_id != kBestNavBMessageId ||
       frame.checksum_status != ChecksumStatus::kValid ||
       frame.payload.size() != kBestNavBPayloadLength)
   {
@@ -1959,8 +1916,7 @@ ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame&
   constexpr std::uint16_t kPvtslnBMessageId = 1021u;
   constexpr std::size_t kPvtslnBPayloadLength = 224u;
 
-  if (frame.protocol != ProtocolType::kUnicore ||
-      frame.message_id != kPvtslnBMessageId ||
+  if (frame.protocol != ProtocolType::kUnicore || frame.message_id != kPvtslnBMessageId ||
       frame.checksum_status != ChecksumStatus::kValid ||
       frame.payload.size() != kPvtslnBPayloadLength)
   {
@@ -1981,7 +1937,8 @@ ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame&
   record.header.leap_seconds = frame.leap_seconds;
   record.header.output_delay_ms = frame.delay_ms;
 
-  record.best_position_type = ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 0u));
+  record.best_position_type =
+      ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 0u));
   record.best_altitude_m = static_cast<double>(ReadLittleEndianFloat32(frame.payload.data() + 4u));
   record.best_latitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 8u);
   record.best_longitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 16u);
@@ -1990,7 +1947,8 @@ ParserResult<UnicorePvtslnBRecord> ParseUnicorePvtslnB(const UnicoreBinaryFrame&
   record.best_longitude_std_m = ReadLittleEndianFloat32(frame.payload.data() + 32u);
   record.best_diff_age_s = ReadLittleEndianFloat32(frame.payload.data() + 36u);
 
-  record.psr_position_type = ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 40u));
+  record.psr_position_type =
+      ParseBinaryPositionType(ReadLittleEndian32(frame.payload.data() + 40u));
   record.psr_altitude_m = static_cast<double>(ReadLittleEndianFloat32(frame.payload.data() + 44u));
   record.psr_latitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 48u);
   record.psr_longitude_deg = ReadLittleEndianFloat64(frame.payload.data() + 56u);
@@ -2034,22 +1992,17 @@ universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtsln
 
   if (state.fix_valid)
   {
-    SetHorizontalAccuracyFromSigmas(
-        state, record.best_latitude_std_m, record.best_longitude_std_m);
+    SetHorizontalAccuracyFromSigmas(state, record.best_latitude_std_m, record.best_longitude_std_m);
     SetVerticalAccuracy(state, record.best_altitude_std_m);
   }
-  SetTrackedAndUsedSatellites(
-      state, record.best_tracked_satellites, record.best_used_satellites);
+  SetTrackedAndUsedSatellites(state, record.best_tracked_satellites, record.best_used_satellites);
   SetCorrectionAge(state, record.best_diff_age_s);
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
   if (record.hdop.has_value())
   {
     universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kHdop,
-        state.hdop,
-        *record.hdop);
+        state, universal_gnss::GnssCapability::kHdop, state.hdop, *record.hdop);
   }
 
   SetBaselineGeometryAndCompatibilityHeading(state,
@@ -2090,20 +2043,17 @@ universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestN
 
   if (state.fix_valid)
   {
-    SetHorizontalAccuracyFromSigmas(
-        state, record.latitude_std_m, record.longitude_std_m);
+    SetHorizontalAccuracyFromSigmas(state, record.latitude_std_m, record.longitude_std_m);
     SetVerticalAccuracy(state, record.altitude_std_m);
   }
-  SetTrackedAndUsedSatellites(
-      state, record.tracked_satellites, record.used_satellites);
+  SetTrackedAndUsedSatellites(state, record.tracked_satellites, record.used_satellites);
   SetCorrectionAge(state, record.diff_age_s);
 
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
-    const UnicoreBestNavBRecord& record)
+universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(const UnicoreBestNavBRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
@@ -2142,8 +2092,7 @@ universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
-    const UnicorePvtslnBRecord& record)
+universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(const UnicorePvtslnBRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
@@ -2160,22 +2109,17 @@ universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
 
   if (state.fix_valid)
   {
-    SetHorizontalAccuracyFromSigmas(
-        state, record.best_latitude_std_m, record.best_longitude_std_m);
+    SetHorizontalAccuracyFromSigmas(state, record.best_latitude_std_m, record.best_longitude_std_m);
     SetVerticalAccuracy(state, record.best_altitude_std_m);
   }
-  SetTrackedAndUsedSatellites(
-      state, record.best_tracked_satellites, record.best_used_satellites);
+  SetTrackedAndUsedSatellites(state, record.best_tracked_satellites, record.best_used_satellites);
   SetCorrectionAge(state, record.best_diff_age_s);
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHdop);
   if (record.hdop.has_value())
   {
     universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kHdop,
-        state.hdop,
-        *record.hdop);
+        state, universal_gnss::GnssCapability::kHdop, state.hdop, *record.hdop);
   }
 
   SetBaselineGeometryAndCompatibilityHeading(state,
@@ -2187,8 +2131,8 @@ universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
-    const UnicoreRtkStatusRecord& record)
+universal_gnss::GnssRuntimeState
+UnicoreRtkStatusToRuntimeState(const UnicoreRtkStatusRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
@@ -2202,8 +2146,8 @@ universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
-    const UnicoreRtcmStatusRecord& record)
+universal_gnss::GnssRuntimeState
+UnicoreRtcmStatusToRuntimeState(const UnicoreRtcmStatusRecord& record)
 {
   (void)record;
   universal_gnss::GnssRuntimeState state;
@@ -2238,11 +2182,10 @@ universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(const UnicoreSats
   state.timestamp_ns = record.header.timestamp_ns;
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kSatellitesTracked);
-  universal_gnss::SetOptionalValue(
-      state,
-      universal_gnss::GnssCapability::kSatellitesTracked,
-      state.satellites_tracked,
-      record.tracked_satellite_count);
+  universal_gnss::SetOptionalValue(state,
+                                   universal_gnss::GnssCapability::kSatellitesTracked,
+                                   state.satellites_tracked,
+                                   record.tracked_satellite_count);
 
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMeanCn0);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMaxCn0);
@@ -2267,24 +2210,20 @@ universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(const UnicoreSats
 
   if (cn0_count > 0u)
   {
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kMeanCn0,
+                                     state.mean_cn0_db_hz,
+                                     cn0_sum / static_cast<float>(cn0_count));
     universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kMeanCn0,
-        state.mean_cn0_db_hz,
-        cn0_sum / static_cast<float>(cn0_count));
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kMaxCn0,
-        state.max_cn0_db_hz,
-        max_cn0);
+        state, universal_gnss::GnssCapability::kMaxCn0, state.max_cn0_db_hz, max_cn0);
   }
 
   universal_gnss::RefreshValueFlagsFromFields(state);
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicoreJamStatusToRuntimeState(
-    const UnicoreJamStatusRecord& record)
+universal_gnss::GnssRuntimeState
+UnicoreJamStatusToRuntimeState(const UnicoreJamStatusRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
@@ -2293,8 +2232,8 @@ universal_gnss::GnssRuntimeState UnicoreJamStatusToRuntimeState(
   return state;
 }
 
-universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
-    const UnicoreFreqJamStatusRecord& record)
+universal_gnss::GnssRuntimeState
+UnicoreFreqJamStatusToRuntimeState(const UnicoreFreqJamStatusRecord& record)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.header.timestamp_ns;
@@ -2317,8 +2256,7 @@ universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
       aggregate = state_value;
       continue;
     }
-    if (state_value == UnicoreJammingState::kNone &&
-        aggregate == UnicoreJammingState::kUnknown)
+    if (state_value == UnicoreJammingState::kNone && aggregate == UnicoreJammingState::kUnknown)
     {
       aggregate = state_value;
     }
@@ -2329,8 +2267,8 @@ universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
   return state;
 }
 
-universal_gnss::GnssDiagnosticEvent UnicoreJamStatusToDiagnosticEvent(
-    const UnicoreJamStatusRecord& record)
+universal_gnss::GnssDiagnosticEvent
+UnicoreJamStatusToDiagnosticEvent(const UnicoreJamStatusRecord& record)
 {
   using universal_gnss::GnssDiagnosticSeverity;
 
@@ -2364,8 +2302,8 @@ universal_gnss::GnssDiagnosticEvent UnicoreJamStatusToDiagnosticEvent(
   }
 }
 
-universal_gnss::GnssDiagnosticEvent UnicoreFreqJamStatusToDiagnosticEvent(
-    const UnicoreFreqJamStatusRecord& record)
+universal_gnss::GnssDiagnosticEvent
+UnicoreFreqJamStatusToDiagnosticEvent(const UnicoreFreqJamStatusRecord& record)
 {
   using universal_gnss::GnssDiagnosticSeverity;
 
@@ -2435,8 +2373,8 @@ universal_gnss::GnssDiagnosticEvent UnicoreFreqJamStatusToDiagnosticEvent(
                                  "unicore/FREQJAMSTATUSA");
 }
 
-universal_gnss::GnssDiagnosticEvent UnicoreHwStatusToDiagnosticEvent(
-    const UnicoreHwStatusRecord& record)
+universal_gnss::GnssDiagnosticEvent
+UnicoreHwStatusToDiagnosticEvent(const UnicoreHwStatusRecord& record)
 {
   using universal_gnss::GnssDiagnosticSeverity;
 

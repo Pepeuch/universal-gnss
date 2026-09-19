@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -21,8 +21,8 @@ using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverConfigProfileKind;
 using universal_gnss_driver::UbloxConfigProfile;
-using universal_gnss_driver::UbloxConfigProfileBuildStatus;
 using universal_gnss_driver::UbloxConfigProfileBuilder;
+using universal_gnss_driver::UbloxConfigProfileBuildStatus;
 using universal_gnss_driver::UbloxConstellationConfig;
 using universal_gnss_driver::UbloxInterfacePort;
 using universal_gnss_driver::UbloxMessageRate;
@@ -76,20 +76,16 @@ bool ContainsBytes(const std::vector<std::uint8_t>& haystack,
     return false;
   }
 
-  return std::search(haystack.begin(),
-                     haystack.end(),
-                     needle.begin(),
-                     needle.end()) != haystack.end();
+  return std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end()) !=
+         haystack.end();
 }
 
 void ExpectUbxValsetFrame(TestContext& ctx, const ReceiverCommand& command)
 {
   ctx.Expect(command.payload.kind == ReceiverCommandPayloadKind::kBinary,
              "u-blox config profile commands should emit binary payloads");
-  ctx.Expect(command.payload.binary.size() >= 8u &&
-                 command.payload.binary[0] == 0xB5u &&
-                 command.payload.binary[1] == 0x62u &&
-                 command.payload.binary[2] == 0x06u &&
+  ctx.Expect(command.payload.binary.size() >= 8u && command.payload.binary[0] == 0xB5u &&
+                 command.payload.binary[1] == 0x62u && command.payload.binary[2] == 0x06u &&
                  command.payload.binary[3] == 0x8Au,
              "u-blox config profile commands should wrap CFG-VALSET in a UBX frame");
 }
@@ -104,7 +100,8 @@ void TestRoverProfileGeneratesExpectedCommands(TestContext& ctx)
   ctx.Expect(profile.config_kind == ReceiverConfigProfileKind::kRover,
              "u-blox rover helper should declare the rover config profile kind");
   ctx.Expect(result.commands.size() == 13u,
-             "u-blox rover helper should generate one rate command, eight message commands, and four constellation commands");
+             "u-blox rover helper should generate one rate command, eight message commands, and "
+             "four constellation commands");
 
   std::size_t protocol_output_commands = 0u;
   for (const auto& command : result.commands)
@@ -128,19 +125,21 @@ void TestBaudrateAndMeasurementRateGeneration(TestContext& ctx)
   profile.measurement_rate_hz = 5.0;
 
   const auto result = UbloxConfigProfileBuilder::Build(profile);
-  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 3u,
-             "explicit UART1/UART2 baudrate overrides and the measurement rate should each generate a command");
+  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk && result.commands.size() == 3u,
+             "explicit UART1/UART2 baudrate overrides and the measurement rate should each "
+             "generate a command");
 
   const auto baud_key = PackU32Le(kUart1Baudrate);
   const auto uart2_baud_key = PackU32Le(kUart2Baudrate);
   const std::vector<std::uint8_t> baud_value = {0x00u, 0x08u, 0x07u, 0x00u};
-  ctx.Expect(ContainsBytes(result.commands[0].payload.binary, baud_key) &&
-                 ContainsBytes(result.commands[0].payload.binary, baud_value),
-             "u-blox baudrate command should pack the UART1 baud CFG key and U4 little-endian value");
-  ctx.Expect(ContainsBytes(result.commands[1].payload.binary, uart2_baud_key) &&
-                 ContainsBytes(result.commands[1].payload.binary, baud_value),
-             "u-blox baudrate command should pack the UART2 baud CFG key and U4 little-endian value");
+  ctx.Expect(
+      ContainsBytes(result.commands[0].payload.binary, baud_key) &&
+          ContainsBytes(result.commands[0].payload.binary, baud_value),
+      "u-blox baudrate command should pack the UART1 baud CFG key and U4 little-endian value");
+  ctx.Expect(
+      ContainsBytes(result.commands[1].payload.binary, uart2_baud_key) &&
+          ContainsBytes(result.commands[1].payload.binary, baud_value),
+      "u-blox baudrate command should pack the UART2 baud CFG key and U4 little-endian value");
 }
 
 void TestMessageEnableDisableGeneration(TestContext& ctx)
@@ -155,8 +154,7 @@ void TestMessageEnableDisableGeneration(TestContext& ctx)
   profile.disabled_messages = {kMsgoutNmeaGgaUart1, kMsgoutNmeaGgaUsb};
 
   const auto result = UbloxConfigProfileBuilder::Build(profile);
-  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 6u,
+  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk && result.commands.size() == 6u,
              "message enable/disable requests should map to one command per message key");
 
   const auto nav_pvt = PackU32Le(kMsgoutUbxNavPvtUart1);
@@ -188,52 +186,60 @@ void TestMessageEnableDisableGeneration(TestContext& ctx)
 void TestOutputPortSelection(TestContext& ctx)
 {
   const auto usb_profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
-      ReceiverCommandSafetyLevel::kRuntime,
-      {UbxCfgLayer::kRam},
-      {UbloxInterfacePort::kUsb});
+      ReceiverCommandSafetyLevel::kRuntime, {UbxCfgLayer::kRam}, {UbloxInterfacePort::kUsb});
   const auto usb_result = UbloxConfigProfileBuilder::Build(usb_profile);
 
   ctx.Expect(usb_result.status == UbloxConfigProfileBuildStatus::kOk &&
                  usb_result.commands.size() == 9u,
-             "USB-only rover profiles should emit one measurement command, four USB message commands, and four constellation commands");
-  ctx.Expect(!usb_result.commands.empty() &&
-                 ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
-                 !ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart1)),
-             "USB-only rover profiles should emit USB NAV-PVT output keys without UART1 output keys");
+             "USB-only rover profiles should emit one measurement command, four USB message "
+             "commands, and four constellation commands");
+  ctx.Expect(
+      !usb_result.commands.empty() &&
+          ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
+          !ContainsBytes(usb_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart1)),
+      "USB-only rover profiles should emit USB NAV-PVT output keys without UART1 output keys");
 
   auto uart2_profile = UbloxConfigProfileBuilder::BuildUbloxDiagnosticsProfile(
-      ReceiverCommandSafetyLevel::kRuntime,
-      {UbxCfgLayer::kRam},
-      {UbloxInterfacePort::kUart2});
+      ReceiverCommandSafetyLevel::kRuntime, {UbxCfgLayer::kRam}, {UbloxInterfacePort::kUart2});
   uart2_profile.port.uart2_baudrate = 460800u;
   const auto uart2_result = UbloxConfigProfileBuilder::Build(uart2_profile);
 
-  ctx.Expect(uart2_result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 uart2_result.commands.size() == 15u,
-             "UART2-only diagnostics profiles with a baud override should emit one UART2 baud command, one rate command, nine UART2 message commands, and four constellation commands");
-  ctx.Expect(ContainsBytes(uart2_result.commands[0].payload.binary, PackU32Le(kUart2Baudrate)) &&
-                 ContainsBytes(uart2_result.commands[2].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart2)) &&
-                 ContainsBytes(uart2_result.commands[10].payload.binary, PackU32Le(kMsgoutNmeaGgaUart2)),
-             "UART2-only diagnostics profiles should target the documented UART2 baud and message-output CFG keys");
+  ctx.Expect(
+      uart2_result.status == UbloxConfigProfileBuildStatus::kOk &&
+          uart2_result.commands.size() == 15u,
+      "UART2-only diagnostics profiles with a baud override should emit one UART2 baud command, "
+      "one rate command, nine UART2 message commands, and four constellation commands");
+  ctx.Expect(
+      ContainsBytes(uart2_result.commands[0].payload.binary, PackU32Le(kUart2Baudrate)) &&
+          ContainsBytes(uart2_result.commands[2].payload.binary,
+                        PackU32Le(kMsgoutUbxNavPvtUart2)) &&
+          ContainsBytes(uart2_result.commands[10].payload.binary, PackU32Le(kMsgoutNmeaGgaUart2)),
+      "UART2-only diagnostics profiles should target the documented UART2 baud and message-output "
+      "CFG keys");
 
-  const auto all_ports_profile = UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
-      ReceiverCommandSafetyLevel::kRuntime,
-      {UbxCfgLayer::kRam},
-      {
-          UbloxInterfacePort::kUsb,
-          UbloxInterfacePort::kUart1,
-          UbloxInterfacePort::kUart2,
-      });
+  const auto all_ports_profile =
+      UbloxConfigProfileBuilder::BuildUbloxRoverProfile(ReceiverCommandSafetyLevel::kRuntime,
+                                                        {UbxCfgLayer::kRam},
+                                                        {
+                                                            UbloxInterfacePort::kUsb,
+                                                            UbloxInterfacePort::kUart1,
+                                                            UbloxInterfacePort::kUart2,
+                                                        });
   const auto all_ports_result = UbloxConfigProfileBuilder::Build(all_ports_profile);
 
   ctx.Expect(all_ports_result.status == UbloxConfigProfileBuildStatus::kOk &&
                  all_ports_result.commands.size() == 17u,
-             "all-port rover profiles should emit one rate command, twelve message commands, and four constellation commands");
-  ctx.Expect(ContainsBytes(all_ports_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
-                 ContainsBytes(all_ports_result.commands[2].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart1)) &&
-                 ContainsBytes(all_ports_result.commands[3].payload.binary, PackU32Le(kMsgoutUbxNavPvtUart2)) &&
-                 ContainsBytes(all_ports_result.commands[12].payload.binary, PackU32Le(kMsgoutUbxMonRfUart2)),
-             "all-port rover profiles should emit USB, UART1, and UART2 message-output keys");
+             "all-port rover profiles should emit one rate command, twelve message commands, and "
+             "four constellation commands");
+  ctx.Expect(
+      ContainsBytes(all_ports_result.commands[1].payload.binary, PackU32Le(kMsgoutUbxNavPvtUsb)) &&
+          ContainsBytes(all_ports_result.commands[2].payload.binary,
+                        PackU32Le(kMsgoutUbxNavPvtUart1)) &&
+          ContainsBytes(all_ports_result.commands[3].payload.binary,
+                        PackU32Le(kMsgoutUbxNavPvtUart2)) &&
+          ContainsBytes(all_ports_result.commands[12].payload.binary,
+                        PackU32Le(kMsgoutUbxMonRfUart2)),
+      "all-port rover profiles should emit USB, UART1, and UART2 message-output keys");
 }
 
 void TestConstellationAndSafetyPolicy(TestContext& ctx)
@@ -245,14 +251,14 @@ void TestConstellationAndSafetyPolicy(TestContext& ctx)
   };
 
   const auto result = UbloxConfigProfileBuilder::Build(profile);
-  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk &&
-                 result.commands.size() == 1u,
+  ctx.Expect(result.status == UbloxConfigProfileBuildStatus::kOk && result.commands.size() == 1u,
              "constellation toggles should generate one command per constellation");
   ctx.Expect(result.commands[0].safety_level == ReceiverCommandSafetyLevel::kPersistent,
              "u-blox commands targeting persistent CFG layers should be marked persistent");
-  ctx.Expect(ContainsBytes(result.commands[0].payload.binary, PackU32Le(kSignalGalEnable)) &&
-                 ContainsBytes(result.commands[0].payload.binary, {0x00u}),
-             "disabled constellation command should carry the documented GAL enable key and false value");
+  ctx.Expect(
+      ContainsBytes(result.commands[0].payload.binary, PackU32Le(kSignalGalEnable)) &&
+          ContainsBytes(result.commands[0].payload.binary, {0x00u}),
+      "disabled constellation command should carry the documented GAL enable key and false value");
 }
 
 void TestDispatchSafetyIntegration(TestContext& ctx)
@@ -264,9 +270,9 @@ void TestDispatchSafetyIntegration(TestContext& ctx)
     ReceiverCommandDispatcher dispatcher(sink);
 
     const auto dispatch = dispatcher.Dispatch(result.commands.front());
-    ctx.Expect(dispatch.status == DispatchStatus::kSent &&
-                   dispatcher.metrics().commands_sent == 1u,
-               "runtime-only u-blox config commands should be dispatchable without extra confirmation");
+    ctx.Expect(
+        dispatch.status == DispatchStatus::kSent && dispatcher.metrics().commands_sent == 1u,
+        "runtime-only u-blox config commands should be dispatchable without extra confirmation");
   }
 
   {
@@ -277,8 +283,9 @@ void TestDispatchSafetyIntegration(TestContext& ctx)
     ReceiverCommandDispatcher dispatcher(sink);
 
     const auto rejected = dispatcher.Dispatch(result.commands.front());
-    ctx.Expect(rejected.status == DispatchStatus::kRejectedSafety,
-               "persistent-layer u-blox config commands should be rejected until explicitly confirmed");
+    ctx.Expect(
+        rejected.status == DispatchStatus::kRejectedSafety,
+        "persistent-layer u-blox config commands should be rejected until explicitly confirmed");
 
     ReceiverCommand confirmed = result.commands.front();
     confirmed.explicit_safety_confirmation = true;

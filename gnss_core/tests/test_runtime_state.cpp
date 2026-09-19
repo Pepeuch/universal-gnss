@@ -10,9 +10,9 @@ namespace
 {
 
 using universal_gnss::ComputeValueFlagsFromFields;
+using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssCapability;
 using universal_gnss::GnssCapabilityFlags;
-using universal_gnss::GnssBaselineSolutionStatus;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::GnssRuntimeState;
@@ -48,8 +48,8 @@ void TestCapabilityValueInvariant(TestContext& ctx)
   ctx.Expect(HasValidCapabilityValueInvariant(state),
              "matching capability/value bits should satisfy the invariant");
 
-  state.value_flags = static_cast<GnssCapabilityFlags>(
-      ToFlag(GnssCapability::kHdop) | ToFlag(GnssCapability::kVdop));
+  state.value_flags = static_cast<GnssCapabilityFlags>(ToFlag(GnssCapability::kHdop) |
+                                                       ToFlag(GnssCapability::kVdop));
   ctx.Expect(!HasValidCapabilityValueInvariant(state),
              "value flags must not contain bits that are absent from capability flags");
 }
@@ -88,8 +88,7 @@ void TestMinimalStateDoesNotInventRichFields(TestContext& ctx)
              "minimal state should not invent horizontal accuracy");
   ctx.Expect(!state.satellites_used.has_value(),
              "minimal state should not invent satellite counts");
-  ctx.Expect(!state.correction_age_s.has_value(),
-             "minimal state should not invent correction age");
+  ctx.Expect(!state.correction_age_s.has_value(), "minimal state should not invent correction age");
   ctx.Expect(state.capability_flags == 0u, "minimal state should not declare rich capabilities");
   ctx.Expect(state.value_flags == 0u, "minimal state should not declare rich values");
 }
@@ -130,17 +129,16 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
              "correction_age_s should be assignable when capability exists");
   ctx.Expect(SetOptionalValue(state, GnssCapability::kMeanCn0, state.mean_cn0_db_hz, 41.5f),
              "mean_cn0_db_hz should be assignable when capability exists");
-  ctx.Expect(SetOptionalValue(
-                 state, GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg, 0.7f),
-             "heading_accuracy_deg should be assignable when capability exists");
-  ctx.Expect(SetOptionalValue(state,
-                              GnssCapability::kDifferentialCorrections,
-                              state.differential_corrections,
-                              true),
-             "differential_corrections should be assignable when capability exists");
-  ctx.Expect(SetOptionalValue(
-                 state, GnssCapability::kCorrectionsActive, state.corrections_active, false),
-             "corrections_active should preserve a known false value");
+  ctx.Expect(
+      SetOptionalValue(state, GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg, 0.7f),
+      "heading_accuracy_deg should be assignable when capability exists");
+  ctx.Expect(
+      SetOptionalValue(
+          state, GnssCapability::kDifferentialCorrections, state.differential_corrections, true),
+      "differential_corrections should be assignable when capability exists");
+  ctx.Expect(
+      SetOptionalValue(state, GnssCapability::kCorrectionsActive, state.corrections_active, false),
+      "corrections_active should preserve a known false value");
   ctx.Expect(SetOptionalValue(
                  state, GnssCapability::kDualAntennaHeading, state.dual_antenna_heading, true),
              "dual_antenna_heading should be assignable when capability exists");
@@ -150,12 +148,12 @@ void TestRicherRtkStateExposesExpectedFlags(TestContext& ctx)
   ctx.Expect(SetOptionalValue(
                  state, GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg, 182.25f),
              "baseline_azimuth_deg should be assignable when capability exists");
-  ctx.Expect(SetOptionalValue(
-                 state, GnssCapability::kBaselinePitch, state.baseline_pitch_deg, 0.1f),
-             "baseline_pitch_deg should be assignable when capability exists");
-  ctx.Expect(SetOptionalValue(
-                 state, GnssCapability::kBaselineLength, state.baseline_length_m, 1.5f),
-             "baseline_length_m should be assignable when capability exists");
+  ctx.Expect(
+      SetOptionalValue(state, GnssCapability::kBaselinePitch, state.baseline_pitch_deg, 0.1f),
+      "baseline_pitch_deg should be assignable when capability exists");
+  ctx.Expect(
+      SetOptionalValue(state, GnssCapability::kBaselineLength, state.baseline_length_m, 1.5f),
+      "baseline_length_m should be assignable when capability exists");
   ctx.Expect(SetOptionalValue(state,
                               GnssCapability::kBaselineSolutionStatus,
                               state.baseline_solution_status,

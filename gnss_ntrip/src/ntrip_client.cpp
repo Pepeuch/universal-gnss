@@ -21,13 +21,11 @@ namespace
 
 constexpr std::size_t kMaxResponseHeaderBytes = 8192u;
 
-bool HasSteadyElapsed(
-    const std::optional<std::chrono::steady_clock::time_point>& start_time,
-    const std::uint32_t timeout_ms)
+bool HasSteadyElapsed(const std::optional<std::chrono::steady_clock::time_point>& start_time,
+                      const std::uint32_t timeout_ms)
 {
   return timeout_ms != 0u && start_time.has_value() &&
-         std::chrono::steady_clock::now() - *start_time >=
-             std::chrono::milliseconds(timeout_ms);
+         std::chrono::steady_clock::now() - *start_time >= std::chrono::milliseconds(timeout_ms);
 }
 
 bool StartsWith(const std::string_view text, const std::string_view prefix)
@@ -58,8 +56,8 @@ bool IsAcceptedNtripStatusLine(const std::string_view status_line)
          HasExactNtripStatusCode(status_line, "HTTP/1.1 ");
 }
 
-std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
-    const std::string_view response_bytes)
+std::optional<std::pair<std::size_t, std::size_t>>
+FindResponseHeaderTerminator(const std::string_view response_bytes)
 {
   if (const std::size_t crlfcrlf = response_bytes.find("\r\n\r\n");
       crlfcrlf != std::string_view::npos)
@@ -67,8 +65,7 @@ std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
     return std::make_pair(crlfcrlf, std::size_t{4u});
   }
 
-  if (const std::size_t lflf = response_bytes.find("\n\n");
-      lflf != std::string_view::npos)
+  if (const std::size_t lflf = response_bytes.find("\n\n"); lflf != std::string_view::npos)
   {
     return std::make_pair(lflf, std::size_t{2u});
   }
@@ -76,8 +73,8 @@ std::optional<std::pair<std::size_t, std::size_t>> FindResponseHeaderTerminator(
   return std::nullopt;
 }
 
-std::optional<std::pair<std::size_t, std::size_t>> FindLegacyIcyPayloadStart(
-    const std::string_view response_bytes)
+std::optional<std::pair<std::size_t, std::size_t>>
+FindLegacyIcyPayloadStart(const std::string_view response_bytes)
 {
   if (!StartsWith(response_bytes, "ICY "))
   {
@@ -140,8 +137,7 @@ std::string_view ExtractStatusLine(const std::string_view header)
 
 bool IsRecognizedNtripStatusLine(const std::string_view status_line)
 {
-  return StartsWith(status_line, "ICY ") ||
-         StartsWith(status_line, "HTTP/1.0 ") ||
+  return StartsWith(status_line, "ICY ") || StartsWith(status_line, "HTTP/1.0 ") ||
          StartsWith(status_line, "HTTP/1.1 ");
 }
 
@@ -165,8 +161,8 @@ NtripGgaSendError MapClientErrorToGgaSendError(const NtripClientError error)
   return NtripGgaSendError::kWriteFailure;
 }
 
-NtripGgaSendError MapTransportErrorToGgaSendError(
-    const universal_gnss_transport::TransportError error)
+NtripGgaSendError
+MapTransportErrorToGgaSendError(const universal_gnss_transport::TransportError error)
 {
   using universal_gnss_transport::TransportError;
 
@@ -197,8 +193,7 @@ bool ShouldTrackReconnectFailure(const NtripClientState state, const NtripClient
     return false;
   }
 
-  return error != NtripClientError::kNone &&
-         error != NtripClientError::kConfiguration;
+  return error != NtripClientError::kNone && error != NtripClientError::kConfiguration;
 }
 
 NtripClientError ParseNtripResponseStatus(const std::string_view header)
@@ -214,9 +209,8 @@ NtripClientError ParseNtripResponseStatus(const std::string_view header)
     return NtripClientError::kNone;
   }
 
-  return IsRecognizedNtripStatusLine(status_line)
-             ? NtripClientError::kHttp
-             : NtripClientError::kProtocol;
+  return IsRecognizedNtripStatusLine(status_line) ? NtripClientError::kHttp
+                                                  : NtripClientError::kProtocol;
 }
 
 NtripClientError MapTransportError(const universal_gnss_transport::TransportError error)
@@ -272,19 +266,15 @@ bool NtripGgaSendResult::ok() const
 }
 
 NtripClient::NtripClient(NtripConfig config)
-    : config_(std::move(config)),
-      source_identity_(BuildNtripSourceIdentity(config_)),
+    : config_(std::move(config)), source_identity_(BuildNtripSourceIdentity(config_)),
       gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
       gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
 {
 }
 
-NtripClient::NtripClient(NtripConfig config,
-                         universal_gnss_transport::TcpClientConfig tcp_config)
-    : config_(std::move(config)),
-      source_identity_(BuildNtripSourceIdentity(config_)),
-      tcp_config_(std::move(tcp_config)),
-      gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
+NtripClient::NtripClient(NtripConfig config, universal_gnss_transport::TcpClientConfig tcp_config)
+    : config_(std::move(config)), source_identity_(BuildNtripSourceIdentity(config_)),
+      tcp_config_(std::move(tcp_config)), gga_injection_policy_(BuildGgaInjectionPolicy(config_)),
       gga_injector_(GgaInjectorConfig{gga_injection_policy_, {}})
 {
 }
@@ -296,9 +286,8 @@ void NtripClient::set_config(NtripConfig config)
   config_ = std::move(config);
   source_identity_ = new_source_identity;
   gga_injection_policy_ = BuildGgaInjectionPolicy(config_);
-  gga_injector_.set_config(GgaInjectorConfig{
-      gga_injection_policy_,
-      gga_injector_.config().sentence_builder_options});
+  gga_injector_.set_config(
+      GgaInjectorConfig{gga_injection_policy_, gga_injector_.config().sentence_builder_options});
 
   if (source_changed)
   {
@@ -326,8 +315,8 @@ const universal_gnss_transport::TcpClientConfig& NtripClient::tcp_config() const
   return tcp_config_;
 }
 
-NtripClientError NtripClient::Connect(
-    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+NtripClientError
+NtripClient::Connect(const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
   universal_gnss_transport::TcpClientConfig transport_config = tcp_config_;
   transport_config.host = config_.host;
@@ -406,8 +395,8 @@ void NtripClient::Disconnect(const NtripClientError error)
   MarkDisconnected(metrics_, error);
 }
 
-NtripClientError NtripClient::SendRequest(
-    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+NtripClientError
+NtripClient::SendRequest(const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
   if (!transport_.IsOpen() || state_ == NtripClientState::kDisconnected)
   {
@@ -430,10 +419,10 @@ NtripClientError NtripClient::SendRequest(
   const std::string& request_text = request_.request_text;
   while (offset < request_text.size())
   {
-    const auto write_result = transport_.Write(
-        reinterpret_cast<const std::uint8_t*>(request_text.data()) +
-            static_cast<std::ptrdiff_t>(offset),
-        request_text.size() - offset);
+    const auto write_result =
+        transport_.Write(reinterpret_cast<const std::uint8_t*>(request_text.data()) +
+                             static_cast<std::ptrdiff_t>(offset),
+                         request_text.size() - offset);
 
     if (write_result.status != universal_gnss_transport::TransportStatus::kOk)
     {
@@ -472,19 +461,18 @@ NtripGgaSendResult NtripClient::SendGga(const universal_gnss::GnssRuntimeState& 
   const auto generated = GenerateGgaFromRuntimeState(state);
   if (!generated.ok())
   {
-    return MakeGgaSendErrorResult(NtripGgaSendError::kGenerationFailed,
-                                  NtripClientError::kNone,
-                                  generated.error);
+    return MakeGgaSendErrorResult(
+        NtripGgaSendError::kGenerationFailed, NtripClientError::kNone, generated.error);
   }
 
   std::size_t offset = 0u;
   const std::string& sentence = generated.sentence;
   while (offset < sentence.size())
   {
-    const auto write_result = transport_.Write(
-        reinterpret_cast<const std::uint8_t*>(sentence.data()) +
-            static_cast<std::ptrdiff_t>(offset),
-        sentence.size() - offset);
+    const auto write_result =
+        transport_.Write(reinterpret_cast<const std::uint8_t*>(sentence.data()) +
+                             static_cast<std::ptrdiff_t>(offset),
+                         sentence.size() - offset);
 
     if (write_result.status != universal_gnss_transport::TransportStatus::kOk)
     {
@@ -507,10 +495,7 @@ NtripGgaSendResult NtripClient::SendGga(const universal_gnss::GnssRuntimeState& 
   NoteGgaSent(metrics_, now_timestamp_ns);
   MarkGgaInjected(gga_injection_policy_, now_timestamp_ns);
   return NtripGgaSendResult{
-      NtripGgaSendStatus::kSent,
-      NtripClientError::kNone,
-      std::nullopt,
-      std::nullopt};
+      NtripGgaSendStatus::kSent, NtripClientError::kNone, std::nullopt, std::nullopt};
 }
 
 NtripGgaSendResult NtripClient::MaybeSendGga(const universal_gnss::GnssRuntimeState& state,
@@ -519,10 +504,7 @@ NtripGgaSendResult NtripClient::MaybeSendGga(const universal_gnss::GnssRuntimeSt
   if (!gga_injection_policy_.enabled)
   {
     return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedDisabled,
-        NtripClientError::kNone,
-        std::nullopt,
-        std::nullopt};
+        NtripGgaSendStatus::kSkippedDisabled, NtripClientError::kNone, std::nullopt, std::nullopt};
   }
 
   if (!transport_.IsOpen() || state_ == NtripClientState::kDisconnected)
@@ -542,27 +524,24 @@ NtripGgaSendResult NtripClient::MaybeSendGga(const universal_gnss::GnssRuntimeSt
           GgaSourcePositionRequirement::kRequirePositionFix &&
       !state.fix_valid)
   {
-    return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedPositionRequired,
-        NtripClientError::kNone,
-        std::nullopt,
-        std::nullopt};
+    return NtripGgaSendResult{NtripGgaSendStatus::kSkippedPositionRequired,
+                              NtripClientError::kNone,
+                              std::nullopt,
+                              std::nullopt};
   }
 
   if (!ShouldInjectGga(gga_injection_policy_, state.fix_valid, now_timestamp_ns))
   {
     return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedInterval,
-        NtripClientError::kNone,
-        std::nullopt,
-        std::nullopt};
+        NtripGgaSendStatus::kSkippedInterval, NtripClientError::kNone, std::nullopt, std::nullopt};
   }
 
   return SendGga(state, now_timestamp_ns);
 }
 
-NtripGgaSendResult NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,
-                                               const universal_gnss::GnssTimestampNs now_timestamp_ns)
+NtripGgaSendResult
+NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,
+                            const universal_gnss::GnssTimestampNs now_timestamp_ns)
 {
   if (state_ == NtripClientState::kFailed)
   {
@@ -572,21 +551,20 @@ NtripGgaSendResult NtripClient::MaybeInjectGga(const universal_gnss::GnssRuntime
 
   if (!transport_.IsOpen() || state_ != NtripClientState::kStreaming)
   {
-    return NtripGgaSendResult{
-        NtripGgaSendStatus::kSkippedNotStreaming,
-        NtripClientError::kNone,
-        std::nullopt,
-        std::nullopt};
+    return NtripGgaSendResult{NtripGgaSendStatus::kSkippedNotStreaming,
+                              NtripClientError::kNone,
+                              std::nullopt,
+                              std::nullopt};
   }
 
   return RunGgaInjector(state, now_timestamp_ns);
 }
 
-NtripClientReadResult NtripClient::Read(
-    std::uint8_t* destination,
-    const std::size_t capacity,
-    const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
-    std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames)
+NtripClientReadResult
+NtripClient::Read(std::uint8_t* destination,
+                  const std::size_t capacity,
+                  const std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+                  std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames)
 {
   NtripClientReadResult result;
 
@@ -706,8 +684,7 @@ std::size_t NtripClient::FeedRtcmMonitor(
       case universal_gnss_protocols::ParserStatus::kSkipped:
         break;
 
-      case universal_gnss_protocols::ParserStatus::kRecordReady:
-      {
+      case universal_gnss_protocols::ParserStatus::kRecordReady: {
         ++frames_seen;
         if (!parsed.record.has_value())
         {
@@ -771,8 +748,7 @@ NtripClientState NtripClient::state() const
 
 bool NtripClient::IsConnected() const
 {
-  return state_ == NtripClientState::kConnected ||
-         state_ == NtripClientState::kStreaming;
+  return state_ == NtripClientState::kConnected || state_ == NtripClientState::kStreaming;
 }
 
 const NtripCorrectionFlowState& NtripClient::correction_flow_state() const
@@ -842,9 +818,9 @@ const universal_gnss_protocols::RtcmCorrectionMonitor& NtripClient::correction_m
   return correction_monitor_;
 }
 
-NtripClientError NtripClient::FailWith(
-    const NtripClientError error,
-    const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
+NtripClientError
+NtripClient::FailWith(const NtripClientError error,
+                      const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns)
 {
   if (ShouldTrackReconnectFailure(state_, error))
   {
@@ -889,28 +865,25 @@ void NtripClient::ResetSessionMetrics()
   const std::uint32_t reconnect_count = metrics_.reconnect_count;
   metrics_ = NtripConnectionMetrics{};
   metrics_.reconnect_count = reconnect_count;
-  gga_injector_ = GgaInjector(GgaInjectorConfig{
-      gga_injection_policy_,
-      gga_injector_.config().sentence_builder_options});
+  gga_injector_ = GgaInjector(
+      GgaInjectorConfig{gga_injection_policy_, gga_injector_.config().sentence_builder_options});
 }
 
 bool NtripClient::CheckCorrectionFlowTimeout(
     const std::optional<universal_gnss::GnssTimestampNs> timestamp_ns,
     NtripClientReadResult& result)
 {
-  if (state_ != NtripClientState::kStreaming ||
-      !correction_flow_state_.response_accepted)
+  if (state_ != NtripClientState::kStreaming || !correction_flow_state_.response_accepted)
   {
     return false;
   }
 
   const bool has_valid_frame = correction_flow_state_.valid_rtcm_frames > 0u;
-  const std::uint32_t timeout_ms = has_valid_frame
-                                       ? config_.rtcm_frame_timeout_ms
-                                       : config_.first_rtcm_frame_timeout_ms;
-  const bool timed_out =
-      has_valid_frame ? HasSteadyElapsed(last_valid_rtcm_frame_steady_time_, timeout_ms)
-                      : HasSteadyElapsed(response_accepted_steady_time_, timeout_ms);
+  const std::uint32_t timeout_ms =
+      has_valid_frame ? config_.rtcm_frame_timeout_ms : config_.first_rtcm_frame_timeout_ms;
+  const bool timed_out = has_valid_frame
+                             ? HasSteadyElapsed(last_valid_rtcm_frame_steady_time_, timeout_ms)
+                             : HasSteadyElapsed(response_accepted_steady_time_, timeout_ms);
   if (!timed_out)
   {
     return false;
@@ -961,26 +934,21 @@ void NtripClient::NoteCorrectionFlowProgress(
   }
 }
 
-NtripGgaSendResult NtripClient::MakeGgaSendErrorResult(
-    const NtripGgaSendError error,
-    const NtripClientError client_error,
-    const std::optional<GgaGenerationError> generation_error)
+NtripGgaSendResult
+NtripClient::MakeGgaSendErrorResult(const NtripGgaSendError error,
+                                    const NtripClientError client_error,
+                                    const std::optional<GgaGenerationError> generation_error)
 {
   NoteGgaSendError(metrics_, error);
-  return NtripGgaSendResult{
-      NtripGgaSendStatus::kError,
-      client_error,
-      error,
-      generation_error};
+  return NtripGgaSendResult{NtripGgaSendStatus::kError, client_error, error, generation_error};
 }
 
-NtripGgaSendResult NtripClient::RunGgaInjector(
-    const universal_gnss::GnssRuntimeState& state,
-    const universal_gnss::GnssTimestampNs now_timestamp_ns)
+NtripGgaSendResult
+NtripClient::RunGgaInjector(const universal_gnss::GnssRuntimeState& state,
+                            const universal_gnss::GnssTimestampNs now_timestamp_ns)
 {
-  gga_injector_.set_config(GgaInjectorConfig{
-      gga_injection_policy_,
-      gga_injector_.config().sentence_builder_options});
+  gga_injector_.set_config(
+      GgaInjectorConfig{gga_injection_policy_, gga_injector_.config().sentence_builder_options});
 
   const std::uint64_t bytes_written_before = transport_.metrics().bytes_written;
   const auto injection_result = gga_injector_.MaybeInject(transport_, state, now_timestamp_ns);
@@ -997,57 +965,47 @@ NtripGgaSendResult NtripClient::RunGgaInjector(
     case GgaInjectionStatus::kSent:
       NoteGgaSent(metrics_, now_timestamp_ns);
       return NtripGgaSendResult{
-          NtripGgaSendStatus::kSent,
-          NtripClientError::kNone,
-          std::nullopt,
-          std::nullopt};
+          NtripGgaSendStatus::kSent, NtripClientError::kNone, std::nullopt, std::nullopt};
 
     case GgaInjectionStatus::kSkippedDisabled:
-      return NtripGgaSendResult{
-          NtripGgaSendStatus::kSkippedDisabled,
-          NtripClientError::kNone,
-          std::nullopt,
-          std::nullopt};
+      return NtripGgaSendResult{NtripGgaSendStatus::kSkippedDisabled,
+                                NtripClientError::kNone,
+                                std::nullopt,
+                                std::nullopt};
 
     case GgaInjectionStatus::kSkippedInterval:
-      return NtripGgaSendResult{
-          NtripGgaSendStatus::kSkippedInterval,
-          NtripClientError::kNone,
-          std::nullopt,
-          std::nullopt};
+      return NtripGgaSendResult{NtripGgaSendStatus::kSkippedInterval,
+                                NtripClientError::kNone,
+                                std::nullopt,
+                                std::nullopt};
 
     case GgaInjectionStatus::kSkippedMissingPosition:
-      return NtripGgaSendResult{
-          NtripGgaSendStatus::kSkippedMissingPosition,
-          NtripClientError::kNone,
-          std::nullopt,
-          std::nullopt};
+      return NtripGgaSendResult{NtripGgaSendStatus::kSkippedMissingPosition,
+                                NtripClientError::kNone,
+                                std::nullopt,
+                                std::nullopt};
 
     case GgaInjectionStatus::kSkippedPositionRequired:
-      return NtripGgaSendResult{
-          NtripGgaSendStatus::kSkippedPositionRequired,
-          NtripClientError::kNone,
-          std::nullopt,
-          std::nullopt};
+      return NtripGgaSendResult{NtripGgaSendStatus::kSkippedPositionRequired,
+                                NtripClientError::kNone,
+                                std::nullopt,
+                                std::nullopt};
 
     case GgaInjectionStatus::kBuildError:
       return MakeGgaSendErrorResult(NtripGgaSendError::kGenerationFailed,
                                     NtripClientError::kNone,
                                     injection_result.build_error);
 
-    case GgaInjectionStatus::kWriteError:
-    {
-      const auto write_error =
-          injection_result.write_error.value_or(universal_gnss_transport::TransportError::kWriteFailure);
-      const NtripClientError client_error = FailWith(MapTransportError(write_error),
-                                                     now_timestamp_ns);
-      return MakeGgaSendErrorResult(MapTransportErrorToGgaSendError(write_error),
-                                    client_error);
+    case GgaInjectionStatus::kWriteError: {
+      const auto write_error = injection_result.write_error.value_or(
+          universal_gnss_transport::TransportError::kWriteFailure);
+      const NtripClientError client_error =
+          FailWith(MapTransportError(write_error), now_timestamp_ns);
+      return MakeGgaSendErrorResult(MapTransportErrorToGgaSendError(write_error), client_error);
     }
   }
 
-  return MakeGgaSendErrorResult(NtripGgaSendError::kWriteFailure,
-                                NtripClientError::kUnknown);
+  return MakeGgaSendErrorResult(NtripGgaSendError::kWriteFailure, NtripClientError::kUnknown);
 }
 
 void NtripClient::RecordReconnectFailure(

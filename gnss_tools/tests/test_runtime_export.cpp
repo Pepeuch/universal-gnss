@@ -248,16 +248,16 @@ void TestUnicoreBinaryJsonlExport(TestContext& ctx)
   ctx.Expect(lines.front().find("\"latitude_deg\":40.078958827") != std::string::npos &&
                  lines.front().find("\"longitude_deg\":116.236510298") != std::string::npos,
              "binary Unicore export should preserve high-precision coordinates in JSONL");
-  ctx.Expect(lines.back().find("\"message\":\"PVTSLNB\"") != std::string::npos &&
-                 lines.back().find("\"heading_deg\":182.25") != std::string::npos &&
-                 lines.back().find("\"dual_antenna_baseline\":true") != std::string::npos &&
-                 lines.back().find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
-                 lines.back().find("\"baseline_pitch_deg\":0.1") != std::string::npos &&
-                 lines.back().find("\"baseline_length_m\":1.5") != std::string::npos &&
-                 lines.back().find("\"baseline_solution_status\":\"computed\"") !=
-                     std::string::npos &&
-                 lines.back().find("\"hdop\":0.684") != std::string::npos,
-             "binary Unicore export should preserve routed PVTSLNB baseline, heading, and DOP fields");
+  ctx.Expect(
+      lines.back().find("\"message\":\"PVTSLNB\"") != std::string::npos &&
+          lines.back().find("\"heading_deg\":182.25") != std::string::npos &&
+          lines.back().find("\"dual_antenna_baseline\":true") != std::string::npos &&
+          lines.back().find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
+          lines.back().find("\"baseline_pitch_deg\":0.1") != std::string::npos &&
+          lines.back().find("\"baseline_length_m\":1.5") != std::string::npos &&
+          lines.back().find("\"baseline_solution_status\":\"computed\"") != std::string::npos &&
+          lines.back().find("\"hdop\":0.684") != std::string::npos,
+      "binary Unicore export should preserve routed PVTSLNB baseline, heading, and DOP fields");
 }
 
 void TestPrettyJsonlExport(TestContext& ctx)
@@ -290,8 +290,7 @@ void TestJsonlEscapingAndEmptyTimeline(TestContext& ctx)
   event.produced_runtime_update = true;
   const std::string jsonl = universal_gnss_tools::FormatRuntimeExportJsonl(replay);
   ctx.Expect(jsonl.find("\"schema_version\":1") != std::string::npos &&
-                 jsonl.find("\"message\":\"value,\\\"quoted\\\"\\nline\"") !=
-                     std::string::npos,
+                 jsonl.find("\"message\":\"value,\\\"quoted\\\"\\nline\"") != std::string::npos,
              "JSONL v1 should retain JSON escaping for message provenance");
 }
 
@@ -322,7 +321,8 @@ void TestCsvExport(TestContext& ctx)
              "CSV export should always emit the stable v1 header before runtime-update rows");
   ctx.Expect(lines.size() > 1u &&
                  lines[1].find("1,1,,NMEA,GGA,true,fix,none,48.117300000,11.516666667,") == 0u,
-             "CSV export should preserve event order, missing timestamps, protocol provenance, and coordinate precision");
+             "CSV export should preserve event order, missing timestamps, protocol provenance, and "
+             "coordinate precision");
   ctx.Expect(lines.size() > 1u && lines[1].find(",,,,") != std::string::npos,
              "CSV export should represent unavailable optional values as empty cells");
   ctx.Expect(lines.back().find(",0.6,1.1,") != std::string::npos,
@@ -332,14 +332,16 @@ void TestCsvExport(TestContext& ctx)
 void TestCsvEscapingAndEmptyTimeline(TestContext& ctx)
 {
   universal_gnss_tools::GnssReplayResult replay;
-  ctx.Expect(universal_gnss_tools::FormatRuntimeExportCsv(replay) ==
-                 "schema_version,event_index,timestamp_ns,protocol,message,fix_valid,fix_type,rtk_mode,"
-                 "latitude_deg,longitude_deg,altitude_m,horizontal_accuracy_m,vertical_accuracy_m,hdop,vdop,"
-                 "satellites_used,satellites_tracked,satellites_visible,mean_cn0_dbhz,max_cn0_dbhz,"
-                 "correction_age_s,heading_deg,dual_antenna_heading,dual_antenna_baseline,"
-                 "baseline_azimuth_deg,baseline_pitch_deg,baseline_length_m,baseline_solution_status,"
-                 "interference_detected,jamming_detected\n",
-             "an empty timeline should still produce the CSV v1 header");
+  ctx.Expect(
+      universal_gnss_tools::FormatRuntimeExportCsv(replay) ==
+          "schema_version,event_index,timestamp_ns,protocol,message,fix_valid,fix_type,rtk_mode,"
+          "latitude_deg,longitude_deg,altitude_m,horizontal_accuracy_m,vertical_accuracy_m,hdop,"
+          "vdop,"
+          "satellites_used,satellites_tracked,satellites_visible,mean_cn0_dbhz,max_cn0_dbhz,"
+          "correction_age_s,heading_deg,dual_antenna_heading,dual_antenna_baseline,"
+          "baseline_azimuth_deg,baseline_pitch_deg,baseline_length_m,baseline_solution_status,"
+          "interference_detected,jamming_detected\n",
+      "an empty timeline should still produce the CSV v1 header");
 
   replay.events.resize(1u);
   auto& event = replay.events.front();

@@ -26,15 +26,12 @@ struct ReceiverCommandResponse
   std::string message{};
 };
 
-constexpr bool IsPositiveReceiverCommandResponseKind(
-    const ReceiverCommandResponseKind kind)
+constexpr bool IsPositiveReceiverCommandResponseKind(const ReceiverCommandResponseKind kind)
 {
-  return kind == ReceiverCommandResponseKind::kAck ||
-         kind == ReceiverCommandResponseKind::kTextOk;
+  return kind == ReceiverCommandResponseKind::kAck || kind == ReceiverCommandResponseKind::kTextOk;
 }
 
-constexpr bool IsNegativeReceiverCommandResponseKind(
-    const ReceiverCommandResponseKind kind)
+constexpr bool IsNegativeReceiverCommandResponseKind(const ReceiverCommandResponseKind kind)
 {
   return kind == ReceiverCommandResponseKind::kNak ||
          kind == ReceiverCommandResponseKind::kTextError ||

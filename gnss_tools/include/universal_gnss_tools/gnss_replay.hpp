@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 #include <map>
@@ -20,8 +20,7 @@ struct GnssReplayEvent
   std::size_t event_index{0};
   std::size_t byte_offset{0};
   std::size_t length_bytes{0};
-  universal_gnss_protocols::ProtocolType protocol{
-      universal_gnss_protocols::ProtocolType::kUnknown};
+  universal_gnss_protocols::ProtocolType protocol{universal_gnss_protocols::ProtocolType::kUnknown};
   universal_gnss_protocols::ChecksumStatus checksum_status{
       universal_gnss_protocols::ChecksumStatus::kNotChecked};
 
@@ -76,26 +75,18 @@ struct GnssReplayTimingStep
   std::chrono::nanoseconds delay_before_event{0};
 };
 
-std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(
-    const GnssReplayResult& result,
-    const GnssReplayTimingConfig& config);
+std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(const GnssReplayResult& result,
+                                                            const GnssReplayTimingConfig& config);
 
-GnssReplayResult ReplayGnssBytes(
-    const std::vector<std::uint8_t>& bytes,
-    bool include_events = true);
+GnssReplayResult ReplayGnssBytes(const std::vector<std::uint8_t>& bytes,
+                                 bool include_events = true);
 
-GnssReplayResult ReplayGnssStream(
-    std::istream& input,
-    bool include_events = true);
+GnssReplayResult ReplayGnssStream(std::istream& input, bool include_events = true);
 
-std::string FormatGnssReplayText(
-    const GnssReplayResult& result,
-    bool summary_only = false);
+std::string FormatGnssReplayText(const GnssReplayResult& result, bool summary_only = false);
 
 std::string FormatGnssReplayEventText(const GnssReplayEvent& event);
 
-std::string FormatGnssReplayJson(
-    const GnssReplayResult& result,
-    bool summary_only = false);
+std::string FormatGnssReplayJson(const GnssReplayResult& result, bool summary_only = false);
 
 }  // namespace universal_gnss_tools

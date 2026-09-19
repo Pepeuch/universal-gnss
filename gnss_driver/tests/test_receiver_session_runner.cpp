@@ -1,5 +1,5 @@
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -15,8 +15,8 @@
 #include "universal_gnss_driver/receiver_session_runner.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 #include "universal_gnss_transport/transport_error.hpp"
 #include "universal_gnss_transport/transport_status.hpp"
@@ -56,14 +56,8 @@ std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
       frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
-  stream << frame_without_crc
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
-         << "\r\n";
+  stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
+         << std::setfill('0') << crc << "\r\n";
   return stream.str();
 }
 
@@ -83,13 +77,17 @@ std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
   return bytes;
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -97,7 +95,9 @@ void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, con
   payload[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xFFu);
 }
 
-void WriteLeI4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::int32_t value)
+void WriteLeI4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::int32_t value)
 {
   WriteLeU4(payload, offset, static_cast<std::uint32_t>(value));
 }
@@ -137,8 +137,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -178,8 +177,8 @@ const std::string kBestNavLine = BuildUnicoreAsciiFrame(
 void TestRunUntilEofWithMixedUbloxStream(TestContext& ctx)
 {
   std::vector<std::uint8_t> stream;
-  const auto gga = BuildNmeaSentence(
-      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   const auto ubx = BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload());
   const auto rtcm = BuildRtcmFrame(1077u);
   stream.insert(stream.end(), gga.begin(), gga.end());
@@ -194,14 +193,12 @@ void TestRunUntilEofWithMixedUbloxStream(TestContext& ctx)
   const auto& runner_metrics = runner.metrics();
   const auto& session_metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(runner_metrics.bytes_read == stream.size() &&
-                 runner_metrics.chunks_read > 1u &&
+  ctx.Expect(runner_metrics.bytes_read == stream.size() && runner_metrics.chunks_read > 1u &&
                  runner_metrics.eof_seen,
              "runner should drain the full mixed u-blox stream in multiple chunks");
-  ctx.Expect(session_metrics.selected_session_kind == std::optional<ReceiverSessionKind>(
-                                                      ReceiverSessionKind::kUblox) &&
-                 state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix,
+  ctx.Expect(session_metrics.selected_session_kind ==
+                     std::optional<ReceiverSessionKind>(ReceiverSessionKind::kUblox) &&
+                 state.fix_valid && state.fix_type == GnssFixType::kFix,
              "mixed u-blox stream should update the routed receiver session");
   ctx.Expect(runner_metrics.runtime_updates_observed == session_metrics.runtime_updates &&
                  session.ublox_metrics().rtcm_frames_seen == 1u,
@@ -217,11 +214,9 @@ void TestRunUntilEofWithUnicoreStream(TestContext& ctx)
   runner.RunUntilEof();
 
   const auto& state = session.current_state();
-  ctx.Expect(runner.metrics().eof_seen &&
-                 runner.metrics().runtime_updates_observed == 1u,
+  ctx.Expect(runner.metrics().eof_seen && runner.metrics().runtime_updates_observed == 1u,
              "runner should drain a Unicore stream to EOF and observe one runtime update");
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFloat &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFloat &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
              "Unicore BESTNAVA stream should update the runtime state");
 }
@@ -234,8 +229,8 @@ void TestChunkBoundarySplittingAndAutoSelection(TestContext& ctx)
   ReceiverSessionRunner runner(source, session, ReceiverSessionRunnerConfig{1u});
   runner.RunUntilEof();
 
-  ctx.Expect(session.metrics().selected_session_kind == std::optional<ReceiverSessionKind>(
-                                                       ReceiverSessionKind::kUblox) &&
+  ctx.Expect(session.metrics().selected_session_kind ==
+                     std::optional<ReceiverSessionKind>(ReceiverSessionKind::kUblox) &&
                  session.current_state().fix_valid,
              "single-byte chunking should still allow auto-detection and runtime updates");
   ctx.Expect(runner.metrics().chunks_read == ubx.size(),
@@ -250,9 +245,7 @@ void TestReadErrorHandling(TestContext& ctx)
   ReceiverSessionRunner runner(source, session);
 
   const bool keep_running = runner.StepOnce();
-  ctx.Expect(!keep_running &&
-                 runner.metrics().read_errors == 1u &&
-                 !runner.metrics().eof_seen &&
+  ctx.Expect(!keep_running && runner.metrics().read_errors == 1u && !runner.metrics().eof_seen &&
                  runner.metrics().last_status == TransportStatus::kError &&
                  runner.metrics().last_error == TransportError::kReadFailure,
              "runner should stop and record transport read errors");
@@ -265,13 +258,14 @@ void TestFinalizePropagationOnEof(TestContext& ctx)
   const auto ubx = BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload());
   MemoryByteSource source(std::vector<std::uint8_t>(ubx.begin(), ubx.begin() + 8));
   ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kUblox});
-  ReceiverSessionRunner runner(source, session, ReceiverSessionRunnerConfig{32u, true, true, false});
+  ReceiverSessionRunner runner(
+      source, session, ReceiverSessionRunnerConfig{32u, true, true, false});
   runner.RunUntilEof();
 
-  ctx.Expect(runner.metrics().eof_seen &&
-                 session.metrics().malformed_records == 1u &&
-                 session.ublox_metrics().malformed_frames == 1u,
-             "EOF-triggered finalization should propagate truncation handling to the child session");
+  ctx.Expect(
+      runner.metrics().eof_seen && session.metrics().malformed_records == 1u &&
+          session.ublox_metrics().malformed_frames == 1u,
+      "EOF-triggered finalization should propagate truncation handling to the child session");
 }
 
 void TestResetMetrics(TestContext& ctx)
@@ -283,10 +277,8 @@ void TestResetMetrics(TestContext& ctx)
   runner.RunUntilEof();
   runner.ResetMetrics();
 
-  ctx.Expect(runner.metrics().bytes_read == 0u &&
-                 runner.metrics().chunks_read == 0u &&
-                 !runner.metrics().eof_seen &&
-                 runner.metrics().runtime_updates_observed == 0u &&
+  ctx.Expect(runner.metrics().bytes_read == 0u && runner.metrics().chunks_read == 0u &&
+                 !runner.metrics().eof_seen && runner.metrics().runtime_updates_observed == 0u &&
                  runner.metrics().last_status == TransportStatus::kOk &&
                  runner.metrics().last_error == TransportError::kNone,
              "resetting runner metrics should clear runner counters without mutating the session");
@@ -296,8 +288,8 @@ void TestResetMetrics(TestContext& ctx)
 
 void TestCapturesAndPreservesLocalReceiptTimestamp(TestContext& ctx)
 {
-  const auto gga = BuildNmeaSentence(
-      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   MemoryByteSource source(gga);
   ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
   ReceiverSessionRunner runner(source, session);
@@ -322,10 +314,10 @@ void TestCapturesAndPreservesLocalReceiptTimestamp(TestContext& ctx)
 
 void TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(TestContext& ctx)
 {
-  const auto gga = BuildNmeaSentence(
-      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
-  const auto gsv = BuildNmeaSentence(
-      "GPGSV,1,1,04,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39");
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto gsv =
+      BuildNmeaSentence("GPGSV,1,1,04,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39");
   std::vector<std::uint8_t> fragmented_stream = gga;
   fragmented_stream.insert(fragmented_stream.end(), gsv.begin(), gsv.end());
 
@@ -334,9 +326,9 @@ void TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(TestCont
   ReceiverSessionRunner runner(source, session, ReceiverSessionRunnerConfig{3u});
   runner.RunUntilEof();
 
-  ctx.Expect(session.metrics().runtime_observations == 2u &&
-                 session.metrics().position_observations == 1u,
-             "fragmented GGA should count once while GSV enrichment must not create position provenance");
+  ctx.Expect(
+      session.metrics().runtime_observations == 2u && session.metrics().position_observations == 1u,
+      "fragmented GGA should count once while GSV enrichment must not create position provenance");
 
   std::vector<std::uint8_t> batched_identical_fixes = gga;
   batched_identical_fixes.insert(batched_identical_fixes.end(), gga.begin(), gga.end());

@@ -16,9 +16,8 @@ class StreamParserBase
 public:
   virtual ~StreamParserBase() = default;
 
-  virtual ParserResult<RecordT> PushByte(
-      std::uint8_t byte,
-      std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) = 0;
+  virtual ParserResult<RecordT>
+  PushByte(std::uint8_t byte, std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) = 0;
 
   virtual ParserResult<RecordT> Finalize() = 0;
 

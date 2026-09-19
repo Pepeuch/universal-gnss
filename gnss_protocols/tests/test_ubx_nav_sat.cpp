@@ -157,10 +157,8 @@ void TestValidNavSatParsing(TestContext& ctx)
              "NAV-SAT should decode version and numSvs");
   ctx.Expect(record.satellite_count == 3u, "NAV-SAT should decode all repeated blocks");
   ctx.Expect(record.used_satellite_count == 2u, "NAV-SAT should count used satellites");
-  ctx.Expect(record.satellites[0].gnss_id == 0u &&
-                 record.satellites[0].sv_id == 4u &&
-                 record.satellites[0].cno_db_hz == 45u &&
-                 record.satellites[0].used_in_navigation &&
+  ctx.Expect(record.satellites[0].gnss_id == 0u && record.satellites[0].sv_id == 4u &&
+                 record.satellites[0].cno_db_hz == 45u && record.satellites[0].used_in_navigation &&
                  record.satellites[0].healthy == std::optional<bool>(true),
              "NAV-SAT should decode the first satellite block");
   ctx.Expect(record.satellites[2].healthy == std::optional<bool>(false),
@@ -170,20 +168,23 @@ void TestValidNavSatParsing(TestContext& ctx)
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
   const UbxFrame wrong_message = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
-  ctx.Expect(universal_gnss_protocols::ParseUbxNavSat(wrong_message).status == ParserStatus::kSkipped,
+  ctx.Expect(universal_gnss_protocols::ParseUbxNavSat(wrong_message).status ==
+                 ParserStatus::kSkipped,
              "wrong UBX class/id should be skipped");
 
   auto short_payload = MakeNavSatPayload();
   short_payload.pop_back();
-  ctx.Expect(universal_gnss_protocols::ParseUbxNavSat(BuildUbxFrame(0x01u, 0x35u, short_payload)).status ==
-                 ParserStatus::kInvalidData,
-             "truncated NAV-SAT payload should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxNavSat(BuildUbxFrame(0x01u, 0x35u, short_payload)).status ==
+          ParserStatus::kInvalidData,
+      "truncated NAV-SAT payload should be rejected");
 
   auto wrong_version = MakeNavSatPayload();
   wrong_version[4u] = 0x02u;
-  ctx.Expect(universal_gnss_protocols::ParseUbxNavSat(BuildUbxFrame(0x01u, 0x35u, wrong_version)).status ==
-                 ParserStatus::kInvalidData,
-             "unsupported NAV-SAT version should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxNavSat(BuildUbxFrame(0x01u, 0x35u, wrong_version)).status ==
+          ParserStatus::kInvalidData,
+      "unsupported NAV-SAT version should be rejected");
 
   UbxFrame invalid_checksum = BuildUbxFrame(0x01u, 0x35u, MakeNavSatPayload());
   invalid_checksum.checksum_status = ChecksumStatus::kInvalid;

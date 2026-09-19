@@ -10,7 +10,8 @@
 #include "universal_gnss_driver/receiver_config_application.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandFailurePolicy;
@@ -127,14 +128,15 @@ void TestOneCommandSuccess(TestContext& ctx)
                  application.transaction_engine().completed_transaction()->response.kind ==
                      ReceiverCommandResponseKind::kTextOk,
              "text_ok should complete a one-command application successfully");
-  ctx.Expect(
-      application.metrics().commands_total == 1u && application.metrics().commands_started == 1u &&
-          application.metrics().commands_completed == 1u &&
-          application.metrics().commands_failed == 0u &&
-          application.metrics().responses_applied == 1u &&
-          sink.written_bytes() == std::vector<std::uint8_t>({'M', 'O', 'D', 'E', ' ', 'R', 'O', 'V',
-                                                             'E', 'R', '\r', '\n'}),
-      "successful one-command applications should update metrics and write payload bytes");
+  ctx.Expect(application.metrics().commands_total == 1u &&
+                 application.metrics().commands_started == 1u &&
+                 application.metrics().commands_completed == 1u &&
+                 application.metrics().commands_failed == 0u &&
+                 application.metrics().responses_applied == 1u &&
+                 sink.written_bytes() ==
+                     std::vector<std::uint8_t>(
+                         {'M', 'O', 'D', 'E', ' ', 'R', 'O', 'V', 'E', 'R', '\r', '\n'}),
+             "successful one-command applications should update metrics and write payload bytes");
 }
 
 void TestMultiCommandSuccess(TestContext& ctx)
@@ -397,7 +399,7 @@ void TestResetClearsStateAndMetrics(TestContext& ctx)
              "application Reset must not clear the engine quarantine or dispatch another command");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

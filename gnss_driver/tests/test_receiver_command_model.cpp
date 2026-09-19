@@ -15,8 +15,8 @@ using universal_gnss_driver::ReceiverCommandPayloadKind;
 using universal_gnss_driver::ReceiverCommandSafetyLevel;
 using universal_gnss_driver::ReceiverConfigProfileKind;
 using universal_gnss_driver::ReceiverFeature;
-using universal_gnss_driver::ReceiverProtocol;
 using universal_gnss_driver::ReceiverProfile;
+using universal_gnss_driver::ReceiverProtocol;
 
 struct TestContext
 {
@@ -34,8 +34,7 @@ struct TestContext
 
 const ReceiverProfile& RequireProfile(TestContext& ctx, const std::string& profile_id)
 {
-  const ReceiverProfile* profile =
-      universal_gnss_driver::FindBuiltInReceiverProfile(profile_id);
+  const ReceiverProfile* profile = universal_gnss_driver::FindBuiltInReceiverProfile(profile_id);
   ctx.Expect(profile != nullptr, "expected built-in receiver profile: " + profile_id);
   if (profile == nullptr)
   {
@@ -55,12 +54,10 @@ void TestDefaultCommandModel(TestContext& ctx)
   ctx.Expect(command.safety_level == ReceiverCommandSafetyLevel::kRuntime &&
                  !universal_gnss_driver::RequiresExplicitSafetyConfirmation(command.safety_level),
              "default receiver command safety should stay runtime-only");
-  ctx.Expect(command.retry_policy.timeout_ms == 500u &&
-                 command.retry_policy.max_retries == 0u,
+  ctx.Expect(command.retry_policy.timeout_ms == 500u && command.retry_policy.max_retries == 0u,
              "default receiver command retry/timeout policy should stay conservative");
   ctx.Expect(command.payload.kind == ReceiverCommandPayloadKind::kNone &&
-                 command.payload.binary.empty() &&
-                 command.payload.text.empty(),
+                 command.payload.binary.empty() && command.payload.text.empty(),
              "default receiver command should not generate vendor payload automatically");
 }
 
@@ -69,8 +66,7 @@ void TestSafetyAcknowledgementPolicy(TestContext& ctx)
   ReceiverCommand persistent{};
   persistent.safety_level = ReceiverCommandSafetyLevel::kPersistent;
 
-  ctx.Expect(universal_gnss_driver::RequiresExplicitSafetyConfirmation(
-                 persistent.safety_level) &&
+  ctx.Expect(universal_gnss_driver::RequiresExplicitSafetyConfirmation(persistent.safety_level) &&
                  !universal_gnss_driver::HasSafeDispatchApproval(persistent),
              "persistent commands should require explicit safety confirmation");
 
@@ -80,10 +76,10 @@ void TestSafetyAcknowledgementPolicy(TestContext& ctx)
 
   ReceiverCommand factory_reset{};
   factory_reset.safety_level = ReceiverCommandSafetyLevel::kFactoryReset;
-  ctx.Expect(universal_gnss_driver::RequiresExplicitSafetyConfirmation(
-                 factory_reset.safety_level) &&
-                 !universal_gnss_driver::HasSafeDispatchApproval(factory_reset),
-             "factory reset commands should require explicit safety confirmation");
+  ctx.Expect(
+      universal_gnss_driver::RequiresExplicitSafetyConfirmation(factory_reset.safety_level) &&
+          !universal_gnss_driver::HasSafeDispatchApproval(factory_reset),
+      "factory reset commands should require explicit safety confirmation");
 }
 
 void TestConfigProfileDeclarations(TestContext& ctx)
@@ -102,23 +98,19 @@ void TestConfigProfileDeclarations(TestContext& ctx)
       ReceiverConfigProfileKind::kDiagnosticsOutput);
 
   ctx.Expect(universal_gnss_driver::RequiresReceiverFeature(rover, ReceiverFeature::kRoverMode) &&
-                 !universal_gnss_driver::RequiresReceiverFeature(
-                     rover, ReceiverFeature::kBaseMode),
+                 !universal_gnss_driver::RequiresReceiverFeature(rover, ReceiverFeature::kBaseMode),
              "rover profile should require rover-mode support only");
   ctx.Expect(universal_gnss_driver::RequiresReceiverFeature(base, ReceiverFeature::kBaseMode),
              "base profile should require base-mode support");
-  ctx.Expect(universal_gnss_driver::RequiresReceiverFeature(
-                 survey_in, ReceiverFeature::kBaseMode) &&
-                 universal_gnss_driver::RequiresReceiverFeature(
-                     survey_in, ReceiverFeature::kSurveyIn),
-             "survey-in profile should require both base-mode and survey-in support");
-  ctx.Expect(universal_gnss_driver::RequiresOutputProtocol(
-                 nmea_output, ReceiverProtocol::kNmea) &&
-                 universal_gnss_driver::RequiresOutputProtocol(
-                     rtcm_output, ReceiverProtocol::kRtcm3),
-             "output-oriented profiles should declare their required output protocols");
-  ctx.Expect(diagnostics_output.default_safety_level ==
-                 ReceiverCommandSafetyLevel::kRuntime &&
+  ctx.Expect(
+      universal_gnss_driver::RequiresReceiverFeature(survey_in, ReceiverFeature::kBaseMode) &&
+          universal_gnss_driver::RequiresReceiverFeature(survey_in, ReceiverFeature::kSurveyIn),
+      "survey-in profile should require both base-mode and survey-in support");
+  ctx.Expect(
+      universal_gnss_driver::RequiresOutputProtocol(nmea_output, ReceiverProtocol::kNmea) &&
+          universal_gnss_driver::RequiresOutputProtocol(rtcm_output, ReceiverProtocol::kRtcm3),
+      "output-oriented profiles should declare their required output protocols");
+  ctx.Expect(diagnostics_output.default_safety_level == ReceiverCommandSafetyLevel::kRuntime &&
                  diagnostics_output.required_features == 0u,
              "diagnostics output profile should stay generic and runtime-safe by default");
 }
@@ -154,9 +146,11 @@ void TestConfigProfilesAgainstReceiverProfiles(TestContext& ctx)
                  universal_gnss_driver::CanApplyConfigProfile(unicore.capabilities, survey_in) &&
                  universal_gnss_driver::CanApplyConfigProfile(unicore.capabilities, rtcm_output),
              "Unicore placeholder should advertise base, survey-in, and RTCM output support");
-  ctx.Expect(universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rover) &&
-                 universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rtcm_output),
-             "model-specific UM982 profiles should remain compatible with rover and RTCM-output generic intents");
+  ctx.Expect(
+      universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rover) &&
+          universal_gnss_driver::CanApplyConfigProfile(unicore_um982.capabilities, rtcm_output),
+      "model-specific UM982 profiles should remain compatible with rover and RTCM-output generic "
+      "intents");
 }
 
 }  // namespace

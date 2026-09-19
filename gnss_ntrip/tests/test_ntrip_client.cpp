@@ -1,6 +1,6 @@
-#include <csignal>
-#include <chrono>
 #include <cerrno>
+#include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -15,16 +15,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "tls_loopback_server.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
-#include "universal_gnss_ntrip/ntrip_client.hpp"
 #include "universal_gnss_ntrip/gga_generator.hpp"
+#include "universal_gnss_ntrip/ntrip_client.hpp"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
-#include "tls_loopback_server.hpp"
 
 namespace
 {
@@ -33,10 +33,10 @@ using universal_gnss::GnssDiagnosticSeverity;
 using universal_gnss::GnssFixType;
 using universal_gnss_ntrip::NtripClient;
 using universal_gnss_ntrip::NtripClientError;
-using universal_gnss_ntrip::NtripGgaSendError;
-using universal_gnss_ntrip::NtripGgaSendStatus;
 using universal_gnss_ntrip::NtripClientState;
 using universal_gnss_ntrip::NtripConfig;
+using universal_gnss_ntrip::NtripGgaSendError;
+using universal_gnss_ntrip::NtripGgaSendStatus;
 using universal_gnss_ntrip::NtripVersion;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaGgaFixQuality;
@@ -94,10 +94,8 @@ public:
     std::size_t offset = 0u;
     while (offset < data.size())
     {
-      const ssize_t bytes_written =
-          ::write(peer_fd_,
-                  data.data() + static_cast<std::ptrdiff_t>(offset),
-                  data.size() - offset);
+      const ssize_t bytes_written = ::write(
+          peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
       if (bytes_written < 0)
       {
         if (errno == EINTR)
@@ -125,9 +123,7 @@ public:
     while (offset < size)
     {
       const ssize_t bytes_read =
-          ::read(peer_fd_,
-                 buffer.data() + static_cast<std::ptrdiff_t>(offset),
-                 size - offset);
+          ::read(peer_fd_, buffer.data() + static_cast<std::ptrdiff_t>(offset), size - offset);
       if (bytes_read < 0)
       {
         if (errno == EINTR)
@@ -180,12 +176,10 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
       static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
   };
 
-  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u,
-                                     static_cast<std::uint8_t>(payload.size())};
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x1u;
@@ -261,8 +255,7 @@ std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -447,22 +440,22 @@ void TestTlsNtripRequestResponseFlow(TestContext& ctx)
       'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
   const std::vector<std::uint8_t> rtcm = BuildRtcmFrame(1005u);
   Append(response, rtcm);
-  universal_gnss_transport::test::TlsLoopbackServer server({
-      false,
-      [&request, &response](SSL* session) {
-        std::vector<std::uint8_t> received(request.size());
-        return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
-                   session, received.data(), received.size()) &&
-               std::string(received.begin(), received.end()) == request &&
-               universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
-                   session, response.data(), response.size());
-      }});
+  universal_gnss_transport::test::TlsLoopbackServer server(
+      {false, [&request, &response](SSL* session) {
+         std::vector<std::uint8_t> received(request.size());
+         return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
+                    session, received.data(), received.size()) &&
+                std::string(received.begin(), received.end()) == request &&
+                universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
+                    session, response.data(), response.size());
+       }});
   ctx.Expect(server.Start(), "TLS NTRIP loopback server should start on localhost");
   config.port = server.port();
   request = universal_gnss_ntrip::BuildNtripGetRequest(config).request_text;
 
   NtripClient client(config);
-  ctx.Expect(client.Connect() == NtripClientError::kNone && client.SendRequest() == NtripClientError::kNone,
+  ctx.Expect(client.Connect() == NtripClientError::kNone &&
+                 client.SendRequest() == NtripClientError::kNone,
              "NtripClient should establish verified TLS and send its NTRIP request");
   std::vector<std::uint8_t> buffer(256u, 0u);
   const auto read_result = client.Read(buffer.data(), buffer.size(), 1000000000LL);
@@ -485,13 +478,11 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
   client.set_tcp_config(tcp_config);
 
   ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone &&
-                 client.state() == NtripClientState::kConnected &&
-                 client.IsConnected() &&
+                 client.state() == NtripClientState::kConnected && client.IsConnected() &&
                  client.metrics().connected,
              "adopting a connected socket should move the NTRIP client into the connected state");
 
-  ctx.Expect(client.SendRequest() == NtripClientError::kNone &&
-                 client.metrics().request_sent &&
+  ctx.Expect(client.SendRequest() == NtripClientError::kNone && client.metrics().request_sent &&
                  client.metrics().bytes_sent == client.request().request_text.size(),
              "sending the NTRIP request should write bytes and mark the request as sent");
 
@@ -508,7 +499,8 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
   const std::string header = "ICY 200 OK\r\nNtrip-Version: Ntrip/2.0\r\n\r\n";
   response.insert(response.end(), header.begin(), header.end());
   Append(response, payload);
-  ctx.Expect(sockets.WritePeer(response), "the fake peer should send a valid NTRIP response and RTCM payload");
+  ctx.Expect(sockets.WritePeer(response),
+             "the fake peer should send a valid NTRIP response and RTCM payload");
 
   std::vector<std::uint8_t> read_buffer(128u, 0u);
   const auto read_result = client.Read(read_buffer.data(), read_buffer.size(), 1000000000LL);
@@ -516,13 +508,12 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
 
   ctx.Expect(read_result.client_error == NtripClientError::kNone &&
                  read_result.transport_status == universal_gnss_transport::TransportStatus::kOk &&
-                 read_result.bytes_read == payload.size() &&
-                 read_buffer == payload,
+                 read_result.bytes_read == payload.size() && read_buffer == payload,
              "reading after a valid ICY response should return only the RTCM payload bytes");
-  ctx.Expect(client.state() == NtripClientState::kStreaming &&
-                 client.metrics().response_received &&
-                 client.response_header() == header,
-             "a valid NTRIP response should move the client into streaming state and capture the header");
+  ctx.Expect(
+      client.state() == NtripClientState::kStreaming && client.metrics().response_received &&
+          client.response_header() == header,
+      "a valid NTRIP response should move the client into streaming state and capture the header");
   ctx.Expect(client.metrics().bytes_received == response.size() &&
                  client.metrics().rtcm_frames_seen == 2u &&
                  client.metrics().rtcm_frames_received == 2u &&
@@ -543,10 +534,10 @@ void TestRequestAndStreamingFlow(TestContext& ctx)
   health_options.require_any_msm = true;
   const auto health = client.BuildCorrectionHealth(health_options);
 
-  ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk &&
-                 health.correction_available &&
-                 !health.stale_data,
-             "correction health should report an active RTCM stream when required messages are present");
+  ctx.Expect(
+      health.overall_severity == GnssDiagnosticSeverity::kOk && health.correction_available &&
+          !health.stale_data,
+      "correction health should report an active RTCM stream when required messages are present");
 }
 
 void TestSplitHttpResponseAndDisconnect(TestContext& ctx)
@@ -570,11 +561,11 @@ void TestSplitHttpResponseAndDisconnect(TestContext& ctx)
 
   std::vector<std::uint8_t> read_buffer(64u, 0u);
   const auto first_read = client.Read(read_buffer.data(), read_buffer.size(), 2000000000LL);
-  ctx.Expect(first_read.client_error == NtripClientError::kNone &&
-                 first_read.bytes_read == 0u &&
+  ctx.Expect(first_read.client_error == NtripClientError::kNone && first_read.bytes_read == 0u &&
                  client.state() == NtripClientState::kConnected &&
                  !client.metrics().response_received,
-             "a partial HTTP response should keep the client connected until the header terminator arrives");
+             "a partial HTTP response should keep the client connected until the header terminator "
+             "arrives");
 
   const auto payload = BuildRtcmFrame(1087u);
   std::vector<std::uint8_t> second_chunk = {'\r', '\n'};
@@ -584,17 +575,15 @@ void TestSplitHttpResponseAndDisconnect(TestContext& ctx)
 
   const auto second_read = client.Read(read_buffer.data(), read_buffer.size(), 2000000000LL);
   read_buffer.resize(second_read.bytes_read);
-  ctx.Expect(second_read.client_error == NtripClientError::kNone &&
-                 second_read.bytes_read == payload.size() &&
-                 read_buffer == payload &&
-                 client.state() == NtripClientState::kStreaming &&
-                 client.metrics().response_received &&
-                 client.metrics().last_rtcm_message_type == 1087u,
-             "the client should transition into streaming once the rest of the response header arrives");
+  ctx.Expect(
+      second_read.client_error == NtripClientError::kNone &&
+          second_read.bytes_read == payload.size() && read_buffer == payload &&
+          client.state() == NtripClientState::kStreaming && client.metrics().response_received &&
+          client.metrics().last_rtcm_message_type == 1087u,
+      "the client should transition into streaming once the rest of the response header arrives");
 
   client.Disconnect();
-  ctx.Expect(client.state() == NtripClientState::kDisconnected &&
-                 !client.IsConnected() &&
+  ctx.Expect(client.state() == NtripClientState::kDisconnected && !client.IsConnected() &&
                  !client.metrics().connected &&
                  client.metrics().last_error == NtripClientError::kNone,
              "explicit disconnect should close the client cleanly without forcing an error state");
@@ -621,8 +610,9 @@ void TestLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
   const std::string header = "ICY 200 OK\r\n";
   response.insert(response.end(), header.begin(), header.end());
   Append(response, payload);
-  ctx.Expect(sockets.WritePeer(response),
-             "the fake peer should send a legacy ICY response line followed directly by RTCM payload");
+  ctx.Expect(
+      sockets.WritePeer(response),
+      "the fake peer should send a legacy ICY response line followed directly by RTCM payload");
 
   std::vector<std::uint8_t> read_buffer(128u, 0u);
   const auto read_result = client.Read(read_buffer.data(), read_buffer.size(), 2500000000LL);
@@ -630,11 +620,10 @@ void TestLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
 
   ctx.Expect(read_result.client_error == NtripClientError::kNone &&
                  read_result.transport_status == universal_gnss_transport::TransportStatus::kOk &&
-                 read_result.bytes_read == payload.size() &&
-                 read_buffer == payload,
-             "legacy ICY responses without a blank header terminator should still return the RTCM payload");
-  ctx.Expect(client.state() == NtripClientState::kStreaming &&
-                 client.metrics().response_received &&
+                 read_result.bytes_read == payload.size() && read_buffer == payload,
+             "legacy ICY responses without a blank header terminator should still return the RTCM "
+             "payload");
+  ctx.Expect(client.state() == NtripClientState::kStreaming && client.metrics().response_received &&
                  client.response_header() == header,
              "legacy ICY responses should still transition the client into streaming state");
   ctx.Expect(client.metrics().rtcm_frames_seen == 1u &&
@@ -665,11 +654,10 @@ void TestSplitLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
 
   std::vector<std::uint8_t> read_buffer(128u, 0u);
   const auto first_read = client.Read(read_buffer.data(), read_buffer.size(), 2600000000LL);
-  ctx.Expect(first_read.client_error == NtripClientError::kNone &&
-                 first_read.bytes_read == 0u &&
-                 client.state() == NtripClientState::kConnected &&
-                 !client.metrics().response_received,
-             "a standalone legacy ICY status line should keep the client connected until payload arrives");
+  ctx.Expect(
+      first_read.client_error == NtripClientError::kNone && first_read.bytes_read == 0u &&
+          client.state() == NtripClientState::kConnected && !client.metrics().response_received,
+      "a standalone legacy ICY status line should keep the client connected until payload arrives");
 
   const auto payload = BuildRtcmFrame(1077u);
   ctx.Expect(sockets.WritePeer(payload),
@@ -679,26 +667,27 @@ void TestSplitLegacyIcyResponseWithoutBlankLine(TestContext& ctx)
   read_buffer.resize(second_read.bytes_read);
   ctx.Expect(second_read.client_error == NtripClientError::kNone &&
                  second_read.transport_status == universal_gnss_transport::TransportStatus::kOk &&
-                 second_read.bytes_read == payload.size() &&
-                 read_buffer == payload &&
+                 second_read.bytes_read == payload.size() && read_buffer == payload &&
                  client.state() == NtripClientState::kStreaming &&
-                 client.metrics().response_received &&
-                 client.response_header() == "ICY 200 OK\r\n",
-             "a split legacy ICY response should still transition into streaming when the payload arrives");
+                 client.metrics().response_received && client.response_header() == "ICY 200 OK\r\n",
+             "a split legacy ICY response should still transition into streaming when the payload "
+             "arrives");
 }
 
 void TestLegacyIcyResponseWithMidFrameBinary(TestContext& ctx)
 {
   SocketPair sockets;
-  ctx.Expect(sockets.Open(), "socketpair fixture should open for mid-frame legacy ICY response test");
+  ctx.Expect(sockets.Open(),
+             "socketpair fixture should open for mid-frame legacy ICY response test");
 
   NtripClient client(MakeConfig());
   universal_gnss_transport::TcpClientConfig tcp_config;
   tcp_config.read_timeout_ms = 100u;
   client.set_tcp_config(tcp_config);
 
-  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
-             "adopting a connected socket should succeed for the mid-frame legacy ICY response test");
+  ctx.Expect(
+      client.AdoptConnectedSocket(sockets.ReleaseClientFd()) == NtripClientError::kNone,
+      "adopting a connected socket should succeed for the mid-frame legacy ICY response test");
   ctx.Expect(client.SendRequest() == NtripClientError::kNone,
              "sending the request should succeed before a mid-frame legacy ICY response");
   sockets.ReadPeerExact(client.request().request_text.size());
@@ -709,7 +698,8 @@ void TestLegacyIcyResponseWithMidFrameBinary(TestContext& ctx)
   response.insert(response.end(), header.begin(), header.end());
   Append(response, payload);
   ctx.Expect(sockets.WritePeer(response),
-             "the fake peer should send a legacy ICY response line followed by binary payload that does not start on an RTCM frame boundary");
+             "the fake peer should send a legacy ICY response line followed by binary payload that "
+             "does not start on an RTCM frame boundary");
 
   std::vector<std::uint8_t> read_buffer(128u, 0u);
   const auto read_result = client.Read(read_buffer.data(), read_buffer.size(), 2800000000LL);
@@ -717,11 +707,10 @@ void TestLegacyIcyResponseWithMidFrameBinary(TestContext& ctx)
 
   ctx.Expect(read_result.client_error == NtripClientError::kNone &&
                  read_result.transport_status == universal_gnss_transport::TransportStatus::kOk &&
-                 read_result.bytes_read == payload.size() &&
-                 read_buffer == payload,
-             "legacy ICY responses should still enter streaming when binary payload bytes arrive mid-frame");
-  ctx.Expect(client.state() == NtripClientState::kStreaming &&
-                 client.metrics().response_received &&
+                 read_result.bytes_read == payload.size() && read_buffer == payload,
+             "legacy ICY responses should still enter streaming when binary payload bytes arrive "
+             "mid-frame");
+  ctx.Expect(client.state() == NtripClientState::kStreaming && client.metrics().response_received &&
                  client.response_header() == header,
              "binary payload after a legacy ICY line should still mark the response as received");
 }
@@ -758,7 +747,8 @@ void TestNtripStatusCodeTokenValidation(TestContext& ctx)
                    client.state() == NtripClientState::kStreaming &&
                    client.metrics().response_received && buffer == payload &&
                    client.metrics().rtcm_frames_received == 1u,
-               "an exact successful NTRIP status token should enter streaming and preserve same-read RTCM payload");
+               "an exact successful NTRIP status token should enter streaming and preserve "
+               "same-read RTCM payload");
   }
 
   const std::vector<std::string> rejected_headers = {
@@ -789,12 +779,12 @@ void TestNtripStatusCodeTokenValidation(TestContext& ctx)
 
     std::vector<std::uint8_t> buffer(64u, 0u);
     const auto read_result = client.Read(buffer.data(), buffer.size(), 6000000000LL);
-    ctx.Expect(read_result.client_error == NtripClientError::kHttp &&
-                   read_result.bytes_read == 0u && client.state() == NtripClientState::kFailed &&
-                   !client.metrics().response_received &&
-                   client.metrics().rtcm_frames_seen == 0u &&
-                   client.correction_monitor().MessageCount(1005u) == 0u,
-               "malformed/non-200 NTRIP status tokens must fail without consuming RTCM suffix bytes");
+    ctx.Expect(
+        read_result.client_error == NtripClientError::kHttp && read_result.bytes_read == 0u &&
+            client.state() == NtripClientState::kFailed && !client.metrics().response_received &&
+            client.metrics().rtcm_frames_seen == 0u &&
+            client.correction_monitor().MessageCount(1005u) == 0u,
+        "malformed/non-200 NTRIP status tokens must fail without consuming RTCM suffix bytes");
   }
 }
 
@@ -816,8 +806,7 @@ void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
     const auto read_result = client.Read(buffer.data(), buffer.size(), 3000000000LL);
 
     ctx.Expect(read_result.client_error == NtripClientError::kHttp &&
-                   client.state() == NtripClientState::kFailed &&
-                   !client.metrics().connected &&
+                   client.state() == NtripClientState::kFailed && !client.metrics().connected &&
                    !client.metrics().response_received &&
                    client.metrics().last_error == NtripClientError::kHttp,
                "non-200 NTRIP responses should fail with an HTTP error");
@@ -859,8 +848,7 @@ void TestInvalidResponsesAndConnectFailure(TestContext& ctx)
     invalid.host = "256.256.256.256";
     NtripClient client(invalid);
     ctx.Expect(client.Connect() == NtripClientError::kDisconnected &&
-                   client.state() == NtripClientState::kFailed &&
-                   !client.metrics().connected,
+                   client.state() == NtripClientState::kFailed && !client.metrics().connected,
                "unresolvable TCP hosts should fail the connect step cleanly");
   }
 }
@@ -1041,8 +1029,9 @@ void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
   options.stale_after_ns = 5 * kSecond;
   options.required_observation_window_ns = 30 * kSecond;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
-  ctx.Expect(client.correction_monitor().HasRequiredCorrectionMessages(options),
-             "same source/station reconnect should combine retained static metadata only with new MSM");
+  ctx.Expect(
+      client.correction_monitor().HasRequiredCorrectionMessages(options),
+      "same source/station reconnect should combine retained static metadata only with new MSM");
 
   const auto station_b_msm = BuildRtcmMsmFrame(1077u, 24u, {1u}, {1u}, {true});
   ctx.Expect(same_source_reconnect.WritePeer(station_b_msm),
@@ -1055,8 +1044,8 @@ void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
   NtripClient changed_source_client(config);
   ConfigureNonblockingReads(changed_source_client);
   SocketPair original_source;
-  if (!BeginStreaming(ctx, original_source, changed_source_client, 1 * kSecond,
-                      BuildRtcm1005Frame(23u)))
+  if (!BeginStreaming(
+          ctx, original_source, changed_source_client, 1 * kSecond, BuildRtcm1005Frame(23u)))
   {
     return;
   }
@@ -1071,15 +1060,16 @@ void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
   NtripConfig changed_source = config;
   changed_source.mountpoint = "OTHER";
   changed_source_client.set_config(changed_source);
-  ctx.Expect(changed_source_client.state() == NtripClientState::kDisconnected &&
-                 !changed_source_client.correction_monitor().HasBaseStationPosition(),
-             "explicit mountpoint/source change must close the session and clear old static metadata");
+  ctx.Expect(
+      changed_source_client.state() == NtripClientState::kDisconnected &&
+          !changed_source_client.correction_monitor().HasBaseStationPosition(),
+      "explicit mountpoint/source change must close the session and clear old static metadata");
 
   NtripClient changed_port_client(config);
   ConfigureNonblockingReads(changed_port_client);
   SocketPair original_port_source;
-  if (!BeginStreaming(ctx, original_port_source, changed_port_client, 1 * kSecond,
-                      BuildRtcm1005Frame(23u)))
+  if (!BeginStreaming(
+          ctx, original_port_source, changed_port_client, 1 * kSecond, BuildRtcm1005Frame(23u)))
   {
     return;
   }
@@ -1093,8 +1083,8 @@ void TestCorrectionSourceOwnsStaticMetadataAcrossReconnect(TestContext& ctx)
   NtripClient changed_host_client(config);
   ConfigureNonblockingReads(changed_host_client);
   SocketPair original_host_source;
-  if (!BeginStreaming(ctx, original_host_source, changed_host_client, 1 * kSecond,
-                      BuildRtcm1005Frame(23u)))
+  if (!BeginStreaming(
+          ctx, original_host_source, changed_host_client, 1 * kSecond, BuildRtcm1005Frame(23u)))
   {
     return;
   }
@@ -1167,12 +1157,10 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
     const auto framed = FrameNmeaSentence(peer_text);
     const auto parsed = universal_gnss_protocols::ParseNmeaGga(framed);
     ctx.Expect(framed.checksum_status == ChecksumStatus::kValid &&
-                   parsed.status == ParserStatus::kRecordReady &&
-                   parsed.record.has_value() &&
+                   parsed.status == ParserStatus::kRecordReady && parsed.record.has_value() &&
                    parsed.record->fix_quality == NmeaGgaFixQuality::kGpsFix,
                "SendGga should emit a valid checksum-protected GGA sentence");
-    ctx.Expect(client.metrics().gga_sent_count == 1u &&
-                   client.metrics().gga_send_errors == 0u &&
+    ctx.Expect(client.metrics().gga_sent_count == 1u && client.metrics().gga_send_errors == 0u &&
                    client.metrics().last_gga_sent_timestamp_ns ==
                        std::optional<std::int64_t>(123456789LL) &&
                    !client.metrics().last_gga_error.has_value() &&
@@ -1193,8 +1181,7 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
 
     const auto maybe_result = client.MaybeSendGga(MakeRuntimeState(), 1000000000LL);
     ctx.Expect(maybe_result.status == NtripGgaSendStatus::kSkippedDisabled &&
-                   maybe_result.skipped() &&
-                   client.metrics().gga_sent_count == 0u &&
+                   maybe_result.skipped() && client.metrics().gga_sent_count == 0u &&
                    client.metrics().bytes_sent == 0u,
                "MaybeSendGga should no-op cleanly when the policy is disabled");
   }
@@ -1241,8 +1228,7 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
 
     const auto maybe_result = client.MaybeSendGga(no_fix_state, 1000000000LL);
     ctx.Expect(maybe_result.status == NtripGgaSendStatus::kSkippedPositionRequired &&
-                   client.metrics().gga_sent_count == 0u &&
-                   client.metrics().gga_send_errors == 0u,
+                   client.metrics().gga_sent_count == 0u && client.metrics().gga_send_errors == 0u,
                "MaybeSendGga should no-op when the policy requires a position fix and none exists");
   }
 
@@ -1260,17 +1246,18 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
     invalid_state.longitude_deg.reset();
 
     const auto send_result = client.MaybeSendGga(invalid_state, 1000000000LL);
-    ctx.Expect(send_result.status == NtripGgaSendStatus::kError &&
-                   send_result.send_error ==
-                       std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
-                   send_result.generation_error ==
-                       std::optional<universal_gnss_ntrip::GgaGenerationError>(
-                           universal_gnss_ntrip::GgaGenerationError::kMissingLongitude) &&
-                   client.metrics().gga_send_errors == 1u &&
-                   client.metrics().last_gga_error ==
-                       std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
-                   client.state() == NtripClientState::kConnected,
-               "invalid runtime state should increment GGA error metrics without crashing the client");
+    ctx.Expect(
+        send_result.status == NtripGgaSendStatus::kError &&
+            send_result.send_error ==
+                std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
+            send_result.generation_error ==
+                std::optional<universal_gnss_ntrip::GgaGenerationError>(
+                    universal_gnss_ntrip::GgaGenerationError::kMissingLongitude) &&
+            client.metrics().gga_send_errors == 1u &&
+            client.metrics().last_gga_error ==
+                std::optional<NtripGgaSendError>(NtripGgaSendError::kGenerationFailed) &&
+            client.state() == NtripClientState::kConnected,
+        "invalid runtime state should increment GGA error metrics without crashing the client");
   }
 
   {
@@ -1295,7 +1282,8 @@ void TestExplicitAndPolicyDrivenGgaSending(TestContext& ctx)
                        std::optional<NtripGgaSendError>(NtripGgaSendError::kWriteFailure) &&
                    client.state() == NtripClientState::kFailed &&
                    client.metrics().last_error == NtripClientError::kDisconnected,
-               "transport write failures should update GGA metrics and move the client into a failed state");
+               "transport write failures should update GGA metrics and move the client into a "
+               "failed state");
   }
 }
 
@@ -1308,15 +1296,15 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
 
     const auto inject_result = client.MaybeInjectGga(MakeRuntimeState(), 1000000000LL);
     ctx.Expect(inject_result.status == NtripGgaSendStatus::kSkippedNotStreaming &&
-                   inject_result.skipped() &&
-                   client.gga_metrics().attempts == 0u &&
+                   inject_result.skipped() && client.gga_metrics().attempts == 0u &&
                    client.metrics().gga_sent_count == 0u,
                "MaybeInjectGga should no-op cleanly before the client reaches the streaming state");
   }
 
   {
     SocketPair sockets;
-    ctx.Expect(sockets.Open(), "socketpair fixture should open for streaming-only GGA injection test");
+    ctx.Expect(sockets.Open(),
+               "socketpair fixture should open for streaming-only GGA injection test");
 
     NtripConfig config = MakeConfig();
     config.send_gga = true;
@@ -1352,15 +1340,15 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
     const auto expected_sentence =
         universal_gnss_ntrip::GenerateGgaFromRuntimeState(MakeRuntimeState()).sentence;
     const auto first_inject = client.MaybeInjectGga(MakeRuntimeState(), 2000000000LL);
-    ctx.Expect(first_inject.status == NtripGgaSendStatus::kSent &&
-                   client.gga_metrics().attempts == 1u &&
-                   client.gga_metrics().sentences_built == 1u &&
-                   client.gga_metrics().sentences_sent == 1u &&
-                   client.metrics().gga_sent_count == 1u &&
-                   client.metrics().bytes_sent == bytes_sent_before + expected_sentence.size() &&
-                   client.gga_injection_policy().last_sent_timestamp_ns ==
-                       std::optional<std::int64_t>(2000000000LL),
-               "MaybeInjectGga should send once streaming, update injector metrics, and reflect bytes in the client metrics");
+    ctx.Expect(
+        first_inject.status == NtripGgaSendStatus::kSent && client.gga_metrics().attempts == 1u &&
+            client.gga_metrics().sentences_built == 1u &&
+            client.gga_metrics().sentences_sent == 1u && client.metrics().gga_sent_count == 1u &&
+            client.metrics().bytes_sent == bytes_sent_before + expected_sentence.size() &&
+            client.gga_injection_policy().last_sent_timestamp_ns ==
+                std::optional<std::int64_t>(2000000000LL),
+        "MaybeInjectGga should send once streaming, update injector metrics, and reflect bytes in "
+        "the client metrics");
 
     const auto peer_bytes = sockets.ReadPeerExact(expected_sentence.size());
     const std::string peer_text(peer_bytes.begin(), peer_bytes.end());
@@ -1377,7 +1365,8 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
 
   {
     SocketPair sockets;
-    ctx.Expect(sockets.Open(), "socketpair fixture should open for missing-position explicit GGA test");
+    ctx.Expect(sockets.Open(),
+               "socketpair fixture should open for missing-position explicit GGA test");
 
     NtripConfig config = MakeConfig();
     config.send_gga = true;
@@ -1428,7 +1417,8 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
 
   {
     SocketPair sockets;
-    ctx.Expect(sockets.Open(), "socketpair fixture should open for write-failure explicit GGA test");
+    ctx.Expect(sockets.Open(),
+               "socketpair fixture should open for write-failure explicit GGA test");
 
     NtripConfig config = MakeConfig();
     config.send_gga = true;
@@ -1455,7 +1445,8 @@ void TestExplicitStreamingOnlyGgaInjection(TestContext& ctx)
                    client.metrics().gga_send_errors == 1u &&
                    !client.gga_injection_policy().last_sent_timestamp_ns.has_value() &&
                    client.state() == NtripClientState::kFailed,
-               "explicit GGA write failures should update both injector and client metrics without advancing last-sent time");
+               "explicit GGA write failures should update both injector and client metrics without "
+               "advancing last-sent time");
   }
 }
 

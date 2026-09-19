@@ -4,11 +4,11 @@
 #include <string>
 #include <vector>
 
+#include "testdata_utils.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
 #include "universal_gnss_protocols/rtcm_records.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
-#include "testdata_utils.hpp"
 
 namespace
 {
@@ -38,12 +38,10 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
       static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
   };
 
-  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u,
-                                     static_cast<std::uint8_t>(payload.size())};
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x1u;
@@ -60,8 +58,7 @@ std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8
   std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -163,8 +160,7 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
   std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -212,8 +208,7 @@ std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
   std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -329,10 +324,8 @@ void TestInspectionCounts(TestContext& ctx)
              "inspection should count valid and invalid frames");
   ctx.Expect(result.summary.malformed_events == 1u && result.summary.truncated_frames == 1u,
              "inspection should report the truncated trailing frame");
-  ctx.Expect(result.frames.size() == 3u,
-             "inspection should retain per-frame records by default");
-  ctx.Expect(result.frames[0].byte_offset == 3u &&
-                 result.frames[1].byte_offset == 11u &&
+  ctx.Expect(result.frames.size() == 3u, "inspection should retain per-frame records by default");
+  ctx.Expect(result.frames[0].byte_offset == 3u && result.frames[1].byte_offset == 11u &&
                  result.frames[2].byte_offset == 19u,
              "inspection should expose frame byte offsets");
   ctx.Expect(result.summary.counts_by_message_type.at(1005u) == 1u &&
@@ -346,8 +339,7 @@ void TestInspectionCounts(TestContext& ctx)
 
 void TestInvalidCrcFrameHandling(TestContext& ctx)
 {
-  const auto result =
-      universal_gnss_tools::InspectRtcmBytes(BuildRtcmFrame(1230u, false), false);
+  const auto result = universal_gnss_tools::InspectRtcmBytes(BuildRtcmFrame(1230u, false), false);
 
   ctx.Expect(result.frames.empty(),
              "inspection should omit frame details when include_frames is false");
@@ -371,16 +363,18 @@ void TestFormattedOutput(TestContext& ctx)
              "text output should include the first frame summary");
   ctx.Expect(text.find("type=1077 class=msm:gps crc=valid") != std::string::npos,
              "text output should classify GPS MSM frames");
-  ctx.Expect(summary.find("summary total_bytes=31 frames=3 valid=3 invalid=0 malformed=1 truncated=1") !=
-                 std::string::npos,
-             "summary output should include aggregate counts");
+  ctx.Expect(
+      summary.find("summary total_bytes=31 frames=3 valid=3 invalid=0 malformed=1 truncated=1") !=
+          std::string::npos,
+      "summary output should include aggregate counts");
   ctx.Expect(summary.find("message_types 1005=1 1077=1 1087=1") != std::string::npos,
              "summary output should include counts by message type");
   ctx.Expect(summary.find("msm_constellations gps=1 glonass=1") != std::string::npos,
              "summary output should include MSM constellation counts");
   ctx.Expect(summary.find("base_station_arp seen=true decoded=false valid=false") !=
                  std::string::npos,
-             "summary output should expose semantic RTCM observations even without a decodable ARP payload");
+             "summary output should expose semantic RTCM observations even without a decodable ARP "
+             "payload");
   ctx.Expect(json.find("\"total_frames_found\":3") != std::string::npos &&
                  json.find("\"1005\":1") != std::string::npos &&
                  json.find("\"gps\":1") != std::string::npos &&
@@ -411,22 +405,14 @@ void TestDecodedBaseStationPositionSummary(TestContext& ctx)
 
 void TestDecodedGlonassBiasSummary(TestContext& ctx)
 {
-  const auto bytes = BuildRtcm1230Frame(42u,
-                                        true,
-                                        true,
-                                        false,
-                                        true,
-                                        true,
-                                        10,
-                                        std::nullopt,
-                                        -5,
-                                        7);
+  const auto bytes =
+      BuildRtcm1230Frame(42u, true, true, false, true, true, 10, std::nullopt, -5, 7);
   const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
   const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
   const std::string json = universal_gnss_tools::FormatRtcmInspectionJson(result, true);
 
   ctx.Expect(summary.find("glonass_code_phase_bias seen=true decoded=true valid=true") !=
-                 std::string::npos &&
+                     std::string::npos &&
                  summary.find("station_id=42") != std::string::npos &&
                  summary.find("signal_mask=0xD") != std::string::npos &&
                  summary.find("l1_ca_bias_m=0.2000") != std::string::npos,
@@ -440,15 +426,16 @@ void TestDecodedGlonassBiasSummary(TestContext& ctx)
 void TestDecodedMsmSummary(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes;
-  Append(bytes, BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u));
+  Append(bytes,
+         BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u));
   Append(bytes, BuildRtcmMsmFrame(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true}));
 
   const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
   const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
   const std::string json = universal_gnss_tools::FormatRtcmInspectionJson(result, true);
 
-  ctx.Expect(summary.find("msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=0 malformed=0 message_type=1087") !=
-                     std::string::npos &&
+  ctx.Expect(summary.find("msm_summary seen=true decoded=true valid=true decode_success=2 "
+                          "decode_failure=0 malformed=0 message_type=1087") != std::string::npos &&
                  summary.find("constellations_seen=gps,glonass") != std::string::npos &&
                  summary.find("station_id=42") != std::string::npos &&
                  summary.find("satellite_count=1") != std::string::npos &&
@@ -468,15 +455,14 @@ void TestDecodedMsmSummary(TestContext& ctx)
 
 void TestMalformedMsmSummary(TestContext& ctx)
 {
-  auto malformed_payload =
-      BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true}, false, 1u);
+  auto malformed_payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true}, false, 1u);
   malformed_payload.resize(21u);
   const auto bytes = BuildRtcmFrameFromPayload(malformed_payload);
   const auto result = universal_gnss_tools::InspectRtcmBytes(bytes, false);
   const std::string summary = universal_gnss_tools::FormatRtcmInspectionText(result, true);
 
-  ctx.Expect(summary.find("msm_summary seen=true decoded=false valid=false decode_success=0 decode_failure=1 malformed=1 message_type=1077") !=
-                 std::string::npos,
+  ctx.Expect(summary.find("msm_summary seen=true decoded=false valid=false decode_success=0 "
+                          "decode_failure=1 malformed=1 message_type=1077") != std::string::npos,
              "summary output should retain malformed MSM decode visibility");
 }
 
@@ -487,12 +473,10 @@ void TestFileBackedInspection(TestContext& ctx)
 
   ctx.Expect(result.summary.total_bytes_read == bytes.size(),
              "file-backed RTCM inspection should report the file byte size");
-  ctx.Expect(result.summary.total_frames_found == 3u &&
-                 result.summary.valid_frames == 3u &&
+  ctx.Expect(result.summary.total_frames_found == 3u && result.summary.valid_frames == 3u &&
                  result.summary.invalid_frames == 0u,
              "file-backed RTCM inspection should find three valid frames");
-  ctx.Expect(result.summary.malformed_events == 0u &&
-                 result.summary.truncated_frames == 0u,
+  ctx.Expect(result.summary.malformed_events == 0u && result.summary.truncated_frames == 0u,
              "file-backed RTCM inspection should not report malformed trailing data");
   ctx.Expect(result.summary.counts_by_message_type.at(1005u) == 1u &&
                  result.summary.counts_by_message_type.at(1077u) == 1u &&

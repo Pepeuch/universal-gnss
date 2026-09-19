@@ -15,14 +15,12 @@ constexpr std::size_t kUbxChecksumSize = 2u;
 
 }  // namespace
 
-UbxFrameFramer::UbxFrameFramer(std::size_t max_frame_length)
-    : max_frame_length_(max_frame_length)
+UbxFrameFramer::UbxFrameFramer(std::size_t max_frame_length) : max_frame_length_(max_frame_length)
 {
 }
 
-ParserResult<UbxFrame> UbxFrameFramer::PushByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<UbxFrame> UbxFrameFramer::PushByte(std::uint8_t byte,
+                                                std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (buffer_.empty())
   {
@@ -53,8 +51,7 @@ ParserResult<UbxFrame> UbxFrameFramer::PushByte(
   if (buffer_.size() == kUbxHeaderSize)
   {
     const std::size_t payload_size =
-        static_cast<std::size_t>(buffer_[4]) |
-        (static_cast<std::size_t>(buffer_[5]) << 8);
+        static_cast<std::size_t>(buffer_[4]) | (static_cast<std::size_t>(buffer_[5]) << 8);
     expected_frame_size_ = kUbxHeaderSize + payload_size + kUbxChecksumSize;
 
     if (expected_frame_size_ > max_frame_length_)
@@ -110,9 +107,8 @@ void UbxFrameFramer::Reset()
   expected_frame_size_ = 0u;
 }
 
-ParserResult<UbxFrame> UbxFrameFramer::StartSync(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<UbxFrame> UbxFrameFramer::StartSync(std::uint8_t byte,
+                                                 std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (byte != kUbxSync1)
   {
@@ -125,9 +121,7 @@ ParserResult<UbxFrame> UbxFrameFramer::StartSync(
   return ParserResult<UbxFrame>::NeedMoreData();
 }
 
-void UbxFrameFramer::AppendByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+void UbxFrameFramer::AppendByte(std::uint8_t byte, std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   buffer_.push_back(byte);
   byte_timestamps_.push_back(timestamp_ns);
@@ -144,17 +138,15 @@ std::optional<UbxFrame> UbxFrameFramer::FindEmbeddedValidFrame() const
       continue;
     }
 
-    const std::size_t payload_size =
-        static_cast<std::size_t>(buffer_[frame_offset + 4u]) |
-        (static_cast<std::size_t>(buffer_[frame_offset + 5u]) << 8);
+    const std::size_t payload_size = static_cast<std::size_t>(buffer_[frame_offset + 4u]) |
+                                     (static_cast<std::size_t>(buffer_[frame_offset + 5u]) << 8);
     const std::size_t frame_size = kUbxHeaderSize + payload_size + kUbxChecksumSize;
     if (frame_size > max_frame_length_ || frame_size > buffer_.size() - frame_offset)
     {
       continue;
     }
 
-    UbxFrame candidate = BuildFrame(
-        frame_offset, frame_size, byte_timestamps_[frame_offset]);
+    UbxFrame candidate = BuildFrame(frame_offset, frame_size, byte_timestamps_[frame_offset]);
     if (candidate.checksum_status == ChecksumStatus::kValid)
     {
       return candidate;
@@ -169,30 +161,26 @@ UbxFrame UbxFrameFramer::BuildFrame() const
   return BuildFrame(0u, buffer_.size(), frame_timestamp_ns_);
 }
 
-UbxFrame UbxFrameFramer::BuildFrame(
-    std::size_t frame_offset,
-    std::size_t frame_size,
-    std::optional<ProtocolTimestampNs> timestamp_ns) const
+UbxFrame UbxFrameFramer::BuildFrame(std::size_t frame_offset,
+                                    std::size_t frame_size,
+                                    std::optional<ProtocolTimestampNs> timestamp_ns) const
 {
   UbxFrame frame;
   frame.timestamp_ns = timestamp_ns;
-  frame.raw_bytes.assign(
-      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset),
-      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + frame_size));
+  frame.raw_bytes.assign(buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset),
+                         buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + frame_size));
   frame.class_id = buffer_[frame_offset + 2u];
   frame.message_id = buffer_[frame_offset + 3u];
 
   const std::size_t payload_size = frame_size - kUbxHeaderSize - kUbxChecksumSize;
   frame.payload.assign(
       buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + kUbxHeaderSize),
-      buffer_.begin() +
-          static_cast<std::ptrdiff_t>(frame_offset + kUbxHeaderSize + payload_size));
+      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + kUbxHeaderSize + payload_size));
 
   frame.reported_ck_a = buffer_[frame_offset + frame_size - 2u];
   frame.reported_ck_b = buffer_[frame_offset + frame_size - 1u];
   const UbxChecksum computed =
-      ComputeUbxChecksum(
-          buffer_.data() + frame_offset + 2u, frame_size - 2u - kUbxChecksumSize);
+      ComputeUbxChecksum(buffer_.data() + frame_offset + 2u, frame_size - 2u - kUbxChecksumSize);
   frame.computed_ck_a = computed.ck_a;
   frame.computed_ck_b = computed.ck_b;
   frame.checksum_status =

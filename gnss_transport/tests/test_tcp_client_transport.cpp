@@ -15,8 +15,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "universal_gnss_transport/tcp_client_transport.hpp"
 #include "tls_loopback_server.hpp"
+#include "universal_gnss_transport/tcp_client_transport.hpp"
 
 namespace
 {
@@ -86,10 +86,8 @@ public:
     std::size_t offset = 0u;
     while (offset < data.size())
     {
-      const ssize_t bytes_written =
-          ::write(peer_fd_,
-                  data.data() + static_cast<std::ptrdiff_t>(offset),
-                  data.size() - offset);
+      const ssize_t bytes_written = ::write(
+          peer_fd_, data.data() + static_cast<std::ptrdiff_t>(offset), data.size() - offset);
       if (bytes_written < 0)
       {
         if (errno == EINTR)
@@ -110,9 +108,7 @@ public:
     while (offset < size)
     {
       const ssize_t bytes_read =
-          ::read(peer_fd_,
-                 buffer.data() + static_cast<std::ptrdiff_t>(offset),
-                 size - offset);
+          ::read(peer_fd_, buffer.data() + static_cast<std::ptrdiff_t>(offset), size - offset);
       if (bytes_read < 0)
       {
         if (errno == EINTR)
@@ -249,8 +245,7 @@ int RunNormallyOpenedClosedPeerWriteChild(const std::uint16_t port,
   pollfd descriptor{};
   descriptor.fd = client.native_fd();
   descriptor.events = POLLIN;
-  if (::poll(&descriptor, 1, 1000) <= 0 ||
-      (descriptor.revents & (POLLIN | POLLERR | POLLHUP)) == 0)
+  if (::poll(&descriptor, 1, 1000) <= 0 || (descriptor.revents & (POLLIN | POLLERR | POLLHUP)) == 0)
   {
     return 23;
   }
@@ -287,7 +282,8 @@ void TestClosedPeerWritesDoNotRaiseSigpipe(TestContext& ctx)
       adopted_child > 0 && ChildExitedSuccessfully(adopted_child, adopted_status);
   ctx.Expect(adopted_succeeded,
              "adopted closed-peer write must survive default SIGPIPE and return kWriteFailure "
-             "(wait status=" + std::to_string(adopted_status) + ")");
+             "(wait status=" +
+                 std::to_string(adopted_status) + ")");
 
   std::uint16_t port = 0u;
   const int listener = CreateLoopbackListener(port);
@@ -339,18 +335,19 @@ void TestClosedPeerWritesDoNotRaiseSigpipe(TestContext& ctx)
     ::close(accepted);
   }
   const std::uint8_t peer_closed = 1u;
-  const bool notified_child = child_opened &&
-                              ::write(close_pipe[1], &peer_closed, 1u) == 1;
+  const bool notified_child = child_opened && ::write(close_pipe[1], &peer_closed, 1u) == 1;
   ::close(opened_pipe[0]);
   ::close(close_pipe[1]);
   ::close(listener);
 
   int normal_status = 0;
-  const bool normal_succeeded = normal_child > 0 &&
-                                ChildExitedSuccessfully(normal_child, normal_status);
-  ctx.Expect(child_opened && accepted >= 0 && notified_child && normal_succeeded,
-             "normally opened closed-peer write must survive default SIGPIPE and return kWriteFailure "
-             "(wait status=" + std::to_string(normal_status) + ")");
+  const bool normal_succeeded =
+      normal_child > 0 && ChildExitedSuccessfully(normal_child, normal_status);
+  ctx.Expect(
+      child_opened && accepted >= 0 && notified_child && normal_succeeded,
+      "normally opened closed-peer write must survive default SIGPIPE and return kWriteFailure "
+      "(wait status=" +
+          std::to_string(normal_status) + ")");
 }
 
 void TestOpenReadWriteCloseAndMetrics(TestContext& ctx)
@@ -367,33 +364,29 @@ void TestOpenReadWriteCloseAndMetrics(TestContext& ctx)
   config.write_timeout_ms = 200u;
 
   const auto open_error = client.AdoptConnectedSocket(sockets.ReleaseClientFd(), config);
-  ctx.Expect(
-      open_error == TransportError::kNone && client.IsOpen(),
-      "TCP client should adopt an already-connected stream socket (error=" + ToString(open_error) +
-          ", is_open=" + std::to_string(client.IsOpen()) + ")");
+  ctx.Expect(open_error == TransportError::kNone && client.IsOpen(),
+             "TCP client should adopt an already-connected stream socket (error=" +
+                 ToString(open_error) + ", is_open=" + std::to_string(client.IsOpen()) + ")");
 
   ctx.Expect(sockets.WritePeer(inbound), "socketpair peer should accept inbound data");
   std::vector<std::uint8_t> read_buffer(inbound.size(), 0u);
   const auto read_result = client.Read(read_buffer.data(), read_buffer.size());
-  ctx.Expect(
-      read_result.status == TransportStatus::kOk && read_result.bytes_read == inbound.size() &&
-          read_buffer == inbound,
-      "TCP client should read bytes sent by the socketpair peer (status=" +
-          ToString(read_result.status) + ", error=" + ToString(read_result.error) +
-          ", bytes=" + std::to_string(read_result.bytes_read) + ")");
+  ctx.Expect(read_result.status == TransportStatus::kOk &&
+                 read_result.bytes_read == inbound.size() && read_buffer == inbound,
+             "TCP client should read bytes sent by the socketpair peer (status=" +
+                 ToString(read_result.status) + ", error=" + ToString(read_result.error) +
+                 ", bytes=" + std::to_string(read_result.bytes_read) + ")");
 
   const auto write_result = client.Write(outbound.data(), outbound.size());
   const bool write_succeeded =
       write_result.status == TransportStatus::kOk && write_result.bytes_written == outbound.size();
-  ctx.Expect(
-      write_succeeded,
-      "TCP client should write bytes to the socketpair peer (status=" +
-          ToString(write_result.status) + ", error=" + ToString(write_result.error) +
-          ", bytes=" + std::to_string(write_result.bytes_written) + ")");
+  ctx.Expect(write_succeeded,
+             "TCP client should write bytes to the socketpair peer (status=" +
+                 ToString(write_result.status) + ", error=" + ToString(write_result.error) +
+                 ", bytes=" + std::to_string(write_result.bytes_written) + ")");
   ctx.Expect(client.metrics().bytes_read == inbound.size() &&
                  client.metrics().bytes_written == outbound.size() &&
-                 client.metrics().read_errors == 0u &&
-                 client.metrics().write_errors == 0u,
+                 client.metrics().read_errors == 0u && client.metrics().write_errors == 0u,
              "TCP client should update metrics for successful I/O");
 
   const std::vector<std::uint8_t> outbound_received =
@@ -413,18 +406,17 @@ void TestReadTimeoutAndNonblockingBehavior(TestContext& ctx)
   TcpClientConfig timeout_config;
   timeout_config.read_timeout_ms = 50u;
 
-  ctx.Expect(timeout_client.AdoptConnectedSocket(timeout_sockets.ReleaseClientFd(), timeout_config) ==
-                 TransportError::kNone,
+  ctx.Expect(timeout_client.AdoptConnectedSocket(timeout_sockets.ReleaseClientFd(),
+                                                 timeout_config) == TransportError::kNone,
              "TCP client should adopt a socket for timeout test");
 
   std::vector<std::uint8_t> buffer(4u, 0u);
   const auto timed_read = timeout_client.Read(buffer.data(), buffer.size());
-  ctx.Expect(
-      timed_read.status == TransportStatus::kOk && timed_read.bytes_read == 0u &&
-          timed_read.error == TransportError::kNone,
-      "read timeout without data should return zero bytes without transport error (status=" +
-          ToString(timed_read.status) + ", error=" + ToString(timed_read.error) +
-          ", bytes=" + std::to_string(timed_read.bytes_read) + ")");
+  ctx.Expect(timed_read.status == TransportStatus::kOk && timed_read.bytes_read == 0u &&
+                 timed_read.error == TransportError::kNone,
+             "read timeout without data should return zero bytes without transport error (status=" +
+                 ToString(timed_read.status) + ", error=" + ToString(timed_read.error) +
+                 ", bytes=" + std::to_string(timed_read.bytes_read) + ")");
 
   SocketPair nonblocking_sockets;
   ctx.Expect(nonblocking_sockets.Open(), "nonblocking socketpair fixture should open");
@@ -433,14 +425,12 @@ void TestReadTimeoutAndNonblockingBehavior(TestContext& ctx)
   TcpClientConfig nonblocking_config;
   nonblocking_config.nonblocking = true;
 
-  ctx.Expect(
-      nonblocking_client.AdoptConnectedSocket(nonblocking_sockets.ReleaseClientFd(), nonblocking_config) ==
-          TransportError::kNone,
-      "TCP client should adopt a socket in nonblocking mode");
+  ctx.Expect(nonblocking_client.AdoptConnectedSocket(nonblocking_sockets.ReleaseClientFd(),
+                                                     nonblocking_config) == TransportError::kNone,
+             "TCP client should adopt a socket in nonblocking mode");
 
   const auto nonblocking_read = nonblocking_client.Read(buffer.data(), buffer.size());
-  ctx.Expect(nonblocking_read.status == TransportStatus::kOk &&
-                 nonblocking_read.bytes_read == 0u &&
+  ctx.Expect(nonblocking_read.status == TransportStatus::kOk && nonblocking_read.bytes_read == 0u &&
                  nonblocking_read.error == TransportError::kNone,
              "nonblocking read without data should return zero bytes without transport error");
 }
@@ -466,8 +456,7 @@ void TestConnectFailureAndInvalidConfiguration(TestContext& ctx)
   connect_failure_config.connect_timeout_ms = 100u;
   const auto connect_error = client.Open(connect_failure_config);
   ctx.Expect(connect_error == TransportError::kConnectFailure &&
-                 client.metrics().last_error == TransportError::kConnectFailure &&
-                 !client.IsOpen(),
+                 client.metrics().last_error == TransportError::kConnectFailure && !client.IsOpen(),
              "invalid TCP host resolution should fail cleanly");
 }
 
@@ -478,7 +467,8 @@ void TestClosedReadWriteBehavior(TestContext& ctx)
 
   TcpClientTransport client;
   TcpClientConfig config;
-  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd(), config) == TransportError::kNone,
+  ctx.Expect(client.AdoptConnectedSocket(sockets.ReleaseClientFd(), config) ==
+                 TransportError::kNone,
              "TCP client should adopt a socket before close-behavior test");
 
   client.Close();
@@ -492,8 +482,7 @@ void TestClosedReadWriteBehavior(TestContext& ctx)
                  write_result.status == TransportStatus::kClosed &&
                  write_result.error == TransportError::kClosed,
              "closed TCP client should reject reads and writes");
-  ctx.Expect(client.metrics().read_errors == 1u &&
-                 client.metrics().write_errors == 1u &&
+  ctx.Expect(client.metrics().read_errors == 1u && client.metrics().write_errors == 1u &&
                  client.metrics().last_error == TransportError::kClosed,
              "closed-direction calls should update transport metrics");
 }
@@ -509,12 +498,11 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
   incomplete_credentials_config.tls_enabled = true;
   incomplete_credentials_config.tls_verify_peer = false;
   incomplete_credentials_config.tls_client_certificate_file = "/client-cert.pem";
-  ctx.Expect(
-      incomplete_credentials_client.AdoptConnectedSocket(
-          incomplete_credentials_sockets.ReleaseClientFd(), incomplete_credentials_config) ==
-              TransportError::kInvalidArgument &&
-          !incomplete_credentials_client.IsOpen(),
-      "a client certificate without a private key must be rejected before handshake");
+  ctx.Expect(incomplete_credentials_client.AdoptConnectedSocket(
+                 incomplete_credentials_sockets.ReleaseClientFd(), incomplete_credentials_config) ==
+                     TransportError::kInvalidArgument &&
+                 !incomplete_credentials_client.IsOpen(),
+             "a client certificate without a private key must be rejected before handshake");
 
   SocketPair invalid_credentials_sockets;
   ctx.Expect(invalid_credentials_sockets.Open(),
@@ -526,12 +514,11 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
   invalid_credentials_config.tls_verify_peer = false;
   invalid_credentials_config.tls_client_certificate_file = "/missing-client-cert.pem";
   invalid_credentials_config.tls_client_private_key_file = "/missing-client-key.pem";
-  ctx.Expect(
-      invalid_credentials_client.AdoptConnectedSocket(
-          invalid_credentials_sockets.ReleaseClientFd(), invalid_credentials_config) ==
-              TransportError::kTlsHandshakeFailure &&
-          !invalid_credentials_client.IsOpen(),
-      "invalid client certificate/key paths must fail closed before handshake");
+  ctx.Expect(invalid_credentials_client.AdoptConnectedSocket(
+                 invalid_credentials_sockets.ReleaseClientFd(), invalid_credentials_config) ==
+                     TransportError::kTlsHandshakeFailure &&
+                 !invalid_credentials_client.IsOpen(),
+             "invalid client certificate/key paths must fail closed before handshake");
 
   SocketPair invalid_ca_sockets;
   ctx.Expect(invalid_ca_sockets.Open(), "socketpair fixture should open for CA validation test");
@@ -540,11 +527,11 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
   invalid_ca_config.host = "localhost";
   invalid_ca_config.tls_enabled = true;
   invalid_ca_config.tls_ca_file = "/definitely-not-a-ca-bundle.pem";
-  ctx.Expect(
-      invalid_ca_client.AdoptConnectedSocket(invalid_ca_sockets.ReleaseClientFd(), invalid_ca_config) ==
-              TransportError::kTlsVerificationFailure &&
-          !invalid_ca_client.IsOpen(),
-      "an unreadable explicit CA bundle must fail TLS verification before the handshake");
+  ctx.Expect(invalid_ca_client.AdoptConnectedSocket(invalid_ca_sockets.ReleaseClientFd(),
+                                                    invalid_ca_config) ==
+                     TransportError::kTlsVerificationFailure &&
+                 !invalid_ca_client.IsOpen(),
+             "an unreadable explicit CA bundle must fail TLS verification before the handshake");
 
   SocketPair nonblocking_sockets;
   ctx.Expect(nonblocking_sockets.Open(), "socketpair fixture should open for TLS mode test");
@@ -554,14 +541,16 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
   nonblocking_config.host = "localhost";
   nonblocking_config.tls_enabled = true;
   nonblocking_config.nonblocking = true;
-  ctx.Expect(
-      nonblocking_client.AdoptConnectedSocket(
-          nonblocking_sockets.ReleaseClientFd(), nonblocking_config) == TransportError::kUnsupported &&
-          !nonblocking_client.IsOpen(),
-      "TLS transport should reject unsupported nonblocking handshakes without retaining the socket");
+  ctx.Expect(nonblocking_client.AdoptConnectedSocket(nonblocking_sockets.ReleaseClientFd(),
+                                                     nonblocking_config) ==
+                     TransportError::kUnsupported &&
+                 !nonblocking_client.IsOpen(),
+             "TLS transport should reject unsupported nonblocking handshakes without retaining the "
+             "socket");
 
   SocketPair closed_peer_sockets;
-  ctx.Expect(closed_peer_sockets.Open(), "socketpair fixture should open for TLS handshake failure test");
+  ctx.Expect(closed_peer_sockets.Open(),
+             "socketpair fixture should open for TLS handshake failure test");
   closed_peer_sockets.ClosePeer();
 
   TcpClientTransport client;
@@ -569,27 +558,25 @@ void TestTlsConfigurationAndHandshakeFailure(TestContext& ctx)
   config.host = "localhost";
   config.tls_enabled = true;
   config.tls_verify_peer = false;
-  ctx.Expect(
-      client.AdoptConnectedSocket(closed_peer_sockets.ReleaseClientFd(), config) ==
-              TransportError::kTlsHandshakeFailure &&
-          !client.IsOpen(),
-      "interrupted TLS handshakes should fail and close the transport");
+  ctx.Expect(client.AdoptConnectedSocket(closed_peer_sockets.ReleaseClientFd(), config) ==
+                     TransportError::kTlsHandshakeFailure &&
+                 !client.IsOpen(),
+             "interrupted TLS handshakes should fail and close the transport");
 }
 
 void TestVerifiedTlsLoopback(TestContext& ctx)
 {
   const std::vector<std::uint8_t> server_bytes = {0x01u, 0x02u, 0x03u};
   const std::vector<std::uint8_t> client_bytes = {0xa1u, 0xb2u, 0xc3u};
-  universal_gnss_transport::test::TlsLoopbackServer server({
-      false,
-      [&server_bytes, &client_bytes](SSL* session) {
-        std::vector<std::uint8_t> received(client_bytes.size());
-        return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
-                   session, received.data(), received.size()) &&
-               received == client_bytes &&
-               universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
-                   session, server_bytes.data(), server_bytes.size());
-      }});
+  universal_gnss_transport::test::TlsLoopbackServer server(
+      {false, [&server_bytes, &client_bytes](SSL* session) {
+         std::vector<std::uint8_t> received(client_bytes.size());
+         return universal_gnss_transport::test::TlsLoopbackServer::ReadExact(
+                    session, received.data(), received.size()) &&
+                received == client_bytes &&
+                universal_gnss_transport::test::TlsLoopbackServer::WriteAll(
+                    session, server_bytes.data(), server_bytes.size());
+       }});
   ctx.Expect(server.Start(), "TLS loopback server should start on localhost");
 
   TcpClientConfig config;
@@ -610,7 +597,7 @@ void TestVerifiedTlsLoopback(TestContext& ctx)
   ctx.Expect(server.Join(), "TLS loopback server session should close cleanly");
 
   const auto expect_verification_failure = [&ctx](TcpClientConfig failed_config,
-                                                   const std::string& message) {
+                                                  const std::string& message) {
     universal_gnss_transport::test::TlsLoopbackServer failed_server;
     ctx.Expect(failed_server.Start(), "TLS loopback server should start for verification failure");
     failed_config.port = failed_server.port();

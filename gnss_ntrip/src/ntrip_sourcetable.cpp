@@ -18,16 +18,14 @@ namespace
 
 std::string_view TrimField(std::string_view text)
 {
-  while (!text.empty() &&
-         (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' ||
-          text.front() == '"'))
+  while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' ||
+                           text.front() == '"'))
   {
     text.remove_prefix(1u);
   }
 
   while (!text.empty() &&
-         (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' ||
-          text.back() == '"'))
+         (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' || text.back() == '"'))
   {
     text.remove_suffix(1u);
   }
@@ -337,8 +335,7 @@ bool ContainsMsmMessageType(std::string_view text)
     }
 
     unsigned int parsed = 0u;
-    if (TryParseUnsigned(text.substr(index, end - index), parsed) &&
-        IsMsmMessageType(parsed))
+    if (TryParseUnsigned(text.substr(index, end - index), parsed) && IsMsmMessageType(parsed))
     {
       return true;
     }
@@ -354,10 +351,7 @@ void AddIssue(NtripSourcetable& sourcetable,
               const NtripSourcetableIssueCode code,
               std::string_view line)
 {
-  sourcetable.issues.push_back(NtripSourcetableIssue{
-      line_number,
-      code,
-      std::string(line)});
+  sourcetable.issues.push_back(NtripSourcetableIssue{line_number, code, std::string(line)});
 }
 
 bool ParseStreamRecord(const std::vector<std::string_view>& fields,
@@ -368,10 +362,7 @@ bool ParseStreamRecord(const std::vector<std::string_view>& fields,
   const std::string_view mountpoint = GetField(fields, 1u);
   if (mountpoint.empty())
   {
-    AddIssue(sourcetable,
-             line_number,
-             NtripSourcetableIssueCode::kMissingMountpoint,
-             line);
+    AddIssue(sourcetable, line_number, NtripSourcetableIssueCode::kMissingMountpoint, line);
     return false;
   }
 
@@ -472,10 +463,9 @@ NtripSourcetable ParseNtripSourcetable(const std::string_view text)
   while (line_start <= text.size())
   {
     const std::size_t line_end = text.find('\n', line_start);
-    const std::string_view raw_line =
-        line_end == std::string_view::npos
-            ? text.substr(line_start)
-            : text.substr(line_start, line_end - line_start);
+    const std::string_view raw_line = line_end == std::string_view::npos
+                                          ? text.substr(line_start)
+                                          : text.substr(line_start, line_end - line_start);
 
     ++line_number;
     const std::string_view line = TrimField(raw_line);
@@ -520,8 +510,7 @@ NtripSourcetable ParseNtripSourcetable(const std::string_view text)
 
 bool IsRtcmStream(const NtripSourcetableStream& stream)
 {
-  return stream.format.has_value() &&
-         ContainsCaseInsensitive(*stream.format, "RTCM");
+  return stream.format.has_value() && ContainsCaseInsensitive(*stream.format, "RTCM");
 }
 
 bool RequiresNmea(const NtripSourcetableStream& stream)

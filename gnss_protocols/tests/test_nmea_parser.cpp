@@ -52,9 +52,8 @@ std::string MakeSentence(std::string payload_text)
   const std::uint8_t checksum = universal_gnss_protocols::ComputeNmeaChecksum(payload_text);
 
   std::ostringstream stream;
-  stream << '$' << payload_text << '*'
-         << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
-         << static_cast<unsigned int>(checksum) << "\r\n";
+  stream << '$' << payload_text << '*' << std::uppercase << std::hex << std::setw(2)
+         << std::setfill('0') << static_cast<unsigned int>(checksum) << "\r\n";
   return stream.str();
 }
 
@@ -141,8 +140,7 @@ void TestCoordinateConversionHelpers(TestContext& ctx)
 void TestValidGgaParsing(TestContext& ctx)
 {
   const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-      987654321);
+      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 987654321);
   const auto result = universal_gnss_protocols::ParseNmeaGga(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -156,8 +154,7 @@ void TestValidGgaParsing(TestContext& ctx)
   ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(987654321),
              "GGA should preserve the framing timestamp");
   ExpectUtcTime(ctx, record.utc_time, 12u, 35u, 19.0, "GGA utc time");
-  ctx.Expect(record.fix_quality == NmeaGgaFixQuality::kGpsFix,
-             "GGA should decode the fix quality");
+  ctx.Expect(record.fix_quality == NmeaGgaFixQuality::kGpsFix, "GGA should decode the fix quality");
   ctx.Expect(record.fix_valid, "GGA fix quality 1 should be valid");
   ctx.Expect(record.latitude_deg.has_value() && NearlyEqual(*record.latitude_deg, 48.1173),
              "GGA should decode latitude");
@@ -167,8 +164,7 @@ void TestValidGgaParsing(TestContext& ctx)
              "GGA should decode altitude");
   ctx.Expect(record.satellites_used == std::optional<std::uint16_t>(8u),
              "GGA should decode satellites used");
-  ctx.Expect(record.hdop.has_value() && NearlyEqual(*record.hdop, 0.9),
-             "GGA should decode HDOP");
+  ctx.Expect(record.hdop.has_value() && NearlyEqual(*record.hdop, 0.9), "GGA should decode HDOP");
 }
 
 void TestValidRmcParsing(TestContext& ctx)
@@ -221,8 +217,7 @@ void TestMalformedCoordinatesRejected(TestContext& ctx)
 
 void TestMissingOptionalFieldsAreTolerated(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGGA,123520,,,,,0,00,,,,,,"));
+  const NmeaSentence sentence = FrameSentence(MakeSentence("GPGGA,123520,,,,,0,00,,,,,,"));
   const auto result = universal_gnss_protocols::ParseNmeaGga(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -244,8 +239,8 @@ void TestMissingOptionalFieldsAreTolerated(TestContext& ctx)
 
 void TestSouthWestCoordinates(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPRMC,225446,A,4916.45,S,12311.12,W,000.5,054.7,191194,020.3,E"));
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPRMC,225446,A,4916.45,S,12311.12,W,000.5,054.7,191194,020.3,E"));
   const auto result = universal_gnss_protocols::ParseNmeaRmc(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -265,8 +260,8 @@ void TestSouthWestCoordinates(TestContext& ctx)
 
 void TestInvalidFixQualityRejected(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,9,08,0.9,545.4,M,46.9,M,,"));
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,9,08,0.9,545.4,M,46.9,M,,"));
   ctx.Expect(universal_gnss_protocols::ParseNmeaGga(sentence).status == ParserStatus::kInvalidData,
              "unsupported GGA fix quality values should be rejected");
 }
@@ -274,8 +269,7 @@ void TestInvalidFixQualityRejected(TestContext& ctx)
 void TestRuntimeMappingBehavior(TestContext& ctx)
 {
   const NmeaSentence gga_sentence = FrameSentence(
-      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-      111);
+      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 111);
   const auto gga_result = universal_gnss_protocols::ParseNmeaGga(gga_sentence);
   ctx.Expect(gga_result.record.has_value(), "runtime mapping test requires a parsed GGA record");
   if (!gga_result.record.has_value())
@@ -296,21 +290,20 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
              "GGA runtime mapping should expose HDOP when present");
   ctx.Expect(universal_gnss::HasValueAvailable(gga_state, GnssCapability::kSatellitesUsed),
              "GGA runtime mapping should expose satellites used when present");
-  ctx.Expect(universal_gnss::HasCapability(gga_state, GnssCapability::kRtkMode),
-             "GGA runtime mapping should advertise RTK capability when standard fix quality is present");
+  ctx.Expect(
+      universal_gnss::HasCapability(gga_state, GnssCapability::kRtkMode),
+      "GGA runtime mapping should advertise RTK capability when standard fix quality is present");
   ctx.Expect(universal_gnss::HasValueAvailable(gga_state, GnssCapability::kRtkMode),
              "GGA runtime mapping should expose RTK mode when fix quality is known");
   ctx.Expect(gga_state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
              "GGA fix quality 1 should map to a known non-RTK runtime mode");
-  ctx.Expect(!gga_state.heading_deg.has_value(),
-             "GGA runtime mapping should not invent heading");
+  ctx.Expect(!gga_state.heading_deg.has_value(), "GGA runtime mapping should not invent heading");
 
   const auto expect_gga_rtk_mode = [&](const std::string& payload,
                                        const GnssRtkMode expected_rtk_mode,
                                        const bool expected_fix_valid,
                                        const GnssFixType expected_fix_type,
-                                       const std::string& label)
-  {
+                                       const std::string& label) {
     const auto sentence = FrameSentence(MakeSentence(payload), 150);
     const auto result = universal_gnss_protocols::ParseNmeaGga(sentence);
     ctx.Expect(result.record.has_value(), label + " should parse");
@@ -345,12 +338,14 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
                       true,
                       GnssFixType::kFix,
                       "GGA fix quality 5");
-  expect_gga_rtk_mode(
-      "GPGGA,123523,,,,,0,00,,,,,,", GnssRtkMode::kNone, false, GnssFixType::kNoFix, "GGA fix quality 0");
+  expect_gga_rtk_mode("GPGGA,123523,,,,,0,00,,,,,,",
+                      GnssRtkMode::kNone,
+                      false,
+                      GnssFixType::kNoFix,
+                      "GGA fix quality 0");
 
   const NmeaSentence rmc_sentence = FrameSentence(
-      MakeSentence("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W"),
-      222);
+      MakeSentence("GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W"), 222);
   const auto rmc_result = universal_gnss_protocols::ParseNmeaRmc(rmc_sentence);
   ctx.Expect(rmc_result.record.has_value(), "runtime mapping test requires a parsed RMC record");
   if (!rmc_result.record.has_value())
@@ -368,17 +363,15 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
                  NearlyEqual(*rmc_state.speed_over_ground_m_s, 22.4 * 0.514444) &&
                  rmc_state.course_over_ground_deg == std::optional<float>(84.4f),
              "RMC runtime mapping should expose independent ground speed and course flags");
-  ctx.Expect(!rmc_state.altitude_m.has_value(),
-             "RMC runtime mapping should not invent altitude");
+  ctx.Expect(!rmc_state.altitude_m.has_value(), "RMC runtime mapping should not invent altitude");
   ctx.Expect(!rmc_state.heading_deg.has_value(),
              "RMC runtime mapping should not map course over ground to heading");
 }
 
 void TestValidGsaParsing(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
-      333);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 333);
   const auto result = universal_gnss_protocols::ParseNmeaGsa(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -393,16 +386,11 @@ void TestValidGsaParsing(TestContext& ctx)
              "GSA should preserve the framing timestamp");
   ctx.Expect(record.fix_mode == NmeaGsaMode::kAutomatic,
              "GSA should decode the automatic/manual mode");
-  ctx.Expect(record.fix_dimension == NmeaFixDimension::k3D,
-             "GSA should decode the fix dimension");
-  ctx.Expect(record.pdop.has_value() && NearlyEqual(*record.pdop, 1.8),
-             "GSA should decode PDOP");
-  ctx.Expect(record.hdop.has_value() && NearlyEqual(*record.hdop, 1.0),
-             "GSA should decode HDOP");
-  ctx.Expect(record.vdop.has_value() && NearlyEqual(*record.vdop, 1.5),
-             "GSA should decode VDOP");
-  ctx.Expect(record.active_satellite_count == 8u,
-             "GSA should count active satellite PRNs");
+  ctx.Expect(record.fix_dimension == NmeaFixDimension::k3D, "GSA should decode the fix dimension");
+  ctx.Expect(record.pdop.has_value() && NearlyEqual(*record.pdop, 1.8), "GSA should decode PDOP");
+  ctx.Expect(record.hdop.has_value() && NearlyEqual(*record.hdop, 1.0), "GSA should decode HDOP");
+  ctx.Expect(record.vdop.has_value() && NearlyEqual(*record.vdop, 1.5), "GSA should decode VDOP");
+  ctx.Expect(record.active_satellite_count == 8u, "GSA should count active satellite PRNs");
   ctx.Expect(record.active_satellite_prns[0] == std::optional<std::uint16_t>(4u) &&
                  record.active_satellite_prns[7] == std::optional<std::uint16_t>(31u),
              "GSA should preserve active satellite PRNs");
@@ -411,8 +399,7 @@ void TestValidGsaParsing(TestContext& ctx)
 void TestValidGsvParsing(TestContext& ctx)
 {
   const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      444);
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 444);
   const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -427,10 +414,8 @@ void TestValidGsvParsing(TestContext& ctx)
              "GSV should preserve the framing timestamp");
   ctx.Expect(record.total_messages == 2u && record.message_index == 1u,
              "GSV should decode message sequencing");
-  ctx.Expect(record.satellites_in_view == 8u,
-             "GSV should decode the visible satellite count");
-  ctx.Expect(record.satellite_count == 4u,
-             "GSV should decode all complete satellite blocks");
+  ctx.Expect(record.satellites_in_view == 8u, "GSV should decode the visible satellite count");
+  ctx.Expect(record.satellite_count == 4u, "GSV should decode all complete satellite blocks");
   ctx.Expect(record.satellites[0].prn == std::optional<std::uint16_t>(1u) &&
                  record.satellites[0].elevation_deg == std::optional<std::uint8_t>(40u) &&
                  record.satellites[0].azimuth_deg == std::optional<std::uint16_t>(83u) &&
@@ -441,8 +426,8 @@ void TestValidGsvParsing(TestContext& ctx)
 
 void TestPartialGsvSatelliteBlockHandling(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15"));
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15"));
   const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -460,16 +445,15 @@ void TestPartialGsvSatelliteBlockHandling(TestContext& ctx)
 
 void TestMalformedDopRejected(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,X,1.0,1.5"));
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,X,1.0,1.5"));
   ctx.Expect(universal_gnss_protocols::ParseNmeaGsa(sentence).status == ParserStatus::kInvalidData,
              "GSA should reject malformed DOP values");
 }
 
 void TestMissingOptionalGsaFields(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSA,M,1,,,,,,,,,,,,,,,"));
+  const NmeaSentence sentence = FrameSentence(MakeSentence("GPGSA,M,1,,,,,,,,,,,,,,,"));
   const auto result = universal_gnss_protocols::ParseNmeaGsa(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -492,8 +476,7 @@ void TestMissingOptionalGsaFields(TestContext& ctx)
 
 void TestGsvMissingOptionalFields(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGSV,1,1,02,01,40,083,,02,17,308,43"));
+  const NmeaSentence sentence = FrameSentence(MakeSentence("GPGSV,1,1,02,01,40,083,,02,17,308,43"));
   const auto result = universal_gnss_protocols::ParseNmeaGsv(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -505,8 +488,7 @@ void TestGsvMissingOptionalFields(TestContext& ctx)
 
   ctx.Expect(result.record->satellite_count == 2u,
              "GSV should decode satellite blocks with partial optional data");
-  ctx.Expect(!result.record->satellites[0].cn0_db_hz.has_value(),
-             "missing CN0 should stay unset");
+  ctx.Expect(!result.record->satellites[0].cn0_db_hz.has_value(), "missing CN0 should stay unset");
   ctx.Expect(result.record->satellites[1].cn0_db_hz.has_value() &&
                  NearlyEqual(*result.record->satellites[1].cn0_db_hz, 43.0),
              "present CN0 should still parse");
@@ -514,9 +496,8 @@ void TestGsvMissingOptionalFields(TestContext& ctx)
 
 void TestValidGstParsing(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
-      777);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 777);
   const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -541,22 +522,19 @@ void TestValidGstParsing(TestContext& ctx)
              "GST should decode semi-minor standard deviation");
   ctx.Expect(record.orientation_deg.has_value() && NearlyEqual(*record.orientation_deg, 45.0),
              "GST should decode ellipse orientation");
-  ctx.Expect(record.latitude_std_dev_m.has_value() &&
-                 NearlyEqual(*record.latitude_std_dev_m, 0.5),
+  ctx.Expect(record.latitude_std_dev_m.has_value() && NearlyEqual(*record.latitude_std_dev_m, 0.5),
              "GST should decode latitude standard deviation");
   ctx.Expect(record.longitude_std_dev_m.has_value() &&
                  NearlyEqual(*record.longitude_std_dev_m, 0.6),
              "GST should decode longitude standard deviation");
-  ctx.Expect(record.altitude_std_dev_m.has_value() &&
-                 NearlyEqual(*record.altitude_std_dev_m, 1.1),
+  ctx.Expect(record.altitude_std_dev_m.has_value() && NearlyEqual(*record.altitude_std_dev_m, 1.1),
              "GST should decode altitude standard deviation");
 }
 
 void TestValidVtgParsing(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"),
-      889);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPVTG,054.7,T,034.4,M,005.5,N,010.2,K,A"), 889);
   const auto result = universal_gnss_protocols::ParseNmeaVtg(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -584,8 +562,8 @@ void TestValidVtgParsing(TestContext& ctx)
 
 void TestVtgMissingOptionalFields(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPVTG,054.7,T,,M,005.5,N,010.2,K"), 890);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPVTG,054.7,T,,M,005.5,N,010.2,K"), 890);
   const auto result = universal_gnss_protocols::ParseNmeaVtg(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -603,8 +581,7 @@ void TestVtgMissingOptionalFields(TestContext& ctx)
   ctx.Expect(result.record->speed_knots.has_value() &&
                  NearlyEqual(*result.record->speed_knots, 5.5),
              "VTG should still decode knots when magnetic course is missing");
-  ctx.Expect(result.record->speed_kmh.has_value() &&
-                 NearlyEqual(*result.record->speed_kmh, 10.2),
+  ctx.Expect(result.record->speed_kmh.has_value() && NearlyEqual(*result.record->speed_kmh, 10.2),
              "VTG should still decode km/h when mode is absent");
   ctx.Expect(!result.record->mode_indicator.has_value(),
              "missing VTG mode indicator should stay unset");
@@ -659,9 +636,8 @@ void TestMalformedVtgRejected(TestContext& ctx)
 
 void TestValidZdaParsing(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPZDA,201530.00,04,07,2002,02,30"),
-      891);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPZDA,201530.00,04,07,2002,02,30"), 891);
   const auto result = universal_gnss_protocols::ParseNmeaZda(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -687,7 +663,8 @@ void TestUtcRuntimeMappings(TestContext& ctx)
   const auto zda = universal_gnss_protocols::ParseNmeaZda(
       FrameSentence(MakeSentence("GPZDA,201530.25,04,07,2002,00,00"), 901));
   ctx.Expect(zda.record.has_value(), "UTC runtime mapping requires valid ZDA");
-  if (!zda.record.has_value()) return;
+  if (!zda.record.has_value())
+    return;
   const auto zda_state = universal_gnss_protocols::NmeaZdaToRuntimeState(*zda.record);
   ctx.Expect(zda_state.timestamp_ns == std::optional<std::int64_t>(901) &&
                  zda_state.utc_date.has_value() && zda_state.utc_date->year == 2002u &&
@@ -707,9 +684,7 @@ void TestUtcRuntimeMappings(TestContext& ctx)
 
 void TestZdaMissingLocalZoneIsTolerated(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPZDA,172809.456,12,07,1996,,"),
-      892);
+  const NmeaSentence sentence = FrameSentence(MakeSentence("GPZDA,172809.456,12,07,1996,,"), 892);
   const auto result = universal_gnss_protocols::ParseNmeaZda(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -730,8 +705,7 @@ void TestZdaMissingLocalZoneIsTolerated(TestContext& ctx)
 
 void TestMalformedZdaRejected(TestContext& ctx)
 {
-  const NmeaSentence checksum_sentence =
-      FrameSentence("$GPZDA,201530.00,04,07,2002,02,30*00\r\n");
+  const NmeaSentence checksum_sentence = FrameSentence("$GPZDA,201530.00,04,07,2002,02,30*00\r\n");
   ctx.Expect(checksum_sentence.checksum_status == ChecksumStatus::kInvalid,
              "test setup should produce an invalid ZDA checksum");
   ctx.Expect(universal_gnss_protocols::ParseNmeaZda(checksum_sentence).status ==
@@ -753,8 +727,7 @@ void TestMalformedZdaRejected(TestContext& ctx)
 
 void TestGstMissingOptionalFields(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGST,123520.00,,,,,,,"));
+  const NmeaSentence sentence = FrameSentence(MakeSentence("GPGST,123520.00,,,,,,,"));
   const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
 
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
@@ -785,8 +758,8 @@ void TestMalformedGstRejected(TestContext& ctx)
                  ParserStatus::kInvalidData,
              "GST semantic parsing should reject invalid checksums");
 
-  const NmeaSentence numeric_sentence = FrameSentence(
-      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,abc,1.1"));
+  const NmeaSentence numeric_sentence =
+      FrameSentence(MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,abc,1.1"));
   ctx.Expect(universal_gnss_protocols::ParseNmeaGst(numeric_sentence).status ==
                  ParserStatus::kInvalidData,
              "GST should reject malformed numeric fields");
@@ -794,9 +767,8 @@ void TestMalformedGstRejected(TestContext& ctx)
 
 void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
 {
-  const NmeaSentence gsa_sentence = FrameSentence(
-      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
-      555);
+  const NmeaSentence gsa_sentence =
+      FrameSentence(MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 555);
   const auto gsa_result = universal_gnss_protocols::ParseNmeaGsa(gsa_sentence);
   ctx.Expect(gsa_result.record.has_value(), "runtime mapping test requires a parsed GSA record");
   if (!gsa_result.record.has_value())
@@ -821,8 +793,7 @@ void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
              "GSA runtime mapping should count active satellites");
 
   const NmeaSentence gsv_sentence = FrameSentence(
-      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      666);
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 666);
   const auto gsv_result = universal_gnss_protocols::ParseNmeaGsv(gsv_sentence);
   ctx.Expect(gsv_result.record.has_value(), "runtime mapping test requires a parsed GSV record");
   if (!gsv_result.record.has_value())
@@ -850,9 +821,8 @@ void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
 
 void TestGstRuntimeMapping(TestContext& ctx)
 {
-  const NmeaSentence sentence = FrameSentence(
-      MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
-      888);
+  const NmeaSentence sentence =
+      FrameSentence(MakeSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 888);
   const auto result = universal_gnss_protocols::ParseNmeaGst(sentence);
   ctx.Expect(result.record.has_value(), "runtime mapping test requires a parsed GST record");
   if (!result.record.has_value())
@@ -872,8 +842,7 @@ void TestGstRuntimeMapping(TestContext& ctx)
   ctx.Expect(state.horizontal_accuracy_m.has_value() &&
                  NearlyEqual(*state.horizontal_accuracy_m, 0.6),
              "GST runtime mapping should conservatively use the worst horizontal axis");
-  ctx.Expect(state.vertical_accuracy_m.has_value() &&
-                 NearlyEqual(*state.vertical_accuracy_m, 1.1),
+  ctx.Expect(state.vertical_accuracy_m.has_value() && NearlyEqual(*state.vertical_accuracy_m, 1.1),
              "GST runtime mapping should expose altitude standard deviation as vertical accuracy");
   ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kUnknown,
              "GST runtime mapping should not invent fix validity");
@@ -889,7 +858,8 @@ void TestGstRuntimeMapping(TestContext& ctx)
   merged_state.fix_type = GnssFixType::kFix;
   universal_gnss_protocols::MergeNmeaGstIntoRuntimeState(*result.record, merged_state);
 
-  ctx.Expect(merged_state.latitude_deg.has_value() && NearlyEqual(*merged_state.latitude_deg, 48.1173) &&
+  ctx.Expect(merged_state.latitude_deg.has_value() &&
+                 NearlyEqual(*merged_state.latitude_deg, 48.1173) &&
                  merged_state.longitude_deg.has_value() &&
                  NearlyEqual(*merged_state.longitude_deg, 11.5166667),
              "GST runtime merge should not overwrite position");
@@ -900,14 +870,11 @@ void TestGstRuntimeMapping(TestContext& ctx)
 void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
 {
   const NmeaSentence gga_sentence = FrameSentence(
-      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
-      1000);
-  const NmeaSentence gsa_sentence = FrameSentence(
-      MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"),
-      1010);
+      MakeSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"), 1000);
+  const NmeaSentence gsa_sentence =
+      FrameSentence(MakeSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 1010);
   const NmeaSentence gsv_sentence = FrameSentence(
-      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      1020);
+      MakeSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 1020);
 
   const auto gga = universal_gnss_protocols::ParseNmeaGga(gga_sentence);
   const auto gsa = universal_gnss_protocols::ParseNmeaGsa(gsa_sentence);
@@ -939,8 +906,8 @@ void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
                  state.longitude_deg.has_value() && NearlyEqual(*state.longitude_deg, 11.5166667) &&
                  state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 545.4),
              "aggregated NMEA state should retain position from GGA");
-  ctx.Expect(state.hdop.has_value() && NearlyEqual(*state.hdop, 1.0) &&
-                 state.vdop.has_value() && NearlyEqual(*state.vdop, 1.5),
+  ctx.Expect(state.hdop.has_value() && NearlyEqual(*state.hdop, 1.0) && state.vdop.has_value() &&
+                 NearlyEqual(*state.vdop, 1.5),
              "aggregated NMEA state should merge GSA DOP values");
   ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(8u) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u),

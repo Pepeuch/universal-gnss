@@ -52,12 +52,14 @@ constexpr bool HasCapabilityFlag(GnssCapabilityFlags flags, GnssCapability capab
   return (flags & ToFlag(capability)) != 0u;
 }
 
-constexpr GnssCapabilityFlags SetCapabilityFlag(GnssCapabilityFlags flags, GnssCapability capability)
+constexpr GnssCapabilityFlags SetCapabilityFlag(GnssCapabilityFlags flags,
+                                                GnssCapability capability)
 {
   return static_cast<GnssCapabilityFlags>(flags | ToFlag(capability));
 }
 
-constexpr GnssCapabilityFlags ClearCapabilityFlag(GnssCapabilityFlags flags, GnssCapability capability)
+constexpr GnssCapabilityFlags ClearCapabilityFlag(GnssCapabilityFlags flags,
+                                                  GnssCapability capability)
 {
   return static_cast<GnssCapabilityFlags>(flags & ~ToFlag(capability));
 }

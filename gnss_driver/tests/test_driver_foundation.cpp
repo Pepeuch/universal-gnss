@@ -9,8 +9,8 @@
 #include "universal_gnss_driver/receiver_profiles.hpp"
 #include "universal_gnss_driver/stream_detector.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
 namespace
 {
@@ -75,8 +75,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -131,8 +130,7 @@ void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8
 
 const ReceiverProfile& RequireProfile(TestContext& ctx, const std::string& profile_id)
 {
-  const ReceiverProfile* profile =
-      universal_gnss_driver::FindBuiltInReceiverProfile(profile_id);
+  const ReceiverProfile* profile = universal_gnss_driver::FindBuiltInReceiverProfile(profile_id);
   ctx.Expect(profile != nullptr, "expected built-in receiver profile: " + profile_id);
   if (profile == nullptr)
   {
@@ -158,102 +156,107 @@ void TestProtocolAndFeatureFlags(TestContext& ctx)
              "receiver capabilities should track supported RTCM input");
   ctx.Expect(universal_gnss_driver::SupportsOutputProtocol(capabilities, ReceiverProtocol::kNmea),
              "receiver capabilities should track supported NMEA output");
-  ctx.Expect(universal_gnss_driver::HasReceiverFeature(capabilities, ReceiverFeature::kRtk) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     capabilities, ReceiverFeature::kRoverMode),
-             "receiver capabilities should track receiver feature flags");
-  ctx.Expect(!universal_gnss_driver::HasReceiverFeature(
-                 capabilities, ReceiverFeature::kDualAntennaBaseline),
+  ctx.Expect(
+      universal_gnss_driver::HasReceiverFeature(capabilities, ReceiverFeature::kRtk) &&
+          universal_gnss_driver::HasReceiverFeature(capabilities, ReceiverFeature::kRoverMode),
+      "receiver capabilities should track receiver feature flags");
+  ctx.Expect(!universal_gnss_driver::HasReceiverFeature(capabilities,
+                                                        ReceiverFeature::kDualAntennaBaseline),
              "receiver capabilities should not invent unsupported baseline features");
-  ctx.Expect(!universal_gnss_driver::SupportsOutputProtocol(
-                 capabilities, ReceiverProtocol::kUbx),
+  ctx.Expect(!universal_gnss_driver::SupportsOutputProtocol(capabilities, ReceiverProtocol::kUbx),
              "receiver capabilities should not imply unsupported outputs");
 }
 
 void TestProfiles(TestContext& ctx)
 {
   const auto& profiles = universal_gnss_driver::GetBuiltInReceiverProfiles();
-  ctx.Expect(profiles.size() == 9u, "built-in receiver profile set should contain the documented vendor/model profiles");
+  ctx.Expect(profiles.size() == 9u,
+             "built-in receiver profile set should contain the documented vendor/model profiles");
 
   const ReceiverProfile& generic = RequireProfile(ctx, "generic_nmea");
-  ctx.Expect(universal_gnss_driver::SupportsOutputProtocol(
-                 generic.capabilities, ReceiverProtocol::kNmea) &&
-                 !universal_gnss_driver::SupportsInputProtocol(
-                     generic.capabilities, ReceiverProtocol::kRtcm3),
+  ctx.Expect(universal_gnss_driver::SupportsOutputProtocol(generic.capabilities,
+                                                           ReceiverProtocol::kNmea) &&
+                 !universal_gnss_driver::SupportsInputProtocol(generic.capabilities,
+                                                               ReceiverProtocol::kRtcm3),
              "generic NMEA profile should stay output-only and correction-agnostic");
-  ctx.Expect(universal_gnss_driver::HasReceiverFeature(
-                 generic.capabilities, ReceiverFeature::kRtk) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     generic.capabilities, ReceiverFeature::kBaseMode),
-             "generic NMEA profile should advertise RTK read visibility without implying base-mode support");
+  ctx.Expect(
+      universal_gnss_driver::HasReceiverFeature(generic.capabilities, ReceiverFeature::kRtk) &&
+          !universal_gnss_driver::HasReceiverFeature(generic.capabilities,
+                                                     ReceiverFeature::kBaseMode),
+      "generic NMEA profile should advertise RTK read visibility without implying base-mode "
+      "support");
 
   const ReceiverProfile& ublox = RequireProfile(ctx, "ublox_f9_f10");
-  ctx.Expect(universal_gnss_driver::SupportsInputProtocol(
-                 ublox.capabilities, ReceiverProtocol::kUbx) &&
-                 universal_gnss_driver::SupportsInputProtocol(
-                     ublox.capabilities, ReceiverProtocol::kRtcm3) &&
-                 universal_gnss_driver::SupportsOutputProtocol(
-                     ublox.capabilities, ReceiverProtocol::kNmea),
-             "u-blox family profile should advertise UBX, RTCM input, and NMEA output");
-  ctx.Expect(universal_gnss_driver::HasReceiverFeature(
-                 ublox.capabilities, ReceiverFeature::kPps) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     ublox.capabilities, ReceiverFeature::kRfMonitoring) &&
+  ctx.Expect(
+      universal_gnss_driver::SupportsInputProtocol(ublox.capabilities, ReceiverProtocol::kUbx) &&
+          universal_gnss_driver::SupportsInputProtocol(ublox.capabilities,
+                                                       ReceiverProtocol::kRtcm3) &&
+          universal_gnss_driver::SupportsOutputProtocol(ublox.capabilities,
+                                                        ReceiverProtocol::kNmea),
+      "u-blox family profile should advertise UBX, RTCM input, and NMEA output");
+  ctx.Expect(universal_gnss_driver::HasReceiverFeature(ublox.capabilities, ReceiverFeature::kPps) &&
+                 universal_gnss_driver::HasReceiverFeature(ublox.capabilities,
+                                                           ReceiverFeature::kRfMonitoring) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      ublox.capabilities, ReceiverFeature::kDualAntennaBaseline) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     ublox.capabilities, ReceiverFeature::kDualAntenna) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     ublox.capabilities, ReceiverFeature::kSurveyIn),
+                 !universal_gnss_driver::HasReceiverFeature(ublox.capabilities,
+                                                            ReceiverFeature::kDualAntenna) &&
+                 !universal_gnss_driver::HasReceiverFeature(ublox.capabilities,
+                                                            ReceiverFeature::kSurveyIn),
              "u-blox family profile should stay conservative about non-universal features");
 
   const ReceiverProfile& unicore = RequireProfile(ctx, "unicore_um98x_placeholder");
   ctx.Expect(unicore.placeholder &&
-                 universal_gnss_driver::SupportsInputProtocol(
-                     unicore.capabilities, ReceiverProtocol::kUnicoreAscii) &&
+                 universal_gnss_driver::SupportsInputProtocol(unicore.capabilities,
+                                                              ReceiverProtocol::kUnicoreAscii) &&
                  !universal_gnss_driver::HasReceiverFeature(
                      unicore.capabilities, ReceiverFeature::kDualAntennaBaseline) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore.capabilities, ReceiverFeature::kDualAntenna),
-             "generic Unicore placeholder should stay safe and not assume dual-antenna baseline capability");
+                 !universal_gnss_driver::HasReceiverFeature(unicore.capabilities,
+                                                            ReceiverFeature::kDualAntenna),
+             "generic Unicore placeholder should stay safe and not assume dual-antenna baseline "
+             "capability");
   const ReceiverProfile& unicore_um960 = RequireProfile(ctx, "unicore_um960");
   ctx.Expect(!unicore_um960.placeholder &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um960.capabilities, ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um960.capabilities, ReceiverFeature::kDualAntennaBaseline),
-             "UM960 profile should stay known single-antenna/non-baseline without guessing signal-group support");
+                 !universal_gnss_driver::HasReceiverFeature(unicore_um960.capabilities,
+                                                            ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(unicore_um960.capabilities,
+                                                            ReceiverFeature::kDualAntennaBaseline),
+             "UM960 profile should stay known single-antenna/non-baseline without guessing "
+             "signal-group support");
   const ReceiverProfile& unicore_um980 = RequireProfile(ctx, "unicore_um980");
   ctx.Expect(!unicore_um980.placeholder &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_um980.capabilities, ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um980.capabilities, ReceiverFeature::kDualAntennaBaseline),
-             "UM980 profile should expose documented single-antenna signal-group support without baseline capability");
+                 universal_gnss_driver::HasReceiverFeature(unicore_um980.capabilities,
+                                                           ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(unicore_um980.capabilities,
+                                                            ReceiverFeature::kDualAntennaBaseline),
+             "UM980 profile should expose documented single-antenna signal-group support without "
+             "baseline capability");
   const ReceiverProfile& unicore_um981 = RequireProfile(ctx, "unicore_um981");
   ctx.Expect(!unicore_um981.placeholder &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um981.capabilities, ReceiverFeature::kSignalGroups) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     unicore_um981.capabilities, ReceiverFeature::kDualAntennaBaseline),
-             "UM981 profile should stay known single-antenna/non-baseline without guessing signal-group support");
+                 !universal_gnss_driver::HasReceiverFeature(unicore_um981.capabilities,
+                                                            ReceiverFeature::kSignalGroups) &&
+                 !universal_gnss_driver::HasReceiverFeature(unicore_um981.capabilities,
+                                                            ReceiverFeature::kDualAntennaBaseline),
+             "UM981 profile should stay known single-antenna/non-baseline without guessing "
+             "signal-group support");
   const ReceiverProfile& unicore_um982 = RequireProfile(ctx, "unicore_um982");
-  ctx.Expect(!unicore_um982.placeholder &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_um982.capabilities, ReceiverFeature::kSignalGroups) &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     unicore_um982.capabilities, ReceiverFeature::kDualAntennaBaseline),
-             "UM982 profile should expose documented signal-group and dual-antenna baseline capability");
+  ctx.Expect(
+      !unicore_um982.placeholder &&
+          universal_gnss_driver::HasReceiverFeature(unicore_um982.capabilities,
+                                                    ReceiverFeature::kSignalGroups) &&
+          universal_gnss_driver::HasReceiverFeature(unicore_um982.capabilities,
+                                                    ReceiverFeature::kDualAntennaBaseline),
+      "UM982 profile should expose documented signal-group and dual-antenna baseline capability");
 
   const ReceiverProfile& quectel = RequireProfile(ctx, "quectel_placeholder");
-  ctx.Expect(quectel.placeholder &&
-                 universal_gnss_driver::HasReceiverFeature(
-                     quectel.capabilities, ReceiverFeature::kRtk) &&
-                 !universal_gnss_driver::HasReceiverFeature(
-                     quectel.capabilities, ReceiverFeature::kHeading) &&
-                 !universal_gnss_driver::SupportsOutputProtocol(
-                     quectel.capabilities, ReceiverProtocol::kUbx),
-             "Quectel placeholder should not imply unsupported heading or UBX output");
+  ctx.Expect(
+      quectel.placeholder &&
+          universal_gnss_driver::HasReceiverFeature(quectel.capabilities, ReceiverFeature::kRtk) &&
+          !universal_gnss_driver::HasReceiverFeature(quectel.capabilities,
+                                                     ReceiverFeature::kHeading) &&
+          !universal_gnss_driver::SupportsOutputProtocol(quectel.capabilities,
+                                                         ReceiverProtocol::kUbx),
+      "Quectel placeholder should not imply unsupported heading or UBX output");
 }
 
 void TestStreamDetection(TestContext& ctx)
@@ -282,7 +285,8 @@ void TestStreamDetection(TestContext& ctx)
              "stream detector should classify a valid RTCM3 frame");
 
   std::vector<std::uint8_t> unicore_binary_stream = {0xAAu};
-  Append(unicore_binary_stream, BuildUnicoreBinaryFrame(2118u, std::vector<std::uint8_t>(120u, 0u)));
+  Append(unicore_binary_stream,
+         BuildUnicoreBinaryFrame(2118u, std::vector<std::uint8_t>(120u, 0u)));
   const auto unicore_binary_result = detector.Detect(unicore_binary_stream);
   ctx.Expect(unicore_binary_result.protocol == DetectedStreamProtocol::kUnicoreBinary &&
                  unicore_binary_result.frame_length_bytes ==

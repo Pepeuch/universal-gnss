@@ -36,8 +36,7 @@ void TestBasicAuthorization(TestContext& ctx)
   ctx.Expect(universal_gnss_ntrip::BuildBasicAuthorizationValue("", "").empty() &&
                  universal_gnss_ntrip::BuildAuthorizationHeader("", "").empty(),
              "empty credentials should suppress authorization output");
-  ctx.Expect(universal_gnss_ntrip::BuildBasicAuthorizationValue("user", "") ==
-                 "Basic dXNlcjo=",
+  ctx.Expect(universal_gnss_ntrip::BuildBasicAuthorizationValue("user", "") == "Basic dXNlcjo=",
              "single-sided credentials should still encode the required colon separator");
 }
 
@@ -94,13 +93,11 @@ void TestNtripV2RequestFormatting(TestContext& ctx)
              "NTRIP v2 requests should advertise the v2 header and omit empty auth");
   ctx.Expect(request.request_text.find("GET /MYMOUNT HTTP/1.1\r\n") == 0,
              "NTRIP v2 requests should use HTTP/1.1");
-  ctx.Expect(request.request_text.find("Host: caster.example.com:2201\r\n") !=
-                 std::string::npos,
+  ctx.Expect(request.request_text.find("Host: caster.example.com:2201\r\n") != std::string::npos,
              "NTRIP v2 requests should include the host header");
   ctx.Expect(request.request_text.find("Ntrip-Version: Ntrip/2.0\r\n") != std::string::npos,
              "NTRIP v2 requests should include the Ntrip-Version header");
-  ctx.Expect(request.request_text.find("User-Agent: NTRIP universal-gnss\r\n") !=
-                 std::string::npos,
+  ctx.Expect(request.request_text.find("User-Agent: NTRIP universal-gnss\r\n") != std::string::npos,
              "empty user-agent configuration should fall back to the default");
   ctx.Expect(request.request_text.find("Authorization: ") == std::string::npos,
              "empty credentials should not emit an Authorization header");
@@ -111,61 +108,46 @@ void TestGgaPolicyDefaults(TestContext& ctx)
   universal_gnss_ntrip::NtripConfig config;
   const auto default_policy = universal_gnss_ntrip::BuildGgaInjectionPolicy(config);
 
-  ctx.Expect(!default_policy.enabled &&
-                 default_policy.interval_s == 10u &&
+  ctx.Expect(!default_policy.enabled && default_policy.interval_s == 10u &&
                  default_policy.source_position_requirement ==
                      universal_gnss_ntrip::GgaSourcePositionRequirement::kRequirePositionFix &&
                  !default_policy.last_sent_timestamp_ns.has_value(),
              "default GGA policy should stay disabled and require a runtime position when enabled");
-  ctx.Expect(config.reconnect_policy.enabled &&
-                 config.reconnect_policy.initial_delay_ms == 1000u &&
+  ctx.Expect(config.reconnect_policy.enabled && config.reconnect_policy.initial_delay_ms == 1000u &&
                  config.reconnect_policy.max_delay_ms == 30000u &&
                  config.reconnect_policy.multiplier == 2.0 &&
                  !config.reconnect_policy.max_attempts.has_value() &&
                  config.reconnect_policy.reset_after_success,
-             "default reconnect policy should expose a portable retry foundation with conservative defaults");
-  ctx.Expect(!universal_gnss_ntrip::ShouldInjectGga(
-                 default_policy,
-                 true,
-                 std::int64_t{1000000000LL}),
-             "disabled GGA policy should not request injection");
+             "default reconnect policy should expose a portable retry foundation with conservative "
+             "defaults");
+  ctx.Expect(
+      !universal_gnss_ntrip::ShouldInjectGga(default_policy, true, std::int64_t{1000000000LL}),
+      "disabled GGA policy should not request injection");
 
   config.send_gga = true;
   config.gga_interval_s = 5u;
   auto enabled_policy = universal_gnss_ntrip::BuildGgaInjectionPolicy(config);
-  ctx.Expect(universal_gnss_ntrip::ShouldInjectGga(
-                 enabled_policy,
-                 true,
-                 std::int64_t{1000000000LL}),
-             "enabled policy with a valid position should allow the first injection");
+  ctx.Expect(
+      universal_gnss_ntrip::ShouldInjectGga(enabled_policy, true, std::int64_t{1000000000LL}),
+      "enabled policy with a valid position should allow the first injection");
   universal_gnss_ntrip::MarkGgaInjected(enabled_policy, 1000000000LL);
-  ctx.Expect(!universal_gnss_ntrip::ShouldInjectGga(
-                 enabled_policy,
-                 true,
-                 std::int64_t{4000000000LL}),
-             "GGA policy should enforce the configured injection interval");
-  ctx.Expect(universal_gnss_ntrip::ShouldInjectGga(
-                 enabled_policy,
-                 true,
-                 std::int64_t{6000000000LL}),
-             "GGA policy should allow injection again after the interval elapses");
+  ctx.Expect(
+      !universal_gnss_ntrip::ShouldInjectGga(enabled_policy, true, std::int64_t{4000000000LL}),
+      "GGA policy should enforce the configured injection interval");
+  ctx.Expect(
+      universal_gnss_ntrip::ShouldInjectGga(enabled_policy, true, std::int64_t{6000000000LL}),
+      "GGA policy should allow injection again after the interval elapses");
 }
 
 void TestMetricsModel(TestContext& ctx)
 {
   universal_gnss_ntrip::NtripConnectionMetrics metrics;
-  ctx.Expect(metrics.bytes_received == 0u &&
-                 metrics.bytes_sent == 0u &&
-                 metrics.rtcm_frames_seen == 0u &&
-                 metrics.rtcm_frames_received == 0u &&
-                 metrics.invalid_rtcm_frames == 0u &&
-                 metrics.gga_sent_count == 0u &&
-                 metrics.gga_send_errors == 0u &&
-                 !metrics.last_gga_sent_timestamp_ns.has_value() &&
-                 !metrics.last_gga_error.has_value() &&
-                 !metrics.connected &&
-                 !metrics.request_sent &&
-                 !metrics.response_received &&
+  ctx.Expect(metrics.bytes_received == 0u && metrics.bytes_sent == 0u &&
+                 metrics.rtcm_frames_seen == 0u && metrics.rtcm_frames_received == 0u &&
+                 metrics.invalid_rtcm_frames == 0u && metrics.gga_sent_count == 0u &&
+                 metrics.gga_send_errors == 0u && !metrics.last_gga_sent_timestamp_ns.has_value() &&
+                 !metrics.last_gga_error.has_value() && !metrics.connected &&
+                 !metrics.request_sent && !metrics.response_received &&
                  metrics.reconnect_count == 0u &&
                  metrics.last_error == universal_gnss_ntrip::NtripClientError::kNone,
              "default metrics should start empty and disconnected");
@@ -179,30 +161,23 @@ void TestMetricsModel(TestContext& ctx)
   universal_gnss_ntrip::NoteRtcmFrame(metrics, std::nullopt, false);
   universal_gnss_ntrip::NoteGgaSent(metrics, 123456789LL);
   universal_gnss_ntrip::NoteGgaSendError(
-      metrics,
-      universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed);
+      metrics, universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed);
   universal_gnss_ntrip::NoteReconnect(metrics);
-  universal_gnss_ntrip::MarkDisconnected(
-      metrics,
-      universal_gnss_ntrip::NtripClientError::kTimeout);
+  universal_gnss_ntrip::MarkDisconnected(metrics, universal_gnss_ntrip::NtripClientError::kTimeout);
 
-  ctx.Expect(metrics.bytes_received == 120u &&
-                 metrics.bytes_sent == 64u &&
-                 metrics.rtcm_frames_seen == 2u &&
-                 metrics.rtcm_frames_received == 1u &&
-                 metrics.invalid_rtcm_frames == 1u &&
-                 metrics.gga_sent_count == 1u &&
-                 metrics.gga_send_errors == 1u &&
-                 metrics.last_gga_sent_timestamp_ns == std::optional<std::int64_t>(123456789LL) &&
-                 metrics.last_gga_error ==
-                     std::optional<universal_gnss_ntrip::NtripGgaSendError>(
-                         universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed) &&
-                 metrics.last_rtcm_message_type == 1005u &&
-                 metrics.request_sent &&
-                 metrics.response_received,
-             "metrics helpers should track request/response state, RTCM frame counts, and GGA activity");
-  ctx.Expect(!metrics.connected &&
-                 metrics.reconnect_count == 1u &&
+  ctx.Expect(
+      metrics.bytes_received == 120u && metrics.bytes_sent == 64u &&
+          metrics.rtcm_frames_seen == 2u && metrics.rtcm_frames_received == 1u &&
+          metrics.invalid_rtcm_frames == 1u && metrics.gga_sent_count == 1u &&
+          metrics.gga_send_errors == 1u &&
+          metrics.last_gga_sent_timestamp_ns == std::optional<std::int64_t>(123456789LL) &&
+          metrics.last_gga_error ==
+              std::optional<universal_gnss_ntrip::NtripGgaSendError>(
+                  universal_gnss_ntrip::NtripGgaSendError::kGenerationFailed) &&
+          metrics.last_rtcm_message_type == 1005u && metrics.request_sent &&
+          metrics.response_received,
+      "metrics helpers should track request/response state, RTCM frame counts, and GGA activity");
+  ctx.Expect(!metrics.connected && metrics.reconnect_count == 1u &&
                  metrics.last_error == universal_gnss_ntrip::NtripClientError::kTimeout,
              "metrics helpers should track reconnects and the last disconnect reason");
 

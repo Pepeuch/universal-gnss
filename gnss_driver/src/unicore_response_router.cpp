@@ -13,28 +13,10 @@ namespace
 {
 
 constexpr std::array<const char*, 22u> kIgnoredTelemetryPrefixes{
-    "#BESTNAVA",
-    "#BESTNAVB",
-    "#PVTSLNA",
-    "#PVTSLNB",
-    "#RTKSTATUSA",
-    "#RTKSTATUSB",
-    "#RTCMSTATUSA",
-    "#RTCMSTATUSB",
-    "#BESTSATA",
-    "#BESTSATB",
-    "#SATSINFOA",
-    "#SATSINFOB",
-    "#AGCA",
-    "#AGCB",
-    "#HWSTATUSA",
-    "#HWSTATUSB",
-    "#JAMSTATUSA",
-    "#JAMSTATUSB",
-    "#FREQJAMSTATUSA",
-    "#FREQJAMSTATUSB",
-    "#OBSVMCMPA",
-    "#OBSVMCMPB",
+    "#BESTNAVA",       "#BESTNAVB",       "#PVTSLNA",   "#PVTSLNB",   "#RTKSTATUSA", "#RTKSTATUSB",
+    "#RTCMSTATUSA",    "#RTCMSTATUSB",    "#BESTSATA",  "#BESTSATB",  "#SATSINFOA",  "#SATSINFOB",
+    "#AGCA",           "#AGCB",           "#HWSTATUSA", "#HWSTATUSB", "#JAMSTATUSA", "#JAMSTATUSB",
+    "#FREQJAMSTATUSA", "#FREQJAMSTATUSB", "#OBSVMCMPA", "#OBSVMCMPB",
 };
 
 constexpr std::array<const char*, 12u> kIgnoredNmeaPrefixes{
@@ -62,8 +44,7 @@ constexpr std::array<const char*, 5u> kNegativeResponseHints{
 
 bool StartsWith(const std::string_view text, const std::string_view prefix)
 {
-  return text.size() >= prefix.size() &&
-         text.compare(0u, prefix.size(), prefix) == 0;
+  return text.size() >= prefix.size() && text.compare(0u, prefix.size(), prefix) == 0;
 }
 
 std::string TrimLineEnding(std::string_view line)
@@ -155,28 +136,24 @@ bool MatchesVersionResponse(std::string_view line)
 bool MatchesNegativeResponse(std::string_view line)
 {
   const std::string lower = ToLowerAscii(line);
-  return std::any_of(
-      kNegativeResponseHints.begin(),
-      kNegativeResponseHints.end(),
-      [&lower](const char* hint) { return lower.find(hint) != std::string::npos; });
+  return std::any_of(kNegativeResponseHints.begin(),
+                     kNegativeResponseHints.end(),
+                     [&lower](const char* hint) { return lower.find(hint) != std::string::npos; });
 }
 
 bool IsIgnoredTelemetryLine(std::string_view line)
 {
-  return std::any_of(
-             kIgnoredTelemetryPrefixes.begin(),
-             kIgnoredTelemetryPrefixes.end(),
-             [line](const char* prefix) { return StartsWith(line, prefix); }) ||
-         std::any_of(
-             kIgnoredNmeaPrefixes.begin(),
-             kIgnoredNmeaPrefixes.end(),
-             [line](const char* prefix) { return StartsWith(line, prefix); });
+  return std::any_of(kIgnoredTelemetryPrefixes.begin(),
+                     kIgnoredTelemetryPrefixes.end(),
+                     [line](const char* prefix) { return StartsWith(line, prefix); }) ||
+         std::any_of(kIgnoredNmeaPrefixes.begin(),
+                     kIgnoredNmeaPrefixes.end(),
+                     [line](const char* prefix) { return StartsWith(line, prefix); });
 }
 
-ReceiverCommandResponse BuildResponse(
-    const ReceiverCommandResponseKind kind,
-    const std::optional<ReceiverCommandTimestampNs> timestamp_ns,
-    const std::string& message)
+ReceiverCommandResponse BuildResponse(const ReceiverCommandResponseKind kind,
+                                      const std::optional<ReceiverCommandTimestampNs> timestamp_ns,
+                                      const std::string& message)
 {
   ReceiverCommandResponse response;
   response.kind = kind;
@@ -187,15 +164,13 @@ ReceiverCommandResponse BuildResponse(
 
 }  // namespace
 
-bool UnicoreResponseRouter::ProcessLine(
-    std::string_view line,
-    std::optional<ReceiverCommandTimestampNs> timestamp_ns)
+bool UnicoreResponseRouter::ProcessLine(std::string_view line,
+                                        std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
   ++metrics_.lines_seen;
 
   const std::string trimmed = TrimLineEnding(line);
-  const std::string normalized =
-      std::string(TrimLeadingResponseNoise(std::string_view(trimmed)));
+  const std::string normalized = std::string(TrimLeadingResponseNoise(std::string_view(trimmed)));
   if (normalized.empty() || !IsPrintableAsciiText(normalized))
   {
     ++metrics_.malformed_lines;
@@ -237,9 +212,8 @@ bool UnicoreResponseRouter::ProcessLine(
   return false;
 }
 
-void UnicoreResponseRouter::FeedBytes(
-    std::string_view data,
-    std::optional<ReceiverCommandTimestampNs> timestamp_ns)
+void UnicoreResponseRouter::FeedBytes(std::string_view data,
+                                      std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
   for (const char c : data)
   {

@@ -25,9 +25,7 @@ std::uint32_t ComputeRtcmCrc24Q(const std::uint8_t* data, std::size_t size)
   return crc;
 }
 
-bool ValidateRtcmCrc24Q(const std::uint8_t* data,
-                        std::size_t size,
-                        std::uint32_t expected_crc24q)
+bool ValidateRtcmCrc24Q(const std::uint8_t* data, std::size_t size, std::uint32_t expected_crc24q)
 {
   return ComputeRtcmCrc24Q(data, size) == (expected_crc24q & 0xFFFFFFu);
 }

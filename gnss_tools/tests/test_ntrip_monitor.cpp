@@ -1,13 +1,13 @@
-#include <cstdlib>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
-#include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss_tools/ntrip_monitor.hpp"
 
 namespace
@@ -272,19 +272,14 @@ void TestConfigAndRuntimeStateBuilders(TestContext& ctx)
   options.gga_interval_s = 5u;
 
   const auto config = BuildNtripMonitorConfig(options);
-  ctx.Expect(config.host == "caster.example.org" &&
-                 config.port == 2101u &&
-                 config.mountpoint == "NEAR" &&
-                 config.username == "user" &&
-                 config.password == "pass" &&
-                 config.user_agent == "universal-gnss-test" &&
-                 config.send_gga &&
-                 config.gga_interval_s == 5u,
+  ctx.Expect(config.host == "caster.example.org" && config.port == 2101u &&
+                 config.mountpoint == "NEAR" && config.username == "user" &&
+                 config.password == "pass" && config.user_agent == "universal-gnss-test" &&
+                 config.send_gga && config.gga_interval_s == 5u,
              "config builder should map monitor options into the portable NTRIP config");
 
   const auto runtime_state = BuildNtripMonitorRuntimeState(options);
-  ctx.Expect(runtime_state.has_value() &&
-                 runtime_state->fix_valid &&
+  ctx.Expect(runtime_state.has_value() && runtime_state->fix_valid &&
                  runtime_state->latitude_deg == std::optional<double>(48.0) &&
                  runtime_state->longitude_deg == std::optional<double>(2.0) &&
                  runtime_state->altitude_m == std::optional<double>(120.5),
@@ -349,33 +344,34 @@ void TestSummaryFormatting(TestContext& ctx)
                  status.find("health=warning") != std::string::npos &&
                  status.find("last_type=1230") != std::string::npos,
              "status formatting should surface state, severity, and the last RTCM type");
-  ctx.Expect(text.find("endpoint=caster.example.org:2101/NEAR state=streaming stop_reason=max_seconds") !=
-                 std::string::npos &&
-                 text.find("message_types 1005=1 1077=1 1087=1 1230=1") != std::string::npos &&
-                 text.find("msm_constellations gps=1 glonass=1") != std::string::npos &&
-                 text.find("response_status ICY 200 OK") != std::string::npos &&
-                 text.find("glonass_bias_1230_seen=true") != std::string::npos &&
-                 text.find("msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=0 malformed=0 message_type=1087") !=
-                     std::string::npos &&
-                 text.find("constellations_seen=gps,glonass") != std::string::npos &&
-                 text.find("glonass_code_phase_bias seen=true decoded=true valid=true") !=
-                     std::string::npos &&
-                 text.find("signal_mask=0xD") != std::string::npos &&
-                 text.find("age_ns=800000000") != std::string::npos,
-             "text formatting should summarize message counts, constellation counts, and status");
-  ctx.Expect(json.find("\"stop_reason\":\"max_seconds\"") != std::string::npos &&
-                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1,\"1087\":1,\"1230\":1}") !=
-                     std::string::npos &&
-                 json.find("\"msm_constellation_counts\":{\"gps\":1,\"glonass\":1}") !=
-                     std::string::npos &&
-                 json.find("\"semantic_observations\":[") != std::string::npos &&
-                 json.find("\"name\":\"msm_summary\"") != std::string::npos &&
-                 json.find("\"constellations_seen\":\"gps,glonass\"") != std::string::npos &&
-                 json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
-                 json.find("\"signal_mask\":\"0xD\"") != std::string::npos &&
-                 json.find("\"response_status_line\":\"ICY 200 OK\"") !=
-                     std::string::npos,
-             "JSON formatting should emit stable structured monitor summary fields");
+  ctx.Expect(
+      text.find("endpoint=caster.example.org:2101/NEAR state=streaming stop_reason=max_seconds") !=
+              std::string::npos &&
+          text.find("message_types 1005=1 1077=1 1087=1 1230=1") != std::string::npos &&
+          text.find("msm_constellations gps=1 glonass=1") != std::string::npos &&
+          text.find("response_status ICY 200 OK") != std::string::npos &&
+          text.find("glonass_bias_1230_seen=true") != std::string::npos &&
+          text.find("msm_summary seen=true decoded=true valid=true decode_success=2 "
+                    "decode_failure=0 malformed=0 message_type=1087") != std::string::npos &&
+          text.find("constellations_seen=gps,glonass") != std::string::npos &&
+          text.find("glonass_code_phase_bias seen=true decoded=true valid=true") !=
+              std::string::npos &&
+          text.find("signal_mask=0xD") != std::string::npos &&
+          text.find("age_ns=800000000") != std::string::npos,
+      "text formatting should summarize message counts, constellation counts, and status");
+  ctx.Expect(
+      json.find("\"stop_reason\":\"max_seconds\"") != std::string::npos &&
+          json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1,\"1087\":1,\"1230\":1}") !=
+              std::string::npos &&
+          json.find("\"msm_constellation_counts\":{\"gps\":1,\"glonass\":1}") !=
+              std::string::npos &&
+          json.find("\"semantic_observations\":[") != std::string::npos &&
+          json.find("\"name\":\"msm_summary\"") != std::string::npos &&
+          json.find("\"constellations_seen\":\"gps,glonass\"") != std::string::npos &&
+          json.find("\"name\":\"glonass_code_phase_bias\"") != std::string::npos &&
+          json.find("\"signal_mask\":\"0xD\"") != std::string::npos &&
+          json.find("\"response_status_line\":\"ICY 200 OK\"") != std::string::npos,
+      "JSON formatting should emit stable structured monitor summary fields");
 }
 
 }  // namespace

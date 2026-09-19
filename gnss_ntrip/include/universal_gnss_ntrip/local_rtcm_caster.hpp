@@ -7,7 +7,8 @@
 
 #include "universal_gnss_protocols/protocol_records.hpp"
 
-namespace universal_gnss_ntrip {
+namespace universal_gnss_ntrip
+{
 
 struct LocalRtcmSourceIdentity
 {
@@ -63,4 +64,4 @@ private:
   Impl* impl_;
 };
 
-} // namespace universal_gnss_ntrip
+}  // namespace universal_gnss_ntrip

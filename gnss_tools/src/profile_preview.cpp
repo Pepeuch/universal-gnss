@@ -262,8 +262,8 @@ std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand
   }
 }
 
-std::optional<std::uint32_t> ExtractPlannedUnicoreConfigBaud(
-    const std::vector<ProfilePreviewCommand>& commands)
+std::optional<std::uint32_t>
+ExtractPlannedUnicoreConfigBaud(const std::vector<ProfilePreviewCommand>& commands)
 {
   for (const auto& command : commands)
   {
@@ -744,9 +744,8 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
 {
   if (options.vendor.empty() || options.profile.empty())
   {
-    return MakeErrorResult(options,
-                           ProfilePreviewStatus::kInvalidArgument,
-                           "both vendor and profile are required");
+    return MakeErrorResult(
+        options, ProfilePreviewStatus::kInvalidArgument, "both vendor and profile are required");
   }
 
   const auto family = ParseReceiverFamily(options.vendor);
@@ -758,9 +757,8 @@ ProfilePreviewResult BuildProfilePreview(const ProfilePreviewOptions& options)
   const auto profile = universal_gnss_driver::ParseReceiverAutoConfigProfile(options.profile);
   if (!profile.has_value())
   {
-    return MakeErrorResult(options,
-                           ProfilePreviewStatus::kUnsupportedProfile,
-                           "unsupported configuration profile");
+    return MakeErrorResult(
+        options, ProfilePreviewStatus::kUnsupportedProfile, "unsupported configuration profile");
   }
 
   universal_gnss_driver::ReceiverAutoConfigRequest request;

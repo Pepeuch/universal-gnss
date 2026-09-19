@@ -12,7 +12,8 @@
 #include "universal_gnss_driver/nmea_session.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
@@ -240,7 +241,7 @@ void TestExplicitInvalidityClearsRuntimeValues(TestContext& ctx)
              "the clearing GSA observation must own aggregate provenance");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

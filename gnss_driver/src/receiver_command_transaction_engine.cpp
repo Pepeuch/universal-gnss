@@ -2,9 +2,11 @@
 
 #include <cstdint>
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
-namespace {
+namespace
+{
 
 constexpr std::int64_t kNanosecondsPerMillisecond = 1000000LL;
 
@@ -30,7 +32,7 @@ bool HasTimedOutAt(const ReceiverCommandTransaction& transaction,
   return now_timestamp_ns >= (*transaction.sent_timestamp_ns + timeout_ns);
 }
 
-} // namespace
+}  // namespace
 
 ReceiverCommandTransactionEngine::ReceiverCommandTransactionEngine(
     universal_gnss_transport::ByteSink& sink, ReceiverCommandTransactionEngineConfig config)
@@ -311,7 +313,8 @@ DispatchResult ReceiverCommandTransactionEngine::DispatchCommand(const ReceiverC
 }
 
 void ReceiverCommandTransactionEngine::MarkFailed(
-    ReceiverCommandTransaction& transaction, const DispatchResult& dispatch_result,
+    ReceiverCommandTransaction& transaction,
+    const DispatchResult& dispatch_result,
     const std::optional<ReceiverCommandTimestampNs> timestamp_ns)
 {
   transaction.state = ReceiverCommandTransactionState::kFailed;
@@ -351,4 +354,4 @@ bool ReceiverCommandTransactionEngine::CanApplyResponseKind(const ReceiverComman
          kind == ReceiverCommandResponseKind::kTextError;
 }
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

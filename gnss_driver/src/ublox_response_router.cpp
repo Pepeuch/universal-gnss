@@ -8,8 +8,7 @@
 namespace universal_gnss_driver
 {
 
-bool UbloxResponseRouter::ProcessUbxFrame(
-    const universal_gnss_protocols::UbxFrame& frame)
+bool UbloxResponseRouter::ProcessUbxFrame(const universal_gnss_protocols::UbxFrame& frame)
 {
   ++metrics_.frames_seen;
 
@@ -18,8 +17,7 @@ bool UbloxResponseRouter::ProcessUbxFrame(
       parsed.record.has_value())
   {
     UbloxRoutedResponse routed_response;
-    routed_response.response =
-        MapUbxAckRecordToReceiverCommandResponse(*parsed.record);
+    routed_response.response = MapUbxAckRecordToReceiverCommandResponse(*parsed.record);
     routed_response.ubx_target =
         UbxMessageIdentity{parsed.record->target_class_id, parsed.record->target_message_id};
 

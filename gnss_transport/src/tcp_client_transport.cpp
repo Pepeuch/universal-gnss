@@ -90,9 +90,8 @@ enum class WaitForSocketResult : std::uint8_t
   kError = 2,
 };
 
-WaitForSocketResult WaitForSocketEvent(const int fd,
-                                      const short requested_events,
-                                      const std::uint32_t timeout_ms)
+WaitForSocketResult
+WaitForSocketEvent(const int fd, const short requested_events, const std::uint32_t timeout_ms)
 {
   if (timeout_ms == 0u)
   {
@@ -202,8 +201,7 @@ TransportError ConnectWithTimeout(const int fd,
       {
         return TransportError::kNone;
       }
-      return socket_error == ETIMEDOUT ? TransportError::kTimeout
-                                       : TransportError::kConnectFailure;
+      return socket_error == ETIMEDOUT ? TransportError::kTimeout : TransportError::kConnectFailure;
     }
 
     if (poll_result == 0)
@@ -258,10 +256,8 @@ void ReleaseTls(::ssl_ctx_st*& context, ::ssl_st*& session)
   }
 }
 
-TransportError StartTls(const int fd,
-                        const TcpClientConfig& config,
-                        ::ssl_ctx_st*& context,
-                        ::ssl_st*& session)
+TransportError
+StartTls(const int fd, const TcpClientConfig& config, ::ssl_ctx_st*& context, ::ssl_st*& session)
 {
   if (config.nonblocking)
   {
@@ -282,10 +278,10 @@ TransportError StartTls(const int fd,
     return TransportError::kInvalidArgument;
   }
   if (has_client_certificate &&
-      (SSL_CTX_use_certificate_chain_file(tls_context, config.tls_client_certificate_file.c_str()) !=
-           1 ||
-       SSL_CTX_use_PrivateKey_file(tls_context, config.tls_client_private_key_file.c_str(),
-                                   SSL_FILETYPE_PEM) != 1 ||
+      (SSL_CTX_use_certificate_chain_file(tls_context,
+                                          config.tls_client_certificate_file.c_str()) != 1 ||
+       SSL_CTX_use_PrivateKey_file(
+           tls_context, config.tls_client_private_key_file.c_str(), SSL_FILETYPE_PEM) != 1 ||
        SSL_CTX_check_private_key(tls_context) != 1))
   {
     SSL_CTX_free(tls_context);
@@ -348,10 +344,10 @@ TransportError StartTls(const int fd,
 
   if (handshake_result != 1)
   {
-    const TransportError error = config.tls_verify_peer &&
-                                         SSL_get_verify_result(tls_session) != X509_V_OK
-                                     ? TransportError::kTlsVerificationFailure
-                                     : TransportError::kTlsHandshakeFailure;
+    const TransportError error =
+        config.tls_verify_peer && SSL_get_verify_result(tls_session) != X509_V_OK
+            ? TransportError::kTlsVerificationFailure
+            : TransportError::kTlsHandshakeFailure;
     SSL_free(tls_session);
     SSL_CTX_free(tls_context);
     return error;
@@ -412,8 +408,8 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
       continue;
     }
 
-    const TransportError connect_error =
-        ConnectWithTimeout(fd, candidate->ai_addr, candidate->ai_addrlen, config.connect_timeout_ms);
+    const TransportError connect_error = ConnectWithTimeout(
+        fd, candidate->ai_addr, candidate->ai_addrlen, config.connect_timeout_ms);
     if (connect_error != TransportError::kNone)
     {
       ::close(fd);
@@ -521,22 +517,21 @@ ReadResult TcpClientTransport::Read(std::uint8_t* destination, const std::size_t
   for (;;)
   {
     const ssize_t bytes_read = tls_session_ != nullptr
-                                   ? SSL_read(reinterpret_cast<SSL*>(tls_session_), destination,
+                                   ? SSL_read(reinterpret_cast<SSL*>(tls_session_),
+                                              destination,
                                               static_cast<int>(capacity))
                                    : (use_generic_fd_io_ ? ::read(fd_, destination, capacity)
                                                          : ::recv(fd_, destination, capacity, 0));
     if (bytes_read > 0)
     {
       NoteReadBytes(metrics_, static_cast<std::size_t>(bytes_read));
-      return ReadResult{static_cast<std::size_t>(bytes_read),
-                        TransportStatus::kOk,
-                        TransportError::kNone};
+      return ReadResult{
+          static_cast<std::size_t>(bytes_read), TransportStatus::kOk, TransportError::kNone};
     }
 
-    if (bytes_read == 0 ||
-        (tls_session_ != nullptr &&
-         SSL_get_error(reinterpret_cast<SSL*>(tls_session_), static_cast<int>(bytes_read)) ==
-             SSL_ERROR_ZERO_RETURN))
+    if (bytes_read == 0 || (tls_session_ != nullptr &&
+                            SSL_get_error(reinterpret_cast<SSL*>(tls_session_),
+                                          static_cast<int>(bytes_read)) == SSL_ERROR_ZERO_RETURN))
     {
       return ReadResult{0u, TransportStatus::kEndOfStream, TransportError::kNone};
     }
@@ -599,8 +594,7 @@ WriteResult TcpClientTransport::Write(const std::uint8_t* data, const std::size_
     ssize_t bytes_written = -1;
     if (tls_session_ != nullptr)
     {
-      bytes_written = SSL_write(reinterpret_cast<SSL*>(tls_session_), data,
-                                static_cast<int>(size));
+      bytes_written = SSL_write(reinterpret_cast<SSL*>(tls_session_), data, static_cast<int>(size));
     }
     else if (use_generic_fd_io_)
     {
@@ -618,9 +612,8 @@ WriteResult TcpClientTransport::Write(const std::uint8_t* data, const std::size_
     if (bytes_written >= 0)
     {
       NoteWrittenBytes(metrics_, static_cast<std::size_t>(bytes_written));
-      return WriteResult{static_cast<std::size_t>(bytes_written),
-                         TransportStatus::kOk,
-                         TransportError::kNone};
+      return WriteResult{
+          static_cast<std::size_t>(bytes_written), TransportStatus::kOk, TransportError::kNone};
     }
 
     if (tls_session_ != nullptr)

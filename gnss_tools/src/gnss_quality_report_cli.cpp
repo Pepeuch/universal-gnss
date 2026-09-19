@@ -10,12 +10,11 @@ namespace
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name << " [--summary] [--json] [path|-]\n"
-      << "Examples:\n"
-      << "  " << program_name << " log.bin\n"
-      << "  " << program_name << " --summary log.bin\n"
-      << "  " << program_name << " --json log.bin\n";
+  std::cout << "Usage: " << program_name << " [--summary] [--json] [path|-]\n"
+            << "Examples:\n"
+            << "  " << program_name << " log.bin\n"
+            << "  " << program_name << " --summary log.bin\n"
+            << "  " << program_name << " --json log.bin\n";
 }
 
 }  // namespace

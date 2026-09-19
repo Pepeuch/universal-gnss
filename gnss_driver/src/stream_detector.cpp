@@ -6,8 +6,8 @@
 #include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
 
 namespace universal_gnss_driver
@@ -22,10 +22,10 @@ using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
 
@@ -92,11 +92,7 @@ StreamDetectionResult StreamDetector::Detect(const std::uint8_t* data, const std
 
   NmeaSentenceFramer nmea_framer;
   const auto nmea_candidate = DetectWithFramer<NmeaSentenceFramer, NmeaSentence>(
-      nmea_framer,
-      data,
-      size,
-      DetectedStreamProtocol::kNmea,
-      [](const NmeaSentence& sentence) {
+      nmea_framer, data, size, DetectedStreamProtocol::kNmea, [](const NmeaSentence& sentence) {
         return !sentence.sentence_type.empty() &&
                sentence.checksum_status != ChecksumStatus::kInvalid;
       });
@@ -104,22 +100,14 @@ StreamDetectionResult StreamDetector::Detect(const std::uint8_t* data, const std
 
   UbxFrameFramer ubx_framer;
   const auto ubx_candidate = DetectWithFramer<UbxFrameFramer, UbxFrame>(
-      ubx_framer,
-      data,
-      size,
-      DetectedStreamProtocol::kUbx,
-      [](const UbxFrame& frame) {
+      ubx_framer, data, size, DetectedStreamProtocol::kUbx, [](const UbxFrame& frame) {
         return frame.checksum_status == ChecksumStatus::kValid;
       });
   MaybeSelectEarlierCandidate(ubx_candidate, best_result);
 
   RtcmFrameFramer rtcm_framer;
   const auto rtcm_candidate = DetectWithFramer<RtcmFrameFramer, RtcmFrame>(
-      rtcm_framer,
-      data,
-      size,
-      DetectedStreamProtocol::kRtcm3,
-      [](const RtcmFrame& frame) {
+      rtcm_framer, data, size, DetectedStreamProtocol::kRtcm3, [](const RtcmFrame& frame) {
         return frame.checksum_status == ChecksumStatus::kValid;
       });
   MaybeSelectEarlierCandidate(rtcm_candidate, best_result);
@@ -130,9 +118,7 @@ StreamDetectionResult StreamDetector::Detect(const std::uint8_t* data, const std
       data,
       size,
       DetectedStreamProtocol::kUnicoreAscii,
-      [](const UnicoreFrame& frame) {
-        return detail::IsVerifiedUnicoreAsciiRecord(frame);
-      });
+      [](const UnicoreFrame& frame) { return detail::IsVerifiedUnicoreAsciiRecord(frame); });
   MaybeSelectEarlierCandidate(unicore_candidate, best_result);
 
   UnicoreBinaryFrameFramer unicore_binary_framer;

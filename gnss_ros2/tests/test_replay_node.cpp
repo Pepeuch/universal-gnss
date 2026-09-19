@@ -30,8 +30,9 @@ std::string TestdataPath(const std::string& relative_path)
   return std::string(TESTDATA_DIR) + "/" + relative_path;
 }
 
-const diagnostic_msgs::msg::DiagnosticStatus* FindDiagnosticStatusByName(
-    const diagnostic_msgs::msg::DiagnosticArray& array, const std::string& name)
+const diagnostic_msgs::msg::DiagnosticStatus*
+FindDiagnosticStatusByName(const diagnostic_msgs::msg::DiagnosticArray& array,
+                           const std::string& name)
 {
   for (const auto& status : array.status)
   {
@@ -123,8 +124,7 @@ TEST_F(ReplayNodeTest, SteppedReplayAdvancesThroughServiceOnUbxFixture)
 
   auto node = std::make_shared<universal_gnss_ros2::ReplayNode>(options);
   auto client_node = std::make_shared<rclcpp::Node>("replay_step_client");
-  auto client =
-      client_node->create_client<std_srvs::srv::Trigger>("/universal_gnss_replay/step");
+  auto client = client_node->create_client<std_srvs::srv::Trigger>("/universal_gnss_replay/step");
 
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
@@ -132,10 +132,9 @@ TEST_F(ReplayNodeTest, SteppedReplayAdvancesThroughServiceOnUbxFixture)
 
   ASSERT_TRUE(node->publishers_ready());
   ASSERT_TRUE(node->last_diagnostics_message().has_value());
-  EXPECT_NE(
-      FindDiagnosticStatusByName(
-          *node->last_diagnostics_message(), "universal_gnss_replay/progress"),
-      nullptr);
+  EXPECT_NE(FindDiagnosticStatusByName(*node->last_diagnostics_message(),
+                                       "universal_gnss_replay/progress"),
+            nullptr);
 
   std::string response_message;
   std::size_t safety_counter = 0u;
@@ -154,9 +153,8 @@ TEST_F(ReplayNodeTest, SteppedReplayAdvancesThroughServiceOnUbxFixture)
   EXPECT_TRUE(std::isfinite(node->last_fix_message()->latitude));
   EXPECT_TRUE(std::isfinite(node->last_fix_message()->longitude));
 
-  const auto* progress =
-      FindDiagnosticStatusByName(*node->last_diagnostics_message(),
-                                 "universal_gnss_replay/progress");
+  const auto* progress = FindDiagnosticStatusByName(*node->last_diagnostics_message(),
+                                                    "universal_gnss_replay/progress");
   ASSERT_NE(progress, nullptr);
   EXPECT_EQ(progress->message, "Replay complete");
 

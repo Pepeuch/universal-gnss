@@ -24,9 +24,8 @@ PayloadView GetPayloadView(const ReceiverCommandPayload& payload)
     case ReceiverCommandPayloadKind::kBinary:
       return PayloadView{payload.binary.data(), payload.binary.size()};
     case ReceiverCommandPayloadKind::kText:
-      return PayloadView{
-          reinterpret_cast<const std::uint8_t*>(payload.text.data()),
-          payload.text.size()};
+      return PayloadView{reinterpret_cast<const std::uint8_t*>(payload.text.data()),
+                         payload.text.size()};
   }
 
   return PayloadView{};
@@ -42,9 +41,8 @@ DispatchResult MakeRejectedResult(const DispatchStatus status, const char* messa
 
 }  // namespace
 
-ReceiverCommandDispatcher::ReceiverCommandDispatcher(
-    universal_gnss_transport::ByteSink& sink,
-    ReceiverCommandDispatcherConfig config)
+ReceiverCommandDispatcher::ReceiverCommandDispatcher(universal_gnss_transport::ByteSink& sink,
+                                                     ReceiverCommandDispatcherConfig config)
     : sink_(sink), config_(config)
 {
 }

@@ -267,8 +267,9 @@ ReceiverTargetSelector BuildUnicoreTargetSelector(const UnicoreModelProfile& pro
   };
 }
 
-const UnicoreSignalGroupSelection* FindUnicoreSignalGroupSelection(
-    const UnicoreModelProfile& profile, const std::vector<std::uint8_t>& groups)
+const UnicoreSignalGroupSelection*
+FindUnicoreSignalGroupSelection(const UnicoreModelProfile& profile,
+                                const std::vector<std::uint8_t>& groups)
 {
   for (const auto& option : profile.signal_group_options)
   {
@@ -281,8 +282,8 @@ const UnicoreSignalGroupSelection* FindUnicoreSignalGroupSelection(
   return nullptr;
 }
 
-const UnicoreSignalGroupSelection* FindUnicorePortableRoverSignalGroupSelection(
-    const UnicoreModelProfile& profile)
+const UnicoreSignalGroupSelection*
+FindUnicorePortableRoverSignalGroupSelection(const UnicoreModelProfile& profile)
 {
   for (const auto& option : profile.signal_group_options)
   {

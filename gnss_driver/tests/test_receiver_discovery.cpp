@@ -17,7 +17,8 @@
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace {
+namespace
+{
 
 namespace fs = std::filesystem;
 
@@ -92,10 +93,19 @@ public:
     return {size, TransportStatus::kOk, TransportError::kNone};
   }
 
-  bool IsOpen() const override { return open_; }
-  void Close() override { open_ = false; }
+  bool IsOpen() const override
+  {
+    return open_;
+  }
+  void Close() override
+  {
+    open_ = false;
+  }
 
-  const std::vector<std::uint8_t>& written() const { return written_; }
+  const std::vector<std::uint8_t>& written() const
+  {
+    return written_;
+  }
 
 private:
   bool open_{true};
@@ -104,7 +114,8 @@ private:
   std::vector<std::uint8_t> written_{};
 };
 
-std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id, const std::uint8_t message_id,
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
+                                        const std::uint8_t message_id,
                                         const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> bytes;
@@ -130,13 +141,13 @@ std::vector<std::uint8_t> BuildMonVerPayload(const std::vector<std::string>& ext
   constexpr std::size_t kExtensionSize = 30u;
   std::vector<std::uint8_t> payload(kFixedPayloadSize + extensions.size() * kExtensionSize, 0u);
 
-  const auto write_field = [&](const std::size_t offset, const std::size_t size,
-                               const std::string& text) {
-    for (std::size_t index = 0u; index < text.size() && index + 1u < size; ++index)
-    {
-      payload[offset + index] = static_cast<std::uint8_t>(text[index]);
-    }
-  };
+  const auto write_field =
+      [&](const std::size_t offset, const std::size_t size, const std::string& text) {
+        for (std::size_t index = 0u; index < text.size() && index + 1u < size; ++index)
+        {
+          payload[offset + index] = static_cast<std::uint8_t>(text[index]);
+        }
+      };
 
   write_field(0u, 30u, "EXT HPG 1.32");
   write_field(30u, 10u, "00080000");
@@ -172,7 +183,23 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
 std::vector<std::uint8_t> BuildMavlinkV1Heartbeat()
 {
   std::vector<std::uint8_t> bytes = {
-      0xFEu, 9u, 1u, 1u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0x12u, 0x34u,
+      0xFEu,
+      9u,
+      1u,
+      1u,
+      1u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0u,
+      0x12u,
+      0x34u,
   };
   return bytes;
 }
@@ -235,7 +262,8 @@ void Append(std::vector<std::uint8_t>& destination, const std::vector<std::uint8
 }
 
 ReceiverProbeResult Analyze(const ReceiverPortCandidate& candidate,
-                            const std::vector<std::uint8_t>& bytes, const bool allow_nmea = false)
+                            const std::vector<std::uint8_t>& bytes,
+                            const bool allow_nmea = false)
 {
   ReceiverProbeConfig config;
   config.allow_generic_nmea_fallback = allow_nmea;
@@ -372,7 +400,8 @@ void TestUbloxMonVerMetadata(TestContext& ctx)
   candidate.path = "/dev/ttyACM0";
 
   const auto metadata_bytes = BuildUbxFrame(
-      0x0Au, 0x04u,
+      0x0Au,
+      0x04u,
       BuildMonVerPayload({"MOD=ZED-F9P-00B", "FWVER=HPG 1.32", "CHIPID=000000D0D69D0F7A54"}));
   const auto result = Analyze(candidate, metadata_bytes);
   const auto identity_only = Analyze(
@@ -648,7 +677,10 @@ void TestSilentProbeRejected(TestContext& ctx)
              "silent ports should report no_data with no confidence");
 }
 
-std::vector<std::uint8_t> Bytes(const std::string& text) { return {text.begin(), text.end()}; }
+std::vector<std::uint8_t> Bytes(const std::string& text)
+{
+  return {text.begin(), text.end()};
+}
 
 std::string BuildUm982VersionA()
 {
@@ -699,7 +731,8 @@ void TestActiveUnicoreProbeReassemblesFragmentedVersionA(TestContext& ctx)
   ReceiverPortCandidate candidate;
   candidate.path = "/dev/ttyUSB0";
   const auto version = BuildUm982VersionA();
-  ScriptedProbeTransport transport({Bytes(version.substr(0u, 17u)), Bytes(version.substr(17u, 31u)),
+  ScriptedProbeTransport transport({Bytes(version.substr(0u, 17u)),
+                                    Bytes(version.substr(17u, 31u)),
                                     Bytes(version.substr(48u))});
 
   const auto result = ProbeReceiverTransportAtBaud(candidate, 460800u, transport);
@@ -755,14 +788,15 @@ void TestActiveUbloxMonVerVerification(TestContext& ctx)
   const auto later_mon_ver_with_model =
       BuildUbxFrame(0x0Au, 0x04u, BuildMonVerPayload({"MOD=ZED-F9R"}));
   auto multiple_mon_ver_bytes = first_mon_ver_without_model;
-  multiple_mon_ver_bytes.insert(multiple_mon_ver_bytes.end(), later_mon_ver_with_model.begin(),
+  multiple_mon_ver_bytes.insert(multiple_mon_ver_bytes.end(),
+                                later_mon_ver_with_model.begin(),
                                 later_mon_ver_with_model.end());
   ScriptedProbeTransport multiple_mon_ver({multiple_mon_ver_bytes});
   const auto multiple_mon_ver_result =
       QueryReceiverModel(ReceiverDetectedFamily::kUblox, multiple_mon_ver, 10u);
 
-  constexpr std::array<std::uint8_t, 8u> expected_poll{0xB5u, 0x62u, 0x0Au, 0x04u,
-                                                       0x00u, 0x00u, 0x0Eu, 0x34u};
+  constexpr std::array<std::uint8_t, 8u> expected_poll{
+      0xB5u, 0x62u, 0x0Au, 0x04u, 0x00u, 0x00u, 0x0Eu, 0x34u};
   ctx.Expect(verified_result.transport_verified && verified_result.model_verified &&
                  verified_result.method == ReceiverModelQueryMethod::kUbloxMonVer &&
                  verified_result.identity.model == std::optional<std::string>{"ZED-F9P"} &&
@@ -850,7 +884,7 @@ void TestResultOrdering(TestContext& ctx)
              "sorted probe results should keep the best-confidence result first");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

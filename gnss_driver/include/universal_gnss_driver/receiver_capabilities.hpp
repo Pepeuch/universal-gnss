@@ -93,8 +93,7 @@ inline void AddSupportedOutputProtocol(ReceiverCapabilities& capabilities,
       SetProtocolFlag(capabilities.supported_output_protocols, protocol);
 }
 
-inline void AddReceiverFeature(ReceiverCapabilities& capabilities,
-                               const ReceiverFeature feature)
+inline void AddReceiverFeature(ReceiverCapabilities& capabilities, const ReceiverFeature feature)
 {
   capabilities.features = SetReceiverFeatureFlag(capabilities.features, feature);
 }

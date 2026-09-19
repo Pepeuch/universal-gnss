@@ -56,15 +56,13 @@ void TestRuntimeCommandDispatchSucceeds(TestContext& ctx)
   const ReceiverCommand command = MakeBinaryRuntimeCommand({0xAAu, 0x55u, 0x10u});
 
   const auto result = dispatcher.Dispatch(command);
-  ctx.Expect(result.status == DispatchStatus::kSent &&
-                 result.bytes_written == 3u &&
+  ctx.Expect(result.status == DispatchStatus::kSent && result.bytes_written == 3u &&
                  sink.written_bytes() == std::vector<std::uint8_t>({0xAAu, 0x55u, 0x10u}),
              "runtime binary commands should dispatch prepared bytes successfully");
-  ctx.Expect(dispatcher.metrics().commands_attempted == 1u &&
-                 dispatcher.metrics().commands_sent == 1u &&
-                 dispatcher.metrics().bytes_written == 3u &&
-                 dispatcher.metrics().write_errors == 0u,
-             "successful runtime dispatch should update dispatcher metrics");
+  ctx.Expect(
+      dispatcher.metrics().commands_attempted == 1u && dispatcher.metrics().commands_sent == 1u &&
+          dispatcher.metrics().bytes_written == 3u && dispatcher.metrics().write_errors == 0u,
+      "successful runtime dispatch should update dispatcher metrics");
 }
 
 void TestPersistentSafetyPolicy(TestContext& ctx)
@@ -75,8 +73,7 @@ void TestPersistentSafetyPolicy(TestContext& ctx)
   ReceiverCommand persistent = MakeBinaryRuntimeCommand({0x01u, 0x02u});
   persistent.safety_level = ReceiverCommandSafetyLevel::kPersistent;
   const auto rejected = dispatcher.Dispatch(persistent);
-  ctx.Expect(rejected.status == DispatchStatus::kRejectedSafety &&
-                 sink.written_bytes().empty(),
+  ctx.Expect(rejected.status == DispatchStatus::kRejectedSafety && sink.written_bytes().empty(),
              "persistent commands should be rejected without explicit confirmation");
 
   persistent.explicit_safety_confirmation = true;
@@ -118,11 +115,9 @@ void TestEmptyPayloadRejectedByDefault(TestContext& ctx)
                  dispatcher.metrics().commands_rejected_invalid == 1u,
              "empty commands should be rejected by default");
 
-  ReceiverCommandDispatcher allow_empty(
-      sink, ReceiverCommandDispatcherConfig{true});
+  ReceiverCommandDispatcher allow_empty(sink, ReceiverCommandDispatcherConfig{true});
   const auto allowed = allow_empty.Dispatch(empty);
-  ctx.Expect(allowed.status == DispatchStatus::kSent &&
-                 allowed.bytes_written == 0u &&
+  ctx.Expect(allowed.status == DispatchStatus::kSent && allowed.bytes_written == 0u &&
                  allow_empty.metrics().commands_sent == 1u,
              "dispatcher config should optionally allow empty payload dispatch");
 }
@@ -148,8 +143,8 @@ void TestTextPayloadDispatch(TestContext& ctx)
 
   const auto result = dispatcher.Dispatch(MakeTextRuntimeCommand("CFG,TEST\r\n"));
   ctx.Expect(result.status == DispatchStatus::kSent &&
-                 sink.written_bytes() ==
-                     std::vector<std::uint8_t>({'C', 'F', 'G', ',', 'T', 'E', 'S', 'T', '\r', '\n'}),
+                 sink.written_bytes() == std::vector<std::uint8_t>(
+                                             {'C', 'F', 'G', ',', 'T', 'E', 'S', 'T', '\r', '\n'}),
              "text payload commands should dispatch UTF-8/ASCII bytes without terminator changes");
 }
 
@@ -160,11 +155,10 @@ void TestResetMetrics(TestContext& ctx)
   dispatcher.Dispatch(MakeBinaryRuntimeCommand({0x42u}));
   dispatcher.ResetMetrics();
 
-  ctx.Expect(dispatcher.metrics().commands_attempted == 0u &&
-                 dispatcher.metrics().commands_sent == 0u &&
-                 dispatcher.metrics().bytes_written == 0u &&
-                 dispatcher.metrics().write_errors == 0u,
-             "dispatcher metric reset should clear counters");
+  ctx.Expect(
+      dispatcher.metrics().commands_attempted == 0u && dispatcher.metrics().commands_sent == 0u &&
+          dispatcher.metrics().bytes_written == 0u && dispatcher.metrics().write_errors == 0u,
+      "dispatcher metric reset should clear counters");
 }
 
 }  // namespace

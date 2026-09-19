@@ -66,8 +66,7 @@ std::optional<FormattedCoordinate> FormatCoordinate(const double coordinate_deg,
   }
 
   const double absolute_deg = std::fabs(coordinate_deg);
-  std::uint32_t degrees_component =
-      static_cast<std::uint32_t>(std::floor(absolute_deg));
+  std::uint32_t degrees_component = static_cast<std::uint32_t>(std::floor(absolute_deg));
   double minutes = (absolute_deg - static_cast<double>(degrees_component)) * 60.0;
 
   constexpr double kMinutePrecisionScale = 100000.0;
@@ -88,10 +87,8 @@ std::optional<FormattedCoordinate> FormatCoordinate(const double coordinate_deg,
   }
 
   std::ostringstream stream;
-  stream << std::setfill('0')
-         << std::setw(latitude ? 2 : 3) << degrees_component
-         << std::fixed << std::setprecision(5)
-         << std::setw(0) << minutes;
+  stream << std::setfill('0') << std::setw(latitude ? 2 : 3) << degrees_component << std::fixed
+         << std::setprecision(5) << std::setw(0) << minutes;
 
   std::string text = stream.str();
   if (minutes < 10.0)
@@ -100,8 +97,7 @@ std::optional<FormattedCoordinate> FormatCoordinate(const double coordinate_deg,
   }
 
   return FormattedCoordinate{
-      text,
-      coordinate_deg < 0.0 ? (latitude ? 'S' : 'W') : (latitude ? 'N' : 'E')};
+      text, coordinate_deg < 0.0 ? (latitude ? 'S' : 'W') : (latitude ? 'N' : 'E')};
 }
 
 std::string FormatSatelliteCount(const std::optional<std::uint16_t> satellites_used)
@@ -132,27 +128,23 @@ std::string FormatAltitude(const std::optional<double> altitude_m)
   return FormatFixedTrimmed(*altitude_m, 3);
 }
 
-std::optional<std::string> FormatUtcTime(
-    const std::optional<universal_gnss_protocols::NmeaUtcTime>& utc_time)
+std::optional<std::string>
+FormatUtcTime(const std::optional<universal_gnss_protocols::NmeaUtcTime>& utc_time)
 {
   if (!utc_time.has_value())
   {
     return std::string{"000000.00"};
   }
 
-  if (!std::isfinite(utc_time->second) ||
-      utc_time->hour > 23u ||
-      utc_time->minute > 59u ||
-      utc_time->second < 0.0 ||
-      utc_time->second >= 60.0)
+  if (!std::isfinite(utc_time->second) || utc_time->hour > 23u || utc_time->minute > 59u ||
+      utc_time->second < 0.0 || utc_time->second >= 60.0)
   {
     return std::nullopt;
   }
 
   std::uint32_t hour = utc_time->hour;
   std::uint32_t minute = utc_time->minute;
-  std::uint32_t centiseconds =
-      static_cast<std::uint32_t>(std::llround(utc_time->second * 100.0));
+  std::uint32_t centiseconds = static_cast<std::uint32_t>(std::llround(utc_time->second * 100.0));
   if (centiseconds >= 6000u)
   {
     centiseconds = 0u;
@@ -168,12 +160,8 @@ std::optional<std::string> FormatUtcTime(
   const std::uint32_t second_fraction = centiseconds % 100u;
 
   std::ostringstream stream;
-  stream << std::setfill('0')
-         << std::setw(2) << hour
-         << std::setw(2) << minute
-         << std::setw(2) << second_whole
-         << '.'
-         << std::setw(2) << second_fraction;
+  stream << std::setfill('0') << std::setw(2) << hour << std::setw(2) << minute << std::setw(2)
+         << second_whole << '.' << std::setw(2) << second_fraction;
   return stream.str();
 }
 
@@ -194,8 +182,7 @@ std::string BuildSentenceFromPayload(const std::string& payload)
   const std::uint8_t checksum = universal_gnss_protocols::ComputeNmeaChecksum(payload);
 
   std::ostringstream stream;
-  stream << '$' << payload << '*'
-         << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+  stream << '$' << payload << '*' << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
          << static_cast<unsigned int>(checksum) << "\r\n";
   return stream.str();
 }
@@ -207,8 +194,8 @@ bool GgaSentenceBuildResult::ok() const
   return error == GgaSentenceBuildError::kNone;
 }
 
-universal_gnss_protocols::NmeaGgaFixQuality MapRuntimeStateToGgaFixQuality(
-    const universal_gnss::GnssRuntimeState& state)
+universal_gnss_protocols::NmeaGgaFixQuality
+MapRuntimeStateToGgaFixQuality(const universal_gnss::GnssRuntimeState& state)
 {
   using universal_gnss::GnssFixType;
   using universal_gnss::GnssRtkMode;
@@ -239,9 +226,8 @@ universal_gnss_protocols::NmeaGgaFixQuality MapRuntimeStateToGgaFixQuality(
   return NmeaGgaFixQuality::kGpsFix;
 }
 
-GgaSentenceBuildResult BuildNmeaGgaSentence(
-    const universal_gnss::GnssRuntimeState& state,
-    const GgaSentenceBuilderOptions& options)
+GgaSentenceBuildResult BuildNmeaGgaSentence(const universal_gnss::GnssRuntimeState& state,
+                                            const GgaSentenceBuilderOptions& options)
 {
   GgaSentenceBuildResult result;
   result.fix_quality = MapRuntimeStateToGgaFixQuality(state);
@@ -279,13 +265,10 @@ GgaSentenceBuildResult BuildNmeaGgaSentence(
   }
 
   std::ostringstream payload;
-  payload << SentenceIdForTalker(options.talker) << ','
-          << *utc_time << ','
-          << latitude->value << ',' << latitude->hemisphere << ','
-          << longitude->value << ',' << longitude->hemisphere << ','
-          << static_cast<unsigned int>(result.fix_quality) << ','
-          << FormatSatelliteCount(state.satellites_used) << ','
-          << FormatHdop(state.hdop) << ','
+  payload << SentenceIdForTalker(options.talker) << ',' << *utc_time << ',' << latitude->value
+          << ',' << latitude->hemisphere << ',' << longitude->value << ',' << longitude->hemisphere
+          << ',' << static_cast<unsigned int>(result.fix_quality) << ','
+          << FormatSatelliteCount(state.satellites_used) << ',' << FormatHdop(state.hdop) << ','
           << FormatAltitude(state.altitude_m) << ",M,,,,";
 
   result.sentence = BuildSentenceFromPayload(payload.str());

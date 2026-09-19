@@ -21,13 +21,13 @@ namespace
 using universal_gnss::GnssDiagnosticSeverity;
 using universal_gnss::GnssHealthSummary;
 using universal_gnss_protocols::ChecksumStatus;
+using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::RtcmConstellation;
 using universal_gnss_protocols::RtcmCorrectionHealthOptions;
 using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
 using universal_gnss_protocols::RtcmMessageInfo;
-using universal_gnss_protocols::ParserStatus;
 
 struct TestContext
 {
@@ -68,8 +68,7 @@ std::vector<std::uint8_t> BuildRtcmFrameBytes(const std::vector<std::uint8_t>& p
       static_cast<std::uint8_t>(payload.size() & 0xFFu),
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -154,9 +153,9 @@ std::vector<std::uint8_t> BuildRtcm1230Payload(const std::uint16_t station_id,
 std::vector<std::uint8_t> CapturedRtcm1006FrameBytes()
 {
   return {
-      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u, 0x4Bu,
-      0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au, 0x41u, 0x56u,
-      0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
+      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u,
+      0x4Bu, 0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au,
+      0x41u, 0x56u, 0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
   };
 }
 
@@ -303,12 +302,12 @@ void AppendText(std::vector<std::uint8_t>& payload,
   }
 }
 
-std::vector<std::uint8_t> BuildRtcmAntennaDescriptorPayload(
-    const std::uint16_t message_type,
-    const std::uint16_t station_id,
-    const std::string& descriptor,
-    const std::uint8_t setup_id,
-    const std::optional<std::string>& serial_number = std::nullopt)
+std::vector<std::uint8_t>
+BuildRtcmAntennaDescriptorPayload(const std::uint16_t message_type,
+                                  const std::uint16_t station_id,
+                                  const std::string& descriptor,
+                                  const std::uint8_t setup_id,
+                                  const std::optional<std::string>& serial_number = std::nullopt)
 {
   std::vector<std::uint8_t> payload;
   std::size_t bit_offset = 0u;
@@ -326,13 +325,12 @@ std::vector<std::uint8_t> BuildRtcmAntennaDescriptorPayload(
   return payload;
 }
 
-RtcmFrame MakeDecodedAntennaDescriptorFrame(
-    const std::uint16_t message_type,
-    const std::uint16_t station_id,
-    const std::string& descriptor,
-    const std::uint8_t setup_id,
-    const std::optional<std::string>& serial_number,
-    const std::int64_t timestamp_ns)
+RtcmFrame MakeDecodedAntennaDescriptorFrame(const std::uint16_t message_type,
+                                            const std::uint16_t station_id,
+                                            const std::string& descriptor,
+                                            const std::uint8_t setup_id,
+                                            const std::optional<std::string>& serial_number,
+                                            const std::int64_t timestamp_ns)
 {
   RtcmFrame frame;
   frame.timestamp_ns = timestamp_ns;
@@ -342,8 +340,7 @@ RtcmFrame MakeDecodedAntennaDescriptorFrame(
   return frame;
 }
 
-RtcmFrame MakeDecodedBaseFrame(const std::uint16_t station_id,
-                               const std::int64_t timestamp_ns)
+RtcmFrame MakeDecodedBaseFrame(const std::uint16_t station_id, const std::int64_t timestamp_ns)
 {
   RtcmFrame frame;
   frame.timestamp_ns = timestamp_ns;
@@ -352,8 +349,7 @@ RtcmFrame MakeDecodedBaseFrame(const std::uint16_t station_id,
   return frame;
 }
 
-RtcmFrame MakeDecodedMsmFrame(const std::uint16_t station_id,
-                              const std::int64_t timestamp_ns)
+RtcmFrame MakeDecodedMsmFrame(const std::uint16_t station_id, const std::int64_t timestamp_ns)
 {
   RtcmFrame frame;
   frame.timestamp_ns = timestamp_ns;
@@ -433,9 +429,9 @@ RtcmMessageInfo MakeMessageInfo(const std::uint16_t message_type)
   return info;
 }
 
-const universal_gnss_protocols::RtcmSemanticObservation* FindObservation(
-    const universal_gnss_protocols::RtcmSemanticObservations& observations,
-    const std::string& name)
+const universal_gnss_protocols::RtcmSemanticObservation*
+FindObservation(const universal_gnss_protocols::RtcmSemanticObservations& observations,
+                const std::string& name)
 {
   for (const auto& observation : observations)
   {
@@ -456,7 +452,8 @@ void TestMessageCountsAndLastSeen(TestContext& ctx)
 
   ctx.Expect(monitor.total_frames() == 3u, "valid observations should increment total frame count");
   ctx.Expect(monitor.valid_frames() == 3u, "valid observations should increment valid frame count");
-  ctx.Expect(monitor.invalid_frames() == 0u, "valid observations should not increment invalid count");
+  ctx.Expect(monitor.invalid_frames() == 0u,
+             "valid observations should not increment invalid count");
   ctx.Expect(monitor.last_frame_timestamp_ns() == std::optional<std::int64_t>(350),
              "monitor should retain the latest frame timestamp");
   ctx.Expect(monitor.MessageCount(1005u) == 1u, "message type 1005 should be counted once");
@@ -488,7 +485,10 @@ void TestRateHelpers(TestContext& ctx)
   ctx.Expect(total_frame_rate_hz.has_value(), "timestamped frames should produce a total rate");
   if (total_frame_rate_hz.has_value())
   {
-    ctx.ExpectNear(*total_frame_rate_hz, 2.0, 1e-9, "frame-rate helper should include valid and invalid frames");
+    ctx.ExpectNear(*total_frame_rate_hz,
+                   2.0,
+                   1e-9,
+                   "frame-rate helper should include valid and invalid frames");
   }
 }
 
@@ -597,7 +597,8 @@ void TestInvalidFrameHandling(TestContext& ctx)
   ctx.Expect(monitor.total_frames() == 3u, "all frame observations should increment total count");
   ctx.Expect(monitor.valid_frames() == 1u, "only checksum-valid, parseable frames should be valid");
   ctx.Expect(monitor.invalid_frames() == 2u, "invalid frames should be counted");
-  ctx.Expect(monitor.MessageCount(1077u) == 1u, "invalid frames should not populate message counts");
+  ctx.Expect(monitor.MessageCount(1077u) == 1u,
+             "invalid frames should not populate message counts");
   ctx.Expect(monitor.last_frame_timestamp_ns() == std::optional<std::int64_t>(300),
              "latest timestamp should include invalid frames");
 }
@@ -607,29 +608,13 @@ void TestGlonassBiasDecodeTracking(TestContext& ctx)
   RtcmCorrectionMonitor monitor;
 
   RtcmFrame valid_1230 = MakeValidRtcmFrame(1230u, 1000);
-  valid_1230.payload = BuildRtcm1230Payload(42u,
-                                            true,
-                                            true,
-                                            false,
-                                            true,
-                                            false,
-                                            10,
-                                            std::nullopt,
-                                            -5,
-                                            std::nullopt);
+  valid_1230.payload =
+      BuildRtcm1230Payload(42u, true, true, false, true, false, 10, std::nullopt, -5, std::nullopt);
   monitor.ObserveFrame(valid_1230);
 
   RtcmFrame malformed_1230 = MakeValidRtcmFrame(1230u, 1500);
-  malformed_1230.payload = BuildRtcm1230Payload(42u,
-                                                true,
-                                                true,
-                                                true,
-                                                false,
-                                                false,
-                                                10,
-                                                12,
-                                                std::nullopt,
-                                                std::nullopt);
+  malformed_1230.payload =
+      BuildRtcm1230Payload(42u, true, true, true, false, false, 10, 12, std::nullopt, std::nullopt);
   malformed_1230.payload.pop_back();
   monitor.ObserveFrame(malformed_1230);
 
@@ -665,16 +650,13 @@ void TestBaseStationArpSemanticObservationFromCaptured1006(TestContext& ctx)
   const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 1500);
   const auto* base_station_arp = FindObservation(observations, "base_station_arp");
 
-  ctx.Expect(base_station_arp != nullptr &&
-                 base_station_arp->message_type == 1006u &&
-                 base_station_arp->seen &&
-                 base_station_arp->decoded &&
-                 base_station_arp->valid &&
-                 base_station_arp->decode_success_count == 1u &&
-                 base_station_arp->decode_failure_count == 0u &&
-                 base_station_arp->malformed_count == 0u &&
-                 base_station_arp->age_ns == std::optional<std::int64_t>(500),
-             "captured RTCM 1006 should produce a decoded and valid base-station semantic observation");
+  ctx.Expect(
+      base_station_arp != nullptr && base_station_arp->message_type == 1006u &&
+          base_station_arp->seen && base_station_arp->decoded && base_station_arp->valid &&
+          base_station_arp->decode_success_count == 1u &&
+          base_station_arp->decode_failure_count == 0u && base_station_arp->malformed_count == 0u &&
+          base_station_arp->age_ns == std::optional<std::int64_t>(500),
+      "captured RTCM 1006 should produce a decoded and valid base-station semantic observation");
   ctx.Expect(monitor.last_base_station_arp().has_value() &&
                  monitor.last_base_station_arp()->message_type == 1006u &&
                  monitor.last_base_station_arp()->station_id == 1u &&
@@ -687,42 +669,27 @@ void TestMsmDecodeTracking(TestContext& ctx)
   RtcmCorrectionMonitor monitor;
 
   RtcmFrame gps_msm7 = MakeValidRtcmFrame(1077u, 1000);
-  gps_msm7.payload = BuildRtcmMsmPayload(1077u,
-                                         42u,
-                                         {1u, 3u},
-                                         {1u, 5u},
-                                         {true, false, true, true},
-                                         true,
-                                         5u);
+  gps_msm7.payload =
+      BuildRtcmMsmPayload(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u);
   monitor.ObserveFrame(gps_msm7);
 
   RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
-  glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
-                                             42u,
-                                             {2u},
-                                             {1u, 3u, 4u},
-                                             {true, false, true});
+  glonass_msm7.payload = BuildRtcmMsmPayload(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true});
   monitor.ObserveFrame(glonass_msm7);
 
   RtcmFrame malformed_msm7 = MakeValidRtcmFrame(1077u, 1800);
-  malformed_msm7.payload = BuildRtcmMsmPayload(1077u,
-                                               42u,
-                                               {1u},
-                                               {1u},
-                                               {true});
+  malformed_msm7.payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true});
   malformed_msm7.payload.resize(21u);
   monitor.ObserveFrame(malformed_msm7);
 
-  ctx.Expect(monitor.HasSeenAnyMsmMessage(),
-             "decoded MSM frames should mark generic MSM presence");
+  ctx.Expect(monitor.HasSeenAnyMsmMessage(), "decoded MSM frames should mark generic MSM presence");
   ctx.Expect(monitor.HasDecodedAnyMsmSummary(),
              "decoded MSM frames should retain the latest semantic summary");
   ctx.Expect(monitor.LastMsmTimestampNs() == std::optional<std::int64_t>(1800),
              "latest MSM timestamp should include malformed trailing frames");
   ctx.Expect(monitor.LastDecodedMsmTimestampNs() == std::optional<std::int64_t>(1500),
              "latest decoded MSM timestamp should retain the latest semantic decode success");
-  ctx.Expect(monitor.MsmDecodeSuccessCount() == 2u &&
-                 monitor.MsmDecodeFailureCount() == 1u &&
+  ctx.Expect(monitor.MsmDecodeSuccessCount() == 2u && monitor.MsmDecodeFailureCount() == 1u &&
                  monitor.MsmMalformedCount() == 1u,
              "MSM decode counters should distinguish successful and malformed payloads");
   if (monitor.last_msm_summary().has_value())
@@ -756,21 +723,12 @@ void TestMsmSemanticObservations(TestContext& ctx)
   RtcmCorrectionMonitor monitor;
 
   RtcmFrame gps_msm7 = MakeValidRtcmFrame(1077u, 1000);
-  gps_msm7.payload = BuildRtcmMsmPayload(1077u,
-                                         42u,
-                                         {1u, 3u},
-                                         {1u, 5u},
-                                         {true, false, true, true},
-                                         true,
-                                         5u);
+  gps_msm7.payload =
+      BuildRtcmMsmPayload(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u);
   monitor.ObserveFrame(gps_msm7);
 
   RtcmFrame glonass_msm7 = MakeValidRtcmFrame(1087u, 1500);
-  glonass_msm7.payload = BuildRtcmMsmPayload(1087u,
-                                             42u,
-                                             {2u},
-                                             {1u, 3u, 4u},
-                                             {true, false, true});
+  glonass_msm7.payload = BuildRtcmMsmPayload(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true});
   monitor.ObserveFrame(glonass_msm7);
 
   const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 2000);
@@ -781,8 +739,7 @@ void TestMsmSemanticObservations(TestContext& ctx)
   ctx.Expect(summary != nullptr && summary->seen && summary->decoded && summary->valid &&
                  summary->message_type == 1087u &&
                  summary->age_ns == std::optional<std::int64_t>(500) &&
-                 summary->decode_success_count == 2u &&
-                 summary->decode_failure_count == 0u,
+                 summary->decode_success_count == 2u && summary->decode_failure_count == 0u,
              "the aggregate MSM semantic observation should expose the latest summary state");
   if (summary != nullptr)
   {
@@ -800,14 +757,13 @@ void TestMsmSemanticObservations(TestContext& ctx)
       }
     }
     ctx.Expect(saw_station && saw_constellations,
-               "the aggregate MSM semantic observation should expose the latest station and seen constellations");
+               "the aggregate MSM semantic observation should expose the latest station and seen "
+               "constellations");
   }
 
   ctx.Expect(gps != nullptr && gps->message_type == 1077u && gps->decoded && gps->valid,
              "GPS MSM semantic observations should be emitted per message type");
-  ctx.Expect(glonass != nullptr &&
-                 glonass->message_type == 1087u &&
-                 glonass->decoded &&
+  ctx.Expect(glonass != nullptr && glonass->message_type == 1087u && glonass->decoded &&
                  glonass->valid &&
                  glonass->last_decoded_timestamp_ns == std::optional<std::int64_t>(1500),
              "GLONASS MSM semantic observations should retain the latest decoded timestamp");
@@ -817,11 +773,7 @@ void TestMsmMalformedHealthEvent(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
   RtcmFrame malformed_msm7 = MakeValidRtcmFrame(1077u, 1800);
-  malformed_msm7.payload = BuildRtcmMsmPayload(1077u,
-                                               42u,
-                                               {1u},
-                                               {1u},
-                                               {true});
+  malformed_msm7.payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true});
   malformed_msm7.payload.resize(21u);
   monitor.ObserveFrame(malformed_msm7);
 
@@ -829,9 +781,8 @@ void TestMsmMalformedHealthEvent(TestContext& ctx)
   options.now_timestamp_ns = 2000;
   options.stale_after_ns = 5000;
   options.require_any_msm = false;
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
 
   bool found_msm_malformed = false;
   for (const auto& event : health.events)
@@ -855,9 +806,8 @@ void TestHealthStates(TestContext& ctx)
   healthy_options.now_timestamp_ns = 1500;
   healthy_options.stale_after_ns = 1000;
   healthy_options.require_any_msm = true;
-  const GnssHealthSummary healthy = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      healthy_monitor,
-      healthy_options);
+  const GnssHealthSummary healthy =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(healthy_monitor, healthy_options);
   ctx.Expect(healthy.overall_severity == GnssDiagnosticSeverity::kOk,
              "recent RTCM activity should yield ok health");
   ctx.Expect(healthy.correction_available, "recent required RTCM activity should be available");
@@ -867,13 +817,13 @@ void TestHealthStates(TestContext& ctx)
   stale_options.now_timestamp_ns = 3000;
   stale_options.stale_after_ns = 1000;
   stale_options.require_any_msm = true;
-  const GnssHealthSummary stale = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      healthy_monitor,
-      stale_options);
+  const GnssHealthSummary stale =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(healthy_monitor, stale_options);
   ctx.Expect(stale.overall_severity == GnssDiagnosticSeverity::kWarning,
              "stale RTCM activity should yield a warning");
   ctx.Expect(stale.stale_data, "stale RTCM activity should set stale_data");
-  ctx.Expect(!stale.correction_available, "stale RTCM activity should not report current availability");
+  ctx.Expect(!stale.correction_available,
+             "stale RTCM activity should not report current availability");
 
   RtcmCorrectionMonitor unknown_monitor;
   unknown_monitor.ObserveMessage(MakeMessageInfo(1077u));
@@ -881,9 +831,8 @@ void TestHealthStates(TestContext& ctx)
   unknown_options.now_timestamp_ns = 5000;
   unknown_options.stale_after_ns = 1000;
   unknown_options.require_any_msm = true;
-  const GnssHealthSummary unknown = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      unknown_monitor,
-      unknown_options);
+  const GnssHealthSummary unknown =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(unknown_monitor, unknown_options);
   ctx.Expect(unknown.overall_severity == GnssDiagnosticSeverity::kUnknown,
              "timestamp-less RTCM activity should yield unknown freshness");
 
@@ -894,9 +843,8 @@ void TestHealthStates(TestContext& ctx)
   error_options.stale_after_ns = 1000;
   error_options.required_message_types = {1077u};
   error_options.require_base_position = true;
-  const GnssHealthSummary error = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      missing_required_monitor,
-      error_options);
+  const GnssHealthSummary error =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(missing_required_monitor, error_options);
   ctx.Expect(error.overall_severity == GnssDiagnosticSeverity::kError,
              "missing required correction content should yield an error");
   ctx.Expect(error.HasErrors(), "missing required correction content should emit an error event");
@@ -950,17 +898,18 @@ void TestPortableRtkRequirementsAccept1006(TestContext& ctx)
   options.required_observation_window_ns = 10000;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
 
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
   ctx.Expect(options.required_msm_constellations.empty() && options.require_any_msm,
-             "portable RTK requirements should require recent MSM presence without pinning specific constellations");
+             "portable RTK requirements should require recent MSM presence without pinning "
+             "specific constellations");
   ctx.Expect(monitor.HasRequiredCorrectionMessages(options),
              "portable RTK requirements should accept 1006 as the base-position message");
   ctx.Expect(health.correction_available,
              "complete portable RTCM content should report correction availability");
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
-             "portable RTCM content with one recent MSM constellation should clear the missing-message diagnostic");
+             "portable RTCM content with one recent MSM constellation should clear the "
+             "missing-message diagnostic");
 }
 
 void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
@@ -979,11 +928,11 @@ void TestPortableRtkRequirementsUseRecentObservationWindow(TestContext& ctx)
   options.required_observation_window_ns = 2000;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
 
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
-  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options),
-             "portable RTK requirements should expire base-position messages outside the recent window");
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
+  ctx.Expect(
+      !monitor.HasRequiredCorrectionMessages(options),
+      "portable RTK requirements should expire base-position messages outside the recent window");
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kError,
              "missing recent required RTCM content should remain an error after startup grace");
 }
@@ -1075,11 +1024,11 @@ void TestPortableRtkRequirementsRespectStartupGrace(TestContext& ctx)
   options.startup_grace_ns = 5000;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
 
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kInfo,
-             "startup grace should defer the missing required RTCM error while the stream is still collecting");
+             "startup grace should defer the missing required RTCM error while the stream is still "
+             "collecting");
   ctx.Expect(!health.HasErrors(),
              "startup grace should avoid emitting a hard required-message error");
 }
@@ -1101,11 +1050,11 @@ void TestPortableRtkRequirementsDoNotRequireGlonassBias(TestContext& ctx)
   ctx.Expect(!options.require_glonass_bias,
              "portable RTK requirements must treat RTCM 1230 GLONASS bias as optional");
 
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
-  ctx.Expect(monitor.HasRequiredCorrectionMessages(options),
-             "base position plus a recent MSM should satisfy portable RTK requirements without 1230");
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
+  ctx.Expect(
+      monitor.HasRequiredCorrectionMessages(options),
+      "base position plus a recent MSM should satisfy portable RTK requirements without 1230");
   ctx.Expect(health.correction_available,
              "correction availability must not depend on GLONASS 1230");
   ctx.Expect(health.overall_severity == GnssDiagnosticSeverity::kOk,
@@ -1115,8 +1064,8 @@ void TestPortableRtkRequirementsDoNotRequireGlonassBias(TestContext& ctx)
 void TestAntennaDescriptorSemanticOwnership(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
-  monitor.ObserveFrame(MakeDecodedAntennaDescriptorFrame(
-      1008u, 42u, "TRM59800.00", 3u, "12345", 1000));
+  monitor.ObserveFrame(
+      MakeDecodedAntennaDescriptorFrame(1008u, 42u, "TRM59800.00", 3u, "12345", 1000));
 
   const auto observations = universal_gnss_protocols::BuildRtcmSemanticObservations(monitor, 1100);
   const auto* antenna = FindObservation(observations, "antenna_descriptor");
@@ -1140,8 +1089,8 @@ void TestAntennaDescriptorSemanticOwnership(TestContext& ctx)
                  !monitor.last_antenna_descriptor().has_value(),
              "a station replacement should invalidate the prior station antenna descriptor");
 
-  std::vector<std::uint8_t> malformed_payload = BuildRtcmAntennaDescriptorPayload(
-      1007u, 77u, "TRM59800.00", 3u);
+  std::vector<std::uint8_t> malformed_payload =
+      BuildRtcmAntennaDescriptorPayload(1007u, 77u, "TRM59800.00", 3u);
   malformed_payload.pop_back();
   monitor.ObserveFrame(MakeIntegrityValidFrame(malformed_payload, 3000));
   ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(99u) &&
@@ -1181,9 +1130,8 @@ void TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(TestContex
   options.required_observation_window_ns = 10000;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(options);
 
-  const GnssHealthSummary health = universal_gnss_protocols::BuildRtcmCorrectionHealth(
-      monitor,
-      options);
+  const GnssHealthSummary health =
+      universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
   ctx.Expect(health.correction_available,
              "a not-valid GLONASS 1230 must not suppress correction availability");
   ctx.Expect(!health.HasErrors(),
@@ -1199,7 +1147,8 @@ void TestDecodedInvalid1230IsInformationalAndCorrectionStillAvailable(TestContex
                  "rtcm.1230_not_valid should be informational, not a warning");
     }
   }
-  ctx.Expect(saw_info_1230, "a decoded-but-not-valid 1230 should still surface an informational note");
+  ctx.Expect(saw_info_1230,
+             "a decoded-but-not-valid 1230 should still surface an informational note");
 }
 
 void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
@@ -1221,8 +1170,7 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
   ctx.Expect(malformed_base.checksum_status == ChecksumStatus::kValid &&
                  malformed_msm.checksum_status == ChecksumStatus::kValid,
              "UGA-008 fixtures must pass real RTCM CRC framing before semantic rejection");
-  ctx.Expect(malformed_only.valid_frames() == 2u &&
-                 malformed_only.MessageCount(1005u) == 1u &&
+  ctx.Expect(malformed_only.valid_frames() == 2u && malformed_only.MessageCount(1005u) == 1u &&
                  malformed_only.MessageCount(1077u) == 1u,
              "CRC-valid malformed messages should remain visible to frame-level flow accounting");
   ctx.Expect(malformed_only.BaseStationArpMalformedCount() == 1u &&
@@ -1236,8 +1184,7 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
              "malformed known RTCM payloads must make semantic parser health unhealthy");
 
   RtcmCorrectionMonitor unsupported_semantics;
-  unsupported_semantics.ObserveFrame(
-      MakeIntegrityValidFrame(MakeRtcmPayload(4095u), 1000));
+  unsupported_semantics.ObserveFrame(MakeIntegrityValidFrame(MakeRtcmPayload(4095u), 1000));
   RtcmCorrectionHealthOptions unsupported_options;
   unsupported_options.now_timestamp_ns = 1100;
   unsupported_options.stale_after_ns = 5000;
@@ -1248,8 +1195,9 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
              "a CRC-valid unsupported RTCM type should remain visible to frame-level accounting");
   ctx.Expect(!unsupported_semantics.HasRequiredMessageTypes({4095u}) &&
                  !unsupported_semantics.HasRequiredCorrectionMessages(unsupported_options) &&
-                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(
-                     unsupported_semantics, unsupported_options).correction_available,
+                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(unsupported_semantics,
+                                                                      unsupported_options)
+                      .correction_available,
              "a raw RTCM type without a semantic decoder must not satisfy semantic requirements");
 
   RtcmCorrectionMonitor valid_base_malformed_msm;
@@ -1260,8 +1208,9 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
   valid_base_malformed_msm.ObserveFrame(MakeDecodedMsmFrame(42u, 1200));
   portable_options.now_timestamp_ns = 1300;
   ctx.Expect(valid_base_malformed_msm.HasRequiredCorrectionMessages(portable_options) &&
-                 universal_gnss_protocols::BuildRtcmCorrectionHealth(
-                     valid_base_malformed_msm, portable_options).correction_available,
+                 universal_gnss_protocols::BuildRtcmCorrectionHealth(valid_base_malformed_msm,
+                                                                     portable_options)
+                     .correction_available,
              "a valid same-station MSM replacement should restore correction availability");
 
   RtcmCorrectionMonitor malformed_base_valid_msm;
@@ -1283,14 +1232,14 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
   msm_window_options.stale_after_ns = 5000;
   msm_window_options.required_observation_window_ns = 1000;
   msm_window_options.require_any_msm = true;
-  ctx.Expect(semantic_timestamp.LastMsmTimestampNs() ==
-                 std::optional<std::int64_t>(5000) &&
+  ctx.Expect(semantic_timestamp.LastMsmTimestampNs() == std::optional<std::int64_t>(5000) &&
                  semantic_timestamp.LastDecodedMsmTimestampNs() ==
                      std::optional<std::int64_t>(1000),
              "frame-level and semantic MSM timestamps should remain independently observable");
   ctx.Expect(!semantic_timestamp.HasRequiredCorrectionMessages(msm_window_options) &&
-                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(
-                     semantic_timestamp, msm_window_options).correction_available,
+                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(semantic_timestamp,
+                                                                      msm_window_options)
+                      .correction_available,
              "a late malformed MSM must not refresh the semantic requirement window");
 
   std::size_t malformed_msm_satisfying_requirements = 0u;
@@ -1311,11 +1260,13 @@ void TestCrcValidMalformedMessagesDoNotSatisfySemanticHealth(TestContext& ctx)
         ++malformed_msm_satisfying_requirements;
       }
       ctx.Expect(monitor.valid_frames() == 1u && monitor.MsmMalformedCount() == 1u,
-                 "every recognized CRC-valid MSM family/variant should stay frame-valid but decode as malformed");
+                 "every recognized CRC-valid MSM family/variant should stay frame-valid but decode "
+                 "as malformed");
     }
   }
-  ctx.Expect(malformed_msm_satisfying_requirements == 0u,
-             "none of the 49 truncated MSM family/variant payloads may satisfy semantic requirements");
+  ctx.Expect(
+      malformed_msm_satisfying_requirements == 0u,
+      "none of the 49 truncated MSM family/variant payloads may satisfy semantic requirements");
 }
 
 void TestMalformedStationContentCannotChangeOwnershipOrStaticMetadata(TestContext& ctx)
@@ -1339,12 +1290,11 @@ void TestMalformedStationContentCannotChangeOwnershipOrStaticMetadata(TestContex
              "a malformed station-bearing 1006 must not steal station ownership");
   ctx.Expect(monitor.last_base_station_arp().has_value() &&
                  monitor.last_base_station_arp()->station_id == 42u &&
-                 monitor.LastBaseStationArpTimestampNs() ==
-                     std::optional<std::int64_t>(1000),
+                 monitor.LastBaseStationArpTimestampNs() == std::optional<std::int64_t>(1000),
              "a malformed 1006 must not replace or refresh retained static base metadata");
-  ctx.Expect(monitor.HasSeenBasePosition1006() &&
-                 !monitor.HasRequiredCorrectionMessages(require_1006),
-             "a malformed 1006 may remain frame-visible but must not establish its semantic requirement");
+  ctx.Expect(
+      monitor.HasSeenBasePosition1006() && !monitor.HasRequiredCorrectionMessages(require_1006),
+      "a malformed 1006 may remain frame-visible but must not establish its semantic requirement");
 
   monitor.ObserveFrame(MakeIntegrityValidFrame(BuildRtcm1006Payload(42u), 5200));
   ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(42u) &&
@@ -1360,11 +1310,7 @@ void TestMaskDeclaredMsmTruncationCannotSatisfyHealthOrChangeOwnership(TestConte
   monitor.ObserveFrame(MakeDecodedMsmFrame(42u, 1100));
 
   RtcmFrame truncated_foreign_msm = MakeValidRtcmFrame(1077u, 5000);
-  truncated_foreign_msm.payload = BuildRtcmMsmPayload(1077u,
-                                                       99u,
-                                                       {1u},
-                                                       {1u},
-                                                       {true});
+  truncated_foreign_msm.payload = BuildRtcmMsmPayload(1077u, 99u, {1u}, {1u}, {true});
   truncated_foreign_msm.payload.resize(22u);
   truncated_foreign_msm = MakeIntegrityValidFrame(truncated_foreign_msm.payload, 5000);
   monitor.ObserveFrame(truncated_foreign_msm);
@@ -1378,18 +1324,20 @@ void TestMaskDeclaredMsmTruncationCannotSatisfyHealthOrChangeOwnership(TestConte
   ctx.Expect(truncated_foreign_msm.checksum_status == ChecksumStatus::kValid &&
                  monitor.valid_frames() == 3u && monitor.MessageCount(1077u) == 2u,
              "an MSM truncated after its masks should remain CRC-valid and frame-visible");
-  ctx.Expect(monitor.MsmMalformedCount() == 1u &&
-                 monitor.LastDecodedMsmTimestampNs() ==
-                     std::optional<std::int64_t>(1100),
-             "mask-declared MSM data truncation should fail semantic decoding without refreshing it");
+  ctx.Expect(
+      monitor.MsmMalformedCount() == 1u &&
+          monitor.LastDecodedMsmTimestampNs() == std::optional<std::int64_t>(1100),
+      "mask-declared MSM data truncation should fail semantic decoding without refreshing it");
   ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(42u) &&
                  monitor.last_base_station_arp().has_value() &&
                  monitor.last_base_station_arp()->station_id == 42u,
-             "a mask-valid but body-truncated foreign MSM must not steal ownership or clear static metadata");
-  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options) &&
-                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options)
-                      .correction_available,
-             "a late mask-valid but body-truncated MSM must not refresh semantic correction health");
+             "a mask-valid but body-truncated foreign MSM must not steal ownership or clear static "
+             "metadata");
+  ctx.Expect(
+      !monitor.HasRequiredCorrectionMessages(options) &&
+          !universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options)
+               .correction_available,
+      "a late mask-valid but body-truncated MSM must not refresh semantic correction health");
 }
 
 void TestMsmWithoutObservationCellsCannotSatisfyHealthOrChangeOwnership(TestContext& ctx)
@@ -1398,11 +1346,7 @@ void TestMsmWithoutObservationCellsCannotSatisfyHealthOrChangeOwnership(TestCont
   monitor.ObserveFrame(MakeDecodedBaseFrame(42u, 1000));
 
   RtcmFrame empty_msm = MakeValidRtcmFrame(1077u, 1100);
-  empty_msm.payload = BuildRtcmMsmPayload(1077u,
-                                          42u,
-                                          {1u},
-                                          {1u},
-                                          {false});
+  empty_msm.payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {false});
   empty_msm = MakeIntegrityValidFrame(empty_msm.payload, 1100);
   monitor.ObserveFrame(empty_msm);
 
@@ -1414,14 +1358,14 @@ void TestMsmWithoutObservationCellsCannotSatisfyHealthOrChangeOwnership(TestCont
   const GnssHealthSummary empty_health =
       universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options);
 
-  ctx.Expect(empty_msm.checksum_status == ChecksumStatus::kValid &&
-                 monitor.valid_frames() == 2u && monitor.MsmDecodeSuccessCount() == 1u &&
-                 monitor.MsmMalformedCount() == 0u,
-             "a complete MSM without populated cells should remain frame-valid and structurally decoded");
-  ctx.Expect(empty_health.parser_healthy &&
-                 !monitor.HasRequiredCorrectionMessages(options) &&
+  ctx.Expect(
+      empty_msm.checksum_status == ChecksumStatus::kValid && monitor.valid_frames() == 2u &&
+          monitor.MsmDecodeSuccessCount() == 1u && monitor.MsmMalformedCount() == 0u,
+      "a complete MSM without populated cells should remain frame-valid and structurally decoded");
+  ctx.Expect(empty_health.parser_healthy && !monitor.HasRequiredCorrectionMessages(options) &&
                  !empty_health.correction_available,
-             "a structurally valid MSM without observations should not satisfy semantic correction health");
+             "a structurally valid MSM without observations should not satisfy semantic correction "
+             "health");
 
   monitor.ObserveFrame(MakeDecodedMsmFrame(42u, 1300));
   options.now_timestamp_ns = 1400;
@@ -1431,11 +1375,7 @@ void TestMsmWithoutObservationCellsCannotSatisfyHealthOrChangeOwnership(TestCont
              "a populated same-station MSM should restore semantic correction health");
 
   RtcmFrame empty_foreign_msm = MakeValidRtcmFrame(1077u, 5000);
-  empty_foreign_msm.payload = BuildRtcmMsmPayload(1077u,
-                                                  99u,
-                                                  {1u},
-                                                  {1u},
-                                                  {false});
+  empty_foreign_msm.payload = BuildRtcmMsmPayload(1077u, 99u, {1u}, {1u}, {false});
   empty_foreign_msm = MakeIntegrityValidFrame(empty_foreign_msm.payload, 5000);
   monitor.ObserveFrame(empty_foreign_msm);
   options.now_timestamp_ns = 5100;
@@ -1443,20 +1383,21 @@ void TestMsmWithoutObservationCellsCannotSatisfyHealthOrChangeOwnership(TestCont
   ctx.Expect(monitor.station_id() == std::optional<std::uint16_t>(42u) &&
                  monitor.last_base_station_arp().has_value() &&
                  monitor.last_base_station_arp()->station_id == 42u &&
-                 monitor.LastDecodedMsmTimestampNs() ==
-                     std::optional<std::int64_t>(1300),
+                 monitor.LastDecodedMsmTimestampNs() == std::optional<std::int64_t>(1300),
              "an observation-empty foreign MSM must not mix station-owned decoded state");
-  ctx.Expect(!monitor.HasRequiredCorrectionMessages(options) &&
-                 !universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options)
-                      .correction_available,
-             "an observation-empty foreign MSM must not refresh a stale semantic observation window");
+  ctx.Expect(
+      !monitor.HasRequiredCorrectionMessages(options) &&
+          !universal_gnss_protocols::BuildRtcmCorrectionHealth(monitor, options)
+               .correction_available,
+      "an observation-empty foreign MSM must not refresh a stale semantic observation window");
 
   RtcmCorrectionMonitor unowned_empty_msm;
   unowned_empty_msm.ObserveFrame(empty_foreign_msm);
   unowned_empty_msm.ObserveFrame(MakeDecodedBaseFrame(42u, 5200));
   ctx.Expect(unowned_empty_msm.station_id() == std::optional<std::uint16_t>(42u) &&
                  !unowned_empty_msm.last_msm_summary().has_value(),
-             "foreign observation-empty MSM state seen before ownership must be discarded when another station is established");
+             "foreign observation-empty MSM state seen before ownership must be discarded when "
+             "another station is established");
 }
 
 void TestRequired1230UsesValidSemanticContentWithoutBecomingUniversal(TestContext& ctx)
@@ -1471,72 +1412,49 @@ void TestRequired1230UsesValidSemanticContentWithoutBecomingUniversal(TestContex
   malformed.ObserveFrame(MakeIntegrityValidFrame(MakeRtcmPayload(1230u), 1000));
   const GnssHealthSummary malformed_health =
       universal_gnss_protocols::BuildRtcmCorrectionHealth(malformed, explicit_1230);
-  ctx.Expect(malformed.valid_frames() == 1u &&
-                 malformed.GlonassBias1230MalformedCount() == 1u,
+  ctx.Expect(malformed.valid_frames() == 1u && malformed.GlonassBias1230MalformedCount() == 1u,
              "a truncated 1230 should remain CRC-valid at frame level and fail semantic decode");
   ctx.Expect(!malformed.HasRequiredCorrectionMessages(explicit_1230) &&
-                 !malformed_health.correction_available &&
-                 !malformed_health.parser_healthy,
+                 !malformed_health.correction_available && !malformed_health.parser_healthy,
              "a malformed 1230 must not satisfy an explicitly configured GLONASS-bias requirement");
 
   RtcmFrame valid_1230 = MakeIntegrityValidFrame(
-      BuildRtcm1230Payload(42u,
-                           true,
-                           true,
-                           false,
-                           false,
-                           false,
-                           10,
-                           std::nullopt,
-                           std::nullopt,
-                           std::nullopt),
+      BuildRtcm1230Payload(
+          42u, true, true, false, false, false, 10, std::nullopt, std::nullopt, std::nullopt),
       2100);
   malformed.ObserveFrame(valid_1230);
   explicit_1230.now_timestamp_ns = 2200;
-  ctx.Expect(malformed.HasRequiredCorrectionMessages(explicit_1230) &&
-                 universal_gnss_protocols::BuildRtcmCorrectionHealth(
-                     malformed, explicit_1230).correction_available,
-             "a decoded and validity-marked 1230 replacement should restore an explicit requirement");
+  ctx.Expect(
+      malformed.HasRequiredCorrectionMessages(explicit_1230) &&
+          universal_gnss_protocols::BuildRtcmCorrectionHealth(malformed, explicit_1230)
+              .correction_available,
+      "a decoded and validity-marked 1230 replacement should restore an explicit requirement");
 
   RtcmCorrectionMonitor invalid_indicator;
   invalid_indicator.ObserveFrame(MakeIntegrityValidFrame(
-      BuildRtcm1230Payload(99u,
-                           false,
-                           true,
-                           false,
-                           false,
-                           false,
-                           10,
-                           std::nullopt,
-                           std::nullopt,
-                           std::nullopt),
+      BuildRtcm1230Payload(
+          99u, false, true, false, false, false, 10, std::nullopt, std::nullopt, std::nullopt),
       1000));
   ctx.Expect(invalid_indicator.HasDecodedGlonassBias1230() &&
                  !invalid_indicator.LastGlonassBias1230Valid(),
              "a 1230 validity indicator clear should remain decoded for informational diagnostics");
   ctx.Expect(!invalid_indicator.HasRequiredCorrectionMessages(explicit_1230) &&
                  !invalid_indicator.station_id().has_value(),
-             "a decoded-but-invalid 1230 must neither satisfy an explicit requirement nor establish ownership");
+             "a decoded-but-invalid 1230 must neither satisfy an explicit requirement nor "
+             "establish ownership");
 
   invalid_indicator.ObserveFrame(MakeDecodedBaseFrame(42u, 1100));
   ctx.Expect(invalid_indicator.station_id() == std::optional<std::uint16_t>(42u) &&
                  !invalid_indicator.last_glonass_code_phase_bias().has_value(),
-             "foreign invalid 1230 state seen before ownership must be discarded when another station is established");
+             "foreign invalid 1230 state seen before ownership must be discarded when another "
+             "station is established");
 
   RtcmCorrectionMonitor portable;
   portable.ObserveFrame(MakeDecodedBaseFrame(42u, 1000));
   portable.ObserveFrame(MakeDecodedMsmFrame(42u, 1100));
   portable.ObserveFrame(MakeIntegrityValidFrame(
-      BuildRtcm1230Payload(99u,
-                           false,
-                           true,
-                           false,
-                           false,
-                           false,
-                           10,
-                           std::nullopt,
-                           std::nullopt,
-                           std::nullopt),
+      BuildRtcm1230Payload(
+          99u, false, true, false, false, false, 10, std::nullopt, std::nullopt, std::nullopt),
       1200));
   RtcmCorrectionHealthOptions portable_options;
   portable_options.now_timestamp_ns = 1300;
@@ -1547,9 +1465,10 @@ void TestRequired1230UsesValidSemanticContentWithoutBecomingUniversal(TestContex
                  portable.station_id() == std::optional<std::uint16_t>(42u) &&
                  !portable.last_glonass_code_phase_bias().has_value() &&
                  portable.HasRequiredCorrectionMessages(portable_options) &&
-                 universal_gnss_protocols::BuildRtcmCorrectionHealth(
-                     portable, portable_options).correction_available,
-             "optional invalid foreign-station 1230 content must not mix ownership state or suppress portable corrections");
+                 universal_gnss_protocols::BuildRtcmCorrectionHealth(portable, portable_options)
+                     .correction_available,
+             "optional invalid foreign-station 1230 content must not mix ownership state or "
+             "suppress portable corrections");
 }
 
 }  // namespace

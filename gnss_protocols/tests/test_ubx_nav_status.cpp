@@ -117,8 +117,7 @@ void TestValidNoFixParsing(TestContext& ctx)
   ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(1234),
              "NAV-STATUS should preserve the framing timestamp");
   ctx.Expect(record.i_tow_ms == 456789u, "NAV-STATUS should decode iTOW");
-  ctx.Expect(record.gps_fix == UbxNavStatusFixType::kNoFix,
-             "NAV-STATUS should decode gpsFix");
+  ctx.Expect(record.gps_fix == UbxNavStatusFixType::kNoFix, "NAV-STATUS should decode gpsFix");
   ctx.Expect(!record.gnss_fix_ok && !record.differential_solution,
              "NAV-STATUS should decode no-fix status flags");
   ctx.Expect(!record.carrier_solution_valid &&
@@ -149,8 +148,7 @@ void TestValidFixAndCarrierSolutionParsing(TestContext& ctx)
   const auto& record = *result.record;
   ctx.Expect(record.gps_fix == UbxNavStatusFixType::k3D && record.gnss_fix_ok,
              "NAV-STATUS should decode a valid 3D fix");
-  ctx.Expect(record.differential_solution,
-             "NAV-STATUS should decode the diffSoln bit");
+  ctx.Expect(record.differential_solution, "NAV-STATUS should decode the diffSoln bit");
   ctx.Expect(record.carrier_solution_valid &&
                  record.carrier_solution == UbxCarrierSolutionStatus::kFloat,
              "NAV-STATUS should decode a valid float carrier solution");
@@ -158,14 +156,12 @@ void TestValidFixAndCarrierSolutionParsing(TestContext& ctx)
 
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
-  const UbxFrame wrong_message =
-      BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(16u, 0u));
+  const UbxFrame wrong_message = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(16u, 0u));
   ctx.Expect(universal_gnss_protocols::ParseUbxNavStatus(wrong_message).status ==
                  ParserStatus::kSkipped,
              "wrong UBX class/id should be skipped");
 
-  const UbxFrame short_payload =
-      BuildUbxFrame(0x01u, 0x03u, std::vector<std::uint8_t>(15u, 0u));
+  const UbxFrame short_payload = BuildUbxFrame(0x01u, 0x03u, std::vector<std::uint8_t>(15u, 0u));
   ctx.Expect(universal_gnss_protocols::ParseUbxNavStatus(short_payload).status ==
                  ParserStatus::kInvalidData,
              "wrong NAV-STATUS payload length should be rejected");
@@ -216,8 +212,8 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   fixed_payload[5u] = static_cast<std::uint8_t>((1u << 0) | (1u << 1));
   fixed_payload[6u] = static_cast<std::uint8_t>(1u << 1);
   fixed_payload[7u] = static_cast<std::uint8_t>(2u << 6);
-  const auto fixed_record = universal_gnss_protocols::ParseUbxNavStatus(
-      BuildUbxFrame(0x01u, 0x03u, fixed_payload));
+  const auto fixed_record =
+      universal_gnss_protocols::ParseUbxNavStatus(BuildUbxFrame(0x01u, 0x03u, fixed_payload));
   ctx.Expect(fixed_record.record.has_value(),
              "fixed RTK mapping test requires a parsed NAV-STATUS record");
   if (!fixed_record.record.has_value())
@@ -233,7 +229,8 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   ctx.Expect(fixed_state.differential_corrections == std::optional<bool>(true) &&
                  fixed_state.corrections_active == std::optional<bool>(true),
              "diffSoln should mark the solution as known corrected and active");
-  ctx.Expect(!fixed_state.latitude_deg.has_value() && !fixed_state.horizontal_accuracy_m.has_value(),
+  ctx.Expect(!fixed_state.latitude_deg.has_value() &&
+                 !fixed_state.horizontal_accuracy_m.has_value(),
              "NAV-STATUS should not invent position or accuracy values");
   ctx.Expect(!HasCapability(fixed_state, GnssCapability::kMeanCn0) &&
                  !HasCapability(fixed_state, GnssCapability::kJammingState),

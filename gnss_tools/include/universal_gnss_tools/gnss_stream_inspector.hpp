@@ -19,8 +19,7 @@ struct GnssStreamInspectionItem
   std::size_t item_index{0};
   std::size_t byte_offset{0};
   std::size_t length_bytes{0};
-  universal_gnss_protocols::ProtocolType protocol{
-      universal_gnss_protocols::ProtocolType::kUnknown};
+  universal_gnss_protocols::ProtocolType protocol{universal_gnss_protocols::ProtocolType::kUnknown};
   universal_gnss_protocols::ChecksumStatus checksum_status{
       universal_gnss_protocols::ChecksumStatus::kNotChecked};
 
@@ -64,13 +63,10 @@ struct GnssStreamInspectionResult
   GnssStreamInspectionSummary summary{};
 };
 
-GnssStreamInspectionResult InspectGnssStreamBytes(
-    const std::vector<std::uint8_t>& bytes,
-    bool include_items = true);
+GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t>& bytes,
+                                                  bool include_items = true);
 
-GnssStreamInspectionResult InspectGnssStreamStream(
-    std::istream& input,
-    bool include_items = true);
+GnssStreamInspectionResult InspectGnssStreamStream(std::istream& input, bool include_items = true);
 
 const char* DescribeProtocolType(universal_gnss_protocols::ProtocolType protocol);
 
@@ -78,12 +74,10 @@ std::string FormatUbxMessageKey(std::uint8_t class_id, std::uint8_t message_id);
 
 std::string DescribeUbxMessage(std::uint8_t class_id, std::uint8_t message_id);
 
-std::string FormatGnssStreamInspectionText(
-    const GnssStreamInspectionResult& result,
-    bool summary_only = false);
+std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& result,
+                                           bool summary_only = false);
 
-std::string FormatGnssStreamInspectionJson(
-    const GnssStreamInspectionResult& result,
-    bool summary_only = false);
+std::string FormatGnssStreamInspectionJson(const GnssStreamInspectionResult& result,
+                                           bool summary_only = false);
 
 }  // namespace universal_gnss_tools

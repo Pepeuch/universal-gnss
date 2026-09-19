@@ -53,7 +53,8 @@ UbxFrame BuildUbxFrame(std::uint8_t class_id,
 
   const auto checksum =
       universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
-  bytes.push_back(valid_checksum ? checksum.ck_a : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
+  bytes.push_back(valid_checksum ? checksum.ck_a
+                                 : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
   bytes.push_back(checksum.ck_b);
 
   UbxFrameFramer framer;
@@ -87,8 +88,7 @@ void TestValidAckAckParsing(TestContext& ctx)
   const auto& record = *result.record;
   ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(1111),
              "ACK-ACK should preserve the framing timestamp");
-  ctx.Expect(record.kind == UbxAckMessageKind::kAck &&
-                 record.target_class_id == 0x06u &&
+  ctx.Expect(record.kind == UbxAckMessageKind::kAck && record.target_class_id == 0x06u &&
                  record.target_message_id == 0x8Au,
              "ACK-ACK should decode the acknowledged class/id payload");
 }
@@ -106,33 +106,31 @@ void TestValidAckNakParsing(TestContext& ctx)
   }
 
   const auto& record = *result.record;
-  ctx.Expect(record.kind == UbxAckMessageKind::kNak &&
-                 record.target_class_id == 0x06u &&
+  ctx.Expect(record.kind == UbxAckMessageKind::kNak && record.target_class_id == 0x06u &&
                  record.target_message_id == 0x8Bu,
              "ACK-NAK should decode the rejected class/id payload");
 }
 
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
-  ctx.Expect(universal_gnss_protocols::ParseUbxAck(
-                 BuildUbxFrame(0x01u, 0x03u, {0x06u, 0x8Au})).status ==
-                 ParserStatus::kSkipped,
-             "non-ACK UBX frames should be skipped by the ACK parser");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxAck(BuildUbxFrame(0x01u, 0x03u, {0x06u, 0x8Au})).status ==
+          ParserStatus::kSkipped,
+      "non-ACK UBX frames should be skipped by the ACK parser");
 
-  ctx.Expect(universal_gnss_protocols::ParseUbxAck(
-                 BuildUbxFrame(0x05u, 0x02u, {0x06u, 0x8Au})).status ==
-                 ParserStatus::kSkipped,
-             "unknown ACK-class message ids should be skipped");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxAck(BuildUbxFrame(0x05u, 0x02u, {0x06u, 0x8Au})).status ==
+          ParserStatus::kSkipped,
+      "unknown ACK-class message ids should be skipped");
 
-  ctx.Expect(universal_gnss_protocols::ParseUbxAck(
-                 BuildUbxFrame(0x05u, 0x01u, {0x06u})).status ==
+  ctx.Expect(universal_gnss_protocols::ParseUbxAck(BuildUbxFrame(0x05u, 0x01u, {0x06u})).status ==
                  ParserStatus::kInvalidData,
              "ACK payloads shorter than two bytes should be rejected");
 
-  ctx.Expect(universal_gnss_protocols::ParseUbxAck(
-                 BuildUbxFrame(0x05u, 0x00u, {0x06u, 0x8Au, 0x01u})).status ==
-                 ParserStatus::kInvalidData,
-             "ACK payloads longer than two bytes should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxAck(BuildUbxFrame(0x05u, 0x00u, {0x06u, 0x8Au, 0x01u}))
+              .status == ParserStatus::kInvalidData,
+      "ACK payloads longer than two bytes should be rejected");
 }
 
 void TestChecksumBehaviorThroughFramer(TestContext& ctx)

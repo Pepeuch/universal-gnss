@@ -14,14 +14,14 @@ namespace
 
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ComputeUnicoreBinaryCrc32;
-using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::kUnicoreBinaryCrcSize;
 using universal_gnss_protocols::kUnicoreBinaryHeaderSize;
 using universal_gnss_protocols::kUnicoreBinarySync1;
 using universal_gnss_protocols::kUnicoreBinarySync2;
 using universal_gnss_protocols::kUnicoreBinarySync3;
+using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 
 struct TestContext
 {
@@ -51,9 +51,8 @@ void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, std::uint32_t value)
   bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
 }
 
-std::vector<std::uint8_t> BuildBinaryFrame(
-    std::uint16_t message_id,
-    const std::vector<std::uint8_t>& payload)
+std::vector<std::uint8_t> BuildBinaryFrame(std::uint16_t message_id,
+                                           const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> frame;
   frame.reserve(kUnicoreBinaryHeaderSize + payload.size() + kUnicoreBinaryCrcSize);
@@ -78,9 +77,9 @@ std::vector<std::uint8_t> BuildBinaryFrame(
   return frame;
 }
 
-std::vector<std::uint8_t> BuildCorruptLengthCandidate(
-    const std::vector<std::uint8_t>& truncated_payload_prefix,
-    const std::vector<std::uint8_t>& following_frame)
+std::vector<std::uint8_t>
+BuildCorruptLengthCandidate(const std::vector<std::uint8_t>& truncated_payload_prefix,
+                            const std::vector<std::uint8_t>& following_frame)
 {
   const std::size_t declared_payload_size =
       truncated_payload_prefix.size() + following_frame.size();
@@ -94,11 +93,10 @@ std::vector<std::uint8_t> BuildCorruptLengthCandidate(
   return frame;
 }
 
-ParserStatus FeedBytes(
-    UnicoreBinaryFrameFramer& framer,
-    const std::vector<std::uint8_t>& bytes,
-    std::optional<UnicoreBinaryFrame>& record,
-    std::optional<std::int64_t> timestamp_ns = std::nullopt)
+ParserStatus FeedBytes(UnicoreBinaryFrameFramer& framer,
+                       const std::vector<std::uint8_t>& bytes,
+                       std::optional<UnicoreBinaryFrame>& record,
+                       std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
   ParserStatus last_status = ParserStatus::kIdle;
   record.reset();
@@ -114,9 +112,8 @@ ParserStatus FeedBytes(
   return last_status;
 }
 
-std::vector<UnicoreBinaryFrame> CollectRecords(
-    UnicoreBinaryFrameFramer& framer,
-    const std::vector<std::uint8_t>& bytes)
+std::vector<UnicoreBinaryFrame> CollectRecords(UnicoreBinaryFrameFramer& framer,
+                                               const std::vector<std::uint8_t>& bytes)
 {
   std::vector<UnicoreBinaryFrame> records;
   for (const std::uint8_t byte : bytes)
@@ -161,17 +158,13 @@ void TestPartialStreamHandling(TestContext& ctx)
 
   std::optional<UnicoreBinaryFrame> record;
   const ParserStatus partial =
-      FeedBytes(framer,
-                std::vector<std::uint8_t>(frame.begin(), frame.end() - 2),
-                record);
+      FeedBytes(framer, std::vector<std::uint8_t>(frame.begin(), frame.end() - 2), record);
   ctx.Expect(partial == ParserStatus::kNeedMoreData,
              "partial binary frame should wait for more data");
   ctx.Expect(!record.has_value(), "partial binary frame should not emit a record");
 
   const ParserStatus completed =
-      FeedBytes(framer,
-                std::vector<std::uint8_t>(frame.end() - 2, frame.end()),
-                record);
+      FeedBytes(framer, std::vector<std::uint8_t>(frame.end() - 2, frame.end()), record);
   ctx.Expect(completed == ParserStatus::kRecordReady,
              "remaining bytes should complete the binary frame");
   ctx.Expect(record.has_value() && record->message_id == 2125u,
@@ -187,8 +180,7 @@ void TestSyncRecoveryAfterNoise(TestContext& ctx)
 
   std::optional<UnicoreBinaryFrame> record;
   const ParserStatus status = FeedBytes(framer, bytes, record);
-  ctx.Expect(status == ParserStatus::kRecordReady,
-             "framer should recover after binary noise");
+  ctx.Expect(status == ParserStatus::kRecordReady, "framer should recover after binary noise");
   ctx.Expect(record.has_value() && record->message_id == 520u,
              "sync recovery should still emit the valid frame");
 }
@@ -201,8 +193,7 @@ void TestInvalidChecksumRejectedAndUnknownIdAccepted(TestContext& ctx)
 
   std::optional<UnicoreBinaryFrame> record;
   const ParserStatus invalid_status = FeedBytes(framer, invalid, record);
-  ctx.Expect(invalid_status == ParserStatus::kInvalidData,
-             "bad binary CRC should be rejected");
+  ctx.Expect(invalid_status == ParserStatus::kInvalidData, "bad binary CRC should be rejected");
   ctx.Expect(!record.has_value(), "bad binary CRC should not emit a record");
 
   const auto unknown_valid = BuildBinaryFrame(9999u, {0x05u, 0x06u, 0x07u});
@@ -216,8 +207,7 @@ void TestInvalidChecksumRejectedAndUnknownIdAccepted(TestContext& ctx)
 void TestCorruptLengthRecoversFollowingValidFrame(TestContext& ctx)
 {
   const auto following = BuildBinaryFrame(
-      520u,
-      {0x01u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x02u});
+      520u, {0x01u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x02u});
   const auto corrupt = BuildCorruptLengthCandidate({}, following);
 
   UnicoreBinaryFrameFramer framer;
@@ -257,9 +247,8 @@ void TestCorruptLengthRecoversFollowingValidFrame(TestContext& ctx)
   bad_crc.insert(bad_crc.end(), following.begin(), following.end());
   UnicoreBinaryFrameFramer bad_crc_framer;
   const auto after_bad_crc = CollectRecords(bad_crc_framer, bad_crc);
-  const auto valid_count = std::count_if(
-      after_bad_crc.begin(), after_bad_crc.end(), [](const auto& frame)
-      {
+  const auto valid_count =
+      std::count_if(after_bad_crc.begin(), after_bad_crc.end(), [](const auto& frame) {
         return frame.checksum_status == ChecksumStatus::kValid;
       });
   ctx.Expect(valid_count == 1u,
@@ -267,8 +256,7 @@ void TestCorruptLengthRecoversFollowingValidFrame(TestContext& ctx)
 
   UnicoreBinaryFrameFramer valid_payload_framer;
   const auto valid_payload = BuildBinaryFrame(
-      520u,
-      {0x10u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x20u});
+      520u, {0x10u, kUnicoreBinarySync1, kUnicoreBinarySync2, kUnicoreBinarySync3, 0x20u});
   const auto valid_payload_records = CollectRecords(valid_payload_framer, valid_payload);
   ctx.Expect(valid_payload_records.size() == 1u &&
                  valid_payload_records.front().message_id == 520u &&

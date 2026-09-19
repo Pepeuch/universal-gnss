@@ -147,8 +147,7 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                       "unicore_um960");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command)
-                            {
+                            [](const ReceiverCommand& command) {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM960 rover helper should not guess a signal-group selection");
@@ -171,8 +170,7 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                       "unicore_um980");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command)
-                            {
+                            [](const ReceiverCommand& command) {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM980 rover helper should not guess a signal-group selection");
@@ -195,8 +193,7 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                       "unicore_ub9a0");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command)
-                            {
+                            [](const ReceiverCommand& command) {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UB9A0 rover helper should not guess a signal-group selection");
@@ -213,16 +210,14 @@ void TestModelAwareRoverProfileGeneration(TestContext& ctx)
                "signal-group commands");
     ctx.Expect(std::none_of(result.commands.begin(),
                             result.commands.end(),
-                            [](const ReceiverCommand& command)
-                            {
+                            [](const ReceiverCommand& command) {
                               return ContainsText(command, "CONFIG SIGNALGROUP");
                             }),
                "UM981 rover helper should not guess a signal-group selection");
   }
 
-  const auto profile =
-      UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(ResolveUnicoreModelProfile("UM982"),
-                                                            UnicorePersistenceTarget::kRuntimeOnly);
+  const auto profile = UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
+      ResolveUnicoreModelProfile("UM982"), UnicorePersistenceTarget::kRuntimeOnly);
   const auto result = UnicoreConfigProfileBuilder::Build(profile);
 
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 14u,
@@ -249,13 +244,11 @@ void TestDiagnosticsProfileGeneration(TestContext& ctx)
   ctx.Expect(result.status == UnicoreConfigProfileBuildStatus::kOk && result.commands.size() == 13u,
              "generic unicore diagnostics helper should preserve the lean rover command count "
              "without guessing a signal-group");
-  ctx.Expect(!std::any_of(result.commands.begin(),
-                          result.commands.end(),
-                          [](const ReceiverCommand& command)
-                          {
-                            return ContainsText(command, "UNLOG");
-                          }),
-             "unicore diagnostics helper should not emit UNLOG by default");
+  ctx.Expect(
+      !std::any_of(result.commands.begin(),
+                   result.commands.end(),
+                   [](const ReceiverCommand& command) { return ContainsText(command, "UNLOG"); }),
+      "unicore diagnostics helper should not emit UNLOG by default");
   ctx.Expect(ContainsText(result.commands[8], "PVTSLNA 0.2"),
              "unicore diagnostics helper should restore PVTSLNA to 5 Hz for verbose live debugging "
              "using the documented current-port syntax");

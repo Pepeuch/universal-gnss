@@ -41,9 +41,8 @@ struct NtripReconnectPolicy
   std::optional<std::uint32_t> max_attempts{};
   bool reset_after_success{true};
 
-  NtripReconnectDecision OnFailure(
-      NtripReconnectState& state,
-      universal_gnss::GnssTimestampNs now_timestamp_ns) const;
+  NtripReconnectDecision OnFailure(NtripReconnectState& state,
+                                   universal_gnss::GnssTimestampNs now_timestamp_ns) const;
   void OnSuccess(NtripReconnectState& state,
                  universal_gnss::GnssTimestampNs now_timestamp_ns) const;
   bool ShouldReconnect(const NtripReconnectState& state,

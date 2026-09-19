@@ -87,12 +87,8 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
 
 GnssQualityReport BuildGnssQualityReportStream(std::istream& input);
 
-std::string FormatGnssQualityReportText(
-    const GnssQualityReport& report,
-    bool summary_only = false);
+std::string FormatGnssQualityReportText(const GnssQualityReport& report, bool summary_only = false);
 
-std::string FormatGnssQualityReportJson(
-    const GnssQualityReport& report,
-    bool summary_only = false);
+std::string FormatGnssQualityReportJson(const GnssQualityReport& report, bool summary_only = false);
 
 }  // namespace universal_gnss_tools

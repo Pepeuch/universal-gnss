@@ -22,8 +22,7 @@ struct RtcmCorrectionActivityStats
 };
 
 using RtcmMessageTypeActivityMap = std::map<std::uint16_t, RtcmCorrectionActivityStats>;
-using RtcmMsmConstellationActivityMap =
-    std::map<RtcmConstellation, RtcmCorrectionActivityStats>;
+using RtcmMsmConstellationActivityMap = std::map<RtcmConstellation, RtcmCorrectionActivityStats>;
 
 struct RtcmMsmSummaryActivityStats
 {
@@ -106,8 +105,8 @@ public:
   std::uint64_t MessageCount(std::uint16_t message_type) const;
   std::optional<ProtocolTimestampNs> LastSeenMessageTimestampNs(std::uint16_t message_type) const;
   std::uint64_t MsmConstellationCount(RtcmConstellation constellation) const;
-  std::optional<ProtocolTimestampNs> LastSeenMsmConstellationTimestampNs(
-      RtcmConstellation constellation) const;
+  std::optional<ProtocolTimestampNs>
+  LastSeenMsmConstellationTimestampNs(RtcmConstellation constellation) const;
 
   bool HasSeenBasePositionMessage() const;
   bool HasBaseStationPosition() const;
@@ -147,18 +146,19 @@ public:
   bool HasRequiredMessageTypes(const std::vector<std::uint16_t>& message_types) const;
   bool HasRequiredCorrectionMessages(const RtcmCorrectionHealthOptions& options) const;
 
-  std::optional<ProtocolTimestampNs> AgeSinceLastFrameNs(ProtocolTimestampNs now_timestamp_ns) const;
-  std::optional<ProtocolTimestampNs> AgeSinceMessageTypeNs(std::uint16_t message_type,
-                                                           ProtocolTimestampNs now_timestamp_ns) const;
-  std::optional<ProtocolTimestampNs> AgeSinceMsmConstellationNs(
-      RtcmConstellation constellation,
-      ProtocolTimestampNs now_timestamp_ns) const;
-  std::optional<ProtocolTimestampNs> AgeSinceBaseStationArpNs(
-      ProtocolTimestampNs now_timestamp_ns) const;
-  std::optional<ProtocolTimestampNs> AgeSinceAntennaDescriptorNs(
-      ProtocolTimestampNs now_timestamp_ns) const;
-  std::optional<ProtocolTimestampNs> AgeSinceGlonassBias1230Ns(
-      ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceLastFrameNs(ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceMessageTypeNs(std::uint16_t message_type, ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceMsmConstellationNs(RtcmConstellation constellation,
+                             ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceBaseStationArpNs(ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceAntennaDescriptorNs(ProtocolTimestampNs now_timestamp_ns) const;
+  std::optional<ProtocolTimestampNs>
+  AgeSinceGlonassBias1230Ns(ProtocolTimestampNs now_timestamp_ns) const;
   std::optional<ProtocolTimestampNs> AgeSinceLastMsmNs(ProtocolTimestampNs now_timestamp_ns) const;
 
   std::optional<double> TotalFrameRateHz(ProtocolTimestampNs window_end_timestamp_ns,
@@ -229,12 +229,12 @@ private:
                              std::optional<ProtocolTimestampNs> timestamp_ns);
 };
 
-universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
-    const RtcmCorrectionMonitor& monitor,
-    const RtcmCorrectionHealthOptions& options);
+universal_gnss::GnssHealthSummary
+BuildRtcmCorrectionHealth(const RtcmCorrectionMonitor& monitor,
+                          const RtcmCorrectionHealthOptions& options);
 
-RtcmSemanticObservations BuildRtcmSemanticObservations(
-    const RtcmCorrectionMonitor& monitor,
-    std::optional<ProtocolTimestampNs> now_timestamp_ns = std::nullopt);
+RtcmSemanticObservations
+BuildRtcmSemanticObservations(const RtcmCorrectionMonitor& monitor,
+                              std::optional<ProtocolTimestampNs> now_timestamp_ns = std::nullopt);
 
 }  // namespace universal_gnss_protocols

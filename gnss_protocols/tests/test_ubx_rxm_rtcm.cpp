@@ -37,7 +37,9 @@ struct TestContext
   }
 };
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -111,11 +113,10 @@ void TestValidAcceptedRtcmParsing(TestContext& ctx)
   ctx.Expect(record.version == 0x02u, "RXM-RTCM should decode version 0x02");
   ctx.Expect(!record.crc_failed && record.crc_ok,
              "RXM-RTCM should decode a passing receiver-side CRC state");
-  ctx.Expect(record.message_use == UbxRxmRtcmMessageUse::kUsed &&
-                 record.message_used && record.message_use_known,
+  ctx.Expect(record.message_use == UbxRxmRtcmMessageUse::kUsed && record.message_used &&
+                 record.message_use_known,
              "RXM-RTCM should decode the msgUsed field");
-  ctx.Expect(record.sub_type == 0u && record.ref_station_id == 42u &&
-                 record.message_type == 1077u,
+  ctx.Expect(record.sub_type == 0u && record.ref_station_id == 42u && record.message_type == 1077u,
              "RXM-RTCM should decode subtype, reference station, and RTCM message type");
 }
 
@@ -134,8 +135,8 @@ void TestValidBaseMessageParsing(TestContext& ctx)
   const auto& record = *result.record;
   ctx.Expect(record.message_type == 1005u,
              "RXM-RTCM should preserve base-position RTCM message types");
-  ctx.Expect(record.message_use == UbxRxmRtcmMessageUse::kNotUsed &&
-                 !record.message_used && record.message_use_known,
+  ctx.Expect(record.message_use == UbxRxmRtcmMessageUse::kNotUsed && !record.message_used &&
+                 record.message_use_known,
              "RXM-RTCM should distinguish received-but-not-used messages");
 }
 
@@ -191,10 +192,11 @@ void TestDiagnosticSeverityAndNoRuntimeInference(TestContext& ctx)
 
   const auto not_used_event =
       universal_gnss_protocols::UbxRxmRtcmToDiagnosticEvent(*not_used.record);
-  ctx.Expect(not_used_event.severity == GnssDiagnosticSeverity::kWarning &&
-                 not_used_event.category == GnssDiagnosticCategory::kCorrection &&
-                 not_used_event.code == "ubx_rxm_rtcm.not_used",
-             "not-used RXM-RTCM should map to a correction warning without inventing runtime fix state");
+  ctx.Expect(
+      not_used_event.severity == GnssDiagnosticSeverity::kWarning &&
+          not_used_event.category == GnssDiagnosticCategory::kCorrection &&
+          not_used_event.code == "ubx_rxm_rtcm.not_used",
+      "not-used RXM-RTCM should map to a correction warning without inventing runtime fix state");
 }
 
 void TestWrongClassIdAndMalformedPayloads(TestContext& ctx)
@@ -216,7 +218,8 @@ void TestWrongClassIdAndMalformedPayloads(TestContext& ctx)
                  ParserStatus::kInvalidData,
              "unexpected RXM-RTCM payload versions should be rejected");
 
-  UbxFrame invalid_checksum = BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x04u, 0u, 42u, 1077u));
+  UbxFrame invalid_checksum =
+      BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x04u, 0u, 42u, 1077u));
   invalid_checksum.checksum_status = ChecksumStatus::kInvalid;
   ctx.Expect(universal_gnss_protocols::ParseUbxRxmRtcm(invalid_checksum).status ==
                  ParserStatus::kInvalidData,

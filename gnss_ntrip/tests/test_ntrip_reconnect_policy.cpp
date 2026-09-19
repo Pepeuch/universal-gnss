@@ -47,12 +47,9 @@ void TestFirstFailureSchedulesInitialDelay(TestContext& ctx)
   universal_gnss_ntrip::NtripReconnectState state;
   const auto decision = policy.OnFailure(state, 1000000000LL);
 
-  ctx.Expect(decision.scheduled,
-             "the first reconnect failure should schedule a retry");
-  ctx.Expect(decision.attempt_count == 1u &&
-                 state.attempt_count == 1u &&
-                 state.current_delay_ms == 1000u &&
-                 !state.exhausted,
+  ctx.Expect(decision.scheduled, "the first reconnect failure should schedule a retry");
+  ctx.Expect(decision.attempt_count == 1u && state.attempt_count == 1u &&
+                 state.current_delay_ms == 1000u && !state.exhausted,
              "the first scheduled retry should use the initial reconnect delay");
   ctx.Expect(state.last_failure_time_ns == 1000000000LL &&
                  state.next_attempt_time_ns == 2000000000LL,
@@ -102,11 +99,8 @@ void TestMaxAttemptsStopsScheduling(TestContext& ctx)
 
   ctx.Expect(first.scheduled && second.scheduled,
              "reconnect scheduling should continue until the max attempt count is reached");
-  ctx.Expect(!third.scheduled &&
-                 !third.can_attempt &&
-                 state.attempt_count == 2u &&
-                 state.exhausted &&
-                 !state.next_attempt_time_ns.has_value(),
+  ctx.Expect(!third.scheduled && !third.can_attempt && state.attempt_count == 2u &&
+                 state.exhausted && !state.next_attempt_time_ns.has_value(),
              "max_attempts should stop scheduling additional reconnect retries");
 }
 
@@ -123,11 +117,10 @@ void TestSuccessResetBehavior(TestContext& ctx)
   policy.OnFailure(state, 2000000000LL);
   policy.OnSuccess(state, 3000000000LL);
 
-  ctx.Expect(state.attempt_count == 0u &&
-                 state.current_delay_ms == 0u &&
-                 !state.next_attempt_time_ns.has_value() &&
-                 !state.last_failure_time_ns.has_value(),
-             "successful reconnects should reset backoff state when reset_after_success is enabled");
+  ctx.Expect(
+      state.attempt_count == 0u && state.current_delay_ms == 0u &&
+          !state.next_attempt_time_ns.has_value() && !state.last_failure_time_ns.has_value(),
+      "successful reconnects should reset backoff state when reset_after_success is enabled");
   ctx.Expect(state.last_success_time_ns == 3000000000LL,
              "successful reconnects should store the last success timestamp");
 }
@@ -144,10 +137,10 @@ void TestSuccessKeepsStateWhenResetDisabled(TestContext& ctx)
   policy.OnFailure(state, 1000000000LL);
   policy.OnSuccess(state, 3000000000LL);
 
-  ctx.Expect(state.attempt_count == 1u &&
-                 state.current_delay_ms == 250u &&
+  ctx.Expect(state.attempt_count == 1u && state.current_delay_ms == 250u &&
                  !state.next_attempt_time_ns.has_value(),
-             "success without reset should preserve the current backoff while clearing the pending deadline");
+             "success without reset should preserve the current backoff while clearing the pending "
+             "deadline");
   ctx.Expect(state.last_failure_time_ns == 1000000000LL &&
                  state.last_success_time_ns == 3000000000LL,
              "success without reset should preserve failure history and store the success time");
@@ -161,12 +154,10 @@ void TestDisabledPolicyNeverReconnects(TestContext& ctx)
   universal_gnss_ntrip::NtripReconnectState state;
   const auto decision = policy.OnFailure(state, 1000000000LL);
 
-  ctx.Expect(!decision.scheduled &&
-                 !policy.CanAttempt(state) &&
+  ctx.Expect(!decision.scheduled && !policy.CanAttempt(state) &&
                  !policy.ShouldReconnect(state, 2000000000LL),
              "disabled reconnect policies should never schedule automatic retries");
-  ctx.Expect(state.attempt_count == 0u &&
-                 !state.exhausted &&
+  ctx.Expect(state.attempt_count == 0u && !state.exhausted &&
                  !state.next_attempt_time_ns.has_value(),
              "disabled reconnect policies should leave the reconnect schedule empty");
 }
@@ -222,15 +213,12 @@ public:
 
   bool WritePeer(const std::string& text)
   {
-    const auto* bytes =
-        reinterpret_cast<const std::uint8_t*>(text.data());
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(text.data());
     std::size_t offset = 0u;
     while (offset < text.size())
     {
       const ssize_t bytes_written =
-          ::write(peer_fd_,
-                  bytes + static_cast<std::ptrdiff_t>(offset),
-                  text.size() - offset);
+          ::write(peer_fd_, bytes + static_cast<std::ptrdiff_t>(offset), text.size() - offset);
       if (bytes_written < 0)
       {
         if (errno == EINTR)
@@ -258,9 +246,7 @@ public:
     while (offset < size)
     {
       const ssize_t bytes_read =
-          ::read(peer_fd_,
-                 buffer.data() + static_cast<std::ptrdiff_t>(offset),
-                 size - offset);
+          ::read(peer_fd_, buffer.data() + static_cast<std::ptrdiff_t>(offset), size - offset);
       if (bytes_read < 0)
       {
         if (errno == EINTR)
@@ -326,11 +312,9 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type)
       static_cast<std::uint8_t>((message_type >> 4u) & 0xFFu),
       static_cast<std::uint8_t>((message_type & 0x0Fu) << 4u),
   };
-  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u,
-                                     static_cast<std::uint8_t>(payload.size())};
+  std::vector<std::uint8_t> bytes = {0xD3u, 0x00u, static_cast<std::uint8_t>(payload.size())};
   bytes.insert(bytes.end(), payload.begin(), payload.end());
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -388,11 +372,10 @@ void TestNtripClientReconnectStateOnFailure(TestContext& ctx)
   ctx.Expect(read_result.client_error == universal_gnss_ntrip::NtripClientError::kProtocol &&
                  client.state() == universal_gnss_ntrip::NtripClientState::kFailed,
              "invalid NTRIP responses should fail the client");
-  ctx.Expect(client.metrics().reconnect_count == 1u &&
-                 reconnect_state.attempt_count == 1u &&
-                 reconnect_state.current_delay_ms == 1000u &&
-                 !reconnect_state.exhausted,
-             "retry-worthy client failures should increment reconnect metrics and record the first delay");
+  ctx.Expect(
+      client.metrics().reconnect_count == 1u && reconnect_state.attempt_count == 1u &&
+          reconnect_state.current_delay_ms == 1000u && !reconnect_state.exhausted,
+      "retry-worthy client failures should increment reconnect metrics and record the first delay");
   ctx.Expect(reconnect_state.last_failure_time_ns == 3000000000LL &&
                  reconnect_state.next_attempt_time_ns == 4000000000LL,
              "client reconnect state should capture the failure time and next retry deadline");
@@ -463,8 +446,8 @@ void TestClientBackoffResetsOnlyAfterOperationalCorrectionFlow(TestContext& ctx)
     {
       return;
     }
-    std::vector<std::uint8_t> response{'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K',
-                                       '\r', '\n', '\r', '\n'};
+    std::vector<std::uint8_t> response{
+        'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
     const auto frame = BuildRtcmFrame(1077u);
     response.insert(response.end(), frame.begin(), frame.end());
     ctx.Expect(one_frame_stream.WritePeer(response),
@@ -495,8 +478,8 @@ void TestClientBackoffResetsOnlyAfterOperationalCorrectionFlow(TestContext& ctx)
     {
       return;
     }
-    std::vector<std::uint8_t> response{'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K',
-                                       '\r', '\n', '\r', '\n'};
+    std::vector<std::uint8_t> response{
+        'I', 'C', 'Y', ' ', '2', '0', '0', ' ', 'O', 'K', '\r', '\n', '\r', '\n'};
     const auto frame = BuildRtcmFrame(1077u);
     response.insert(response.end(), frame.begin(), frame.end());
     response.insert(response.end(), frame.begin(), frame.end());

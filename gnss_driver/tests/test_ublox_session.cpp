@@ -64,13 +64,17 @@ std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload,
   return bytes;
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -78,12 +82,16 @@ void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, con
   payload[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xFFu);
 }
 
-void WriteLeI4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::int32_t value)
+void WriteLeI4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::int32_t value)
 {
   WriteLeU4(payload, offset, static_cast<std::uint32_t>(value));
 }
 
-void WriteLeI2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::int16_t value)
+void WriteLeI2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::int16_t value)
 {
   WriteLeU2(payload, offset, static_cast<std::uint16_t>(value));
 }
@@ -105,7 +113,8 @@ std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
 
   const auto checksum =
       universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
-  bytes.push_back(valid_checksum ? checksum.ck_a : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
+  bytes.push_back(valid_checksum ? checksum.ck_a
+                                 : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
   bytes.push_back(checksum.ck_b);
   return bytes;
 }
@@ -125,8 +134,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -296,8 +304,8 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
   ctx.Expect(metrics.ubx_frames_seen == 1u && metrics.frames_parsed == 1u &&
                  metrics.runtime_updates == 1u,
              "NAV-PVT should count as one parsed runtime-updating UBX frame");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1111) &&
-                 state.fix_valid && state.fix_type == GnssFixType::kFix,
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1111) && state.fix_valid &&
+                 state.fix_type == GnssFixType::kFix,
              "NAV-PVT should update fix state");
   ctx.Expect(state.latitude_deg == std::optional<double>(48.5678901) &&
                  state.longitude_deg == std::optional<double>(23.1234567) &&
@@ -305,8 +313,7 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
              "NAV-PVT should update coordinates and altitude");
   ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
                  HasValueAvailable(state, GnssCapability::kHeading) &&
-                 state.heading_deg.has_value() &&
-                 NearlyEqual(*state.heading_deg, 123.45678),
+                 state.heading_deg.has_value() && NearlyEqual(*state.heading_deg, 123.45678),
              "NAV-PVT should update heading when valid");
   ctx.Expect(HasValueAvailable(state, GnssCapability::kSpeedOverGround) &&
                  state.speed_over_ground_m_s == std::optional<float>(12.5f) &&
@@ -365,8 +372,8 @@ void TestNavStatusRtkUpdates(TestContext& ctx)
   session.FeedBytes(BuildUbxFrame(0x01u, 0x03u, MakeNavStatusPayload()), 3333);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(3333) &&
-                 state.fix_valid && state.fix_type == GnssFixType::kFix &&
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(3333) && state.fix_valid &&
+                 state.fix_type == GnssFixType::kFix &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "NAV-STATUS should update fix state and RTK mode");
 }
@@ -393,14 +400,12 @@ void TestNavDopUpdatesHdopAndVdop(TestContext& ctx)
                  HasCapability(state, GnssCapability::kHdop) &&
                  HasCapability(state, GnssCapability::kVdop) &&
                  HasValueAvailable(state, GnssCapability::kHdop) &&
-                 HasValueAvailable(state, GnssCapability::kVdop) &&
-                 state.hdop.has_value() && NearlyEqual(*state.hdop, 0.65) &&
-                 state.vdop.has_value() && NearlyEqual(*state.vdop, 0.87),
+                 HasValueAvailable(state, GnssCapability::kVdop) && state.hdop.has_value() &&
+                 NearlyEqual(*state.hdop, 0.65) && state.vdop.has_value() &&
+                 NearlyEqual(*state.vdop, 0.87),
              "NAV-DOP should update HDOP and VDOP conservatively");
-  ctx.Expect(!state.fix_valid &&
-                 state.fix_type == GnssFixType::kUnknown &&
-                 !state.latitude_deg.has_value() &&
-                 !state.satellites_visible.has_value(),
+  ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kUnknown &&
+                 !state.latitude_deg.has_value() && !state.satellites_visible.has_value(),
              "NAV-DOP should not invent fix, position, or satellite state");
 }
 
@@ -414,8 +419,7 @@ void TestMonHwInterferenceAndJammingUpdates(TestContext& ctx)
                  state.interference_detected == std::optional<bool>(true) &&
                  state.jamming_detected == std::optional<bool>(true),
              "MON-HW should update interference and jamming state conservatively");
-  ctx.Expect(state.fix_type == GnssFixType::kUnknown &&
-                 !state.latitude_deg.has_value() &&
+  ctx.Expect(state.fix_type == GnssFixType::kUnknown && !state.latitude_deg.has_value() &&
                  !state.horizontal_accuracy_m.has_value(),
              "MON-HW should not invent fix, position, or accuracy state");
 }
@@ -428,8 +432,7 @@ void TestRxmRtcmMetrics(TestContext& ctx)
   session.FeedBytes(BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(1230u, 42u, 0x01u)), 4549);
 
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.ubx_frames_seen == 3u &&
-                 metrics.frames_parsed == 3u &&
+  ctx.Expect(metrics.ubx_frames_seen == 3u && metrics.frames_parsed == 3u &&
                  metrics.receiver_rtcm_messages_seen == 3u,
              "RXM-RTCM should be counted as a known parsed UBX message");
   ctx.Expect(metrics.receiver_rtcm_messages_used == 1u &&
@@ -446,24 +449,19 @@ void TestRxmRtcmMetrics(TestContext& ctx)
 void TestNmeaGstAccuracyUpdates(TestContext& ctx)
 {
   UbloxSession session;
-  session.FeedBytes(BuildNmeaSentence(
-                        "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"),
-                    5000);
-  session.FeedBytes(BuildNmeaSentence(
-                        "GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
-                    5001);
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"), 5000);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 5001);
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.nmea_sentences_seen == 2u &&
-                 metrics.frames_parsed == 2u &&
+  ctx.Expect(metrics.nmea_sentences_seen == 2u && metrics.frames_parsed == 2u &&
                  metrics.runtime_updates == 2u,
              "GGA plus GST should count as two parsed runtime updates");
   ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
              "GST should not disturb the existing NMEA fix state");
   ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 48.1173) &&
-                 state.longitude_deg.has_value() &&
-                 NearlyEqual(*state.longitude_deg, 11.5166667) &&
+                 state.longitude_deg.has_value() && NearlyEqual(*state.longitude_deg, 11.5166667) &&
                  state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 545.4),
              "GST should not overwrite position from GGA");
   ctx.Expect(HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
@@ -482,12 +480,11 @@ void TestNmeaGstAccuracyUpdates(TestContext& ctx)
 void TestMixedStreamRouting(TestContext& ctx)
 {
   std::vector<std::uint8_t> stream = {0x00u, 0x7Fu};
-  Append(stream, BuildNmeaSentence(
-                     "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
-  Append(stream, BuildNmeaSentence(
-                     "GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"));
-  Append(stream, BuildNmeaSentence(
-                     "GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
+  Append(stream,
+         BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,"));
+  Append(stream, BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"));
+  Append(stream,
+         BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"));
   Append(stream, BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()));
   Append(stream, BuildRtcmFrame(1005u));
 
@@ -496,16 +493,13 @@ void TestMixedStreamRouting(TestContext& ctx)
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.nmea_sentences_seen == 3u &&
-                 metrics.ubx_frames_seen == 1u &&
+  ctx.Expect(metrics.nmea_sentences_seen == 3u && metrics.ubx_frames_seen == 1u &&
                  metrics.rtcm_frames_seen == 1u,
              "mixed stream should count NMEA, UBX, and RTCM frames");
-  ctx.Expect(metrics.frames_parsed == 5u &&
-                 metrics.runtime_updates == 4u &&
+  ctx.Expect(metrics.frames_parsed == 5u && metrics.runtime_updates == 4u &&
                  metrics.rtcm_message_type_counts.at(1005u) == 1u,
              "mixed stream should parse supported messages and retain RTCM counts");
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
                  state.latitude_deg == std::optional<double>(48.5678901) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u),
              "mixed stream should merge NMEA and UBX runtime fields");
@@ -516,15 +510,13 @@ void TestUnknownAndMalformedFrameCounting(TestContext& ctx)
   UbloxSession session;
   session.FeedBytes(BuildUbxFrame(0x06u, 0x01u, std::vector<std::uint8_t>(8u, 0u)));
   session.FeedBytes(BuildUbxFrame(0x01u, 0x03u, MakeNavStatusPayload(), false));
-  session.FeedBytes(BuildNmeaSentence(
-                        "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,",
-                        false));
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,", false));
 
   const auto& metrics = session.metrics();
   ctx.Expect(metrics.unknown_frames == 1u,
              "unsupported valid UBX frames should increment unknown-frame count");
-  ctx.Expect(metrics.malformed_frames == 2u &&
-                 metrics.frames_rejected == 0u,
+  ctx.Expect(metrics.malformed_frames == 2u && metrics.frames_rejected == 0u,
              "invalid checksum UBX and NMEA frames should count as malformed, not rejected");
 }
 
@@ -535,10 +527,10 @@ void TestPartialChunksAcrossFeedCalls(TestContext& ctx)
   session.FeedBytes(nav_pvt.data(), 12u, 7000);
   session.FeedBytes(nav_pvt.data() + 12u, nav_pvt.size() - 12u, 7001);
 
-  ctx.Expect(session.metrics().ubx_frames_seen == 1u &&
-                 session.metrics().frames_parsed == 1u &&
+  ctx.Expect(session.metrics().ubx_frames_seen == 1u && session.metrics().frames_parsed == 1u &&
                  session.current_state().timestamp_ns == std::optional<std::int64_t>(7000),
-             "split NAV-PVT input should parse after the final chunk and preserve the first-byte timestamp");
+             "split NAV-PVT input should parse after the final chunk and preserve the first-byte "
+             "timestamp");
 }
 
 void TestFinalizeAndReset(TestContext& ctx)

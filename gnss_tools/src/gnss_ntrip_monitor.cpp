@@ -41,32 +41,25 @@ void HandleSignal(const int)
 std::int64_t MonotonicNowNs()
 {
   using clock = std::chrono::steady_clock;
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             clock::now().time_since_epoch())
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(clock::now().time_since_epoch())
       .count();
 }
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name
-      << " --host <name> --port <int> --mountpoint <name>"
-      << " [--user <name>] [--password <text>] [--user-agent <text>]"
-      << " [--lat <deg> --lon <deg> [--alt <m>] [--gga-interval <seconds>]]"
-      << " [--max-bytes <bytes>] [--max-seconds <seconds>]"
-      << " [--read-timeout-ms <ms>] [--summary] [--json]\n"
-      << "Examples:\n"
-      << "  " << program_name
-      << " --host caster.example.org --port 2101 --mountpoint MOUNT\n"
-      << "  " << program_name
-      << " --host caster.example.org --port 2101 --mountpoint NEAR"
-      << " --user user --password pass\n"
-      << "  " << program_name
-      << " --host caster.example.org --port 2101 --mountpoint NEAR"
-      << " --lat 48.0 --lon 2.0 --gga-interval 5\n"
-      << "  " << program_name
-      << " --host caster.example.org --port 2101 --mountpoint NEAR"
-      << " --max-seconds 30\n";
+  std::cout << "Usage: " << program_name << " --host <name> --port <int> --mountpoint <name>"
+            << " [--user <name>] [--password <text>] [--user-agent <text>]"
+            << " [--lat <deg> --lon <deg> [--alt <m>] [--gga-interval <seconds>]]"
+            << " [--max-bytes <bytes>] [--max-seconds <seconds>]"
+            << " [--read-timeout-ms <ms>] [--summary] [--json]\n"
+            << "Examples:\n"
+            << "  " << program_name << " --host caster.example.org --port 2101 --mountpoint MOUNT\n"
+            << "  " << program_name << " --host caster.example.org --port 2101 --mountpoint NEAR"
+            << " --user user --password pass\n"
+            << "  " << program_name << " --host caster.example.org --port 2101 --mountpoint NEAR"
+            << " --lat 48.0 --lon 2.0 --gga-interval 5\n"
+            << "  " << program_name << " --host caster.example.org --port 2101 --mountpoint NEAR"
+            << " --max-seconds 30\n";
 }
 
 bool ParseUnsigned64(const std::string& text, std::uint64_t& value)
@@ -164,16 +157,16 @@ RtcmCorrectionHealthOptions BuildHealthOptions(const NtripMonitorOptions& option
 {
   RtcmCorrectionHealthOptions health_options;
   health_options.now_timestamp_ns = now_ns;
-  health_options.stale_after_ns =
-      std::max<std::int64_t>(5000000000LL,
-                             static_cast<std::int64_t>(options.read_timeout_ms) * 5000000LL);
+  health_options.stale_after_ns = std::max<std::int64_t>(
+      5000000000LL, static_cast<std::int64_t>(options.read_timeout_ms) * 5000000LL);
   health_options.required_observation_window_ns = 30000000000LL;
   health_options.startup_grace_ns = 30000000000LL;
   universal_gnss_protocols::ConfigurePortableRtkCorrectionRequirements(health_options);
   return health_options;
 }
 
-void PrintSummary(const NtripMonitorOptions& options, const NtripClient& client,
+void PrintSummary(const NtripMonitorOptions& options,
+                  const NtripClient& client,
                   const NtripMonitorStopReason stop_reason,
                   const std::int64_t elapsed_time_ns)
 {
@@ -450,8 +443,7 @@ int main(int argc, char** argv)
       stop_reason = NtripMonitorStopReason::kMaxSeconds;
       break;
     }
-    if (options.max_bytes.has_value() &&
-        client.metrics().bytes_received >= *options.max_bytes)
+    if (options.max_bytes.has_value() && client.metrics().bytes_received >= *options.max_bytes)
     {
       stop_reason = NtripMonitorStopReason::kMaxBytes;
       break;
@@ -501,8 +493,7 @@ int main(int argc, char** argv)
       break;
     }
 
-    if (options.max_bytes.has_value() &&
-        client.metrics().bytes_received >= *options.max_bytes)
+    if (options.max_bytes.has_value() && client.metrics().bytes_received >= *options.max_bytes)
     {
       stop_reason = NtripMonitorStopReason::kMaxBytes;
       break;

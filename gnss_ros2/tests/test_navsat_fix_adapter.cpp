@@ -91,12 +91,12 @@ TEST(NavSatFixAdapterTest, DerivesConservativeApproximateCovarianceWhenAvailable
   state.altitude_m = 100.0;
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                               state.horizontal_accuracy_m,
+                                               0.2f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m,
-      0.2f));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kVerticalAccuracy, state.vertical_accuracy_m,
-      0.5f));
+      state, universal_gnss::GnssCapability::kVerticalAccuracy, state.vertical_accuracy_m, 0.5f));
 
   const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
 
@@ -114,9 +114,10 @@ TEST(NavSatFixAdapterTest, DoesNotInventPartialCovarianceFromSingleAxisAccuracy)
   state.latitude_deg = 48.0;
   state.longitude_deg = 2.0;
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHorizontalAccuracy);
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m,
-      0.2f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                               state.horizontal_accuracy_m,
+                                               0.2f));
 
   const auto msg = universal_gnss_ros2::ToNavSatFixMessage(state);
 
@@ -143,9 +144,10 @@ TEST(NavSatFixAdapterTest, MapsOnlyExplicitRtkFixedToGbasStatus)
   float_state.latitude_deg = 48.0;
   float_state.longitude_deg = 2.0;
   universal_gnss::SetCapability(float_state, universal_gnss::GnssCapability::kRtkMode);
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      float_state, universal_gnss::GnssCapability::kRtkMode, float_state.rtk_mode,
-      universal_gnss::GnssRtkMode::kFloat));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(float_state,
+                                               universal_gnss::GnssCapability::kRtkMode,
+                                               float_state.rtk_mode,
+                                               universal_gnss::GnssRtkMode::kFloat));
 
   const auto float_msg = universal_gnss_ros2::ToNavSatFixMessage(float_state);
   EXPECT_EQ(float_msg.status.status, NavSatStatus::STATUS_FIX);

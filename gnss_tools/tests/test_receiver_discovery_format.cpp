@@ -7,7 +7,8 @@
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_tools/receiver_discovery_format.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_driver::ReceiverDetectedFamily;
 using universal_gnss_driver::ReceiverModelQueryMethod;
@@ -31,7 +32,8 @@ struct TestContext
   }
 };
 
-ReceiverProbeResult MakeResult(const std::string& path, const ReceiverDetectedFamily family,
+ReceiverProbeResult MakeResult(const std::string& path,
+                               const ReceiverDetectedFamily family,
                                const ReceiverProbeConfidence confidence)
 {
   ReceiverProbeResult result;
@@ -52,7 +54,8 @@ ReceiverProbeResult MakeResult(const std::string& path, const ReceiverDetectedFa
     result.model_verified = true;
     result.model_query_method = ReceiverModelQueryMethod::kUbloxMonVer;
     result.reason = "valid_ubx_frame:+100";
-  } else if (family == ReceiverDetectedFamily::kUnicore)
+  }
+  else if (family == ReceiverDetectedFamily::kUnicore)
   {
     result.identity.receiver_identity = "receiver-serial-42";
     result.identity.model = "UM982";
@@ -142,7 +145,7 @@ void TestFileBackedDiscoveryReplaySamples(TestContext& ctx)
              "generic NMEA replay should classify as medium-confidence NMEA");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

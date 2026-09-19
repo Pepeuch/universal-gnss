@@ -1,8 +1,10 @@
 #include "universal_gnss_driver/receiver_config_application.hpp"
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
-namespace {
+namespace
+{
 
 EngineStepResult
 MakeApplicationEngineResult(const ReceiverCommandTransactionEngineStepStatus status,
@@ -14,7 +16,7 @@ MakeApplicationEngineResult(const ReceiverCommandTransactionEngineStepStatus sta
   return result;
 }
 
-} // namespace
+}  // namespace
 
 ReceiverConfigApplication::ReceiverConfigApplication(universal_gnss_transport::ByteSink& sink,
                                                      ReceiverConfigApplicationConfig config)
@@ -142,15 +144,15 @@ ReceiverConfigApplication::ApplyResponse(const ReceiverCommandResponse& response
 
   if (command_succeeded)
   {
-    return CompleteCurrentCommand(engine_result, true, true,
-                                  "configuration command completed successfully");
+    return CompleteCurrentCommand(
+        engine_result, true, true, "configuration command completed successfully");
   }
 
   const std::string completed_message = engine_.completed_transaction().has_value()
                                             ? engine_.completed_transaction()->response.message
                                             : std::string{};
-  return HandleCommandFailure(engine_result, true, "configuration command was rejected",
-                              completed_message);
+  return HandleCommandFailure(
+      engine_result, true, "configuration command was rejected", completed_message);
 }
 
 ReceiverConfigApplicationResult
@@ -165,20 +167,35 @@ ReceiverConfigApplication::CheckTimeout(const ReceiverCommandTimestampNs now_tim
   return HandleTimeoutResult(engine_.CheckTimeout(now_timestamp_ns), now_timestamp_ns);
 }
 
-void ReceiverConfigApplication::Reset() { ResetRunState(); }
+void ReceiverConfigApplication::Reset()
+{
+  ResetRunState();
+}
 
-const ReceiverConfigApplicationConfig& ReceiverConfigApplication::config() const { return config_; }
+const ReceiverConfigApplicationConfig& ReceiverConfigApplication::config() const
+{
+  return config_;
+}
 
 const ReceiverConfigApplicationMetrics& ReceiverConfigApplication::metrics() const
 {
   return metrics_;
 }
 
-ReceiverConfigApplicationState ReceiverConfigApplication::state() const { return state_; }
+ReceiverConfigApplicationState ReceiverConfigApplication::state() const
+{
+  return state_;
+}
 
-std::size_t ReceiverConfigApplication::command_count() const { return commands_.size(); }
+std::size_t ReceiverConfigApplication::command_count() const
+{
+  return commands_.size();
+}
 
-std::size_t ReceiverConfigApplication::current_index() const { return current_index_; }
+std::size_t ReceiverConfigApplication::current_index() const
+{
+  return current_index_;
+}
 
 const ReceiverCommand* ReceiverConfigApplication::current_command() const
 {
@@ -203,10 +220,13 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::BuildResult() const
   return result;
 }
 
-ReceiverConfigApplicationResult ReceiverConfigApplication::CompleteCurrentCommand(
-    const EngineStepResult& engine_result, const bool command_succeeded,
-    const bool response_applied, const char* fallback_error_message, std::string error_message,
-    const bool allow_continuation)
+ReceiverConfigApplicationResult
+ReceiverConfigApplication::CompleteCurrentCommand(const EngineStepResult& engine_result,
+                                                  const bool command_succeeded,
+                                                  const bool response_applied,
+                                                  const char* fallback_error_message,
+                                                  std::string error_message,
+                                                  const bool allow_continuation)
 {
   const ReceiverCommand* command = current_command();
   const bool command_required = command == nullptr || IsRequiredCommand(*command);
@@ -215,13 +235,15 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::CompleteCurrentComman
   if (command_succeeded)
   {
     ++metrics_.commands_completed;
-  } else
+  }
+  else
   {
     ++metrics_.commands_failed;
     if (command_required)
     {
       ++metrics_.required_commands_failed;
-    } else
+    }
+    else
     {
       ++metrics_.optional_commands_failed;
     }
@@ -238,7 +260,8 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::CompleteCurrentComman
     ++current_index_;
     state_ = has_more_commands ? ReceiverConfigApplicationState::kRunning
                                : ReceiverConfigApplicationState::kCompleted;
-  } else
+  }
+  else
   {
     state_ = ReceiverConfigApplicationState::kFailed;
   }
@@ -262,12 +285,14 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::CompleteCurrentComman
   return result;
 }
 
-ReceiverConfigApplicationResult ReceiverConfigApplication::HandleCommandFailure(
-    const EngineStepResult& engine_result, const bool response_applied,
-    const char* fallback_error_message, std::string error_message)
+ReceiverConfigApplicationResult
+ReceiverConfigApplication::HandleCommandFailure(const EngineStepResult& engine_result,
+                                                const bool response_applied,
+                                                const char* fallback_error_message,
+                                                std::string error_message)
 {
-  return CompleteCurrentCommand(engine_result, false, response_applied, fallback_error_message,
-                                std::move(error_message));
+  return CompleteCurrentCommand(
+      engine_result, false, response_applied, fallback_error_message, std::move(error_message));
 }
 
 ReceiverConfigApplicationResult ReceiverConfigApplication::HandleTimeoutResult(
@@ -287,8 +312,11 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::HandleTimeoutResult(
 
   (void)retry_timestamp_ns;
   return CompleteCurrentCommand(
-      timeout_result, false, false,
-      "configuration command timed out after dispatch; receiver session is indeterminate", {},
+      timeout_result,
+      false,
+      false,
+      "configuration command timed out after dispatch; receiver session is indeterminate",
+      {},
       false);
 }
 
@@ -301,4 +329,4 @@ void ReceiverConfigApplication::ResetRunState()
   current_index_ = 0u;
 }
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

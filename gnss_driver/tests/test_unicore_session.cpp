@@ -17,8 +17,8 @@
 namespace
 {
 
-using universal_gnss::GnssCapability;
 using universal_gnss::GnssBaselineSolutionStatus;
+using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
@@ -53,14 +53,8 @@ std::string WithUnicoreAsciiCrc(const std::string& frame_without_crc)
       frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
-  stream << frame_without_crc
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
-         << "\r\n";
+  stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
+         << std::setfill('0') << crc << "\r\n";
   return stream.str();
 }
 
@@ -101,7 +95,8 @@ std::string MakeBestNavLineWithLatitude(const std::string_view latitude)
 {
   return WithUnicoreAsciiCrc(
       "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,NARROW_FLOAT," + std::string(latitude) +
+      "SOL_COMPUTED,NARROW_FLOAT," +
+      std::string(latitude) +
       ",116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
       "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
       "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
@@ -114,30 +109,32 @@ const std::string kPvtslnLine = WithUnicoreAsciiCrc(
     "SOL_COMPUTED,1.5000,182.2500,0.1000,28,25,12,8,2.1753,1.3480,0.6840,1.8392,1.7072,5.0,"
     "28,25,26");
 
-const std::string kRtkStatusLine = WithUnicoreAsciiCrc(
-    "#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
-    "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0");
+const std::string kRtkStatusLine =
+    WithUnicoreAsciiCrc("#RTKSTATUSA,97,GPS,FINE,2190,365354000,0,0,18,1;"
+                        "0,0,0,0,0,0,0,0,0,0,0,NARROW_INT,5,0,1,12,0");
 
-const std::string kSatsInfoLine = WithUnicoreAsciiCrc(
-    "#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
-    "3,2,0,0,0,63,"
-    "2,302,51,0,45,0,2,0,42,9,2,"
-    "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
-    "5,225,14,1,50,0,1");
+const std::string kSatsInfoLine =
+    WithUnicoreAsciiCrc("#SATSINFOA,96,GPS,FINE,2215,367199000,0,0,18,16;"
+                        "3,2,0,0,0,63,"
+                        "2,302,51,0,45,0,2,0,42,9,2,"
+                        "4,48,17,0,37,0,3,0,43,14,3,0,39,9,3,"
+                        "5,225,14,1,50,0,1");
 
-const std::string kBestSatLine = WithUnicoreAsciiCrc(
-    "#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
-    "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,BEIDOU,20,GOOD,00000000");
+const std::string kBestSatLine =
+    WithUnicoreAsciiCrc("#BESTSATA,79,GPS,FINE,2203,226245800,0,0,18,22;"
+                        "4,GPS,2,GOOD,00000013,GLONASS,2-4,GOOD,00000010,GALILEO,5,GOOD,00000001,"
+                        "BEIDOU,20,GOOD,00000000");
 
-const std::string kJamStatusLine = WithUnicoreAsciiCrc(
-    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0");
+const std::string kJamStatusLine =
+    WithUnicoreAsciiCrc("#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0");
 
-const std::string kRtcmStatusLine = WithUnicoreAsciiCrc(
-    "#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
-    "1124,21186,0,21,0,6,11,0,0,21");
+const std::string kRtcmStatusLine =
+    WithUnicoreAsciiCrc("#RTCMSTATUSA,76,GPS,FINE,2219,392572000,0,0,18,187;"
+                        "1124,21186,0,21,0,6,11,0,0,21");
 
-const std::string kHwStatusLine = WithUnicoreAsciiCrc(
-    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,0.693,0.0,0x00,0,0x0377,0,0");
+const std::string kHwStatusLine =
+    WithUnicoreAsciiCrc("#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,1,"
+                        "0.693,0.0,0x00,0,0x0377,0,0");
 
 void AppendLittleEndian16(std::vector<std::uint8_t>& bytes, const std::uint16_t value)
 {
@@ -295,8 +292,7 @@ void TestBestNavUpdatesRuntimeState(TestContext& ctx)
   ctx.Expect(metrics.lines_seen == 1u && metrics.ascii_records_seen == 1u &&
                  metrics.records_parsed == 1u && metrics.runtime_updates == 1u,
              "BESTNAVA feed should count one parsed runtime update");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(2222) &&
-                 state.fix_valid &&
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(2222) && state.fix_valid &&
                  state.fix_type == GnssFixType::kRtkFloat &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
              "BESTNAVA should update fix and RTK state");
@@ -322,7 +318,8 @@ void TestNonFiniteBestNavValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
                    metrics.runtime_updates == 1u &&
                    state.latitude_deg == std::optional<double>(40.0789588272) &&
                    state.latitude_deg.has_value() && std::isfinite(*state.latitude_deg),
-               "non-finite Unicore BESTNAVA latitude must be rejected before it can update runtime state: " +
+               "non-finite Unicore BESTNAVA latitude must be rejected before it can update runtime "
+               "state: " +
                    std::string(value));
   }
 }
@@ -333,8 +330,7 @@ void TestPvtslnUpdatesHeading(TestContext& ctx)
   session.FeedString(kPvtslnLine, 1111);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFixed &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "PVTSLNA should expose RTK fixed state");
   ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
@@ -344,9 +340,8 @@ void TestPvtslnUpdatesHeading(TestContext& ctx)
                  HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
                  state.heading_deg == std::optional<double>(182.25) &&
                  state.dual_antenna_baseline == std::optional<bool>(true) &&
-                 state.baseline_solution_status ==
-                     std::optional<GnssBaselineSolutionStatus>(
-                         GnssBaselineSolutionStatus::kComputed) &&
+                 state.baseline_solution_status == std::optional<GnssBaselineSolutionStatus>(
+                                                       GnssBaselineSolutionStatus::kComputed) &&
                  state.dual_antenna_heading == std::optional<bool>(true),
              "PVTSLNA should update compatibility heading plus canonical baseline state");
 }
@@ -357,8 +352,7 @@ void TestRtkStatusUpdatesDualAntenna(TestContext& ctx)
   session.FeedString(kRtkStatusLine, 3333);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFixed &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "RTKSTATUSA should update RTK fixed state");
   ctx.Expect(HasCapability(state, GnssCapability::kDualAntennaHeading) &&
@@ -393,19 +387,15 @@ void TestNmeaGsvUpdatesVisibleAndCn0AcrossTalkers(TestContext& ctx)
 {
   UnicoreSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      5800);
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 5800);
   session.FeedBytes(
-      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"),
-      5801);
+      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"), 5801);
   session.FeedBytes(
-      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"),
-      5802);
+      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"), 5802);
 
   const auto& state = session.current_state();
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.records_parsed == 3u &&
-                 metrics.runtime_observations == 3u &&
+  ctx.Expect(metrics.records_parsed == 3u && metrics.runtime_observations == 3u &&
                  metrics.runtime_updates == 3u,
              "mixed Unicore NMEA GSV sentences should count as parsed runtime observations");
   ctx.Expect(HasCapability(state, GnssCapability::kSatellitesVisible) &&
@@ -421,7 +411,8 @@ void TestNmeaGsvUpdatesVisibleAndCn0AcrossTalkers(TestContext& ctx)
                  state.mean_cn0_db_hz.has_value() &&
                  std::fabs(*state.mean_cn0_db_hz - 37.5f) < 1e-6f &&
                  state.max_cn0_db_hz == std::optional<float>(43.0f),
-             "GSV routing should aggregate conservative tracked counts, visible satellites, and CN0 across recent talkers");
+             "GSV routing should aggregate conservative tracked counts, visible satellites, and "
+             "CN0 across recent talkers");
 }
 
 void TestBestSatUpdatesTrackedAndUsedOnly(TestContext& ctx)
@@ -449,69 +440,56 @@ void TestNmeaFallbackDoesNotOverrideRichUnicoreState(TestContext& ctx)
   UnicoreSession session;
   session.FeedString(kBestNavLine, 6000);
   session.FeedBytes(
-      BuildNmeaSentence("GNGGA,123519,4807.111,N,01131.999,E,1,08,1.5,100.1,M,46.9,M,,"),
-      6001);
-  session.FeedBytes(
-      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,9.9,8.8,7.7"),
-      6002);
+      BuildNmeaSentence("GNGGA,123519,4807.111,N,01131.999,E,1,08,1.5,100.1,M,46.9,M,,"), 6001);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,9.9,8.8,7.7"), 6002);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFloat &&
-                 state.latitude_deg == std::optional<double>(40.0789588272) &&
-                 state.longitude_deg == std::optional<double>(116.2365102982) &&
-                 state.altitude_m == std::optional<double>(65.8312) &&
-                 state.horizontal_accuracy_m.has_value() &&
-                 std::fabs(*state.horizontal_accuracy_m - 1.2221f) < 1e-6f &&
-                 state.vertical_accuracy_m.has_value() &&
-                 std::fabs(*state.vertical_accuracy_m - 2.1970f) < 1e-6f,
-             "NMEA fallback sentences should not overwrite richer Unicore fix, position, or accuracy");
+  ctx.Expect(
+      state.fix_valid && state.fix_type == GnssFixType::kRtkFloat &&
+          state.latitude_deg == std::optional<double>(40.0789588272) &&
+          state.longitude_deg == std::optional<double>(116.2365102982) &&
+          state.altitude_m == std::optional<double>(65.8312) &&
+          state.horizontal_accuracy_m.has_value() &&
+          std::fabs(*state.horizontal_accuracy_m - 1.2221f) < 1e-6f &&
+          state.vertical_accuracy_m.has_value() &&
+          std::fabs(*state.vertical_accuracy_m - 2.1970f) < 1e-6f,
+      "NMEA fallback sentences should not overwrite richer Unicore fix, position, or accuracy");
 }
 
 void TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(TestContext& ctx)
 {
   UnicoreSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"),
-      6100);
-  session.FeedBytes(
-      BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"),
-      6101);
+      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"), 6100);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.5,0.6,1.1"), 6101);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix &&
-                 state.latitude_deg.has_value() &&
-                 state.longitude_deg.has_value() &&
-                 state.altitude_m == std::optional<double>(545.4) &&
-                 state.hdop == std::optional<float>(0.9f) &&
-                 state.satellites_used == std::optional<std::uint16_t>(8u) &&
-                 state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
-                 state.vertical_accuracy_m == std::optional<float>(1.1f),
-             "NMEA fallback should populate fix and accuracy only when Unicore state is still missing");
+  ctx.Expect(
+      state.fix_valid && state.fix_type == GnssFixType::kFix && state.latitude_deg.has_value() &&
+          state.longitude_deg.has_value() && state.altitude_m == std::optional<double>(545.4) &&
+          state.hdop == std::optional<float>(0.9f) &&
+          state.satellites_used == std::optional<std::uint16_t>(8u) &&
+          state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
+          state.vertical_accuracy_m == std::optional<float>(1.1f),
+      "NMEA fallback should populate fix and accuracy only when Unicore state is still missing");
 }
 
 void TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(TestContext& ctx)
 {
   UnicoreSession session;
   session.FeedBytes(
-      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,17,0.9,545.4,M,46.9,M,,"),
-      6200);
+      BuildNmeaSentence("GNGGA,123519,4807.038,N,01131.000,E,2,17,0.9,545.4,M,46.9,M,,"), 6200);
   session.FeedBytes(
-      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"),
-      6201);
+      BuildNmeaSentence("GPGSV,2,1,08,01,40,083,41,02,17,308,43,12,25,120,42,14,10,220,39"), 6201);
   session.FeedBytes(
-      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"),
-      6202);
+      BuildNmeaSentence("GPGSV,2,2,08,15,05,300,37,18,30,045,40,20,15,180,38,22,20,270,36"), 6202);
   session.FeedBytes(
-      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"),
-      6203);
+      BuildNmeaSentence("GLGSV,1,1,06,65,45,123,35,66,30,200,34,67,20,250,33,68,15,300,32"), 6203);
   session.FeedString(kBestNavLine, 6204);
   session.FeedString(kPvtslnLine, 6205);
 
   const auto& state = session.current_state();
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFixed &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
                  state.latitude_deg == std::optional<double>(40.07898130522) &&
                  state.longitude_deg == std::optional<double>(116.23663134427),
@@ -519,7 +497,8 @@ void TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(TestContext& 
   ctx.Expect(state.satellites_used == std::optional<std::uint16_t>(17u) &&
                  state.satellites_tracked == std::optional<std::uint16_t>(17u) &&
                  state.satellites_visible == std::optional<std::uint16_t>(17u),
-             "recent mixed NMEA GGA/GSV satellite counts should remain physically coherent over position-message tails");
+             "recent mixed NMEA GGA/GSV satellite counts should remain physically coherent over "
+             "position-message tails");
 }
 
 void TestJammingStatusUpdatesRuntimeState(TestContext& ctx)
@@ -545,8 +524,7 @@ void TestRtcmStatusParsesWithoutRuntimeUpdate(TestContext& ctx)
   session.FeedString(kRtcmStatusLine, 7777);
 
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.ascii_records_seen == 1u &&
-                 metrics.records_parsed == 1u &&
+  ctx.Expect(metrics.ascii_records_seen == 1u && metrics.records_parsed == 1u &&
                  metrics.runtime_updates == 0u,
              "RTCMSTATUSA should be parsed by the session without becoming a runtime update");
   ctx.Expect(metrics.receiver_rtcm_status_messages_seen == 1u &&
@@ -565,9 +543,9 @@ void TestUnknownAndMalformedRecords(TestContext& ctx)
 {
   UnicoreSession session;
   session.FeedString(WithUnicoreAsciiCrc("#FOOBARA,97,GPS,FINE,1,2,0,0,0,0;payload"));
-  session.FeedString(WithUnicoreAsciiCrc(
-      "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-      "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312"));
+  session.FeedString(
+      WithUnicoreAsciiCrc("#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+                          "SOL_COMPUTED,SINGLE,not_a_latitude,116.2365102982,65.8312"));
 
   const auto& metrics = session.metrics();
   ctx.Expect(metrics.lines_seen == 2u && metrics.ascii_records_seen == 2u,
@@ -599,13 +577,13 @@ void TestHardwareAndAgcRecordsCountAsParsedWithoutRuntimeUpdate(TestContext& ctx
   UnicoreSession session;
   session.FeedString(kHwStatusLine, 9000);
   session.FeedString(
-      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1*634f1e4b\r\n",
-      9001);
+      "#AGCA,65,GPS,FINE,2190,375570000,0,0,18,37;44,46,63,-1,-1,41,1,0,-1,-1*634f1e4b\r\n", 9001);
 
   const auto& metrics = session.metrics();
   ctx.Expect(metrics.records_parsed == 2u && metrics.runtime_updates == 0u &&
                  metrics.unknown_records == 0u && metrics.records_rejected == 0u,
-             "HWSTATUSA and AGCA should be treated as known parsed telemetry even without runtime updates");
+             "HWSTATUSA and AGCA should be treated as known parsed telemetry even without runtime "
+             "updates");
   ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
                  !session.current_state().timestamp_ns.has_value(),
              "HWSTATUSA and AGCA should not modify the aggregated runtime state");
@@ -619,20 +597,17 @@ void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.binary_frames_seen == 2u &&
-                 metrics.records_parsed == 2u && metrics.runtime_updates == 2u,
+  ctx.Expect(metrics.binary_frames_seen == 2u && metrics.records_parsed == 2u &&
+                 metrics.runtime_updates == 2u,
              "BESTNAVB and PVTSLNB should route through the binary Unicore session path");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9200) &&
-                 state.fix_valid &&
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9200) && state.fix_valid &&
                  state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "PVTSLNB should update the final fix and RTK state");
-  ctx.Expect(state.latitude_deg.has_value() &&
-                 NearlyEqual(*state.latitude_deg, 40.07898130522) &&
+  ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 40.07898130522) &&
                  state.longitude_deg.has_value() &&
                  NearlyEqual(*state.longitude_deg, 116.23663134427) &&
-                 state.altitude_m.has_value() &&
-                 NearlyEqual(*state.altitude_m, 60.5060, 1e-4),
+                 state.altitude_m.has_value() && NearlyEqual(*state.altitude_m, 60.5060, 1e-4),
              "binary Unicore runtime routing should update coordinates and altitude");
   ctx.Expect(state.horizontal_accuracy_m.has_value() &&
                  std::fabs(*state.horizontal_accuracy_m - 0.18f) < 1e-6f &&
@@ -640,13 +615,11 @@ void TestBinaryBestNavAndPvtslnRouting(TestContext& ctx)
                  std::fabs(*state.vertical_accuracy_m - 0.2f) < 1e-6f &&
                  state.correction_age_s.has_value() &&
                  std::fabs(*state.correction_age_s - 0.9f) < 1e-6f &&
-                 state.heading_deg.has_value() &&
-                 NearlyEqual(*state.heading_deg, 182.25, 1e-6) &&
+                 state.heading_deg.has_value() && NearlyEqual(*state.heading_deg, 182.25, 1e-6) &&
                  state.dual_antenna_baseline == std::optional<bool>(true) &&
                  state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
                  state.baseline_pitch_deg == std::optional<float>(0.1f) &&
-                 state.baseline_length_m == std::optional<float>(1.5f) &&
-                 state.hdop.has_value() &&
+                 state.baseline_length_m == std::optional<float>(1.5f) && state.hdop.has_value() &&
                  std::fabs(*state.hdop - 0.684f) < 1e-6f,
              "PVTSLNB should carry accuracy, baseline geometry, correction age, heading, and HDOP");
 }
@@ -657,12 +630,11 @@ void TestUnknownBinaryFrameCountsWithoutRuntimeUpdate(TestContext& ctx)
   session.FeedBytes(BuildUnicoreBinaryFrame(9999u, std::vector<std::uint8_t>(8u, 0x42u)), 9250);
 
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.binary_frames_seen == 1u &&
-                 metrics.unknown_records == 1u &&
-                 metrics.records_parsed == 0u &&
-                 metrics.records_rejected == 0u &&
+  ctx.Expect(metrics.binary_frames_seen == 1u && metrics.unknown_records == 1u &&
+                 metrics.records_parsed == 0u && metrics.records_rejected == 0u &&
                  metrics.runtime_updates == 0u,
-             "valid but unsupported Unicore binary message ids should remain unknown and must not be decoded as runtime state");
+             "valid but unsupported Unicore binary message ids should remain unknown and must not "
+             "be decoded as runtime state");
   ctx.Expect(session.current_state().fix_type == GnssFixType::kUnknown &&
                  !session.current_state().timestamp_ns.has_value(),
              "unknown Unicore binary frames should not invent runtime state");
@@ -679,15 +651,11 @@ void TestStartupBinaryResyncSuppressesFirstMalformedFrame(TestContext& ctx)
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.binary_frames_seen == 1u &&
-                 metrics.malformed_frames == 0u &&
-                 metrics.records_parsed == 1u &&
-                 metrics.runtime_updates == 1u,
+  ctx.Expect(metrics.binary_frames_seen == 1u && metrics.malformed_frames == 0u &&
+                 metrics.records_parsed == 1u && metrics.runtime_updates == 1u,
              "the first malformed binary frame before sync should be suppressed once");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9400) &&
-                 state.fix_valid &&
-                 state.latitude_deg.has_value() &&
-                 NearlyEqual(*state.latitude_deg, 40.0789588272),
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9400) && state.fix_valid &&
+                 state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 40.0789588272),
              "a valid binary frame after startup resync should still update runtime state");
 }
 
@@ -721,10 +689,8 @@ void TestMalformedBinaryFrameAfterSyncCounts(TestContext& ctx)
   session.FeedBytes(invalid_frame, 9700);
 
   const auto& metrics = session.metrics();
-  ctx.Expect(metrics.binary_frames_seen == 1u &&
-                 metrics.malformed_frames == 1u &&
-                 metrics.records_parsed == 1u &&
-                 metrics.runtime_updates == 1u,
+  ctx.Expect(metrics.binary_frames_seen == 1u && metrics.malformed_frames == 1u &&
+                 metrics.records_parsed == 1u && metrics.runtime_updates == 1u,
              "malformed binary frames after initial sync should still be counted");
 }
 
@@ -734,21 +700,17 @@ void TestStrayBinarySyncCanFallbackIntoAsciiFrame(TestContext& ctx)
   std::string bytes;
   bytes.push_back(static_cast<char>(universal_gnss_protocols::kUnicoreBinarySync1));
   bytes += kBestNavLine;
-  session.FeedBytes(
-      reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size(), 9800);
+  session.FeedBytes(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size(), 9800);
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.lines_seen == 1u &&
-                 metrics.ascii_records_seen == 1u &&
-                 metrics.records_parsed == 1u &&
-                 metrics.runtime_updates == 1u &&
-                 metrics.unknown_records == 0u &&
-                 metrics.records_rejected == 0u &&
-                 metrics.malformed_frames == 0u,
-             "a stray binary sync byte ahead of a real ASCII frame should not hide the ASCII record");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9800) &&
-                 state.fix_valid &&
+  ctx.Expect(
+      metrics.lines_seen == 1u && metrics.ascii_records_seen == 1u &&
+          metrics.records_parsed == 1u && metrics.runtime_updates == 1u &&
+          metrics.unknown_records == 0u && metrics.records_rejected == 0u &&
+          metrics.malformed_frames == 0u,
+      "a stray binary sync byte ahead of a real ASCII frame should not hide the ASCII record");
+  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(9800) && state.fix_valid &&
                  state.latitude_deg == std::optional<double>(40.0789588272),
              "binary fallback should still preserve the first-byte timestamp and runtime state");
 }
@@ -762,21 +724,18 @@ void TestBinaryPayloadDoesNotLeakIntoAsciiFramer(TestContext& ctx)
 
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.binary_frames_seen == 1u &&
-                 metrics.lines_seen == 1u &&
-                 metrics.ascii_records_seen == 1u &&
-                 metrics.records_parsed == 2u &&
-                 metrics.runtime_updates == 2u &&
-                 metrics.unknown_records == 0u &&
-                 metrics.records_rejected == 0u &&
-                 metrics.malformed_lines == 0u &&
+  ctx.Expect(metrics.binary_frames_seen == 1u && metrics.lines_seen == 1u &&
+                 metrics.ascii_records_seen == 1u && metrics.records_parsed == 2u &&
+                 metrics.runtime_updates == 2u && metrics.unknown_records == 0u &&
+                 metrics.records_rejected == 0u && metrics.malformed_lines == 0u &&
                  metrics.malformed_frames == 0u,
-             "binary payload bytes that look like ASCII sync should stay isolated inside the binary framer");
-  ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(10000) &&
-                 state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFloat &&
-                 state.latitude_deg == std::optional<double>(40.0789588272),
-             "mixed binary and ASCII runtime records should still converge on the final parsed state");
+             "binary payload bytes that look like ASCII sync should stay isolated inside the "
+             "binary framer");
+  ctx.Expect(
+      state.timestamp_ns == std::optional<std::int64_t>(10000) && state.fix_valid &&
+          state.fix_type == GnssFixType::kRtkFloat &&
+          state.latitude_deg == std::optional<double>(40.0789588272),
+      "mixed binary and ASCII runtime records should still converge on the final parsed state");
 }
 
 void TestFinalizeAndReset(TestContext& ctx)
@@ -792,9 +751,8 @@ void TestFinalizeAndReset(TestContext& ctx)
   session.Reset();
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
-  ctx.Expect(metrics.bytes_seen == 0u && metrics.lines_seen == 0u &&
-                 metrics.records_parsed == 0u && metrics.runtime_updates == 0u &&
-                 metrics.malformed_lines == 0u,
+  ctx.Expect(metrics.bytes_seen == 0u && metrics.lines_seen == 0u && metrics.records_parsed == 0u &&
+                 metrics.runtime_updates == 0u && metrics.malformed_lines == 0u,
              "reset should clear session metrics");
   ctx.Expect(state.fix_type == GnssFixType::kUnknown && !state.fix_valid &&
                  !state.latitude_deg.has_value(),

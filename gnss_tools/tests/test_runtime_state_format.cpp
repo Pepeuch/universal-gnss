@@ -105,13 +105,15 @@ void TestJsonFormatting(TestContext& ctx)
              "json formatting should preserve valid zero speed and course values");
   ctx.Expect(formatted.find("\"dual_antenna_baseline\":true") != std::string::npos &&
                  formatted.find("\"baseline_azimuth_deg\":182.25") != std::string::npos &&
-                 formatted.find("\"baseline_solution_status\":\"computed\"") !=
-                     std::string::npos,
+                 formatted.find("\"baseline_solution_status\":\"computed\"") != std::string::npos,
              "json formatting should include additive baseline fields");
   ctx.Expect(formatted.find("\"jamming_detected\":true") != std::string::npos,
              "json formatting should include available boolean fields");
-  ctx.Expect(formatted.find("\"utc_date\":{\"year\":2002,\"month\":7,\"day\":4}") != std::string::npos &&
-                 formatted.find("\"utc_time\":{\"hour\":20,\"minute\":15,\"second\":30,\"nanosecond\":0}") != std::string::npos,
+  ctx.Expect(formatted.find("\"utc_date\":{\"year\":2002,\"month\":7,\"day\":4}") !=
+                     std::string::npos &&
+                 formatted.find(
+                     "\"utc_time\":{\"hour\":20,\"minute\":15,\"second\":30,\"nanosecond\":0}") !=
+                     std::string::npos,
              "json formatting should expose receiver UTC components independently");
 }
 

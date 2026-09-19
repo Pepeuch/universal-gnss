@@ -1,8 +1,8 @@
 #include "universal_gnss_ros2/replay_node.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -171,9 +171,9 @@ bool ParseUnsigned16Text(const std::string& text, std::uint16_t& value)
   }
 }
 
-std::optional<universal_gnss::GnssTimestampNs> SelectReplayTimestamp(
-    const universal_gnss_tools::GnssReplayEvent& event,
-    const std::optional<universal_gnss::GnssTimestampNs>& last_known_timestamp)
+std::optional<universal_gnss::GnssTimestampNs>
+SelectReplayTimestamp(const universal_gnss_tools::GnssReplayEvent& event,
+                      const std::optional<universal_gnss::GnssTimestampNs>& last_known_timestamp)
 {
   if (event.state_after_event.timestamp_ns.has_value())
   {
@@ -192,8 +192,7 @@ bool HasRtkAvailability(const universal_gnss::GnssRuntimeState& state)
   }
 
   return universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
-         state.rtk_mode.has_value() &&
-         *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
+         state.rtk_mode.has_value() && *state.rtk_mode != universal_gnss::GnssRtkMode::kNone &&
          *state.rtk_mode != universal_gnss::GnssRtkMode::kUnknown;
 }
 
@@ -220,11 +219,12 @@ bool CanPublishFixMessage(const universal_gnss::GnssRuntimeState& state)
   return std::isfinite(*state.latitude_deg) && std::isfinite(*state.longitude_deg);
 }
 
-universal_gnss::GnssDiagnosticEvent MakeEvent(universal_gnss::GnssDiagnosticSeverity severity,
-                                              universal_gnss::GnssDiagnosticCategory category,
-                                              std::string code,
-                                              std::string message,
-                                              std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt)
+universal_gnss::GnssDiagnosticEvent
+MakeEvent(universal_gnss::GnssDiagnosticSeverity severity,
+          universal_gnss::GnssDiagnosticCategory category,
+          std::string code,
+          std::string message,
+          std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt)
 {
   universal_gnss::GnssDiagnosticEvent event;
   event.severity = severity;
@@ -273,16 +273,14 @@ ReplayNodeConfig LoadReplayNodeConfig(rclcpp::Node& node)
   }
 
   if (fallback_step_ms <= 0 ||
-      fallback_step_ms >
-          static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+      fallback_step_ms > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
   {
     ThrowInvalidParameter(node, "fallback_step_ms", "must be in the 1..4294967295 range");
   }
   config.fallback_step_ms = static_cast<std::uint32_t>(fallback_step_ms);
 
   if (timer_poll_ms <= 0 ||
-      timer_poll_ms >
-          static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+      timer_poll_ms > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
   {
     ThrowInvalidParameter(node, "timer_poll_ms", "must be in the 1..4294967295 range");
   }
@@ -300,8 +298,7 @@ struct ReplayNode::Impl
     config_ = LoadReplayNodeConfig(owner_);
     hardware_id_ = "replay:" + BasenameOf(config_.input_path);
 
-    status_publisher_ =
-        owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
+    status_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
     fix_publisher_ = owner_.create_publisher<sensor_msgs::msg::NavSatFix>("fix", 10);
     diagnostics_publisher_ =
         owner_.create_publisher<diagnostic_msgs::msg::DiagnosticArray>("diagnostics", 10);
@@ -326,8 +323,8 @@ struct ReplayNode::Impl
           }
           else
           {
-            response->message = replay_complete_ ? "replay already complete"
-                                                 : "no replay actions are available";
+            response->message =
+                replay_complete_ ? "replay already complete" : "no replay actions are available";
           }
         });
 
@@ -345,8 +342,8 @@ struct ReplayNode::Impl
     if (config_.replay_mode != ReplayMode::kStepped && !replay_complete_)
     {
       next_due_time_ = SteadyClock::now();
-      timer_ = owner_.create_wall_timer(
-          std::chrono::milliseconds(config_.timer_poll_ms), [this]() { this->OnTimer(); });
+      timer_ = owner_.create_wall_timer(std::chrono::milliseconds(config_.timer_poll_ms),
+                                        [this]() { this->OnTimer(); });
     }
   }
 
@@ -429,8 +426,7 @@ struct ReplayNode::Impl
 
   std::chrono::nanoseconds DelayToNextAction(const std::size_t current_index) const
   {
-    if (config_.replay_mode == ReplayMode::kFast ||
-        current_index + 1u >= actions_.size())
+    if (config_.replay_mode == ReplayMode::kFast || current_index + 1u >= actions_.size())
     {
       return std::chrono::nanoseconds(0);
     }
@@ -449,15 +445,13 @@ struct ReplayNode::Impl
       return std::chrono::nanoseconds(0);
     }
 
-    const double scaled_ns =
-        static_cast<double>(delta_ns) / config_.wall_time_scale;
+    const double scaled_ns = static_cast<double>(delta_ns) / config_.wall_time_scale;
     if (!std::isfinite(scaled_ns) || scaled_ns <= 0.0)
     {
       return std::chrono::nanoseconds(0);
     }
 
-    const auto rounded_ns =
-        static_cast<long long>(std::llround(scaled_ns));
+    const auto rounded_ns = static_cast<long long>(std::llround(scaled_ns));
     if (rounded_ns <= 0)
     {
       return std::chrono::nanoseconds(0);
@@ -496,68 +490,62 @@ struct ReplayNode::Impl
 
     if (replay_result_.summary.invalid_records > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kParser,
-          "replay_invalid_records",
-          "Replay input contains checksum-invalid records",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kParser,
+                                 "replay_invalid_records",
+                                 "Replay input contains checksum-invalid records",
+                                 timestamp_ns));
     }
 
     if (replay_result_.summary.malformed_events > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kParser,
-          "replay_malformed_records",
-          "Replay input contains malformed records",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kParser,
+                                 "replay_malformed_records",
+                                 "Replay input contains malformed records",
+                                 timestamp_ns));
     }
 
     if (replay_result_.summary.truncated_records > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kParser,
-          "replay_truncated_records",
-          "Replay input ended with truncated records",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                                 universal_gnss::GnssDiagnosticCategory::kParser,
+                                 "replay_truncated_records",
+                                 "Replay input ended with truncated records",
+                                 timestamp_ns));
     }
 
     if (actions_.empty())
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kWarning,
-          universal_gnss::GnssDiagnosticCategory::kRuntime,
-          "replay_no_publishable_actions",
-          "Replay input did not produce any ROS-visible GNSS or RTCM actions",
-          timestamp_ns));
+      summary.AddEvent(
+          MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                    universal_gnss::GnssDiagnosticCategory::kRuntime,
+                    "replay_no_publishable_actions",
+                    "Replay input did not produce any ROS-visible GNSS or RTCM actions",
+                    timestamp_ns));
     }
 
     if (!has_runtime_state_ && !actions_.empty())
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kInfo,
-          universal_gnss::GnssDiagnosticCategory::kRuntime,
-          "replay_waiting_for_runtime",
-          "Replay has not reached the first GNSS runtime update yet",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                                 universal_gnss::GnssDiagnosticCategory::kRuntime,
+                                 "replay_waiting_for_runtime",
+                                 "Replay has not reached the first GNSS runtime update yet",
+                                 timestamp_ns));
     }
 
     if (rtcm_published_frames_ > 0u)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kOk,
-          universal_gnss::GnssDiagnosticCategory::kCorrection,
-          "replay_rtcm_active",
-          "Replay is publishing RTCM frames",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                                 universal_gnss::GnssDiagnosticCategory::kCorrection,
+                                 "replay_rtcm_active",
+                                 "Replay is publishing RTCM frames",
+                                 timestamp_ns));
     }
 
-    if (HasKnownBoolField(
-            current_state_,
-            universal_gnss::GnssCapability::kInterferenceState,
-            current_state_.interference_detected))
+    if (HasKnownBoolField(current_state_,
+                          universal_gnss::GnssCapability::kInterferenceState,
+                          current_state_.interference_detected))
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
                                  universal_gnss::GnssDiagnosticCategory::kReceiver,
@@ -566,10 +554,9 @@ struct ReplayNode::Impl
                                  timestamp_ns));
     }
 
-    if (HasKnownBoolField(
-            current_state_,
-            universal_gnss::GnssCapability::kJammingState,
-            current_state_.jamming_detected))
+    if (HasKnownBoolField(current_state_,
+                          universal_gnss::GnssCapability::kJammingState,
+                          current_state_.jamming_detected))
     {
       summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kError,
                                  universal_gnss::GnssDiagnosticCategory::kReceiver,
@@ -580,12 +567,11 @@ struct ReplayNode::Impl
 
     if (replay_complete_)
     {
-      summary.AddEvent(MakeEvent(
-          universal_gnss::GnssDiagnosticSeverity::kInfo,
-          universal_gnss::GnssDiagnosticCategory::kTiming,
-          "replay_complete",
-          "Replay has reached end of file",
-          timestamp_ns));
+      summary.AddEvent(MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                                 universal_gnss::GnssDiagnosticCategory::kTiming,
+                                 "replay_complete",
+                                 "Replay has reached end of file",
+                                 timestamp_ns));
     }
 
     return summary;
@@ -601,38 +587,27 @@ struct ReplayNode::Impl
 
     status.values.push_back(MakeKeyValue("input_path", config_.input_path));
     status.values.push_back(MakeKeyValue("replay_mode", ToString(config_.replay_mode)));
+    status.values.push_back(MakeKeyValue("publish_rtcm", config_.publish_rtcm ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("capture_timestamps_available",
+                                         capture_timestamps_available_ ? "true" : "false"));
+    status.values.push_back(MakeKeyValue(
+        "recognized_records", std::to_string(replay_result_.summary.recognized_records)));
     status.values.push_back(
-        MakeKeyValue("publish_rtcm", config_.publish_rtcm ? "true" : "false"));
+        MakeKeyValue("runtime_updates", std::to_string(replay_result_.summary.runtime_updates)));
     status.values.push_back(
-        MakeKeyValue("capture_timestamps_available",
-                     capture_timestamps_available_ ? "true" : "false"));
+        MakeKeyValue("invalid_records", std::to_string(replay_result_.summary.invalid_records)));
     status.values.push_back(
-        MakeKeyValue("recognized_records",
-                     std::to_string(replay_result_.summary.recognized_records)));
-    status.values.push_back(
-        MakeKeyValue("runtime_updates",
-                     std::to_string(replay_result_.summary.runtime_updates)));
-    status.values.push_back(
-        MakeKeyValue("invalid_records",
-                     std::to_string(replay_result_.summary.invalid_records)));
-    status.values.push_back(
-        MakeKeyValue("malformed_events",
-                     std::to_string(replay_result_.summary.malformed_events)));
-    status.values.push_back(
-        MakeKeyValue("truncated_records",
-                     std::to_string(replay_result_.summary.truncated_records)));
-    status.values.push_back(
-        MakeKeyValue("publishable_actions", std::to_string(actions_.size())));
-    status.values.push_back(
-        MakeKeyValue("processed_actions", std::to_string(processed_actions_)));
+        MakeKeyValue("malformed_events", std::to_string(replay_result_.summary.malformed_events)));
+    status.values.push_back(MakeKeyValue("truncated_records",
+                                         std::to_string(replay_result_.summary.truncated_records)));
+    status.values.push_back(MakeKeyValue("publishable_actions", std::to_string(actions_.size())));
+    status.values.push_back(MakeKeyValue("processed_actions", std::to_string(processed_actions_)));
     status.values.push_back(
         MakeKeyValue("runtime_actions", std::to_string(total_runtime_actions_)));
-    status.values.push_back(
-        MakeKeyValue("rtcm_actions", std::to_string(total_rtcm_actions_)));
+    status.values.push_back(MakeKeyValue("rtcm_actions", std::to_string(total_rtcm_actions_)));
     status.values.push_back(
         MakeKeyValue("rtcm_published_frames", std::to_string(rtcm_published_frames_)));
-    status.values.push_back(
-        MakeKeyValue("complete", replay_complete_ ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("complete", replay_complete_ ? "true" : "false"));
     status.values.push_back(
         MakeKeyValue("wall_time_scale", std::to_string(config_.wall_time_scale)));
     status.values.push_back(
@@ -650,8 +625,7 @@ struct ReplayNode::Impl
     if (last_diagnostics_message_->header.stamp.sec == 0 &&
         last_diagnostics_message_->header.stamp.nanosec == 0u)
     {
-      const std::optional<universal_gnss::GnssTimestampNs> now_ns =
-          owner_.now().nanoseconds();
+      const std::optional<universal_gnss::GnssTimestampNs> now_ns = owner_.now().nanoseconds();
       last_diagnostics_message_->header.stamp = ToRosTime(now_ns);
     }
     last_diagnostics_message_->header.frame_id = config_.frame_id;

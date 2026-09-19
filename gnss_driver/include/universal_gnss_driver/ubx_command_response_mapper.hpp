@@ -16,11 +16,10 @@ struct UbxMessageIdentity
   std::uint8_t message_id{0};
 };
 
-std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(
-    const ReceiverCommand& command);
+std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(const ReceiverCommand& command);
 
-ReceiverCommandResponse MapUbxAckRecordToReceiverCommandResponse(
-    const universal_gnss_protocols::UbxAckRecord& record);
+ReceiverCommandResponse
+MapUbxAckRecordToReceiverCommandResponse(const universal_gnss_protocols::UbxAckRecord& record);
 
 bool DoesUbxAckRecordMatchCommand(const universal_gnss_protocols::UbxAckRecord& record,
                                   const ReceiverCommand& command);

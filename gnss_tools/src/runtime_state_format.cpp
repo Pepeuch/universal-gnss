@@ -257,14 +257,16 @@ std::string FormatRuntimeStateCompact(
   AppendOptionalFloat(stream, "corr_age_s", state.correction_age_s, 2);
   if (state.utc_date.has_value())
   {
-    stream << " utc_date=" << state.utc_date->year << '-' << static_cast<unsigned int>(state.utc_date->month)
-           << '-' << static_cast<unsigned int>(state.utc_date->day);
+    stream << " utc_date=" << state.utc_date->year << '-'
+           << static_cast<unsigned int>(state.utc_date->month) << '-'
+           << static_cast<unsigned int>(state.utc_date->day);
   }
   if (state.utc_time.has_value())
   {
     stream << " utc_time=" << static_cast<unsigned int>(state.utc_time->hour) << ':'
            << static_cast<unsigned int>(state.utc_time->minute) << ':'
-           << static_cast<unsigned int>(state.utc_time->second) << '.' << state.utc_time->nanosecond;
+           << static_cast<unsigned int>(state.utc_time->second) << '.'
+           << state.utc_time->nanosecond;
   }
   AppendOptionalFloat(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s, 3);
   AppendOptionalFloat(stream, "course_over_ground_deg", state.course_over_ground_deg, 2);
@@ -274,10 +276,7 @@ std::string FormatRuntimeStateCompact(
   AppendOptionalFloat(stream, "baseline_azimuth_deg", state.baseline_azimuth_deg, 2);
   AppendOptionalFloat(stream, "baseline_pitch_deg", state.baseline_pitch_deg, 2);
   AppendOptionalFloat(stream, "baseline_length_m", state.baseline_length_m, 3);
-  AppendOptionalEnum(stream,
-                     "baseline_solution_status",
-                     state.baseline_solution_status,
-                     ToString);
+  AppendOptionalEnum(stream, "baseline_solution_status", state.baseline_solution_status, ToString);
   AppendOptionalBool(stream, "interference", state.interference_detected);
   AppendOptionalBool(stream, "jamming", state.jamming_detected);
 
@@ -346,11 +345,14 @@ std::string FormatRuntimeStateJson(
   stream << "\"utc_date\":";
   if (state.utc_date.has_value())
   {
-    stream << "{\"year\":" << state.utc_date->year << ",\"month\":"
-           << static_cast<unsigned int>(state.utc_date->month) << ",\"day\":"
-           << static_cast<unsigned int>(state.utc_date->day) << '}';
+    stream << "{\"year\":" << state.utc_date->year
+           << ",\"month\":" << static_cast<unsigned int>(state.utc_date->month)
+           << ",\"day\":" << static_cast<unsigned int>(state.utc_date->day) << '}';
   }
-  else { stream << "null"; }
+  else
+  {
+    stream << "null";
+  }
   stream << ',';
   stream << "\"utc_time\":";
   if (state.utc_time.has_value())
@@ -360,7 +362,10 @@ std::string FormatRuntimeStateJson(
            << ",\"second\":" << static_cast<unsigned int>(state.utc_time->second)
            << ",\"nanosecond\":" << state.utc_time->nanosecond << '}';
   }
-  else { stream << "null"; }
+  else
+  {
+    stream << "null";
+  }
   stream << ',';
   AppendJsonOptionalNumber(stream, "speed_over_ground_m_s", state.speed_over_ground_m_s);
   stream << ',';
@@ -378,10 +383,8 @@ std::string FormatRuntimeStateJson(
   stream << ',';
   AppendJsonOptionalNumber(stream, "baseline_length_m", state.baseline_length_m);
   stream << ',';
-  AppendJsonOptionalEnum(stream,
-                         "baseline_solution_status",
-                         state.baseline_solution_status,
-                         ToString);
+  AppendJsonOptionalEnum(
+      stream, "baseline_solution_status", state.baseline_solution_status, ToString);
   stream << ',';
   AppendJsonOptionalBool(stream, "interference_detected", state.interference_detected);
   stream << ',';

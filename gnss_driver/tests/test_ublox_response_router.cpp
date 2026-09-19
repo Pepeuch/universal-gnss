@@ -89,8 +89,7 @@ void TestAckFrameGeneratesAckResponse(TestContext& ctx)
                  routed_response.ubx_target->class_id == 0x06u &&
                  routed_response.ubx_target->message_id == 0x8Au,
              "ACK-ACK routing should preserve the ACK response kind, timestamp, and UBX target");
-  ctx.Expect(router.metrics().frames_seen == 1u &&
-                 router.metrics().ack_frames_seen == 1u &&
+  ctx.Expect(router.metrics().frames_seen == 1u && router.metrics().ack_frames_seen == 1u &&
                  router.metrics().responses_generated == 1u &&
                  router.pending_response_count() == 1u,
              "ACK routing should update metrics and queue depth");
@@ -110,8 +109,7 @@ void TestNakFrameGeneratesNakResponse(TestContext& ctx)
                  routed_response.ubx_target.has_value() &&
                  routed_response.ubx_target->message_id == 0x8Bu,
              "ACK-NAK routing should preserve the NAK response kind, timestamp, and target id");
-  ctx.Expect(router.metrics().nak_frames_seen == 1u &&
-                 router.metrics().responses_generated == 1u &&
+  ctx.Expect(router.metrics().nak_frames_seen == 1u && router.metrics().responses_generated == 1u &&
                  router.pending_response_count() == 0u,
              "NAK routing should update NAK metrics and empty the queue after pop");
 }
@@ -125,8 +123,7 @@ void TestNavPvtIgnored(TestContext& ctx)
   UbloxRoutedResponse routed_response;
   ctx.Expect(!generated && !router.TryGetResponse(routed_response),
              "non-response UBX frames such as NAV-PVT should be ignored cleanly");
-  ctx.Expect(router.metrics().frames_seen == 1u &&
-                 router.metrics().ignored_frames == 1u &&
+  ctx.Expect(router.metrics().frames_seen == 1u && router.metrics().ignored_frames == 1u &&
                  router.metrics().responses_generated == 0u,
              "ignored UBX runtime frames should update ignored metrics only");
 }
@@ -136,17 +133,15 @@ void TestMalformedAckIgnored(TestContext& ctx)
   UbloxResponseRouter router;
   const bool bad_checksum =
       router.ProcessUbxFrame(BuildUbxFrame(0x05u, 0x01u, {0x06u, 0x8Au}, false));
-  const bool wrong_payload =
-      router.ProcessUbxFrame(BuildUbxFrame(0x05u, 0x00u, {0x06u}));
+  const bool wrong_payload = router.ProcessUbxFrame(BuildUbxFrame(0x05u, 0x00u, {0x06u}));
 
   UbloxRoutedResponse routed_response;
   ctx.Expect(!bad_checksum && !wrong_payload && !router.TryGetResponse(routed_response),
              "malformed ACK frames should not generate routed responses");
-  ctx.Expect(router.metrics().frames_seen == 2u &&
-                 router.metrics().malformed_frames == 2u &&
-                 router.metrics().responses_generated == 0u &&
-                 router.metrics().ignored_frames == 0u,
-             "malformed ACK frames should update malformed metrics without touching ignored counts");
+  ctx.Expect(
+      router.metrics().frames_seen == 2u && router.metrics().malformed_frames == 2u &&
+          router.metrics().responses_generated == 0u && router.metrics().ignored_frames == 0u,
+      "malformed ACK frames should update malformed metrics without touching ignored counts");
 }
 
 void TestResponseQueueBehavior(TestContext& ctx)

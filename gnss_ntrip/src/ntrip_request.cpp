@@ -35,8 +35,8 @@ std::string Base64Encode(std::string_view input)
   const std::size_t remaining = input.size() - index;
   if (remaining == 1u)
   {
-    const std::uint32_t chunk =
-        static_cast<std::uint32_t>(static_cast<unsigned char>(input[index])) << 16u;
+    const std::uint32_t chunk = static_cast<std::uint32_t>(static_cast<unsigned char>(input[index]))
+                                << 16u;
     encoded.push_back(kAlphabet[(chunk >> 18u) & 0x3Fu]);
     encoded.push_back(kAlphabet[(chunk >> 12u) & 0x3Fu]);
     encoded.push_back('=');
@@ -90,9 +90,7 @@ std::string NormalizeMountpointPath(const std::string_view mountpoint)
 NtripSourceIdentity BuildNtripSourceIdentity(const NtripConfig& config)
 {
   return NtripSourceIdentity{
-      NormalizeHost(config.host),
-      config.port,
-      NormalizeMountpointPath(config.mountpoint)};
+      NormalizeHost(config.host), config.port, NormalizeMountpointPath(config.mountpoint)};
 }
 
 std::string BuildBasicAuthorizationValue(const std::string_view username,
@@ -122,8 +120,7 @@ NtripRequest BuildNtripGetRequest(const NtripConfig& config)
 {
   NtripRequest request;
   request.mountpoint_path = NormalizeMountpointPath(config.mountpoint);
-  request.includes_authorization =
-      !(config.username.empty() && config.password.empty());
+  request.includes_authorization = !(config.username.empty() && config.password.empty());
   request.includes_ntrip_version_header = config.version == NtripVersion::kV2;
 
   const std::string user_agent = ResolveUserAgent(config.user_agent);

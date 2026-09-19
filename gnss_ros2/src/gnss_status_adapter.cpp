@@ -99,8 +99,7 @@ universal_gnss::GnssRtkMode FromMsgRtkMode(const std::uint8_t rtk_mode)
   }
 }
 
-std::uint8_t ToMsgBaselineSolutionStatus(
-    const universal_gnss::GnssBaselineSolutionStatus status)
+std::uint8_t ToMsgBaselineSolutionStatus(const universal_gnss::GnssBaselineSolutionStatus status)
 {
   switch (status)
   {
@@ -124,8 +123,7 @@ std::uint8_t ToMsgBaselineSolutionStatus(
   }
 }
 
-universal_gnss::GnssBaselineSolutionStatus FromMsgBaselineSolutionStatus(
-    const std::uint8_t status)
+universal_gnss::GnssBaselineSolutionStatus FromMsgBaselineSolutionStatus(const std::uint8_t status)
 {
   switch (status)
   {
@@ -156,9 +154,7 @@ void AssignOptionalWithNaN(T& destination, const std::optional<T>& source)
 }
 
 template <typename T>
-void AssignFlaggedOptional(T& destination,
-                           const std::optional<T>& source,
-                           bool value_available)
+void AssignFlaggedOptional(T& destination, const std::optional<T>& source, bool value_available)
 {
   destination = (value_available && source.has_value()) ? *source : QuietNaN<T>();
 }
@@ -177,8 +173,8 @@ void AssignFlaggedOptional(bool& destination,
   destination = value_available && source.has_value() ? *source : false;
 }
 
-std::optional<universal_gnss::GnssTimestampNs> FromRosTime(
-    const builtin_interfaces::msg::Time& stamp)
+std::optional<universal_gnss::GnssTimestampNs>
+FromRosTime(const builtin_interfaces::msg::Time& stamp)
 {
   if (stamp.sec == 0 && stamp.nanosec == 0u)
   {
@@ -196,9 +192,7 @@ std::optional<T> OptionalFromFinite(const T value)
 }
 
 template <typename T>
-void AssignOptionalField(std::optional<T>& destination,
-                         const T value,
-                         const bool value_available)
+void AssignOptionalField(std::optional<T>& destination, const T value, const bool value_available)
 {
   if (!value_available)
   {
@@ -237,8 +231,8 @@ void AssignOptionalField(std::optional<bool>& destination,
 
 }  // namespace
 
-builtin_interfaces::msg::Time ToRosTime(
-    const std::optional<universal_gnss::GnssTimestampNs>& timestamp_ns)
+builtin_interfaces::msg::Time
+ToRosTime(const std::optional<universal_gnss::GnssTimestampNs>& timestamp_ns)
 {
   builtin_interfaces::msg::Time stamp;
   if (!timestamp_ns.has_value())
@@ -279,8 +273,8 @@ bool HasValidCapabilityValueInvariant(const universal_gnss_ros2::msg::GnssStatus
   return (message.value_flags & ~message.capability_flags) == 0u;
 }
 
-universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
-    const universal_gnss::GnssRuntimeState& state)
+universal_gnss_ros2::msg::GnssStatus
+ToGnssStatusMessage(const universal_gnss::GnssRuntimeState& state)
 {
   const auto available_from_fields = universal_gnss::ComputeValueFlagsFromFields(state);
 
@@ -303,10 +297,8 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
 
   const bool has_rtk_mode =
       (message.value_flags & Msg::CAP_RTK_MODE) != 0u && state.rtk_mode.has_value();
-  const bool has_horizontal_accuracy =
-      (message.value_flags & Msg::CAP_HORIZONTAL_ACCURACY) != 0u;
-  const bool has_vertical_accuracy =
-      (message.value_flags & Msg::CAP_VERTICAL_ACCURACY) != 0u;
+  const bool has_horizontal_accuracy = (message.value_flags & Msg::CAP_HORIZONTAL_ACCURACY) != 0u;
+  const bool has_vertical_accuracy = (message.value_flags & Msg::CAP_VERTICAL_ACCURACY) != 0u;
   const bool has_hdop = (message.value_flags & Msg::CAP_HDOP) != 0u;
   const bool has_vdop = (message.value_flags & Msg::CAP_VDOP) != 0u;
   const bool has_satellites_used = (message.value_flags & Msg::CAP_SATELLITES_USED) != 0u;
@@ -319,20 +311,16 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
   const bool has_heading_accuracy = (message.value_flags & Msg::CAP_HEADING_ACCURACY) != 0u;
   const bool has_differential_corrections =
       (message.value_flags & Msg::CAP_DIFFERENTIAL_CORRECTIONS) != 0u;
-  const bool has_corrections_active =
-      (message.value_flags & Msg::CAP_CORRECTIONS_ACTIVE) != 0u;
-  const bool has_dual_antenna_heading =
-      (message.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u;
+  const bool has_corrections_active = (message.value_flags & Msg::CAP_CORRECTIONS_ACTIVE) != 0u;
+  const bool has_dual_antenna_heading = (message.value_flags & Msg::CAP_DUAL_ANTENNA_HEADING) != 0u;
   const bool has_dual_antenna_baseline =
       (message.value_flags & Msg::CAP_DUAL_ANTENNA_BASELINE) != 0u;
-  const bool has_baseline_azimuth =
-      (message.value_flags & Msg::CAP_BASELINE_AZIMUTH) != 0u;
+  const bool has_baseline_azimuth = (message.value_flags & Msg::CAP_BASELINE_AZIMUTH) != 0u;
   const bool has_baseline_pitch = (message.value_flags & Msg::CAP_BASELINE_PITCH) != 0u;
   const bool has_baseline_length = (message.value_flags & Msg::CAP_BASELINE_LENGTH) != 0u;
   const bool has_baseline_solution_status =
       (message.value_flags & Msg::CAP_BASELINE_SOLUTION_STATUS) != 0u;
-  const bool has_interference_state =
-      (message.value_flags & Msg::CAP_INTERFERENCE_STATE) != 0u;
+  const bool has_interference_state = (message.value_flags & Msg::CAP_INTERFERENCE_STATE) != 0u;
   const bool has_jamming_state = (message.value_flags & Msg::CAP_JAMMING_STATE) != 0u;
 
   if (has_rtk_mode)
@@ -364,15 +352,12 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
       message.corrections_active, state.corrections_active, has_corrections_active);
   AssignFlaggedOptional(
       message.dual_antenna_heading, state.dual_antenna_heading, has_dual_antenna_heading);
-  AssignFlaggedOptional(message.dual_antenna_baseline,
-                        state.dual_antenna_baseline,
-                        has_dual_antenna_baseline);
+  AssignFlaggedOptional(
+      message.dual_antenna_baseline, state.dual_antenna_baseline, has_dual_antenna_baseline);
   AssignFlaggedOptional(
       message.baseline_azimuth_deg, state.baseline_azimuth_deg, has_baseline_azimuth);
-  AssignFlaggedOptional(
-      message.baseline_pitch_deg, state.baseline_pitch_deg, has_baseline_pitch);
-  AssignFlaggedOptional(
-      message.baseline_length_m, state.baseline_length_m, has_baseline_length);
+  AssignFlaggedOptional(message.baseline_pitch_deg, state.baseline_pitch_deg, has_baseline_pitch);
+  AssignFlaggedOptional(message.baseline_length_m, state.baseline_length_m, has_baseline_length);
   if (has_baseline_solution_status && state.baseline_solution_status.has_value())
   {
     message.baseline_solution_status = ToMsgBaselineSolutionStatus(*state.baseline_solution_status);
@@ -384,8 +369,8 @@ universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
   return message;
 }
 
-universal_gnss::GnssRuntimeState FromGnssStatusMessage(
-    const universal_gnss_ros2::msg::GnssStatus& message)
+universal_gnss::GnssRuntimeState
+FromGnssStatusMessage(const universal_gnss_ros2::msg::GnssStatus& message)
 {
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = FromRosTime(message.stamp);
@@ -410,10 +395,8 @@ universal_gnss::GnssRuntimeState FromGnssStatusMessage(
   AssignOptionalField(state.vertical_accuracy_m,
                       message.vertical_accuracy_m,
                       (state.value_flags & Msg::CAP_VERTICAL_ACCURACY) != 0u);
-  AssignOptionalField(
-      state.hdop, message.hdop, (state.value_flags & Msg::CAP_HDOP) != 0u);
-  AssignOptionalField(
-      state.vdop, message.vdop, (state.value_flags & Msg::CAP_VDOP) != 0u);
+  AssignOptionalField(state.hdop, message.hdop, (state.value_flags & Msg::CAP_HDOP) != 0u);
+  AssignOptionalField(state.vdop, message.vdop, (state.value_flags & Msg::CAP_VDOP) != 0u);
   AssignOptionalField(state.satellites_used,
                       message.satellites_used,
                       (state.value_flags & Msg::CAP_SATELLITES_USED) != 0u);
@@ -423,18 +406,15 @@ universal_gnss::GnssRuntimeState FromGnssStatusMessage(
   AssignOptionalField(state.satellites_tracked,
                       message.satellites_tracked,
                       (state.value_flags & Msg::CAP_SATELLITES_TRACKED) != 0u);
-  AssignOptionalField(state.mean_cn0_db_hz,
-                      message.mean_cn0_db_hz,
-                      (state.value_flags & Msg::CAP_MEAN_CN0) != 0u);
-  AssignOptionalField(state.max_cn0_db_hz,
-                      message.max_cn0_db_hz,
-                      (state.value_flags & Msg::CAP_MAX_CN0) != 0u);
+  AssignOptionalField(
+      state.mean_cn0_db_hz, message.mean_cn0_db_hz, (state.value_flags & Msg::CAP_MEAN_CN0) != 0u);
+  AssignOptionalField(
+      state.max_cn0_db_hz, message.max_cn0_db_hz, (state.value_flags & Msg::CAP_MAX_CN0) != 0u);
   AssignOptionalField(state.correction_age_s,
                       message.correction_age_s,
                       (state.value_flags & Msg::CAP_CORRECTION_AGE) != 0u);
-  AssignOptionalField(state.heading_deg,
-                      message.heading_deg,
-                      (state.value_flags & Msg::CAP_HEADING) != 0u);
+  AssignOptionalField(
+      state.heading_deg, message.heading_deg, (state.value_flags & Msg::CAP_HEADING) != 0u);
   AssignOptionalField(state.heading_accuracy_deg,
                       message.heading_accuracy_deg,
                       (state.value_flags & Msg::CAP_HEADING_ACCURACY) != 0u);

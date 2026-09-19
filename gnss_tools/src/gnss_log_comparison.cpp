@@ -59,8 +59,7 @@ const char* DescribeRtkMode(const std::optional<universal_gnss::GnssRtkMode>& rt
 }
 
 template <typename T>
-std::optional<double> RightMinusLeft(const std::optional<T>& left,
-                                     const std::optional<T>& right)
+std::optional<double> RightMinusLeft(const std::optional<T>& left, const std::optional<T>& right)
 {
   if (!left.has_value() || !right.has_value())
   {
@@ -69,9 +68,8 @@ std::optional<double> RightMinusLeft(const std::optional<T>& left,
   return static_cast<double>(*right) - static_cast<double>(*left);
 }
 
-std::optional<double> ComputeHorizontalSeparationM(
-    const universal_gnss::GnssRuntimeState& left,
-    const universal_gnss::GnssRuntimeState& right)
+std::optional<double> ComputeHorizontalSeparationM(const universal_gnss::GnssRuntimeState& left,
+                                                   const universal_gnss::GnssRuntimeState& right)
 {
   if (!left.latitude_deg.has_value() || !left.longitude_deg.has_value() ||
       !right.latitude_deg.has_value() || !right.longitude_deg.has_value())
@@ -82,13 +80,12 @@ std::optional<double> ComputeHorizontalSeparationM(
   const double left_latitude_rad = *left.latitude_deg * kPi / 180.0;
   const double right_latitude_rad = *right.latitude_deg * kPi / 180.0;
   const double delta_latitude_rad = right_latitude_rad - left_latitude_rad;
-  const double delta_longitude_rad =
-      (*right.longitude_deg - *left.longitude_deg) * kPi / 180.0;
+  const double delta_longitude_rad = (*right.longitude_deg - *left.longitude_deg) * kPi / 180.0;
   const double sin_latitude = std::sin(delta_latitude_rad / 2.0);
   const double sin_longitude = std::sin(delta_longitude_rad / 2.0);
-  const double haversine = sin_latitude * sin_latitude +
-                           std::cos(left_latitude_rad) * std::cos(right_latitude_rad) *
-                               sin_longitude * sin_longitude;
+  const double haversine = sin_latitude * sin_latitude + std::cos(left_latitude_rad) *
+                                                             std::cos(right_latitude_rad) *
+                                                             sin_longitude * sin_longitude;
   const double bounded_haversine = std::max(0.0, std::min(1.0, haversine));
   return 2.0 * kMeanEarthRadiusM * std::asin(std::sqrt(bounded_haversine));
 }
@@ -127,10 +124,10 @@ void WriteReportJson(std::ostringstream& output, const GnssQualityReport& report
 {
   output << "{\"total_bytes_read\":" << report.summary.total_bytes_read
          << ",\"records_processed\":" << report.summary.records_processed
-         << ",\"runtime_updates\":" << report.summary.runtime_updates
-         << ",\"quality_level\":\"" << DescribeGnssQualityLevel(report.summary.quality_level)
-         << "\",\"final_fix_type\":\"" << DescribeFixType(report.summary.final_fix_type)
-         << "\",\"final_rtk_mode\":\"" << DescribeRtkMode(report.summary.final_rtk_mode)
+         << ",\"runtime_updates\":" << report.summary.runtime_updates << ",\"quality_level\":\""
+         << DescribeGnssQualityLevel(report.summary.quality_level) << "\",\"final_fix_type\":\""
+         << DescribeFixType(report.summary.final_fix_type) << "\",\"final_rtk_mode\":\""
+         << DescribeRtkMode(report.summary.final_rtk_mode)
          << "\",\"warning_count\":" << report.summary.warning_count
          << ",\"error_count\":" << report.summary.error_count << '}';
 }
@@ -166,10 +163,9 @@ GnssLogComparison CompareGnssQualityReports(const GnssQualityReport& left,
       ComputeHorizontalSeparationM(left.final_state, right.final_state);
   comparison.summary.final_altitude_delta_m =
       RightMinusLeft(left.final_state.altitude_m, right.final_state.altitude_m);
-  comparison.summary.horizontal_accuracy_delta_m =
-      RightMinusLeft(left.final_state.horizontal_accuracy_m, right.final_state.horizontal_accuracy_m);
-  if (left.final_state.satellites_used.has_value() &&
-      right.final_state.satellites_used.has_value())
+  comparison.summary.horizontal_accuracy_delta_m = RightMinusLeft(
+      left.final_state.horizontal_accuracy_m, right.final_state.horizontal_accuracy_m);
+  if (left.final_state.satellites_used.has_value() && right.final_state.satellites_used.has_value())
   {
     comparison.summary.satellites_used_delta =
         static_cast<std::int32_t>(*right.final_state.satellites_used) -
@@ -183,7 +179,7 @@ GnssLogComparison CompareGnssQualityReports(const GnssQualityReport& left,
 }
 
 GnssLogComparison BuildGnssLogComparisonBytes(const std::vector<std::uint8_t>& left,
-                                               const std::vector<std::uint8_t>& right)
+                                              const std::vector<std::uint8_t>& right)
 {
   return CompareGnssQualityReports(BuildGnssQualityReportBytes(left),
                                    BuildGnssQualityReportBytes(right));
@@ -209,15 +205,16 @@ std::string FormatGnssLogComparisonText(const GnssLogComparison& comparison)
          << " runtime_updates=" << comparison.right.summary.runtime_updates
          << " warnings=" << comparison.right.summary.warning_count
          << " errors=" << comparison.right.summary.error_count << '\n';
-  output << "comparison final_fix_type_matches=" <<
-      (comparison.summary.final_fix_type_matches ? "true" : "false")
-         << " final_rtk_mode_matches=" <<
-      (comparison.summary.final_rtk_mode_matches ? "true" : "false");
+  output << "comparison final_fix_type_matches="
+         << (comparison.summary.final_fix_type_matches ? "true" : "false")
+         << " final_rtk_mode_matches="
+         << (comparison.summary.final_rtk_mode_matches ? "true" : "false");
   WriteOptionalTextValue(
       output, "final_horizontal_separation_m", comparison.summary.final_horizontal_separation_m);
-  WriteOptionalTextValue(output, "final_altitude_right_minus_left_m",
-                         comparison.summary.final_altitude_delta_m);
-  WriteOptionalTextValue(output, "horizontal_accuracy_right_minus_left_m",
+  WriteOptionalTextValue(
+      output, "final_altitude_right_minus_left_m", comparison.summary.final_altitude_delta_m);
+  WriteOptionalTextValue(output,
+                         "horizontal_accuracy_right_minus_left_m",
                          comparison.summary.horizontal_accuracy_delta_m);
   output << " satellites_used_right_minus_left=";
   if (comparison.summary.satellites_used_delta.has_value())
@@ -228,10 +225,10 @@ std::string FormatGnssLogComparisonText(const GnssLogComparison& comparison)
   {
     output << "unavailable";
   }
-  WriteOptionalTextValue(output, "mean_cn0_right_minus_left_db_hz",
-                         comparison.summary.mean_cn0_delta_db_hz);
-  WriteOptionalTextValue(output, "correction_age_right_minus_left_s",
-                         comparison.summary.correction_age_delta_s);
+  WriteOptionalTextValue(
+      output, "mean_cn0_right_minus_left_db_hz", comparison.summary.mean_cn0_delta_db_hz);
+  WriteOptionalTextValue(
+      output, "correction_age_right_minus_left_s", comparison.summary.correction_age_delta_s);
   output << '\n';
   return output.str();
 }

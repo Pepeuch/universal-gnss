@@ -33,10 +33,10 @@ struct TestContext
 
 void TestSeverityOrdering(TestContext& ctx)
 {
-  ctx.Expect(CombineDiagnosticSeverities(GnssDiagnosticSeverity::kOk,
-                                         GnssDiagnosticSeverity::kInfo) ==
-                 GnssDiagnosticSeverity::kInfo,
-             "info should override ok");
+  ctx.Expect(
+      CombineDiagnosticSeverities(GnssDiagnosticSeverity::kOk, GnssDiagnosticSeverity::kInfo) ==
+          GnssDiagnosticSeverity::kInfo,
+      "info should override ok");
   ctx.Expect(CombineDiagnosticSeverities(GnssDiagnosticSeverity::kWarning,
                                          GnssDiagnosticSeverity::kInfo) ==
                  GnssDiagnosticSeverity::kWarning,
@@ -49,10 +49,10 @@ void TestSeverityOrdering(TestContext& ctx)
                                          GnssDiagnosticSeverity::kUnknown) ==
                  GnssDiagnosticSeverity::kError,
              "error should outrank unknown");
-  ctx.Expect(CombineDiagnosticSeverities(GnssDiagnosticSeverity::kUnknown,
-                                         GnssDiagnosticSeverity::kOk) ==
-                 GnssDiagnosticSeverity::kUnknown,
-             "unknown should outrank ok");
+  ctx.Expect(
+      CombineDiagnosticSeverities(GnssDiagnosticSeverity::kUnknown, GnssDiagnosticSeverity::kOk) ==
+          GnssDiagnosticSeverity::kUnknown,
+      "unknown should outrank ok");
 }
 
 void TestEventCreation(TestContext& ctx)
@@ -65,14 +65,10 @@ void TestEventCreation(TestContext& ctx)
   event.timestamp_ns = 123456789;
   event.source = std::string("nmea");
 
-  ctx.Expect(event.severity == GnssDiagnosticSeverity::kWarning,
-             "event should keep its severity");
-  ctx.Expect(event.category == GnssDiagnosticCategory::kParser,
-             "event should keep its category");
-  ctx.Expect(event.code == "nmea.checksum_mismatch",
-             "event should keep its portable code id");
-  ctx.Expect(event.message == "NMEA checksum mismatch",
-             "event should keep its message");
+  ctx.Expect(event.severity == GnssDiagnosticSeverity::kWarning, "event should keep its severity");
+  ctx.Expect(event.category == GnssDiagnosticCategory::kParser, "event should keep its category");
+  ctx.Expect(event.code == "nmea.checksum_mismatch", "event should keep its portable code id");
+  ctx.Expect(event.message == "NMEA checksum mismatch", "event should keep its message");
   ctx.Expect(event.timestamp_ns == std::optional<universal_gnss::GnssTimestampNs>(123456789),
              "event should keep its optional timestamp");
   ctx.Expect(event.source == std::optional<std::string>("nmea"),

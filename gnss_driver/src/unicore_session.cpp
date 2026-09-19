@@ -31,10 +31,10 @@ using universal_gnss_protocols::NmeaGsvRecord;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreFrameFramer;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
 
 constexpr std::int64_t kGsvTalkerFreshnessWindowNs = 5'000'000'000ll;
 
@@ -80,8 +80,7 @@ void PruneNmeaGstFallback(const GnssRuntimeState& current_state, GnssRuntimeStat
 {
   if (current_state.horizontal_accuracy_m.has_value())
   {
-    OmitOptionalValue(
-        update, GnssCapability::kHorizontalAccuracy, update.horizontal_accuracy_m);
+    OmitOptionalValue(update, GnssCapability::kHorizontalAccuracy, update.horizontal_accuracy_m);
   }
   if (current_state.vertical_accuracy_m.has_value())
   {
@@ -243,7 +242,9 @@ bool IsSupportedBinaryMessageId(const std::uint16_t message_id)
 
 }  // namespace
 
-UnicoreSession::UnicoreSession(UnicoreSessionConfig config) : config_(config) {}
+UnicoreSession::UnicoreSession(UnicoreSessionConfig config) : config_(config)
+{
+}
 
 void UnicoreSession::FeedBytes(const std::uint8_t* data,
                                const std::size_t size,
@@ -582,15 +583,13 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
     ++metrics_.position_observations;
 
     GnssRuntimeState update = universal_gnss_protocols::UnicorePvtslnToRuntimeState(*parsed.record);
-    if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
-                                last_nmea_gga_timestamp_ns_,
-                                update.timestamp_ns))
+    if (HasFreshMixedNmeaSample(
+            seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
       OmitOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
     }
-    if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
-                                last_nmea_gsv_timestamp_ns_,
-                                update.timestamp_ns))
+    if (HasFreshMixedNmeaSample(
+            seen_valid_nmea_gsv_, last_nmea_gsv_timestamp_ns_, update.timestamp_ns))
     {
       OmitOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
     }
@@ -615,16 +614,15 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
     ++metrics_.runtime_observations;
     ++metrics_.position_observations;
 
-    GnssRuntimeState update = universal_gnss_protocols::UnicoreBestNavToRuntimeState(*parsed.record);
-    if (HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
-                                last_nmea_gga_timestamp_ns_,
-                                update.timestamp_ns))
+    GnssRuntimeState update =
+        universal_gnss_protocols::UnicoreBestNavToRuntimeState(*parsed.record);
+    if (HasFreshMixedNmeaSample(
+            seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
       OmitOptionalValue(update, GnssCapability::kSatellitesUsed, update.satellites_used);
     }
-    if (HasFreshMixedNmeaSample(seen_valid_nmea_gsv_,
-                                last_nmea_gsv_timestamp_ns_,
-                                update.timestamp_ns))
+    if (HasFreshMixedNmeaSample(
+            seen_valid_nmea_gsv_, last_nmea_gsv_timestamp_ns_, update.timestamp_ns))
     {
       OmitOptionalValue(update, GnssCapability::kSatellitesTracked, update.satellites_tracked);
     }
@@ -732,8 +730,9 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
 
     GnssRuntimeState update = universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record);
     PruneNmeaGgaFallback(aggregator_.state(),
-                         HasFreshMixedNmeaSample(
-                             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, sentence.timestamp_ns),
+                         HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
+                                                 last_nmea_gga_timestamp_ns_,
+                                                 sentence.timestamp_ns),
                          update);
     if (aggregator_.Merge(update))
     {
@@ -776,20 +775,19 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
   last_nmea_gsv_timestamp_ns_ = sentence.timestamp_ns;
 
   const NmeaGsvRecord& record = *parsed.record;
-  auto it = std::find_if(gsv_talker_states_.begin(),
-                         gsv_talker_states_.end(),
-                         [&](const UnicoreNmeaGsvTalkerState& state) {
-                           return state.talker == sentence.talker;
-                         });
+  auto it = std::find_if(
+      gsv_talker_states_.begin(),
+      gsv_talker_states_.end(),
+      [&](const UnicoreNmeaGsvTalkerState& state) { return state.talker == sentence.talker; });
   if (it == gsv_talker_states_.end())
   {
     it = gsv_talker_states_.emplace(gsv_talker_states_.end());
     it->talker = sentence.talker;
   }
 
-  const bool stale_cycle = sentence.timestamp_ns.has_value() && it->last_timestamp_ns.has_value() &&
-                           *sentence.timestamp_ns - *it->last_timestamp_ns >
-                               kGsvTalkerFreshnessWindowNs;
+  const bool stale_cycle =
+      sentence.timestamp_ns.has_value() && it->last_timestamp_ns.has_value() &&
+      *sentence.timestamp_ns - *it->last_timestamp_ns > kGsvTalkerFreshnessWindowNs;
   const bool invalid_message_count =
       record.total_messages == 0u ||
       record.total_messages > UnicoreNmeaGsvTalkerState::kMaxMessages;
@@ -809,8 +807,7 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
   it->satellites_in_view = record.satellites_in_view;
   it->last_timestamp_ns = sentence.timestamp_ns;
 
-  if (record.message_index >= 1u &&
-      record.message_index <= UnicoreNmeaGsvTalkerState::kMaxMessages)
+  if (record.message_index >= 1u && record.message_index <= UnicoreNmeaGsvTalkerState::kMaxMessages)
   {
     const std::size_t index = static_cast<std::size_t>(record.message_index - 1u);
     if (!it->seen_messages[index])
@@ -818,9 +815,8 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
       it->seen_messages[index] = true;
       const std::uint32_t tracked_next_total =
           static_cast<std::uint32_t>(it->tracked_satellites) + record.satellite_count;
-      it->tracked_satellites =
-          static_cast<std::uint16_t>(std::min<std::uint32_t>(
-              tracked_next_total, std::numeric_limits<std::uint16_t>::max()));
+      it->tracked_satellites = static_cast<std::uint16_t>(
+          std::min<std::uint32_t>(tracked_next_total, std::numeric_limits<std::uint16_t>::max()));
       for (std::size_t satellite_index = 0u; satellite_index < record.satellite_count;
            ++satellite_index)
       {
@@ -831,9 +827,9 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
         }
 
         it->cn0_sum += *satellite.cn0_db_hz;
-        it->cn0_max =
-            (it->cn0_count == 0u || *satellite.cn0_db_hz > it->cn0_max) ? *satellite.cn0_db_hz
-                                                                         : it->cn0_max;
+        it->cn0_max = (it->cn0_count == 0u || *satellite.cn0_db_hz > it->cn0_max)
+                          ? *satellite.cn0_db_hz
+                          : it->cn0_max;
         ++it->cn0_count;
       }
     }
@@ -865,28 +861,28 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
 
     const std::uint32_t tracked_next_total =
         static_cast<std::uint32_t>(satellites_tracked_total) + talker_state.tracked_satellites;
-    satellites_tracked_total =
-        static_cast<std::uint16_t>(std::min<std::uint32_t>(tracked_next_total,
-                                                           std::numeric_limits<std::uint16_t>::max()));
+    satellites_tracked_total = static_cast<std::uint16_t>(
+        std::min<std::uint32_t>(tracked_next_total, std::numeric_limits<std::uint16_t>::max()));
 
     const std::uint32_t next_total =
         static_cast<std::uint32_t>(satellites_visible_total) + talker_state.satellites_in_view;
-    satellites_visible_total =
-        static_cast<std::uint16_t>(std::min<std::uint32_t>(next_total,
-                                                           std::numeric_limits<std::uint16_t>::max()));
+    satellites_visible_total = static_cast<std::uint16_t>(
+        std::min<std::uint32_t>(next_total, std::numeric_limits<std::uint16_t>::max()));
 
     cn0_sum_total += talker_state.cn0_sum;
     cn0_count_total += talker_state.cn0_count;
     if (talker_state.cn0_count > 0u)
     {
-      cn0_max_total = cn0_seen ? std::max(cn0_max_total, talker_state.cn0_max) : talker_state.cn0_max;
+      cn0_max_total =
+          cn0_seen ? std::max(cn0_max_total, talker_state.cn0_max) : talker_state.cn0_max;
       cn0_seen = true;
     }
   }
 
   if (aggregator_.state().satellites_used.has_value())
   {
-    satellites_tracked_total = std::max(satellites_tracked_total, *aggregator_.state().satellites_used);
+    satellites_tracked_total =
+        std::max(satellites_tracked_total, *aggregator_.state().satellites_used);
     satellites_visible_total = std::max(satellites_visible_total, satellites_tracked_total);
   }
 

@@ -46,9 +46,8 @@ struct ReceiverCommandTransaction
     response = ReceiverCommandResponse{};
   }
 
-  void mark_ack(
-      const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
-      const ReceiverCommandResponseKind response_kind = ReceiverCommandResponseKind::kAck)
+  void mark_ack(const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
+                const ReceiverCommandResponseKind response_kind = ReceiverCommandResponseKind::kAck)
   {
     state = ReceiverCommandTransactionState::kAcknowledged;
     response.kind = IsPositiveReceiverCommandResponseKind(response_kind)
@@ -58,9 +57,8 @@ struct ReceiverCommandTransaction
     completed_timestamp_ns = timestamp_ns;
   }
 
-  void mark_nak(
-      const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
-      const ReceiverCommandResponseKind response_kind = ReceiverCommandResponseKind::kNak)
+  void mark_nak(const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt,
+                const ReceiverCommandResponseKind response_kind = ReceiverCommandResponseKind::kNak)
   {
     state = ReceiverCommandTransactionState::kRejected;
     response.kind = response_kind == ReceiverCommandResponseKind::kTextError
@@ -70,8 +68,7 @@ struct ReceiverCommandTransaction
     completed_timestamp_ns = timestamp_ns;
   }
 
-  void mark_timeout(
-      const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt)
+  void mark_timeout(const std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt)
   {
     state = ReceiverCommandTransactionState::kTimedOut;
     response.kind = ReceiverCommandResponseKind::kTimeout;
@@ -104,8 +101,7 @@ struct ReceiverCommandTransaction
   }
 };
 
-constexpr bool IsReceiverCommandTransactionTerminal(
-    const ReceiverCommandTransactionState state)
+constexpr bool IsReceiverCommandTransactionTerminal(const ReceiverCommandTransactionState state)
 {
   return state == ReceiverCommandTransactionState::kAcknowledged ||
          state == ReceiverCommandTransactionState::kRejected ||

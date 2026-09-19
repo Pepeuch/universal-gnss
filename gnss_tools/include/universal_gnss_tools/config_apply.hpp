@@ -10,13 +10,15 @@
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include "universal_gnss_tools/config_plan.hpp"
 
-namespace universal_gnss_transport {
+namespace universal_gnss_transport
+{
 
 class ByteDuplex;
 
-} // namespace universal_gnss_transport
+}  // namespace universal_gnss_transport
 
-namespace universal_gnss_tools {
+namespace universal_gnss_tools
+{
 
 class ConfigApplyTransportHooks
 {
@@ -30,8 +32,10 @@ public:
                                  std::string& error_message) = 0;
 
   virtual bool ReopenTransport(universal_gnss_transport::ByteDuplex& transport,
-                               const std::string& device_path, std::uint32_t baud_rate,
-                               std::uint32_t read_timeout_ms, std::string& error_message) = 0;
+                               const std::string& device_path,
+                               std::uint32_t baud_rate,
+                               std::uint32_t read_timeout_ms,
+                               std::string& error_message) = 0;
 };
 
 enum class ConfigApplyStatus : std::uint8_t
@@ -130,4 +134,4 @@ std::string FormatConfigApplyText(const ConfigApplyResult& result);
 
 std::string FormatConfigApplyJson(const ConfigApplyResult& result);
 
-} // namespace universal_gnss_tools
+}  // namespace universal_gnss_tools

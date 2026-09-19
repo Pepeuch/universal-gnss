@@ -119,96 +119,94 @@ constexpr std::uint32_t kMsgoutNmeaGgaUsb = 0x209100BDu;
 
 }  // namespace ubx_cfg_keys
 
-UbxCfgBuilderResult BuildUbxCfgValsetFrame(
-    std::initializer_list<UbxCfgLayer> layers,
-    const std::vector<UbxCfgKeyValue>& key_values,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUbxCfgValsetFrame(std::initializer_list<UbxCfgLayer> layers,
+                       const std::vector<UbxCfgKeyValue>& key_values,
+                       UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUbxCfgValsetFrame(
-    const std::vector<UbxCfgLayer>& layers,
-    const std::vector<UbxCfgKeyValue>& key_values,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUbxCfgValsetFrame(const std::vector<UbxCfgLayer>& layers,
+                       const std::vector<UbxCfgKeyValue>& key_values,
+                       UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUbxCfgValsetFrame(
-    std::initializer_list<UbxCfgLayer> layers,
-    const UbxCfgKeyValue& key_value,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUbxCfgValsetFrame(std::initializer_list<UbxCfgLayer> layers,
+                       const UbxCfgKeyValue& key_value,
+                       UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUbxCfgValsetFrame(
-    const std::vector<UbxCfgLayer>& layers,
-    const UbxCfgKeyValue& key_value,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUbxCfgValsetFrame(const std::vector<UbxCfgLayer>& layers,
+                       const UbxCfgKeyValue& key_value,
+                       UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
 UbxCfgBuilderResult BuildUbxCfgValgetFrame(UbxCfgLayer layer,
                                            const std::vector<std::uint32_t>& keys,
                                            std::uint16_t position = 0u);
 
-UbxCfgBuilderResult BuildUbxCfgValgetFrame(UbxCfgLayer layer,
-                                           std::uint32_t key,
-                                           std::uint16_t position = 0u);
+UbxCfgBuilderResult
+BuildUbxCfgValgetFrame(UbxCfgLayer layer, std::uint32_t key, std::uint16_t position = 0u);
 
-UbxCfgBuilderResult BuildEnableMessageRateFrame(
-    std::uint32_t message_rate_key,
-    std::uint8_t rate,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildEnableMessageRateFrame(std::uint32_t message_rate_key,
+                            std::uint8_t rate,
+                            std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                            UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildEnableMessageRateFrame(
-    std::uint32_t message_rate_key,
-    std::uint8_t rate,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildEnableMessageRateFrame(std::uint32_t message_rate_key,
+                            std::uint8_t rate,
+                            const std::vector<UbxCfgLayer>& layers,
+                            UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildDisableMessageFrame(
-    std::uint32_t message_rate_key,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildDisableMessageFrame(std::uint32_t message_rate_key,
+                         std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                         UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildDisableMessageFrame(
-    std::uint32_t message_rate_key,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildDisableMessageFrame(std::uint32_t message_rate_key,
+                         const std::vector<UbxCfgLayer>& layers,
+                         UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUart1BaudrateFrame(
-    std::uint32_t baud_rate,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUart1BaudrateFrame(std::uint32_t baud_rate,
+                        std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                        UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUart1BaudrateFrame(
-    std::uint32_t baud_rate,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUart1BaudrateFrame(std::uint32_t baud_rate,
+                        const std::vector<UbxCfgLayer>& layers,
+                        UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUart2BaudrateFrame(
-    std::uint32_t baud_rate,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUart2BaudrateFrame(std::uint32_t baud_rate,
+                        std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                        UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildUart2BaudrateFrame(
-    std::uint32_t baud_rate,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildUart2BaudrateFrame(std::uint32_t baud_rate,
+                        const std::vector<UbxCfgLayer>& layers,
+                        UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildRateHzFrame(
-    double rate_hz,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildRateHzFrame(double rate_hz,
+                 std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                 UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildRateHzFrame(
-    double rate_hz,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult BuildRateHzFrame(double rate_hz,
+                                     const std::vector<UbxCfgLayer>& layers,
+                                     UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildEnableConstellationFrame(
-    UbxCfgConstellation constellation,
-    bool enabled,
-    std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildEnableConstellationFrame(UbxCfgConstellation constellation,
+                              bool enabled,
+                              std::initializer_list<UbxCfgLayer> layers = {UbxCfgLayer::kRam},
+                              UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
-UbxCfgBuilderResult BuildEnableConstellationFrame(
-    UbxCfgConstellation constellation,
-    bool enabled,
-    const std::vector<UbxCfgLayer>& layers,
-    UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
+UbxCfgBuilderResult
+BuildEnableConstellationFrame(UbxCfgConstellation constellation,
+                              bool enabled,
+                              const std::vector<UbxCfgLayer>& layers,
+                              UbxCfgTransaction transaction = UbxCfgTransaction::kNone);
 
 }  // namespace universal_gnss_protocols

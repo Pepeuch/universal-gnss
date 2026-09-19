@@ -11,7 +11,8 @@
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 
-namespace {
+namespace
+{
 using universal_gnss_ntrip::LocalRtcmCaster;
 using universal_gnss_ntrip::LocalRtcmCasterConfig;
 using universal_gnss_ntrip::LocalRtcmSourceIdentity;
@@ -101,7 +102,7 @@ void TestServingAndIncarnation(TestContext& ctx)
   ::close(two);
   caster.Stop();
 }
-} // namespace
+}  // namespace
 int main()
 {
   TestContext ctx;

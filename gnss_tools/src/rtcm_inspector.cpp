@@ -30,8 +30,7 @@ RtcmMessageInfo BuildMessageInfo(const RtcmFrame& frame)
   info.message_type = frame.message_type;
   info.is_station_arp = universal_gnss_protocols::IsRtcmStationArpMessage(info.message_type);
   info.is_glonass_bias = universal_gnss_protocols::IsRtcmGlonassBiasMessage(info.message_type);
-  info.msm_constellation =
-      universal_gnss_protocols::GetRtcmMsmConstellation(info.message_type);
+  info.msm_constellation = universal_gnss_protocols::GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
   info.msm_variant = universal_gnss_protocols::GetRtcmMsmVariant(info.message_type);
   return info;
@@ -151,14 +150,12 @@ void WriteBaseStationArpJson(
     return;
   }
 
-  output << '{'
-         << "\"message_type\":" << arp_record->message_type << ','
+  output << '{' << "\"message_type\":" << arp_record->message_type << ','
          << "\"station_id\":" << arp_record->station_id << ','
          << "\"itrf_year\":" << static_cast<unsigned int>(arp_record->itrf_year) << ','
          << "\"gps_indicator\":" << (arp_record->gps_indicator ? "true" : "false") << ','
          << "\"glonass_indicator\":" << (arp_record->glonass_indicator ? "true" : "false") << ','
-         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false")
-         << ','
+         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false") << ','
          << "\"reference_station_indicator\":"
          << (arp_record->reference_station_indicator ? "true" : "false") << ','
          << "\"ecef_x_m\":" << arp_record->ecef_x_m << ','
@@ -290,8 +287,7 @@ std::string FormatRtcmSemanticObservationText(
     const universal_gnss_protocols::RtcmSemanticObservation& observation)
 {
   std::ostringstream output;
-  output << observation.name
-         << " seen=" << (observation.seen ? "true" : "false")
+  output << observation.name << " seen=" << (observation.seen ? "true" : "false")
          << " decoded=" << (observation.decoded ? "true" : "false")
          << " valid=" << (observation.valid ? "true" : "false")
          << " decode_success=" << observation.decode_success_count
@@ -321,8 +317,7 @@ std::string FormatRtcmSemanticObservationText(
 }
 
 void WriteRtcmSemanticObservationsJson(
-    std::ostream& output,
-    const universal_gnss_protocols::RtcmSemanticObservations& observations)
+    std::ostream& output, const universal_gnss_protocols::RtcmSemanticObservations& observations)
 {
   output << '[';
   for (std::size_t index = 0u; index < observations.size(); ++index)
@@ -333,8 +328,7 @@ void WriteRtcmSemanticObservationsJson(
     }
 
     const auto& observation = observations[index];
-    output << '{'
-           << "\"name\":\"" << observation.name << "\","
+    output << '{' << "\"name\":\"" << observation.name << "\","
            << "\"message_type\":" << observation.message_type << ','
            << "\"seen\":" << (observation.seen ? "true" : "false") << ','
            << "\"decoded\":" << (observation.decoded ? "true" : "false") << ','
@@ -351,8 +345,7 @@ void WriteRtcmSemanticObservationsJson(
     {
       output << "null";
     }
-    output << ','
-           << "\"last_decoded_timestamp_ns\":";
+    output << ',' << "\"last_decoded_timestamp_ns\":";
     if (observation.last_decoded_timestamp_ns.has_value())
     {
       output << *observation.last_decoded_timestamp_ns;
@@ -361,8 +354,7 @@ void WriteRtcmSemanticObservationsJson(
     {
       output << "null";
     }
-    output << ','
-           << "\"age_ns\":";
+    output << ',' << "\"age_ns\":";
     if (observation.age_ns.has_value())
     {
       output << *observation.age_ns;
@@ -390,10 +382,8 @@ std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, const b
   {
     for (const auto& frame : result.frames)
     {
-      output << frame.frame_index
-             << " offset=" << frame.byte_offset
-             << " len=" << frame.length_bytes
-             << " type=" << frame.message_type
+      output << frame.frame_index << " offset=" << frame.byte_offset
+             << " len=" << frame.length_bytes << " type=" << frame.message_type
              << " class=" << DescribeRtcmMessageInfo(frame.message_info)
              << " crc=" << DescribeChecksumStatus(frame.checksum_status) << '\n';
     }
@@ -402,11 +392,9 @@ std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, const b
   output << "summary"
          << " total_bytes=" << result.summary.total_bytes_read
          << " frames=" << result.summary.total_frames_found
-         << " valid=" << result.summary.valid_frames
-         << " invalid=" << result.summary.invalid_frames
+         << " valid=" << result.summary.valid_frames << " invalid=" << result.summary.invalid_frames
          << " malformed=" << result.summary.malformed_events
-         << " truncated=" << result.summary.truncated_frames
-         << '\n';
+         << " truncated=" << result.summary.truncated_frames << '\n';
 
   if (!result.summary.counts_by_message_type.empty())
   {
@@ -460,14 +448,12 @@ std::string FormatRtcmInspectionJson(const RtcmInspectionResult& result, const b
         output << ',';
       }
       const auto& frame = result.frames[i];
-      output << '{'
-             << "\"index\":" << frame.frame_index << ','
+      output << '{' << "\"index\":" << frame.frame_index << ','
              << "\"byte_offset\":" << frame.byte_offset << ','
              << "\"length_bytes\":" << frame.length_bytes << ','
-             << "\"message_type\":" << frame.message_type << ','
-             << "\"classification\":\"" << DescribeRtcmMessageInfo(frame.message_info) << "\","
-             << "\"crc_status\":\"" << DescribeChecksumStatus(frame.checksum_status) << "\""
-             << '}';
+             << "\"message_type\":" << frame.message_type << ',' << "\"classification\":\""
+             << DescribeRtcmMessageInfo(frame.message_info) << "\","
+             << "\"crc_status\":\"" << DescribeChecksumStatus(frame.checksum_status) << "\"" << '}';
     }
     output << ']';
   }

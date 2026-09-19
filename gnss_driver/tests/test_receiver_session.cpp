@@ -16,7 +16,8 @@
 #include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
@@ -66,14 +67,16 @@ std::vector<std::uint8_t> BuildNmeaSentence(const std::string& payload)
   return bytes;
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset,
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
                const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset,
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
                const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
@@ -82,13 +85,15 @@ void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset,
   payload[offset + 3u] = static_cast<std::uint8_t>((value >> 24u) & 0xFFu);
 }
 
-void WriteLeI4(std::vector<std::uint8_t>& payload, const std::size_t offset,
+void WriteLeI4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
                const std::int32_t value)
 {
   WriteLeU4(payload, offset, static_cast<std::uint32_t>(value));
 }
 
-std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id, const std::uint8_t message_id,
+std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
+                                        const std::uint8_t message_id,
                                         const std::vector<std::uint8_t>& payload)
 {
   std::vector<std::uint8_t> bytes = {
@@ -143,7 +148,8 @@ void AppendLittleEndian32(std::vector<std::uint8_t>& bytes, const std::uint32_t 
   bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
 }
 
-void WriteLittleEndian32(std::vector<std::uint8_t>& bytes, const std::size_t offset,
+void WriteLittleEndian32(std::vector<std::uint8_t>& bytes,
+                         const std::size_t offset,
                          const std::uint32_t value)
 {
   bytes[offset] = static_cast<std::uint8_t>(value & 0xFFu);
@@ -152,7 +158,8 @@ void WriteLittleEndian32(std::vector<std::uint8_t>& bytes, const std::size_t off
   bytes[offset + 3u] = static_cast<std::uint8_t>((value >> 24) & 0xFFu);
 }
 
-void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes, const std::size_t offset,
+void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
                               const float value)
 {
   std::uint32_t raw = 0u;
@@ -160,7 +167,8 @@ void WriteLittleEndianFloat32(std::vector<std::uint8_t>& bytes, const std::size_
   WriteLittleEndian32(bytes, offset, raw);
 }
 
-void WriteLittleEndianFloat64(std::vector<std::uint8_t>& bytes, const std::size_t offset,
+void WriteLittleEndianFloat64(std::vector<std::uint8_t>& bytes,
+                              const std::size_t offset,
                               const double value)
 {
   std::uint64_t raw = 0u;
@@ -434,7 +442,7 @@ void TestFinalizeAndReset(TestContext& ctx)
              "reset should clear runtime state");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

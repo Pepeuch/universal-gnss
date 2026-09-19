@@ -62,10 +62,8 @@ void TestDisabledPolicySkips(TestContext& ctx)
   const auto result = injector.MaybeInject(sink, MakeRuntimeState(), 1000000000LL);
   ctx.Expect(result.status == GgaInjectionStatus::kSkippedDisabled && result.skipped(),
              "disabled policy should skip injection");
-  ctx.Expect(injector.metrics().attempts == 1u &&
-                 injector.metrics().skipped_disabled == 1u &&
-                 injector.metrics().sentences_sent == 0u &&
-                 sink.written_bytes().empty(),
+  ctx.Expect(injector.metrics().attempts == 1u && injector.metrics().skipped_disabled == 1u &&
+                 injector.metrics().sentences_sent == 0u && sink.written_bytes().empty(),
              "disabled policy should update only skip counters");
 }
 
@@ -80,8 +78,7 @@ void TestFirstSendAndIntervalBehavior(TestContext& ctx)
   const auto first = injector.MaybeInject(sink, MakeRuntimeState(), 1000000000LL);
   ctx.Expect(first.status == GgaInjectionStatus::kSent && first.sent(),
              "first eligible call should send a GGA sentence");
-  ctx.Expect(injector.metrics().sentences_built == 1u &&
-                 injector.metrics().sentences_sent == 1u &&
+  ctx.Expect(injector.metrics().sentences_built == 1u && injector.metrics().sentences_sent == 1u &&
                  injector.policy().last_sent_timestamp_ns ==
                      std::optional<std::int64_t>(1000000000LL),
              "successful send should update build/send counters and last-sent timestamp");
@@ -94,8 +91,7 @@ void TestFirstSendAndIntervalBehavior(TestContext& ctx)
              "calls before the interval elapses should skip without writing");
 
   const auto third = injector.MaybeInject(sink, MakeRuntimeState(), 7000000000LL);
-  ctx.Expect(third.status == GgaInjectionStatus::kSent &&
-                 injector.metrics().sentences_sent == 2u &&
+  ctx.Expect(third.status == GgaInjectionStatus::kSent && injector.metrics().sentences_sent == 2u &&
                  injector.policy().last_sent_timestamp_ns ==
                      std::optional<std::int64_t>(7000000000LL),
              "calls after the interval elapses should send again");
@@ -145,10 +141,10 @@ void TestNoFixAllowedWhenPolicyAllowsIt(TestContext& ctx)
   const auto result = injector.MaybeInject(sink, no_fix, 1000000000LL);
   const std::string text = SinkText(sink);
   ctx.Expect(result.status == GgaInjectionStatus::kSent &&
-                 injector.metrics().sentences_sent == 1u &&
-                 text.find("$GNGGA,000000.00,") == 0 &&
+                 injector.metrics().sentences_sent == 1u && text.find("$GNGGA,000000.00,") == 0 &&
                  text.find(",0,08,0.9,545.4,M,,,,*") != std::string::npos,
-             "policies that do not require a fix should allow no-fix GGA injection when coordinates are present");
+             "policies that do not require a fix should allow no-fix GGA injection when "
+             "coordinates are present");
 }
 
 void TestWriteErrorDoesNotAdvanceLastSent(TestContext& ctx)
@@ -164,8 +160,7 @@ void TestWriteErrorDoesNotAdvanceLastSent(TestContext& ctx)
                  result.write_error ==
                      std::optional<TransportError>(TransportError::kWriteFailure) &&
                  injector.metrics().sentences_built == 1u &&
-                 injector.metrics().sentences_sent == 0u &&
-                 injector.metrics().write_errors == 1u &&
+                 injector.metrics().sentences_sent == 0u && injector.metrics().write_errors == 1u &&
                  injector.metrics().last_write_error ==
                      std::optional<TransportError>(TransportError::kWriteFailure) &&
                  !injector.policy().last_sent_timestamp_ns.has_value(),
@@ -184,12 +179,11 @@ void TestSentenceContainsChecksumAndCrLf(TestContext& ctx)
   const auto expected =
       BuildNmeaGgaSentence(MakeRuntimeState(), config.sentence_builder_options).sentence;
 
-  ctx.Expect(result.status == GgaInjectionStatus::kSent &&
-                 text == expected &&
-                 text.find('*') != std::string::npos &&
-                 text.size() >= 2u &&
-                 text.substr(text.size() - 2u) == "\r\n",
-             "successful injection should write the complete checksum-protected CRLF-terminated sentence");
+  ctx.Expect(
+      result.status == GgaInjectionStatus::kSent && text == expected &&
+          text.find('*') != std::string::npos && text.size() >= 2u &&
+          text.substr(text.size() - 2u) == "\r\n",
+      "successful injection should write the complete checksum-protected CRLF-terminated sentence");
 }
 
 void TestResetClearsMetricsAndLastSent(TestContext& ctx)
@@ -202,10 +196,8 @@ void TestResetClearsMetricsAndLastSent(TestContext& ctx)
   injector.MaybeInject(sink, MakeRuntimeState(), 1000000000LL);
   injector.Reset();
 
-  ctx.Expect(injector.metrics().attempts == 0u &&
-                 injector.metrics().sentences_built == 0u &&
-                 injector.metrics().sentences_sent == 0u &&
-                 injector.metrics().write_errors == 0u &&
+  ctx.Expect(injector.metrics().attempts == 0u && injector.metrics().sentences_built == 0u &&
+                 injector.metrics().sentences_sent == 0u && injector.metrics().write_errors == 0u &&
                  !injector.policy().last_sent_timestamp_ns.has_value(),
              "reset should clear counters and the last-sent timestamp");
 }

@@ -243,9 +243,9 @@ OptionalFieldStatus ParseOptionalDate(std::string_view text, std::optional<NmeaD
     return OptionalFieldStatus::kInvalid;
   }
 
-  value = NmeaDate{
-      static_cast<std::uint8_t>(day), static_cast<std::uint8_t>(month),
-      static_cast<std::uint8_t>(year)};
+  value = NmeaDate{static_cast<std::uint8_t>(day),
+                   static_cast<std::uint8_t>(month),
+                   static_cast<std::uint8_t>(year)};
   return OptionalFieldStatus::kValue;
 }
 
@@ -301,8 +301,8 @@ bool ParseGgaFixQuality(std::string_view text, NmeaGgaFixQuality& fix_quality)
   return true;
 }
 
-std::optional<universal_gnss::GnssRtkMode> MapGgaFixQualityToRtkMode(
-    const NmeaGgaFixQuality fix_quality)
+std::optional<universal_gnss::GnssRtkMode>
+MapGgaFixQualityToRtkMode(const NmeaGgaFixQuality fix_quality)
 {
   switch (fix_quality)
   {
@@ -370,7 +370,8 @@ OptionalFieldStatus ParseOptionalPositiveFloat(std::string_view text, std::optio
   return status;
 }
 
-OptionalFieldStatus ParseOptionalUnsigned8(std::string_view text, std::optional<std::uint8_t>& value)
+OptionalFieldStatus ParseOptionalUnsigned8(std::string_view text,
+                                           std::optional<std::uint8_t>& value)
 {
   value.reset();
   if (text.empty())
@@ -618,8 +619,9 @@ ParserResult<NmeaGgaRecord> ParseNmeaGga(const NmeaSentence& sentence)
   }
 
   const OptionalFieldStatus latitude_status =
-      field_count > 3u ? ParseOptionalCoordinate(fields[2], fields[3], 2u, record.latitude_deg, 'N', 'S')
-                       : OptionalFieldStatus::kMissing;
+      field_count > 3u
+          ? ParseOptionalCoordinate(fields[2], fields[3], 2u, record.latitude_deg, 'N', 'S')
+          : OptionalFieldStatus::kMissing;
   if (latitude_status == OptionalFieldStatus::kInvalid ||
       (record.latitude_deg.has_value() &&
        (*record.latitude_deg < -90.0 || *record.latitude_deg > 90.0)))
@@ -628,8 +630,9 @@ ParserResult<NmeaGgaRecord> ParseNmeaGga(const NmeaSentence& sentence)
   }
 
   const OptionalFieldStatus longitude_status =
-      field_count > 5u ? ParseOptionalCoordinate(fields[4], fields[5], 3u, record.longitude_deg, 'E', 'W')
-                       : OptionalFieldStatus::kMissing;
+      field_count > 5u
+          ? ParseOptionalCoordinate(fields[4], fields[5], 3u, record.longitude_deg, 'E', 'W')
+          : OptionalFieldStatus::kMissing;
   if (longitude_status == OptionalFieldStatus::kInvalid ||
       (record.longitude_deg.has_value() &&
        (*record.longitude_deg < -180.0 || *record.longitude_deg > 180.0)))
@@ -649,7 +652,8 @@ ParserResult<NmeaGgaRecord> ParseNmeaGga(const NmeaSentence& sentence)
     return InvalidGga();
   }
 
-  if (field_count > 8u && ParseOptionalFloat(fields[8], record.hdop) == OptionalFieldStatus::kInvalid)
+  if (field_count > 8u &&
+      ParseOptionalFloat(fields[8], record.hdop) == OptionalFieldStatus::kInvalid)
   {
     return InvalidGga();
   }
@@ -730,8 +734,8 @@ ParserResult<NmeaRmcRecord> ParseNmeaRmc(const NmeaSentence& sentence)
     return InvalidRmc();
   }
 
-  if (field_count > 7u &&
-      ParseOptionalFloat(fields[7], record.speed_over_ground_knots) == OptionalFieldStatus::kInvalid)
+  if (field_count > 7u && ParseOptionalFloat(fields[7], record.speed_over_ground_knots) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidRmc();
   }
@@ -748,7 +752,8 @@ ParserResult<NmeaRmcRecord> ParseNmeaRmc(const NmeaSentence& sentence)
     return InvalidRmc();
   }
 
-  if (field_count > 9u && ParseOptionalDate(fields[9], record.date) == OptionalFieldStatus::kInvalid)
+  if (field_count > 9u &&
+      ParseOptionalDate(fields[9], record.date) == OptionalFieldStatus::kInvalid)
   {
     return InvalidRmc();
   }
@@ -844,8 +849,8 @@ ParserResult<NmeaGsvRecord> ParseNmeaGsv(const NmeaSentence& sentence)
   unsigned int message_index = 0;
   unsigned int satellites_in_view = 0;
   if (!TryParseUnsigned(fields[1], total_messages) || !TryParseUnsigned(fields[2], message_index) ||
-      !TryParseUnsigned(fields[3], satellites_in_view) || total_messages == 0u || message_index == 0u ||
-      message_index > total_messages ||
+      !TryParseUnsigned(fields[3], satellites_in_view) || total_messages == 0u ||
+      message_index == 0u || message_index > total_messages ||
       total_messages > static_cast<unsigned int>(std::numeric_limits<std::uint8_t>::max()) ||
       message_index > static_cast<unsigned int>(std::numeric_limits<std::uint8_t>::max()) ||
       satellites_in_view > static_cast<unsigned int>(std::numeric_limits<std::uint16_t>::max()))
@@ -927,21 +932,18 @@ ParserResult<NmeaGstRecord> ParseNmeaGst(const NmeaSentence& sentence)
     return InvalidGst();
   }
 
-  if (field_count > 2u &&
-      ParseOptionalPositiveFloat(fields[2], record.rms_range_residual_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 2u && ParseOptionalPositiveFloat(fields[2], record.rms_range_residual_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
-  if (field_count > 3u &&
-      ParseOptionalPositiveFloat(fields[3], record.semi_major_std_dev_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 3u && ParseOptionalPositiveFloat(fields[3], record.semi_major_std_dev_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
-  if (field_count > 4u &&
-      ParseOptionalPositiveFloat(fields[4], record.semi_minor_std_dev_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 4u && ParseOptionalPositiveFloat(fields[4], record.semi_minor_std_dev_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
@@ -955,21 +957,18 @@ ParserResult<NmeaGstRecord> ParseNmeaGst(const NmeaSentence& sentence)
   {
     return InvalidGst();
   }
-  if (field_count > 6u &&
-      ParseOptionalPositiveFloat(fields[6], record.latitude_std_dev_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 6u && ParseOptionalPositiveFloat(fields[6], record.latitude_std_dev_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
-  if (field_count > 7u &&
-      ParseOptionalPositiveFloat(fields[7], record.longitude_std_dev_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 7u && ParseOptionalPositiveFloat(fields[7], record.longitude_std_dev_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
-  if (field_count > 8u &&
-      ParseOptionalPositiveFloat(fields[8], record.altitude_std_dev_m) ==
-          OptionalFieldStatus::kInvalid)
+  if (field_count > 8u && ParseOptionalPositiveFloat(fields[8], record.altitude_std_dev_m) ==
+                              OptionalFieldStatus::kInvalid)
   {
     return InvalidGst();
   }
@@ -1086,8 +1085,8 @@ ParserResult<NmeaZdaRecord> ParseNmeaZda(const NmeaSentence& sentence)
   unsigned int month = 0;
   unsigned int year = 0;
   if (!TryParseUnsigned(fields[2], day) || !TryParseUnsigned(fields[3], month) ||
-      !TryParseUnsigned(fields[4], year) || day == 0u || day > 31u || month == 0u ||
-      month > 12u || year < 1000u || year > 9999u)
+      !TryParseUnsigned(fields[4], year) || day == 0u || day > 31u || month == 0u || month > 12u ||
+      year < 1000u || year > 9999u)
   {
     return InvalidZda();
   }
@@ -1111,10 +1110,10 @@ ParserResult<NmeaZdaRecord> ParseNmeaZda(const NmeaSentence& sentence)
       return InvalidZda();
     }
 
-    const bool any_zone_field_present =
-        hours_status == OptionalFieldStatus::kValue || minutes_status == OptionalFieldStatus::kValue;
-    if (any_zone_field_present &&
-        (hours_status != OptionalFieldStatus::kValue || minutes_status != OptionalFieldStatus::kValue))
+    const bool any_zone_field_present = hours_status == OptionalFieldStatus::kValue ||
+                                        minutes_status == OptionalFieldStatus::kValue;
+    if (any_zone_field_present && (hours_status != OptionalFieldStatus::kValue ||
+                                   minutes_status != OptionalFieldStatus::kValue))
     {
       return InvalidZda();
     }
@@ -1139,8 +1138,8 @@ universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& reco
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.timestamp_ns;
   state.fix_valid = record.fix_valid;
-  state.fix_type = record.fix_valid ? universal_gnss::GnssFixType::kFix
-                                    : universal_gnss::GnssFixType::kNoFix;
+  state.fix_type =
+      record.fix_valid ? universal_gnss::GnssFixType::kFix : universal_gnss::GnssFixType::kNoFix;
   if (record.fix_valid)
   {
     state.latitude_deg = record.latitude_deg;
@@ -1182,8 +1181,8 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.timestamp_ns;
   state.fix_valid = record.fix_valid;
-  state.fix_type = record.fix_valid ? universal_gnss::GnssFixType::kFix
-                                    : universal_gnss::GnssFixType::kNoFix;
+  state.fix_type =
+      record.fix_valid ? universal_gnss::GnssFixType::kFix : universal_gnss::GnssFixType::kNoFix;
   if (record.fix_valid)
   {
     state.latitude_deg = record.latitude_deg;
@@ -1198,11 +1197,12 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcTime);
   if (record.date.has_value())
   {
-    universal_gnss::SetOptionalValue(
-        state,
-        universal_gnss::GnssCapability::kUtcDate,
-        state.utc_date,
-        universal_gnss::GnssUtcDate{record.date->year_two_digits, record.date->month, record.date->day});
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kUtcDate,
+                                     state.utc_date,
+                                     universal_gnss::GnssUtcDate{record.date->year_two_digits,
+                                                                 record.date->month,
+                                                                 record.date->day});
   }
   else
   {
@@ -1214,13 +1214,14 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
     const double whole_seconds = std::floor(record.utc_time->second);
     const std::int32_t nanoseconds = static_cast<std::int32_t>(
         std::llround((record.utc_time->second - whole_seconds) * 1000000000.0));
-    universal_gnss::SetOptionalValue(state,
-                                     universal_gnss::GnssCapability::kUtcTime,
-                                     state.utc_time,
-                                     universal_gnss::GnssUtcTime{record.utc_time->hour,
-                                                                 record.utc_time->minute,
-                                                                 static_cast<std::uint8_t>(whole_seconds),
-                                                                 nanoseconds});
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kUtcTime,
+        state.utc_time,
+        universal_gnss::GnssUtcTime{record.utc_time->hour,
+                                    record.utc_time->minute,
+                                    static_cast<std::uint8_t>(whole_seconds),
+                                    nanoseconds});
   }
   else
   {
@@ -1239,9 +1240,8 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kSpeedOverGround,
-                                       state.speed_over_ground_m_s);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kSpeedOverGround, state.speed_over_ground_m_s);
   }
   if (record.fix_valid && record.course_over_ground_deg.has_value())
   {
@@ -1252,9 +1252,8 @@ universal_gnss::GnssRuntimeState NmeaRmcToRuntimeState(const NmeaRmcRecord& reco
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kCourseOverGround,
-                                       state.course_over_ground_deg);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kCourseOverGround, state.course_over_ground_deg);
   }
   return state;
 }
@@ -1265,20 +1264,22 @@ universal_gnss::GnssRuntimeState NmeaZdaToRuntimeState(const NmeaZdaRecord& reco
   state.timestamp_ns = record.timestamp_ns;
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcDate);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kUtcTime);
-  universal_gnss::SetOptionalValue(state,
-                                   universal_gnss::GnssCapability::kUtcDate,
-                                   state.utc_date,
-                                   universal_gnss::GnssUtcDate{record.year, record.month, record.day});
+  universal_gnss::SetOptionalValue(
+      state,
+      universal_gnss::GnssCapability::kUtcDate,
+      state.utc_date,
+      universal_gnss::GnssUtcDate{record.year, record.month, record.day});
   const double whole_seconds = std::floor(record.utc_time->second);
   const std::int32_t nanoseconds = static_cast<std::int32_t>(
       std::llround((record.utc_time->second - whole_seconds) * 1000000000.0));
-  universal_gnss::SetOptionalValue(state,
-                                   universal_gnss::GnssCapability::kUtcTime,
-                                   state.utc_time,
-                                   universal_gnss::GnssUtcTime{record.utc_time->hour,
-                                                               record.utc_time->minute,
-                                                               static_cast<std::uint8_t>(whole_seconds),
-                                                               nanoseconds});
+  universal_gnss::SetOptionalValue(
+      state,
+      universal_gnss::GnssCapability::kUtcTime,
+      state.utc_time,
+      universal_gnss::GnssUtcTime{record.utc_time->hour,
+                                  record.utc_time->minute,
+                                  static_cast<std::uint8_t>(whole_seconds),
+                                  nanoseconds});
   return state;
 }
 
@@ -1305,9 +1306,8 @@ universal_gnss::GnssRuntimeState NmeaVtgToRuntimeState(const NmeaVtgRecord& reco
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kSpeedOverGround,
-                                       state.speed_over_ground_m_s);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kSpeedOverGround, state.speed_over_ground_m_s);
   }
 
   if (record.true_course_deg.has_value())
@@ -1319,9 +1319,8 @@ universal_gnss::GnssRuntimeState NmeaVtgToRuntimeState(const NmeaVtgRecord& reco
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kCourseOverGround,
-                                       state.course_over_ground_deg);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kCourseOverGround, state.course_over_ground_deg);
   }
   return state;
 }
@@ -1463,9 +1462,8 @@ void MergeNmeaGstIntoRuntimeState(const NmeaGstRecord& record,
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kHorizontalAccuracy,
-                                       state.horizontal_accuracy_m);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m);
   }
 
   if (record.altitude_std_dev_m.has_value())
@@ -1477,9 +1475,8 @@ void MergeNmeaGstIntoRuntimeState(const NmeaGstRecord& record,
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kVerticalAccuracy,
-                                       state.vertical_accuracy_m);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kVerticalAccuracy, state.vertical_accuracy_m);
   }
 }
 

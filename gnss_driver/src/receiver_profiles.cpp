@@ -46,8 +46,7 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
           false,
           MakeCapabilities(0u,
                            ToFlag(ReceiverProtocol::kNmea),
-                           ToFlag(ReceiverFeature::kRtk) |
-                               ToFlag(ReceiverFeature::kRoverMode)),
+                           ToFlag(ReceiverFeature::kRtk) | ToFlag(ReceiverFeature::kRoverMode)),
           {},
       },
       ReceiverProfile{
@@ -57,12 +56,9 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
           "F9/F10",
           "family",
           false,
-          MakeCapabilities(ToFlag(ReceiverProtocol::kUbx) |
-                               ToFlag(ReceiverProtocol::kRtcm3),
-                           ToFlag(ReceiverProtocol::kNmea) |
-                               ToFlag(ReceiverProtocol::kUbx),
-                           ToFlag(ReceiverFeature::kRfMonitoring) |
-                               ToFlag(ReceiverFeature::kPps) |
+          MakeCapabilities(ToFlag(ReceiverProtocol::kUbx) | ToFlag(ReceiverProtocol::kRtcm3),
+                           ToFlag(ReceiverProtocol::kNmea) | ToFlag(ReceiverProtocol::kUbx),
+                           ToFlag(ReceiverFeature::kRfMonitoring) | ToFlag(ReceiverFeature::kPps) |
                                ToFlag(ReceiverFeature::kRoverMode)),
           ToConfigProfileFlag(ReceiverConfigProfileKind::kRover) |
               ToConfigProfileFlag(ReceiverConfigProfileKind::kDiagnosticsOutput) |
@@ -83,8 +79,7 @@ const std::array<ReceiverProfile, 9>& GetBuiltInReceiverProfiles()
           true,
           MakeCapabilities(ToFlag(ReceiverProtocol::kRtcm3),
                            ToFlag(ReceiverProtocol::kNmea),
-                           ToFlag(ReceiverFeature::kRtk) |
-                               ToFlag(ReceiverFeature::kPps) |
+                           ToFlag(ReceiverFeature::kRtk) | ToFlag(ReceiverFeature::kPps) |
                                ToFlag(ReceiverFeature::kRoverMode)),
           {},
       },

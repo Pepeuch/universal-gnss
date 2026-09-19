@@ -64,15 +64,15 @@ void NmeaDriver::Reset()
   session_.Reset();
 }
 
-ReceiverDriverProfileBuildResult NmeaDriver::BuildRoverProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+NmeaDriver::BuildRoverProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   (void)safety_level;
   return MakeUnsupportedProfileResult(ReceiverConfigProfileKind::kRover);
 }
 
-ReceiverDriverProfileBuildResult NmeaDriver::BuildDiagnosticsProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+NmeaDriver::BuildDiagnosticsProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   (void)safety_level;
   return MakeUnsupportedProfileResult(ReceiverConfigProfileKind::kDiagnosticsOutput);
@@ -101,8 +101,8 @@ const std::vector<ReceiverConfigProfileKind>& NmeaDriver::SupportedProfileKinds(
   return supported;
 }
 
-ReceiverDriverProfileBuildResult NmeaDriver::MakeUnsupportedProfileResult(
-    const ReceiverConfigProfileKind profile_kind)
+ReceiverDriverProfileBuildResult
+NmeaDriver::MakeUnsupportedProfileResult(const ReceiverConfigProfileKind profile_kind)
 {
   ReceiverDriverProfileBuildResult result;
   result.status = ReceiverDriverProfileBuildStatus::kUnsupportedProfile;

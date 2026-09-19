@@ -45,13 +45,17 @@ struct TestContext
   }
 };
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -172,8 +176,7 @@ void TestValidMonHwParseAndDiagnostics(TestContext& ctx)
                  state.jamming_detected == std::optional<bool>(true),
              "MON-HW warning jamming state should map to portable interference/jamming booleans");
   ctx.Expect(state.fix_type == universal_gnss::GnssFixType::kUnknown &&
-                 !state.latitude_deg.has_value() &&
-                 !state.horizontal_accuracy_m.has_value(),
+                 !state.latitude_deg.has_value() && !state.horizontal_accuracy_m.has_value(),
              "MON-HW runtime mapping should not invent fix or position fields");
 }
 
@@ -200,10 +203,8 @@ void TestReservedMonHwLayoutAndMonHw2Parse(TestContext& ctx)
   }
 
   ctx.Expect(mon_hw2.record->timestamp_ns == std::optional<std::int64_t>(2001) &&
-                 mon_hw2.record->ofs_i == -3 &&
-                 mon_hw2.record->mag_i == 120u &&
-                 mon_hw2.record->ofs_q == 5 &&
-                 mon_hw2.record->mag_q == 110u &&
+                 mon_hw2.record->ofs_i == -3 && mon_hw2.record->mag_i == 120u &&
+                 mon_hw2.record->ofs_q == 5 && mon_hw2.record->mag_q == 110u &&
                  mon_hw2.record->cfg_source == 112u &&
                  mon_hw2.record->low_level_configuration == 0x12345678u &&
                  mon_hw2.record->post_status == 0xAABBCCDDu,
@@ -235,17 +236,17 @@ void TestAntennaFaultDiagnosticsAndMalformedFrames(TestContext& ctx)
 
   auto short_payload = MakeMonHwPayload(2u, 1u, 1u);
   short_payload.pop_back();
-  ctx.Expect(universal_gnss_protocols::ParseUbxMonHw(
-                 BuildUbxFrame(0x0Au, 0x09u, short_payload)).status ==
-                 ParserStatus::kInvalidData,
-             "truncated MON-HW classic payload should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxMonHw(BuildUbxFrame(0x0Au, 0x09u, short_payload)).status ==
+          ParserStatus::kInvalidData,
+      "truncated MON-HW classic payload should be rejected");
 
   auto short_hw2 = MakeMonHw2Payload();
   short_hw2.pop_back();
-  ctx.Expect(universal_gnss_protocols::ParseUbxMonHw2(
-                 BuildUbxFrame(0x0Au, 0x0Bu, short_hw2)).status ==
-                 ParserStatus::kInvalidData,
-             "truncated MON-HW2 payload should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxMonHw2(BuildUbxFrame(0x0Au, 0x0Bu, short_hw2)).status ==
+          ParserStatus::kInvalidData,
+      "truncated MON-HW2 payload should be rejected");
 
   UbxFrame invalid_checksum = BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(2u, 1u, 1u));
   invalid_checksum.checksum_status = ChecksumStatus::kInvalid;

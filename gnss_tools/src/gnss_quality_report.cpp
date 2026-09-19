@@ -19,10 +19,10 @@
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
-#include "universal_gnss_protocols/unicore_framer.hpp"
-#include "universal_gnss_protocols/unicore_parser.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_protocols/ubx_parser.hpp"
+#include "universal_gnss_protocols/unicore_framer.hpp"
+#include "universal_gnss_protocols/unicore_parser.hpp"
 #include "universal_gnss_tools/gnss_replay.hpp"
 #include "universal_gnss_tools/gnss_stream_inspector.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
@@ -39,20 +39,20 @@ using universal_gnss::GnssDiagnosticEvent;
 using universal_gnss::GnssDiagnosticEvents;
 using universal_gnss::GnssDiagnosticSeverity;
 using universal_gnss::GnssFixType;
-using universal_gnss::GnssRuntimeState;
 using universal_gnss::GnssRtkMode;
+using universal_gnss::GnssRuntimeState;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ParserStatus;
 using universal_gnss_protocols::ProtocolType;
-using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmConstellation;
+using universal_gnss_protocols::RtcmCorrectionMonitor;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
-using universal_gnss_protocols::UnicoreFrame;
-using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_protocols::UbxFrame;
 using universal_gnss_protocols::UbxFrameFramer;
 using universal_gnss_protocols::UbxRxmRtcmMessageUse;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
 
 template <typename RecordT>
 struct ProbeResult
@@ -213,9 +213,7 @@ std::string EscapeJsonString(const std::string& text)
       default:
         if (ch < 0x20u)
         {
-          output << "\\u"
-                 << std::hex << std::setw(4) << std::setfill('0')
-                 << static_cast<int>(ch)
+          output << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(ch)
                  << std::dec << std::setfill(' ');
         }
         else
@@ -247,14 +245,12 @@ void WriteBaseStationArpJson(
     return;
   }
 
-  output << '{'
-         << "\"message_type\":" << arp_record->message_type << ','
+  output << '{' << "\"message_type\":" << arp_record->message_type << ','
          << "\"station_id\":" << arp_record->station_id << ','
          << "\"itrf_year\":" << static_cast<unsigned int>(arp_record->itrf_year) << ','
          << "\"gps_indicator\":" << (arp_record->gps_indicator ? "true" : "false") << ','
          << "\"glonass_indicator\":" << (arp_record->glonass_indicator ? "true" : "false") << ','
-         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false")
-         << ','
+         << "\"galileo_indicator\":" << (arp_record->galileo_indicator ? "true" : "false") << ','
          << "\"reference_station_indicator\":"
          << (arp_record->reference_station_indicator ? "true" : "false") << ','
          << "\"ecef_x_m\":" << arp_record->ecef_x_m << ','
@@ -276,9 +272,8 @@ void WriteBaseStationArpJson(
   output << '}';
 }
 
-std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
-    const std::vector<std::uint8_t>& bytes,
-    const std::size_t byte_offset)
+std::optional<universal_gnss_protocols::UbxRxmRtcmRecord>
+ParseRxmRtcmAtOffset(const std::vector<std::uint8_t>& bytes, const std::size_t byte_offset)
 {
   UbxFrameFramer framer;
   const auto probe = ProbeAtOffset<UbxFrameFramer, UbxFrame>(framer, bytes, byte_offset);
@@ -296,9 +291,8 @@ std::optional<universal_gnss_protocols::UbxRxmRtcmRecord> ParseRxmRtcmAtOffset(
   return parsed.record;
 }
 
-std::optional<universal_gnss_protocols::UbxMonHwRecord> ParseMonHwAtOffset(
-    const std::vector<std::uint8_t>& bytes,
-    const std::size_t byte_offset)
+std::optional<universal_gnss_protocols::UbxMonHwRecord>
+ParseMonHwAtOffset(const std::vector<std::uint8_t>& bytes, const std::size_t byte_offset)
 {
   UbxFrameFramer framer;
   const auto probe = ProbeAtOffset<UbxFrameFramer, UbxFrame>(framer, bytes, byte_offset);
@@ -510,8 +504,7 @@ GnssQualityLevel ClassifyQualityLevel(const GnssRuntimeState& state,
     }
   }
 
-  if (universal_gnss::HasDiagnosticWarnings(diagnostics) &&
-      base_level == GnssQualityLevel::kGood)
+  if (universal_gnss::HasDiagnosticWarnings(diagnostics) && base_level == GnssQualityLevel::kGood)
   {
     return GnssQualityLevel::kUsable;
   }
@@ -546,8 +539,7 @@ std::size_t CountErrors(const GnssDiagnosticEvents& diagnostics)
   return count;
 }
 
-void PopulateBestAccuracy(const GnssReplayResult& replay_result,
-                          GnssQualityReportSummary& summary)
+void PopulateBestAccuracy(const GnssReplayResult& replay_result, GnssQualityReportSummary& summary)
 {
   for (const auto& event : replay_result.events)
   {
@@ -665,9 +657,7 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
     {
       if (const auto jam_status =
               ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreJamStatusRecord>(
-                  bytes,
-                  item.byte_offset,
-                  universal_gnss_protocols::ParseUnicoreJamStatus);
+                  bytes, item.byte_offset, universal_gnss_protocols::ParseUnicoreJamStatus);
           jam_status.has_value())
       {
         report.diagnostics.push_back(
@@ -677,9 +667,7 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
 
       if (const auto freq_jam_status =
               ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreFreqJamStatusRecord>(
-                  bytes,
-                  item.byte_offset,
-                  universal_gnss_protocols::ParseUnicoreFreqJamStatus);
+                  bytes, item.byte_offset, universal_gnss_protocols::ParseUnicoreFreqJamStatus);
           freq_jam_status.has_value())
       {
         report.diagnostics.push_back(
@@ -689,9 +677,7 @@ GnssQualityReport BuildGnssQualityReportBytes(const std::vector<std::uint8_t>& b
 
       if (const auto hw_status =
               ParseUnicoreRecordAtOffset<universal_gnss_protocols::UnicoreHwStatusRecord>(
-                  bytes,
-                  item.byte_offset,
-                  universal_gnss_protocols::ParseUnicoreHwStatus);
+                  bytes, item.byte_offset, universal_gnss_protocols::ParseUnicoreHwStatus);
           hw_status.has_value())
       {
         report.diagnostics.push_back(
@@ -780,14 +766,12 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
   std::ostringstream output;
   output << "quality level=" << DescribeGnssQualityLevel(report.summary.quality_level)
          << " fix=" << DescribeFixType(report.summary.final_fix_type)
-         << " rtk=" << DescribeRtkMode(report.summary.final_rtk_mode)
-         << '\n';
+         << " rtk=" << DescribeRtkMode(report.summary.final_rtk_mode) << '\n';
 
   output << "processing total_bytes=" << report.summary.total_bytes_read
          << " records=" << report.summary.records_processed
          << " runtime_updates=" << report.summary.runtime_updates
-         << " warnings=" << report.summary.warning_count
-         << " errors=" << report.summary.error_count
+         << " warnings=" << report.summary.warning_count << " errors=" << report.summary.error_count
          << '\n';
 
   output << "final_state " << FormatRuntimeStateCompact(report.final_state) << '\n';
@@ -824,8 +808,7 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
          << " receiver_events=" << report.rtcm.receiver_side.events_observed
          << " receiver_accepted=" << report.rtcm.receiver_side.accepted_messages
          << " receiver_not_used=" << report.rtcm.receiver_side.not_used_messages
-         << " receiver_crc_failed=" << report.rtcm.receiver_side.crc_failed_messages
-         << '\n';
+         << " receiver_crc_failed=" << report.rtcm.receiver_side.crc_failed_messages << '\n';
 
   if (report.rtcm.last_base_station_arp.has_value())
   {
@@ -868,8 +851,7 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
 
   if (!summary_only && !report.diagnostics.empty())
   {
-    output << "diagnostics"
-           << '\n';
+    output << "diagnostics" << '\n';
     for (const auto& event : report.diagnostics)
     {
       if (event.severity == GnssDiagnosticSeverity::kOk ||
@@ -879,8 +861,7 @@ std::string FormatGnssQualityReportText(const GnssQualityReport& report, const b
       }
 
       output << "- severity=" << DescribeDiagnosticSeverity(event.severity)
-             << " category=" << DescribeDiagnosticCategory(event.category)
-             << " code=" << event.code
+             << " category=" << DescribeDiagnosticCategory(event.category) << " code=" << event.code
              << " message=\"" << event.message << '"';
       if (event.source.has_value())
       {
@@ -931,12 +912,12 @@ std::string FormatGnssQualityReportJson(const GnssQualityReport& report, const b
   write_summary_string("quality_level", DescribeGnssQualityLevel(report.summary.quality_level));
   write_summary_string("final_fix_type", DescribeFixType(report.summary.final_fix_type));
   write_summary_string("final_rtk_mode", DescribeRtkMode(report.summary.final_rtk_mode));
-  write_summary_optional_number(
-      "best_horizontal_accuracy_m", report.summary.best_horizontal_accuracy_m);
-  write_summary_optional_number(
-      "latest_horizontal_accuracy_m", report.summary.latest_horizontal_accuracy_m);
-  write_summary_optional_number(
-      "latest_vertical_accuracy_m", report.summary.latest_vertical_accuracy_m);
+  write_summary_optional_number("best_horizontal_accuracy_m",
+                                report.summary.best_horizontal_accuracy_m);
+  write_summary_optional_number("latest_horizontal_accuracy_m",
+                                report.summary.latest_horizontal_accuracy_m);
+  write_summary_optional_number("latest_vertical_accuracy_m",
+                                report.summary.latest_vertical_accuracy_m);
   write_summary_optional_number("latest_hdop", report.summary.latest_hdop);
   write_summary_optional_number("latest_vdop", report.summary.latest_vdop);
   write_summary_optional_number("satellites_used", report.summary.satellites_used);

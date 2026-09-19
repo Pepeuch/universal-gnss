@@ -37,10 +37,8 @@ void TestParseSingleStreamRecord(TestContext& ctx)
       "48.8566;2.3522;1;1;BKG;none;B;N;9600\r\n"
       "ENDSOURCETABLE\r\n");
 
-  ctx.Expect(sourcetable.has_end_marker &&
-                 sourcetable.streams.size() == 1u &&
-                 sourcetable.casters.empty() &&
-                 sourcetable.networks.empty() &&
+  ctx.Expect(sourcetable.has_end_marker && sourcetable.streams.size() == 1u &&
+                 sourcetable.casters.empty() && sourcetable.networks.empty() &&
                  sourcetable.issues.empty(),
              "a valid single STR line should parse cleanly and honor ENDSOURCETABLE");
   if (sourcetable.streams.empty())
@@ -68,16 +66,15 @@ void TestParseSingleStreamRecord(TestContext& ctx)
                  stream.fee == std::optional<bool>(false) &&
                  stream.bitrate == std::optional<std::uint32_t>(9600u),
              "STR parsing should extract the common sourcetable fields with typed optionals");
-  ctx.Expect(IsRtcmStream(stream) &&
-                 RequiresNmea(stream) &&
-                 SupportsMsm(stream),
+  ctx.Expect(IsRtcmStream(stream) && RequiresNmea(stream) && SupportsMsm(stream),
              "RTCM STR helpers should recognize RTCM, NMEA-required, and MSM-capable streams");
 }
 
 void TestParseMultipleStreamsAndHelpers(TestContext& ctx)
 {
   const auto sourcetable = ParseNtripSourcetable(
-      "STR;RTCM3;Station A;RTCM 3.1;1005(10),1074(1),1084(1);2;GPS+GLO;NETA;FRA;48.0;2.0;0;1;;;;;9600\n"
+      "STR;RTCM3;Station A;RTCM "
+      "3.1;1005(10),1074(1),1084(1);2;GPS+GLO;NETA;FRA;48.0;2.0;0;1;;;;;9600\n"
       "STR;CMR;Station B;CMR+;legacy;1;GPS;NETB;USA;40.0;-74.0;0;0;;;;;4800\n"
       "ENDSOURCETABLE\n");
 
@@ -85,31 +82,25 @@ void TestParseMultipleStreamsAndHelpers(TestContext& ctx)
   const auto* found_plain = FindMountpoint(sourcetable, "RTCM3");
   const auto* found_slash = FindMountpoint(sourcetable, "/RTCM3");
 
-  ctx.Expect(sourcetable.streams.size() == 2u &&
-                 rtcm_streams.size() == 1u &&
-                 found_plain != nullptr &&
-                 found_slash != nullptr &&
-                 found_plain == found_slash &&
+  ctx.Expect(sourcetable.streams.size() == 2u && rtcm_streams.size() == 1u &&
+                 found_plain != nullptr && found_slash != nullptr && found_plain == found_slash &&
                  found_plain->mountpoint == "RTCM3",
              "multiple STR lines should support RTCM filtering and normalized mountpoint lookup");
-  ctx.Expect(!RequiresNmea(sourcetable.streams[0u]) &&
-                 !SupportsMsm(sourcetable.streams[1u]) &&
+  ctx.Expect(!RequiresNmea(sourcetable.streams[0u]) && !SupportsMsm(sourcetable.streams[1u]) &&
                  !IsRtcmStream(sourcetable.streams[1u]),
              "helper behavior should stay false for non-NMEA or non-RTCM streams");
 }
 
 void TestParseCasterNetworkAndEndMarker(TestContext& ctx)
 {
-  const auto sourcetable = ParseNtripSourcetable(
-      "CAS;caster.example.org;2101;PRIMARY;Example operator\n"
-      "NET;FRANCE;National network\n"
-      "ENDSOURCETABLE\n"
-      "STR;IGNORED;After end;RTCM 3.2;;;;\n");
+  const auto sourcetable =
+      ParseNtripSourcetable("CAS;caster.example.org;2101;PRIMARY;Example operator\n"
+                            "NET;FRANCE;National network\n"
+                            "ENDSOURCETABLE\n"
+                            "STR;IGNORED;After end;RTCM 3.2;;;;\n");
 
-  ctx.Expect(sourcetable.has_end_marker &&
-                 sourcetable.casters.size() == 1u &&
-                 sourcetable.networks.size() == 1u &&
-                 sourcetable.streams.empty(),
+  ctx.Expect(sourcetable.has_end_marker && sourcetable.casters.size() == 1u &&
+                 sourcetable.networks.size() == 1u && sourcetable.streams.empty(),
              "CAS and NET records should parse minimally and ENDSOURCETABLE should stop parsing");
   if (sourcetable.casters.empty() || sourcetable.networks.empty())
   {
@@ -128,14 +119,13 @@ void TestParseCasterNetworkAndEndMarker(TestContext& ctx)
 
 void TestMalformedLineHandling(TestContext& ctx)
 {
-  const auto sourcetable = ParseNtripSourcetable(
-      "BOGUS;unsupported\n"
-      "STR;;Missing mountpoint;RTCM 3.2;;;;\n"
-      "STR;BADLAT;Bad latitude;RTCM 3.2;;;;;;not-a-number;2.0;;;;;;\n"
-      "CAS;caster.example.org;not-a-port;PRIMARY\n");
+  const auto sourcetable =
+      ParseNtripSourcetable("BOGUS;unsupported\n"
+                            "STR;;Missing mountpoint;RTCM 3.2;;;;\n"
+                            "STR;BADLAT;Bad latitude;RTCM 3.2;;;;;;not-a-number;2.0;;;;;;\n"
+                            "CAS;caster.example.org;not-a-port;PRIMARY\n");
 
-  ctx.Expect(sourcetable.streams.empty() &&
-                 sourcetable.casters.empty() &&
+  ctx.Expect(sourcetable.streams.empty() && sourcetable.casters.empty() &&
                  sourcetable.issues.size() == 4u,
              "malformed or unknown sourcetable lines should be reported and skipped");
   if (sourcetable.issues.size() != 4u)
@@ -156,8 +146,7 @@ void TestMsmKeywordDetection(TestContext& ctx)
       "STR;MSMKEY;Keyword stream;RTCM 3.3;MSM7;2;GPS+GAL;NET;DEU;52.0;13.0;0;1;;;;;9600\n"
       "ENDSOURCETABLE\n");
 
-  ctx.Expect(sourcetable.streams.size() == 1u &&
-                 SupportsMsm(sourcetable.streams.front()),
+  ctx.Expect(sourcetable.streams.size() == 1u && SupportsMsm(sourcetable.streams.front()),
              "MSM helper should also recognize sourcetable details that advertise MSM by name");
 }
 

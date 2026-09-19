@@ -7,15 +7,15 @@
 namespace universal_gnss_ros2
 {
 
-builtin_interfaces::msg::Time ToRosTime(
-    const std::optional<universal_gnss::GnssTimestampNs>& timestamp_ns);
+builtin_interfaces::msg::Time
+ToRosTime(const std::optional<universal_gnss::GnssTimestampNs>& timestamp_ns);
 
 bool HasValidCapabilityValueInvariant(const universal_gnss_ros2::msg::GnssStatus& message);
 
-universal_gnss_ros2::msg::GnssStatus ToGnssStatusMessage(
-    const universal_gnss::GnssRuntimeState& state);
+universal_gnss_ros2::msg::GnssStatus
+ToGnssStatusMessage(const universal_gnss::GnssRuntimeState& state);
 
-universal_gnss::GnssRuntimeState FromGnssStatusMessage(
-    const universal_gnss_ros2::msg::GnssStatus& message);
+universal_gnss::GnssRuntimeState
+FromGnssStatusMessage(const universal_gnss_ros2::msg::GnssStatus& message);
 
 }  // namespace universal_gnss_ros2

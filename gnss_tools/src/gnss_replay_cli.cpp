@@ -1,6 +1,6 @@
-#include <cstdlib>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -14,13 +14,14 @@ namespace
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name << " [--summary] [--json] [--timing-mode fast|wall_time] [--speed N] [--fallback-step-ms N] [path|-]\n"
-      << "Examples:\n"
-      << "  " << program_name << " file.bin\n"
-      << "  cat file.bin | " << program_name << " -\n"
-      << "  " << program_name << " --summary file.bin\n"
-      << "  " << program_name << " --json file.bin\n";
+  std::cout << "Usage: " << program_name
+            << " [--summary] [--json] [--timing-mode fast|wall_time] [--speed N] "
+               "[--fallback-step-ms N] [path|-]\n"
+            << "Examples:\n"
+            << "  " << program_name << " file.bin\n"
+            << "  cat file.bin | " << program_name << " -\n"
+            << "  " << program_name << " --summary file.bin\n"
+            << "  " << program_name << " --json file.bin\n";
 }
 
 }  // namespace
@@ -67,9 +68,12 @@ int main(int argc, char** argv)
     }
     if ((argument == "--speed" || argument == "--fallback-step-ms") && index + 1 < argc)
     {
-      try {
-        if (argument == "--speed") timing_config.speed = std::stod(argv[++index]);
-        else timing_config.fallback_step = std::chrono::milliseconds(std::stoll(argv[++index]));
+      try
+      {
+        if (argument == "--speed")
+          timing_config.speed = std::stod(argv[++index]);
+        else
+          timing_config.fallback_step = std::chrono::milliseconds(std::stoll(argv[++index]));
       }
       catch (const std::exception&)
       {

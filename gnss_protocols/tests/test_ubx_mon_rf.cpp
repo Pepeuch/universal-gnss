@@ -137,8 +137,7 @@ void TestValidMonRfNoJamming(TestContext& ctx)
              "MON-RF should decode version and block count");
   ctx.Expect(record.blocks[0].block_id == 0u &&
                  record.blocks[0].jamming_state == UbxMonRfJammingState::kOk &&
-                 record.blocks[0].noise_per_ms == 150u &&
-                 record.blocks[0].agc_count == 4096u &&
+                 record.blocks[0].noise_per_ms == 150u && record.blocks[0].agc_count == 4096u &&
                  record.blocks[0].cw_suppression == 20u,
              "MON-RF should decode documented RF block fields");
 }
@@ -168,20 +167,23 @@ void TestValidMonRfJammingState(TestContext& ctx)
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
   const UbxFrame wrong_message = BuildUbxFrame(0x01u, 0x35u, std::vector<std::uint8_t>(8u, 0u));
-  ctx.Expect(universal_gnss_protocols::ParseUbxMonRf(wrong_message).status == ParserStatus::kSkipped,
+  ctx.Expect(universal_gnss_protocols::ParseUbxMonRf(wrong_message).status ==
+                 ParserStatus::kSkipped,
              "wrong UBX class/id should be skipped");
 
   auto short_payload = MakeMonRfPayload(1u);
   short_payload.pop_back();
-  ctx.Expect(universal_gnss_protocols::ParseUbxMonRf(BuildUbxFrame(0x0Au, 0x38u, short_payload)).status ==
-                 ParserStatus::kInvalidData,
-             "truncated MON-RF payload should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxMonRf(BuildUbxFrame(0x0Au, 0x38u, short_payload)).status ==
+          ParserStatus::kInvalidData,
+      "truncated MON-RF payload should be rejected");
 
   auto wrong_version = MakeMonRfPayload(1u);
   wrong_version[0u] = 0x01u;
-  ctx.Expect(universal_gnss_protocols::ParseUbxMonRf(BuildUbxFrame(0x0Au, 0x38u, wrong_version)).status ==
-                 ParserStatus::kInvalidData,
-             "unsupported MON-RF version should be rejected");
+  ctx.Expect(
+      universal_gnss_protocols::ParseUbxMonRf(BuildUbxFrame(0x0Au, 0x38u, wrong_version)).status ==
+          ParserStatus::kInvalidData,
+      "unsupported MON-RF version should be rejected");
 
   UbxFrame invalid_checksum = BuildUbxFrame(0x0Au, 0x38u, MakeMonRfPayload(1u));
   invalid_checksum.checksum_status = ChecksumStatus::kInvalid;
@@ -206,9 +208,8 @@ void TestMultipleBlocksAndNoInventedFixFields(TestContext& ctx)
   ctx.Expect(state.interference_detected == std::optional<bool>(true) &&
                  state.jamming_detected == std::optional<bool>(true),
              "any warning block should make the aggregate RF state true");
-  ctx.Expect(!HasCapability(state, GnssCapability::kRtkMode) &&
-                 !state.rtk_mode.has_value() && !state.latitude_deg.has_value() &&
-                 !state.horizontal_accuracy_m.has_value(),
+  ctx.Expect(!HasCapability(state, GnssCapability::kRtkMode) && !state.rtk_mode.has_value() &&
+                 !state.latitude_deg.has_value() && !state.horizontal_accuracy_m.has_value(),
              "MON-RF mapping should not invent fix, RTK, or accuracy fields");
 }
 

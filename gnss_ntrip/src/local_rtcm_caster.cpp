@@ -15,8 +15,10 @@
 #include <unistd.h>
 #endif
 
-namespace universal_gnss_ntrip {
-namespace {
+namespace universal_gnss_ntrip
+{
+namespace
+{
 constexpr char kIcyResponse[] = "ICY 200 OK\r\n\r\n";
 
 std::string NormalizeMountpoint(std::string value)
@@ -25,7 +27,7 @@ std::string NormalizeMountpoint(std::string value)
     value.erase(value.begin());
   return value;
 }
-} // namespace
+}  // namespace
 
 struct LocalRtcmCaster::Impl
 {
@@ -69,8 +71,8 @@ struct LocalRtcmCaster::Impl
     {
       client.pending.clear();
       client.pending_offset = 0u;
-    } else if (client.pending_offset >= 4096u &&
-               client.pending_offset * 2u >= client.pending.size())
+    }
+    else if (client.pending_offset >= 4096u && client.pending_offset * 2u >= client.pending.size())
     {
       client.pending.erase(client.pending.begin(), client.pending.begin() + client.pending_offset);
       client.pending_offset = 0u;
@@ -85,7 +87,9 @@ struct LocalRtcmCaster::Impl
   }
 };
 
-LocalRtcmCaster::LocalRtcmCaster() : impl_(new Impl{}) {}
+LocalRtcmCaster::LocalRtcmCaster() : impl_(new Impl{})
+{
+}
 LocalRtcmCaster::~LocalRtcmCaster()
 {
   Stop();
@@ -144,8 +148,14 @@ void LocalRtcmCaster::Stop()
   impl_->source.reset();
   impl_->ClearCaches();
 }
-bool LocalRtcmCaster::running() const { return impl_->listener >= 0; }
-std::uint16_t LocalRtcmCaster::port() const { return impl_->bound_port; }
+bool LocalRtcmCaster::running() const
+{
+  return impl_->listener >= 0;
+}
+std::uint16_t LocalRtcmCaster::port() const
+{
+  return impl_->bound_port;
+}
 
 bool LocalRtcmCaster::ActivateSource(LocalRtcmSourceIdentity source)
 {
@@ -238,8 +248,10 @@ void LocalRtcmCaster::Poll()
     }
     if (client.fd >= 0 && client.pending_offset < client.pending.size())
     {
-      const ssize_t count = ::send(client.fd, client.pending.data() + client.pending_offset,
-                                   client.pending.size() - client.pending_offset, MSG_NOSIGNAL);
+      const ssize_t count = ::send(client.fd,
+                                   client.pending.data() + client.pending_offset,
+                                   client.pending.size() - client.pending_offset,
+                                   MSG_NOSIGNAL);
       if (count > 0)
       {
         client.pending_offset += static_cast<std::size_t>(count);
@@ -248,14 +260,19 @@ void LocalRtcmCaster::Poll()
           client.pending.clear();
           client.pending_offset = 0u;
         }
-      } else if (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
+      }
+      else if (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
         impl_->Close(client);
     }
   }
-  impl_->clients.erase(std::remove_if(impl_->clients.begin(), impl_->clients.end(),
+  impl_->clients.erase(std::remove_if(impl_->clients.begin(),
+                                      impl_->clients.end(),
                                       [](const Impl::Client& c) { return c.fd < 0; }),
                        impl_->clients.end());
 #endif
 }
-const LocalRtcmCasterMetrics& LocalRtcmCaster::metrics() const { return impl_->metrics; }
-} // namespace universal_gnss_ntrip
+const LocalRtcmCasterMetrics& LocalRtcmCaster::metrics() const
+{
+  return impl_->metrics;
+}
+}  // namespace universal_gnss_ntrip

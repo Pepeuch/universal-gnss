@@ -78,19 +78,20 @@ void AppendSignedBits(std::vector<std::uint8_t>& payload,
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
-std::vector<std::uint8_t> BuildBaseStationArpPayload(const std::uint16_t message_type,
-                                                     const std::uint16_t station_id,
-                                                     const std::uint8_t itrf_year,
-                                                     const bool gps_indicator,
-                                                     const bool glonass_indicator,
-                                                     const bool galileo_indicator,
-                                                     const bool reference_station_indicator,
-                                                     const std::int64_t ecef_x_0_1mm,
-                                                     const bool single_receiver_oscillator_indicator,
-                                                     const std::int64_t ecef_y_0_1mm,
-                                                     const std::uint8_t quarter_cycle_indicator,
-                                                     const std::int64_t ecef_z_0_1mm,
-                                                     const std::optional<std::uint16_t> antenna_height_0_1mm)
+std::vector<std::uint8_t>
+BuildBaseStationArpPayload(const std::uint16_t message_type,
+                           const std::uint16_t station_id,
+                           const std::uint8_t itrf_year,
+                           const bool gps_indicator,
+                           const bool glonass_indicator,
+                           const bool galileo_indicator,
+                           const bool reference_station_indicator,
+                           const std::int64_t ecef_x_0_1mm,
+                           const bool single_receiver_oscillator_indicator,
+                           const std::int64_t ecef_y_0_1mm,
+                           const std::uint8_t quarter_cycle_indicator,
+                           const std::int64_t ecef_z_0_1mm,
+                           const std::optional<std::uint16_t> antenna_height_0_1mm)
 {
   std::vector<std::uint8_t> payload;
   std::size_t bit_offset = 0u;
@@ -103,8 +104,7 @@ std::vector<std::uint8_t> BuildBaseStationArpPayload(const std::uint16_t message
   AppendUnsignedBits(payload, bit_offset, galileo_indicator ? 1u : 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, reference_station_indicator ? 1u : 0u, 1u);
   AppendSignedBits(payload, bit_offset, ecef_x_0_1mm, 38u);
-  AppendUnsignedBits(
-      payload, bit_offset, single_receiver_oscillator_indicator ? 1u : 0u, 1u);
+  AppendUnsignedBits(payload, bit_offset, single_receiver_oscillator_indicator ? 1u : 0u, 1u);
   AppendUnsignedBits(payload, bit_offset, 0u, 1u);
   AppendSignedBits(payload, bit_offset, ecef_y_0_1mm, 38u);
   AppendUnsignedBits(payload, bit_offset, quarter_cycle_indicator, 2u);
@@ -127,8 +127,7 @@ std::vector<std::uint8_t> BuildRtcmFrameBytes(const std::vector<std::uint8_t>& p
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -164,9 +163,9 @@ RtcmFrame ParseSingleFrame(const std::vector<std::uint8_t>& bytes)
 std::vector<std::uint8_t> CapturedRtcm1006FrameBytes()
 {
   return {
-      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u, 0x4Bu,
-      0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au, 0x41u, 0x56u,
-      0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
+      0xD3u, 0x00u, 0x15u, 0x3Eu, 0xE0u, 0x01u, 0x03u, 0x0Au, 0xB3u,
+      0x4Bu, 0x6Eu, 0x4Au, 0x80u, 0x69u, 0x58u, 0x11u, 0xB8u, 0x0Au,
+      0x41u, 0x56u, 0xB9u, 0xA1u, 0x00u, 0x00u, 0xE1u, 0x25u, 0x6Du,
   };
 }
 
@@ -185,29 +184,39 @@ RtcmFrame BuildBaseStationArpFrame(const std::uint16_t message_type,
                                    const std::optional<std::uint16_t> antenna_height_0_1mm,
                                    const std::optional<std::int64_t> timestamp_ns = std::nullopt)
 {
-  RtcmFrame frame = ParseSingleFrame(BuildRtcmFrameBytes(BuildBaseStationArpPayload(
-      message_type,
-      station_id,
-      itrf_year,
-      gps_indicator,
-      glonass_indicator,
-      galileo_indicator,
-      reference_station_indicator,
-      ecef_x_0_1mm,
-      single_receiver_oscillator_indicator,
-      ecef_y_0_1mm,
-      quarter_cycle_indicator,
-      ecef_z_0_1mm,
-      antenna_height_0_1mm)));
+  RtcmFrame frame = ParseSingleFrame(
+      BuildRtcmFrameBytes(BuildBaseStationArpPayload(message_type,
+                                                     station_id,
+                                                     itrf_year,
+                                                     gps_indicator,
+                                                     glonass_indicator,
+                                                     galileo_indicator,
+                                                     reference_station_indicator,
+                                                     ecef_x_0_1mm,
+                                                     single_receiver_oscillator_indicator,
+                                                     ecef_y_0_1mm,
+                                                     quarter_cycle_indicator,
+                                                     ecef_z_0_1mm,
+                                                     antenna_height_0_1mm)));
   frame.timestamp_ns = timestamp_ns;
   return frame;
 }
 
 void TestParseRtcm1005(TestContext& ctx)
 {
-  const RtcmFrame frame = BuildBaseStationArpFrame(
-      1005u, 42u, 20u, true, true, false, true, 1234567LL, true, -2345678LL, 2u, 3456789LL,
-      std::nullopt);
+  const RtcmFrame frame = BuildBaseStationArpFrame(1005u,
+                                                   42u,
+                                                   20u,
+                                                   true,
+                                                   true,
+                                                   false,
+                                                   true,
+                                                   1234567LL,
+                                                   true,
+                                                   -2345678LL,
+                                                   2u,
+                                                   3456789LL,
+                                                   std::nullopt);
 
   const auto parsed = universal_gnss_protocols::ParseRtcmBaseStationArp(frame);
   ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
@@ -221,15 +230,14 @@ void TestParseRtcm1005(TestContext& ctx)
   ctx.Expect(parsed.record->station_id == 42u, "1005 should decode the station id");
   ctx.Expect(parsed.record->itrf_year == 20u, "1005 should decode the ITRF year");
   ctx.Expect(parsed.record->gps_indicator && parsed.record->glonass_indicator &&
-                 !parsed.record->galileo_indicator &&
-                 parsed.record->reference_station_indicator,
+                 !parsed.record->galileo_indicator && parsed.record->reference_station_indicator,
              "1005 should decode constellation/reference indicators");
-  ctx.ExpectNear(parsed.record->ecef_x_m, 123.4567, 1e-7,
-                 "1005 should decode positive signed ECEF X");
-  ctx.ExpectNear(parsed.record->ecef_y_m, -234.5678, 1e-7,
-                 "1005 should decode negative signed ECEF Y");
-  ctx.ExpectNear(parsed.record->ecef_z_m, 345.6789, 1e-7,
-                 "1005 should decode positive signed ECEF Z");
+  ctx.ExpectNear(
+      parsed.record->ecef_x_m, 123.4567, 1e-7, "1005 should decode positive signed ECEF X");
+  ctx.ExpectNear(
+      parsed.record->ecef_y_m, -234.5678, 1e-7, "1005 should decode negative signed ECEF Y");
+  ctx.ExpectNear(
+      parsed.record->ecef_z_m, 345.6789, 1e-7, "1005 should decode positive signed ECEF Z");
   ctx.Expect(parsed.record->single_receiver_oscillator_indicator &&
                  parsed.record->quarter_cycle_indicator == 2u &&
                  !parsed.record->antenna_height_m.has_value(),
@@ -238,9 +246,19 @@ void TestParseRtcm1005(TestContext& ctx)
 
 void TestParseRtcm1006(TestContext& ctx)
 {
-  const RtcmFrame frame = BuildBaseStationArpFrame(
-      1006u, 314u, 21u, true, false, true, false, -7654321LL, false, 1111111LL, 1u,
-      -2222222LL, 12345u);
+  const RtcmFrame frame = BuildBaseStationArpFrame(1006u,
+                                                   314u,
+                                                   21u,
+                                                   true,
+                                                   false,
+                                                   true,
+                                                   false,
+                                                   -7654321LL,
+                                                   false,
+                                                   1111111LL,
+                                                   1u,
+                                                   -2222222LL,
+                                                   12345u);
 
   const auto parsed = universal_gnss_protocols::ParseRtcmBaseStationArp(frame);
   ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
@@ -252,20 +270,17 @@ void TestParseRtcm1006(TestContext& ctx)
 
   ctx.Expect(parsed.record->message_type == 1006u, "1006 should preserve the message type");
   ctx.Expect(parsed.record->station_id == 314u, "1006 should decode the station id");
-  ctx.ExpectNear(parsed.record->ecef_x_m, -765.4321, 1e-7,
-                 "1006 should decode negative signed ECEF X");
-  ctx.ExpectNear(parsed.record->ecef_y_m, 111.1111, 1e-7,
-                 "1006 should decode positive signed ECEF Y");
-  ctx.ExpectNear(parsed.record->ecef_z_m, -222.2222, 1e-7,
-                 "1006 should decode negative signed ECEF Z");
-  ctx.Expect(parsed.record->antenna_height_m.has_value(),
-             "1006 should populate antenna height");
+  ctx.ExpectNear(
+      parsed.record->ecef_x_m, -765.4321, 1e-7, "1006 should decode negative signed ECEF X");
+  ctx.ExpectNear(
+      parsed.record->ecef_y_m, 111.1111, 1e-7, "1006 should decode positive signed ECEF Y");
+  ctx.ExpectNear(
+      parsed.record->ecef_z_m, -222.2222, 1e-7, "1006 should decode negative signed ECEF Z");
+  ctx.Expect(parsed.record->antenna_height_m.has_value(), "1006 should populate antenna height");
   if (parsed.record->antenna_height_m.has_value())
   {
-    ctx.ExpectNear(*parsed.record->antenna_height_m,
-                   1.2345,
-                   1e-9,
-                   "1006 should decode the antenna height");
+    ctx.ExpectNear(
+        *parsed.record->antenna_height_m, 1.2345, 1e-9, "1006 should decode the antenna height");
   }
 }
 
@@ -294,23 +309,16 @@ void TestParseCapturedRtcm1006Fixture(TestContext& ctx)
                    1e-9,
                    "captured live RTCM 1006 should decode the antenna height field");
   }
-  ctx.ExpectNear(parsed.record->ecef_x_m,
-                 4595773.8058,
-                 1e-4,
-                 "captured live RTCM 1006 should decode ECEF X");
-  ctx.ExpectNear(parsed.record->ecef_y_m,
-                 176737.9384,
-                 1e-4,
-                 "captured live RTCM 1006 should decode ECEF Y");
-  ctx.ExpectNear(parsed.record->ecef_z_m,
-                 4404587.5617,
-                 1e-4,
-                 "captured live RTCM 1006 should decode ECEF Z");
+  ctx.ExpectNear(
+      parsed.record->ecef_x_m, 4595773.8058, 1e-4, "captured live RTCM 1006 should decode ECEF X");
+  ctx.ExpectNear(
+      parsed.record->ecef_y_m, 176737.9384, 1e-4, "captured live RTCM 1006 should decode ECEF Y");
+  ctx.ExpectNear(
+      parsed.record->ecef_z_m, 4404587.5617, 1e-4, "captured live RTCM 1006 should decode ECEF Z");
 
-  const double ecef_radius_m =
-      std::sqrt(parsed.record->ecef_x_m * parsed.record->ecef_x_m +
-                parsed.record->ecef_y_m * parsed.record->ecef_y_m +
-                parsed.record->ecef_z_m * parsed.record->ecef_z_m);
+  const double ecef_radius_m = std::sqrt(parsed.record->ecef_x_m * parsed.record->ecef_x_m +
+                                         parsed.record->ecef_y_m * parsed.record->ecef_y_m +
+                                         parsed.record->ecef_z_m * parsed.record->ecef_z_m);
   ctx.Expect(ecef_radius_m > 6000000.0 && ecef_radius_m < 7000000.0,
              "captured live RTCM 1006 should decode plausible ECEF coordinates");
 }
@@ -345,9 +353,20 @@ void TestRejectWrongMessageTypeAndTruncation(TestContext& ctx)
 void TestCorrectionMonitorStoresLatestBasePosition(TestContext& ctx)
 {
   RtcmCorrectionMonitor monitor;
-  monitor.ObserveFrame(BuildBaseStationArpFrame(
-      1005u, 7u, 18u, true, true, false, true, 100LL, false, 200LL, 0u, 300LL, std::nullopt,
-      1000LL));
+  monitor.ObserveFrame(BuildBaseStationArpFrame(1005u,
+                                                7u,
+                                                18u,
+                                                true,
+                                                true,
+                                                false,
+                                                true,
+                                                100LL,
+                                                false,
+                                                200LL,
+                                                0u,
+                                                300LL,
+                                                std::nullopt,
+                                                1000LL));
   monitor.ObserveFrame(BuildBaseStationArpFrame(
       1006u, 7u, 19u, true, false, true, false, -400LL, true, 500LL, 3u, -600LL, 70u, 2500LL));
 

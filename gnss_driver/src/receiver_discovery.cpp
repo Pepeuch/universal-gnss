@@ -22,9 +22,11 @@
 #include "universal_gnss_protocols/unicore_framer.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
-namespace {
+namespace
+{
 
 namespace fs = std::filesystem;
 
@@ -80,8 +82,9 @@ bool IsVersionToken(const std::string_view value)
 bool IsReceiverIdentityValue(const std::string_view value)
 {
   return value != "-" && !value.empty() &&
-         std::all_of(value.begin(), value.end(),
-                     [](const unsigned char ch) { return ch >= 0x20u && ch <= 0x7Eu; });
+         std::all_of(value.begin(), value.end(), [](const unsigned char ch) {
+           return ch >= 0x20u && ch <= 0x7Eu;
+         });
 }
 
 std::optional<std::string_view> ReadQuotedCsvField(const std::string_view fields,
@@ -124,8 +127,8 @@ std::optional<std::string_view> ReadNulTerminatedAsciiField(const std::vector<st
     return std::nullopt;
   }
 
-  if (!std::all_of(begin, nul,
-                   [](const std::uint8_t byte) { return byte >= 0x20u && byte <= 0x7Eu; }))
+  if (!std::all_of(
+          begin, nul, [](const std::uint8_t byte) { return byte >= 0x20u && byte <= 0x7Eu; }))
   {
     return std::nullopt;
   }
@@ -181,16 +184,18 @@ std::optional<ReceiverIdentityMetadata> FindUbloxMonVerMetadata(const UbxFrame& 
       {
         metadata.model = std::string(model);
       }
-    } else if (extension->size() >= kFirmwarePrefix.size() &&
-               extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
+    }
+    else if (extension->size() >= kFirmwarePrefix.size() &&
+             extension->substr(0u, kFirmwarePrefix.size()) == kFirmwarePrefix)
     {
       const std::string_view firmware = extension->substr(kFirmwarePrefix.size());
       if (!firmware.empty())
       {
         metadata.firmware_version = std::string(firmware);
       }
-    } else if (extension->size() >= kChipIdPrefix.size() &&
-               extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
+    }
+    else if (extension->size() >= kChipIdPrefix.size() &&
+             extension->substr(0u, kChipIdPrefix.size()) == kChipIdPrefix)
     {
       const std::string_view chip_id = extension->substr(kChipIdPrefix.size());
       if (IsReceiverIdentityValue(chip_id))
@@ -310,12 +315,14 @@ std::string CanonicalKey(const std::string& path)
   try
   {
     return fs::weakly_canonical(fs::path(path)).string();
-  } catch (const fs::filesystem_error&)
+  }
+  catch (const fs::filesystem_error&)
   {
     try
     {
       return fs::absolute(fs::path(path)).lexically_normal().string();
-    } catch (const fs::filesystem_error&)
+    }
+    catch (const fs::filesystem_error&)
     {
       return path;
     }
@@ -336,7 +343,8 @@ std::vector<std::string> ListDirectoryPaths(const std::string& directory)
     {
       entries.push_back(entry.path().string());
     }
-  } catch (const fs::filesystem_error&)
+  }
+  catch (const fs::filesystem_error&)
   {
     return {};
   }
@@ -366,16 +374,16 @@ int SourcePriority(const ReceiverPortSource source)
 {
   switch (source)
   {
-  case ReceiverPortSource::kSerialById:
-    return 0;
-  case ReceiverPortSource::kTtyAcm:
-    return 1;
-  case ReceiverPortSource::kTtyUsb:
-    return 2;
-  case ReceiverPortSource::kPlatformUart:
-    return 3;
-  case ReceiverPortSource::kExplicitPath:
-    return 4;
+    case ReceiverPortSource::kSerialById:
+      return 0;
+    case ReceiverPortSource::kTtyAcm:
+      return 1;
+    case ReceiverPortSource::kTtyUsb:
+      return 2;
+    case ReceiverPortSource::kPlatformUart:
+      return 3;
+    case ReceiverPortSource::kExplicitPath:
+      return 4;
   }
 
   return 5;
@@ -505,7 +513,8 @@ std::size_t CountMavlinkHeartbeats(const std::vector<std::uint8_t>& bytes)
       {
         ++count;
       }
-    } else if (bytes[index] == 0xFDu && index + 9u < bytes.size())
+    }
+    else if (bytes[index] == 0xFDu && index + 9u < bytes.size())
     {
       const std::uint8_t payload_length = bytes[index + 1u];
       const std::uint32_t message_id = static_cast<std::uint32_t>(bytes[index + 7u]) |
@@ -614,7 +623,8 @@ ReceiverProbeConfidence MaxConfidence(const ReceiverProbeConfidence lhs,
 }
 
 void SetUnknownResultNote(const ReceiverProbeEvidence& evidence,
-                          const bool allow_generic_nmea_fallback, std::string& note,
+                          const bool allow_generic_nmea_fallback,
+                          std::string& note,
                           ReceiverProbeConfidence& confidence)
 {
   if (evidence.rtcm_frames_seen > 0u && evidence.ubx_frames_seen == 0u &&
@@ -658,13 +668,13 @@ int FamilyRank(const ReceiverDetectedFamily family)
 {
   switch (family)
   {
-  case ReceiverDetectedFamily::kUblox:
-  case ReceiverDetectedFamily::kUnicore:
-  case ReceiverDetectedFamily::kNmea:
-    return 1;
-  case ReceiverDetectedFamily::kUnknown:
-  default:
-    return 0;
+    case ReceiverDetectedFamily::kUblox:
+    case ReceiverDetectedFamily::kUnicore:
+    case ReceiverDetectedFamily::kNmea:
+      return 1;
+    case ReceiverDetectedFamily::kUnknown:
+    default:
+      return 0;
   }
 }
 
@@ -719,23 +729,23 @@ const char* ToString(const TransportError error)
 {
   switch (error)
   {
-  case TransportError::kNone:
-    return "none";
-  case TransportError::kClosed:
-    return "closed";
-  case TransportError::kInvalidArgument:
-    return "invalid_argument";
-  case TransportError::kOverflow:
-    return "overflow";
-  case TransportError::kReadFailure:
-    return "read_failure";
-  case TransportError::kWriteFailure:
-    return "write_failure";
-  case TransportError::kUnsupported:
-    return "unsupported";
-  case TransportError::kUnknown:
-  default:
-    return "unknown";
+    case TransportError::kNone:
+      return "none";
+    case TransportError::kClosed:
+      return "closed";
+    case TransportError::kInvalidArgument:
+      return "invalid_argument";
+    case TransportError::kOverflow:
+      return "overflow";
+    case TransportError::kReadFailure:
+      return "read_failure";
+    case TransportError::kWriteFailure:
+      return "write_failure";
+    case TransportError::kUnsupported:
+      return "unsupported";
+    case TransportError::kUnknown:
+    default:
+      return "unknown";
   }
 }
 
@@ -774,7 +784,7 @@ ReceiverProbeResult ProbeSerialPortAtBaud(const ReceiverPortCandidate& candidate
 #endif
 }
 
-} // namespace
+}  // namespace
 
 std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPaths& paths)
 {
@@ -824,7 +834,8 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig
         {
           continue;
         }
-      } catch (const fs::filesystem_error&)
+      }
+      catch (const fs::filesystem_error&)
       {
         continue;
       }
@@ -856,7 +867,8 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig
     candidates.push_back(entry.second);
   }
 
-  std::sort(candidates.begin(), candidates.end(),
+  std::sort(candidates.begin(),
+            candidates.end(),
             [](const ReceiverPortCandidate& lhs, const ReceiverPortCandidate& rhs) {
               const int lhs_priority = SourcePriority(lhs.source);
               const int rhs_priority = SourcePriority(rhs.source);
@@ -1027,7 +1039,8 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     {
       result.detected_family = ReceiverDetectedFamily::kUblox;
       PopulateObservedUbloxIdentity(result, bytes);
-    } else
+    }
+    else
     {
       result.detected_family = ReceiverDetectedFamily::kUnicore;
       PopulateObservedUnicoreIdentity(result, bytes);
@@ -1055,8 +1068,8 @@ ReceiverProbeResult AnalyzeReceiverProbeBytes(const ReceiverPortCandidate& candi
     return result;
   }
 
-  SetUnknownResultNote(result.evidence, config.allow_generic_nmea_fallback, result.note,
-                       result.confidence);
+  SetUnknownResultNote(
+      result.evidence, config.allow_generic_nmea_fallback, result.note, result.confidence);
   if (result.reason.empty())
   {
     result.reason = result.note;
@@ -1070,11 +1083,12 @@ ParseVerifiedUnicoreVersionAIdentity(const std::vector<std::uint8_t>& bytes)
   return FindUnicoreVersionAMetadata(bytes);
 }
 
-bool VerifyUbloxMonVerResponse(ByteDuplex& transport, const std::uint32_t read_timeout_ms,
+bool VerifyUbloxMonVerResponse(ByteDuplex& transport,
+                               const std::uint32_t read_timeout_ms,
                                const std::size_t max_response_bytes)
 {
-  return QueryReceiverModel(ReceiverDetectedFamily::kUblox, transport, read_timeout_ms,
-                            max_response_bytes)
+  return QueryReceiverModel(
+             ReceiverDetectedFamily::kUblox, transport, read_timeout_ms, max_response_bytes)
       .transport_verified;
 }
 
@@ -1084,8 +1098,8 @@ ReceiverModelQueryResult QueryReceiverModel(const ReceiverDetectedFamily family,
                                             const std::size_t max_response_bytes)
 {
   ReceiverModelQueryResult result;
-  constexpr std::array<std::uint8_t, 8u> kMonVerPoll{0xB5u, 0x62u, 0x0Au, 0x04u,
-                                                     0x00u, 0x00u, 0x0Eu, 0x34u};
+  constexpr std::array<std::uint8_t, 8u> kMonVerPoll{
+      0xB5u, 0x62u, 0x0Au, 0x04u, 0x00u, 0x00u, 0x0Eu, 0x34u};
   if (max_response_bytes == 0u)
   {
     return result;
@@ -1094,15 +1108,15 @@ ReceiverModelQueryResult QueryReceiverModel(const ReceiverDetectedFamily family,
   std::string_view query;
   switch (family)
   {
-  case ReceiverDetectedFamily::kUblox:
-    result.method = ReceiverModelQueryMethod::kUbloxMonVer;
-    break;
-  case ReceiverDetectedFamily::kUnicore:
-    result.method = ReceiverModelQueryMethod::kUnicoreVersionA;
-    query = "VERSIONA\r\n";
-    break;
-  default:
-    return result;
+    case ReceiverDetectedFamily::kUblox:
+      result.method = ReceiverModelQueryMethod::kUbloxMonVer;
+      break;
+    case ReceiverDetectedFamily::kUnicore:
+      result.method = ReceiverModelQueryMethod::kUnicoreVersionA;
+      query = "VERSIONA\r\n";
+      break;
+    default:
+      return result;
   }
 
   const auto write =
@@ -1139,8 +1153,8 @@ ReceiverModelQueryResult QueryReceiverModel(const ReceiverDetectedFamily family,
     }
 
     bytes_read += read.bytes_read;
-    bytes.insert(bytes.end(), buffer.begin(),
-                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
+    bytes.insert(
+        bytes.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
     if (family == ReceiverDetectedFamily::kUnicore)
     {
       if (const auto metadata = FindUnicoreVersionAMetadata(bytes); metadata.has_value())
@@ -1217,8 +1231,8 @@ ReceiverProbeResult ProbeReceiverTransportAtBaud(const ReceiverPortCandidate& ca
       continue;
     }
 
-    bytes.insert(bytes.end(), buffer.begin(),
-                 buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
+    bytes.insert(
+        bytes.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(read.bytes_read));
     result = AnalyzeReceiverProbeBytes(candidate, baud_rate, bytes, config);
     if (const auto version_metadata = ParseVerifiedUnicoreVersionAIdentity(bytes);
         version_metadata.has_value())
@@ -1291,7 +1305,8 @@ std::vector<ReceiverProbeResult> DiscoverReceivers(const ReceiverProbeConfig& co
   if (explicit_path.has_value())
   {
     candidates.push_back(MakeExplicitReceiverPortCandidate(*explicit_path, paths));
-  } else
+  }
+  else
   {
     candidates = DiscoverSerialPorts(config, paths);
   }
@@ -1308,7 +1323,8 @@ std::vector<ReceiverProbeResult> DiscoverReceivers(const ReceiverProbeConfig& co
 
 std::vector<ReceiverProbeResult> SortReceiverProbeResults(std::vector<ReceiverProbeResult> results)
 {
-  std::sort(results.begin(), results.end(),
+  std::sort(results.begin(),
+            results.end(),
             [](const ReceiverProbeResult& lhs, const ReceiverProbeResult& rhs) {
               if (ConfidenceRank(lhs.confidence) != ConfidenceRank(rhs.confidence))
               {
@@ -1346,9 +1362,9 @@ const char* ToString(const ReceiverTransportType transport_type)
 {
   switch (transport_type)
   {
-  case ReceiverTransportType::kSerial:
-  default:
-    return "serial";
+    case ReceiverTransportType::kSerial:
+    default:
+      return "serial";
   }
 }
 
@@ -1356,17 +1372,17 @@ const char* ToString(const ReceiverPortSource source)
 {
   switch (source)
   {
-  case ReceiverPortSource::kSerialById:
-    return "serial_by_id";
-  case ReceiverPortSource::kTtyAcm:
-    return "tty_acm";
-  case ReceiverPortSource::kTtyUsb:
-    return "tty_usb";
-  case ReceiverPortSource::kPlatformUart:
-    return "platform_uart";
-  case ReceiverPortSource::kExplicitPath:
-  default:
-    return "explicit_path";
+    case ReceiverPortSource::kSerialById:
+      return "serial_by_id";
+    case ReceiverPortSource::kTtyAcm:
+      return "tty_acm";
+    case ReceiverPortSource::kTtyUsb:
+      return "tty_usb";
+    case ReceiverPortSource::kPlatformUart:
+      return "platform_uart";
+    case ReceiverPortSource::kExplicitPath:
+    default:
+      return "explicit_path";
   }
 }
 
@@ -1374,15 +1390,15 @@ const char* ToString(const ReceiverDetectedFamily family)
 {
   switch (family)
   {
-  case ReceiverDetectedFamily::kUblox:
-    return "ublox";
-  case ReceiverDetectedFamily::kUnicore:
-    return "unicore";
-  case ReceiverDetectedFamily::kNmea:
-    return "nmea";
-  case ReceiverDetectedFamily::kUnknown:
-  default:
-    return "unknown";
+    case ReceiverDetectedFamily::kUblox:
+      return "ublox";
+    case ReceiverDetectedFamily::kUnicore:
+      return "unicore";
+    case ReceiverDetectedFamily::kNmea:
+      return "nmea";
+    case ReceiverDetectedFamily::kUnknown:
+    default:
+      return "unknown";
   }
 }
 
@@ -1390,15 +1406,15 @@ const char* ToString(const ReceiverProbeConfidence confidence)
 {
   switch (confidence)
   {
-  case ReceiverProbeConfidence::kLow:
-    return "low";
-  case ReceiverProbeConfidence::kMedium:
-    return "medium";
-  case ReceiverProbeConfidence::kHigh:
-    return "high";
-  case ReceiverProbeConfidence::kNone:
-  default:
-    return "none";
+    case ReceiverProbeConfidence::kLow:
+      return "low";
+    case ReceiverProbeConfidence::kMedium:
+      return "medium";
+    case ReceiverProbeConfidence::kHigh:
+      return "high";
+    case ReceiverProbeConfidence::kNone:
+    default:
+      return "none";
   }
 }
 
@@ -1406,14 +1422,14 @@ const char* ToString(const ReceiverModelQueryMethod method)
 {
   switch (method)
   {
-  case ReceiverModelQueryMethod::kUbloxMonVer:
-    return "ublox_mon_ver";
-  case ReceiverModelQueryMethod::kUnicoreVersionA:
-    return "unicore_versiona";
-  case ReceiverModelQueryMethod::kUnsupported:
-  default:
-    return "unsupported";
+    case ReceiverModelQueryMethod::kUbloxMonVer:
+      return "ublox_mon_ver";
+    case ReceiverModelQueryMethod::kUnicoreVersionA:
+      return "unicore_versiona";
+    case ReceiverModelQueryMethod::kUnsupported:
+    default:
+      return "unsupported";
   }
 }
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

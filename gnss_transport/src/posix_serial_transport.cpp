@@ -108,8 +108,7 @@ TransportError ConfigureSerialPort(const int fd, const PosixSerialConfig& config
   }
   else if (config.read_timeout_ms > 0u)
   {
-    const auto deciseconds =
-        ((config.read_timeout_ms - 1u) / kMillisecondsPerDecisecond) + 1u;
+    const auto deciseconds = ((config.read_timeout_ms - 1u) / kMillisecondsPerDecisecond) + 1u;
     options.c_cc[VMIN] = 0;
     options.c_cc[VTIME] = static_cast<cc_t>(deciseconds);
   }
@@ -242,9 +241,8 @@ ReadResult PosixSerialTransport::Read(std::uint8_t* destination, const std::size
     if (bytes_read > 0)
     {
       NoteReadBytes(metrics_, static_cast<std::size_t>(bytes_read));
-      return ReadResult{static_cast<std::size_t>(bytes_read),
-                        TransportStatus::kOk,
-                        TransportError::kNone};
+      return ReadResult{
+          static_cast<std::size_t>(bytes_read), TransportStatus::kOk, TransportError::kNone};
     }
 
     if (bytes_read == 0)
@@ -294,9 +292,8 @@ WriteResult PosixSerialTransport::Write(const std::uint8_t* data, const std::siz
     if (bytes_written >= 0)
     {
       NoteWrittenBytes(metrics_, static_cast<std::size_t>(bytes_written));
-      return WriteResult{static_cast<std::size_t>(bytes_written),
-                         TransportStatus::kOk,
-                         TransportError::kNone};
+      return WriteResult{
+          static_cast<std::size_t>(bytes_written), TransportStatus::kOk, TransportError::kNone};
     }
 
     if (errno == EINTR)

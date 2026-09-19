@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <utility>
 
-namespace universal_gnss_transport {
+namespace universal_gnss_transport
+{
 
-RtcmFrameWriter::RtcmFrameWriter(const std::size_t capacity) : capacity_(capacity) {}
+RtcmFrameWriter::RtcmFrameWriter(const std::size_t capacity) : capacity_(capacity)
+{
+}
 
 bool RtcmFrameWriter::Enqueue(Frame frame)
 {
@@ -67,9 +70,21 @@ RtcmFrameWriter::FlushOutcome RtcmFrameWriter::Flush(ByteSink& sink)
   return outcome;
 }
 
-void RtcmFrameWriter::Abandon() { pending_.clear(); }
-std::size_t RtcmFrameWriter::size() const { return pending_.size(); }
-std::size_t RtcmFrameWriter::capacity() const { return capacity_; }
-bool RtcmFrameWriter::empty() const { return pending_.empty(); }
+void RtcmFrameWriter::Abandon()
+{
+  pending_.clear();
+}
+std::size_t RtcmFrameWriter::size() const
+{
+  return pending_.size();
+}
+std::size_t RtcmFrameWriter::capacity() const
+{
+  return capacity_;
+}
+bool RtcmFrameWriter::empty() const
+{
+  return pending_.empty();
+}
 
-} // namespace universal_gnss_transport
+}  // namespace universal_gnss_transport

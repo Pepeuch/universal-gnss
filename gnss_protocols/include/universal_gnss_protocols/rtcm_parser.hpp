@@ -32,8 +32,7 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
 
 ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(const RtcmFrame& frame);
 
-ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
-    const RtcmFrame& frame);
+ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(const RtcmFrame& frame);
 
 ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame);
 

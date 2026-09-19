@@ -19,28 +19,28 @@
 namespace
 {
 
-using universal_gnss::GnssCapability;
 using universal_gnss::GnssBaselineSolutionStatus;
+using universal_gnss::GnssCapability;
 using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::HasCapability;
 using universal_gnss::HasValueAvailable;
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::ComputeUnicoreBinaryCrc32;
-using universal_gnss_protocols::ParseUnicorePvtsln;
-using universal_gnss_protocols::ParseUnicorePvtslnB;
-using universal_gnss_protocols::ParserStatus;
-using universal_gnss_protocols::UnicoreFrame;
-using universal_gnss_protocols::UnicoreFrameFramer;
-using universal_gnss_protocols::UnicorePvtslnToRuntimeState;
-using universal_gnss_protocols::UnicoreBinaryFrame;
-using universal_gnss_protocols::UnicoreBinaryFrameFramer;
-using universal_gnss_protocols::UnicorePvtslnBToRuntimeState;
 using universal_gnss_protocols::kUnicoreBinaryCrcSize;
 using universal_gnss_protocols::kUnicoreBinaryHeaderSize;
 using universal_gnss_protocols::kUnicoreBinarySync1;
 using universal_gnss_protocols::kUnicoreBinarySync2;
 using universal_gnss_protocols::kUnicoreBinarySync3;
+using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::ParseUnicorePvtsln;
+using universal_gnss_protocols::ParseUnicorePvtslnB;
+using universal_gnss_protocols::UnicoreBinaryFrame;
+using universal_gnss_protocols::UnicoreBinaryFrameFramer;
+using universal_gnss_protocols::UnicoreFrame;
+using universal_gnss_protocols::UnicoreFrameFramer;
+using universal_gnss_protocols::UnicorePvtslnBToRuntimeState;
+using universal_gnss_protocols::UnicorePvtslnToRuntimeState;
 
 struct TestContext
 {
@@ -239,8 +239,7 @@ std::string MakePvtslnAsciiLine()
 
 void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
 {
-  const UnicoreBinaryFrame frame =
-      BuildBinaryFrame(1021u, MakePvtslnPayload(50u, 0u), 1111);
+  const UnicoreBinaryFrame frame = BuildBinaryFrame(1021u, MakePvtslnPayload(50u, 0u), 1111);
   ctx.Expect(frame.checksum_status == ChecksumStatus::kValid,
              "PVTSLNB test frame should have a valid CRC");
 
@@ -254,11 +253,10 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
 
   const auto& record = *result.record;
   ctx.Expect(record.header.timestamp_ns == std::optional<std::int64_t>(1111) &&
-                 record.header.message_id == 1021u &&
-                 record.header.payload_length == 224u,
+                 record.header.message_id == 1021u && record.header.payload_length == 224u,
              "PVTSLNB should preserve binary header metadata");
   ctx.Expect(record.best_position_type ==
-                 universal_gnss_protocols::UnicorePositionType::kNarrowInt &&
+                     universal_gnss_protocols::UnicorePositionType::kNarrowInt &&
                  record.baseline_solution_status ==
                      universal_gnss_protocols::UnicoreSolutionStatus::kSolComputed,
              "PVTSLNB should decode documented position and baseline solution fields");
@@ -266,16 +264,13 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
                  NearlyEqual(record.best_latitude_deg, 40.07898130522) &&
                  NearlyEqual(record.best_longitude_deg, 116.23663134427),
              "PVTSLNB should decode best-position coordinates and altitude");
-  ctx.Expect(record.best_diff_age_s == 0.9000f &&
-                 record.best_tracked_satellites == 46u &&
-                 record.best_used_satellites == 28u &&
-                 record.hdop == 0.6840f &&
+  ctx.Expect(record.best_diff_age_s == 0.9000f && record.best_tracked_satellites == 46u &&
+                 record.best_used_satellites == 28u && record.hdop == 0.6840f &&
                  record.baseline_azimuth_deg == 182.2500f,
              "PVTSLNB should decode documented age, satellite, DOP, and baseline azimuth fields");
 
   const auto state = UnicorePvtslnBToRuntimeState(record);
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFixed &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "PVTSLNB runtime mapping should expose RTK fixed from NARROW_INT");
   ctx.Expect(HasCapability(state, GnssCapability::kHorizontalAccuracy) &&
@@ -289,27 +284,25 @@ void TestValidPvtslnBParseAndRuntimeMapping(TestContext& ctx)
                  HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
                  HasCapability(state, GnssCapability::kHdop),
              "PVTSLNB runtime mapping should advertise documented optional fields");
-  ctx.Expect(HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
-                 HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
-                 HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
-                 HasValueAvailable(state, GnssCapability::kHeading) &&
-                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
-                 HasValueAvailable(state, GnssCapability::kBaselineAzimuth) &&
-                 HasValueAvailable(state, GnssCapability::kBaselinePitch) &&
-                 HasValueAvailable(state, GnssCapability::kBaselineLength) &&
-                 HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
-                 HasValueAvailable(state, GnssCapability::kHdop) &&
-                 state.heading_deg == 182.2500f &&
-                 state.dual_antenna_baseline == std::optional<bool>(true) &&
-                 state.baseline_azimuth_deg == std::optional<float>(182.2500f) &&
-                 state.baseline_pitch_deg == std::optional<float>(0.1000f) &&
-                 state.baseline_length_m == std::optional<float>(1.5000f) &&
-                 state.baseline_solution_status ==
-                     std::optional<GnssBaselineSolutionStatus>(
-                         GnssBaselineSolutionStatus::kComputed) &&
-                 state.correction_age_s == 0.9000f &&
-                 state.hdop == 0.6840f,
-             "PVTSLNB runtime mapping should expose documented baseline, heading, DOP, and age values");
+  ctx.Expect(
+      HasValueAvailable(state, GnssCapability::kHorizontalAccuracy) &&
+          HasValueAvailable(state, GnssCapability::kVerticalAccuracy) &&
+          HasValueAvailable(state, GnssCapability::kCorrectionAge) &&
+          HasValueAvailable(state, GnssCapability::kHeading) &&
+          HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+          HasValueAvailable(state, GnssCapability::kBaselineAzimuth) &&
+          HasValueAvailable(state, GnssCapability::kBaselinePitch) &&
+          HasValueAvailable(state, GnssCapability::kBaselineLength) &&
+          HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
+          HasValueAvailable(state, GnssCapability::kHdop) && state.heading_deg == 182.2500f &&
+          state.dual_antenna_baseline == std::optional<bool>(true) &&
+          state.baseline_azimuth_deg == std::optional<float>(182.2500f) &&
+          state.baseline_pitch_deg == std::optional<float>(0.1000f) &&
+          state.baseline_length_m == std::optional<float>(1.5000f) &&
+          state.baseline_solution_status ==
+              std::optional<GnssBaselineSolutionStatus>(GnssBaselineSolutionStatus::kComputed) &&
+          state.correction_age_s == 0.9000f && state.hdop == 0.6840f,
+      "PVTSLNB runtime mapping should expose documented baseline, heading, DOP, and age values");
   ctx.Expect(!HasCapability(state, GnssCapability::kInterferenceState) &&
                  !HasCapability(state, GnssCapability::kJammingState),
              "PVTSLNB should not invent RF runtime fields");
@@ -320,11 +313,10 @@ void TestAsciiAndBinaryRuntimeConsistency(TestContext& ctx)
   const auto binary_result =
       ParseUnicorePvtslnB(BuildBinaryFrame(1021u, MakePvtslnPayload(50u, 0u), 4444));
   const auto ascii_result = ParseUnicorePvtsln(BuildAsciiFrame(MakePvtslnAsciiLine(), 4444));
-  ctx.Expect(binary_result.status == ParserStatus::kRecordReady &&
-                 binary_result.record.has_value() &&
-                 ascii_result.status == ParserStatus::kRecordReady &&
-                 ascii_result.record.has_value(),
-             "matching PVTSLNB and PVTSLNA test vectors should both parse successfully");
+  ctx.Expect(
+      binary_result.status == ParserStatus::kRecordReady && binary_result.record.has_value() &&
+          ascii_result.status == ParserStatus::kRecordReady && ascii_result.record.has_value(),
+      "matching PVTSLNB and PVTSLNA test vectors should both parse successfully");
   if (!binary_result.record.has_value() || !ascii_result.record.has_value())
   {
     return;
@@ -338,14 +330,11 @@ void TestAsciiAndBinaryRuntimeConsistency(TestContext& ctx)
                  binary_state.dual_antenna_baseline == ascii_state.dual_antenna_baseline &&
                  binary_state.baseline_solution_status == ascii_state.baseline_solution_status,
              "ASCII and binary PVTSLN runtime mapping should agree on fix and baseline status");
-  ctx.Expect(binary_state.latitude_deg.has_value() &&
-                 ascii_state.latitude_deg.has_value() &&
+  ctx.Expect(binary_state.latitude_deg.has_value() && ascii_state.latitude_deg.has_value() &&
                  NearlyEqual(*binary_state.latitude_deg, *ascii_state.latitude_deg) &&
-                 binary_state.longitude_deg.has_value() &&
-                 ascii_state.longitude_deg.has_value() &&
+                 binary_state.longitude_deg.has_value() && ascii_state.longitude_deg.has_value() &&
                  NearlyEqual(*binary_state.longitude_deg, *ascii_state.longitude_deg) &&
-                 binary_state.altitude_m.has_value() &&
-                 ascii_state.altitude_m.has_value() &&
+                 binary_state.altitude_m.has_value() && ascii_state.altitude_m.has_value() &&
                  NearlyEqual(*binary_state.altitude_m, *ascii_state.altitude_m, 1e-4),
              "ASCII and binary PVTSLN runtime mapping should agree on coordinates and altitude");
   ctx.Expect(binary_state.baseline_azimuth_deg == ascii_state.baseline_azimuth_deg &&
@@ -354,13 +343,14 @@ void TestAsciiAndBinaryRuntimeConsistency(TestContext& ctx)
                  binary_state.heading_deg == ascii_state.heading_deg &&
                  binary_state.hdop == ascii_state.hdop &&
                  binary_state.correction_age_s == ascii_state.correction_age_s,
-             "ASCII and binary PVTSLN runtime mapping should agree on shared baseline geometry, heading compatibility, HDOP, and correction age");
+             "ASCII and binary PVTSLN runtime mapping should agree on shared baseline geometry, "
+             "heading compatibility, HDOP, and correction age");
 }
 
 void TestHeadingIsGatedByHeadingSolutionStatus(TestContext& ctx)
 {
-  const auto result = ParseUnicorePvtslnB(
-      BuildBinaryFrame(1021u, MakePvtslnPayload(34u, 1u), 2222));
+  const auto result =
+      ParseUnicorePvtslnB(BuildBinaryFrame(1021u, MakePvtslnPayload(34u, 1u), 2222));
   ctx.Expect(result.status == ParserStatus::kRecordReady && result.record.has_value(),
              "second PVTSLNB frame should parse successfully");
   if (!result.record.has_value())
@@ -369,22 +359,22 @@ void TestHeadingIsGatedByHeadingSolutionStatus(TestContext& ctx)
   }
 
   const auto state = UnicorePvtslnBToRuntimeState(*result.record);
-  ctx.Expect(state.fix_valid &&
-                 state.fix_type == GnssFixType::kRtkFloat &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFloat &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
              "PVTSLNB should expose RTK float from NARROW_FLOAT");
-  ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
-                 !HasValueAvailable(state, GnssCapability::kHeading) &&
-                 HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
-                 HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
-                 HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
-                 HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
-                 state.dual_antenna_baseline == std::optional<bool>(false) &&
-                 state.baseline_solution_status ==
-                     std::optional<GnssBaselineSolutionStatus>(
-                         GnssBaselineSolutionStatus::kInsufficientObservations) &&
-                 !HasValueAvailable(state, GnssCapability::kBaselineAzimuth),
-             "PVTSLNB should gate baseline geometry while still exposing a known unsolved baseline state");
+  ctx.Expect(
+      HasCapability(state, GnssCapability::kHeading) &&
+          !HasValueAvailable(state, GnssCapability::kHeading) &&
+          HasCapability(state, GnssCapability::kDualAntennaBaseline) &&
+          HasCapability(state, GnssCapability::kBaselineSolutionStatus) &&
+          HasValueAvailable(state, GnssCapability::kDualAntennaBaseline) &&
+          HasValueAvailable(state, GnssCapability::kBaselineSolutionStatus) &&
+          state.dual_antenna_baseline == std::optional<bool>(false) &&
+          state.baseline_solution_status ==
+              std::optional<GnssBaselineSolutionStatus>(
+                  GnssBaselineSolutionStatus::kInsufficientObservations) &&
+          !HasValueAvailable(state, GnssCapability::kBaselineAzimuth),
+      "PVTSLNB should gate baseline geometry while still exposing a known unsolved baseline state");
 }
 
 void TestWrongIdAndMalformedPayloadRejected(TestContext& ctx)

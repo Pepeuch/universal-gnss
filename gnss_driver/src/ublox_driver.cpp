@@ -25,9 +25,8 @@ std::vector<UbxCfgLayer> ResolveLayers(const ReceiverCommandSafetyLevel safety_l
   return {UbxCfgLayer::kRam};
 }
 
-ReceiverDriverProfileBuildResult MakeUnsupportedSafetyResult(
-    const ReceiverConfigProfileKind profile_kind,
-    const char* error_message)
+ReceiverDriverProfileBuildResult
+MakeUnsupportedSafetyResult(const ReceiverConfigProfileKind profile_kind, const char* error_message)
 {
   ReceiverDriverProfileBuildResult result;
   result.status = ReceiverDriverProfileBuildStatus::kUnsupportedSafetyLevel;
@@ -36,9 +35,9 @@ ReceiverDriverProfileBuildResult MakeUnsupportedSafetyResult(
   return result;
 }
 
-ReceiverDriverProfileBuildResult ConvertBuildResult(
-    const ReceiverConfigProfileKind profile_kind,
-    const UbloxConfigProfileBuildResult& build_result)
+ReceiverDriverProfileBuildResult
+ConvertBuildResult(const ReceiverConfigProfileKind profile_kind,
+                   const UbloxConfigProfileBuildResult& build_result)
 {
   ReceiverDriverProfileBuildResult result;
   result.profile_kind = profile_kind;
@@ -56,8 +55,7 @@ ReceiverDriverProfileBuildResult ConvertBuildResult(
 
 }  // namespace
 
-UbloxDriver::UbloxDriver(UbloxSessionConfig session_config)
-    : session_(std::move(session_config))
+UbloxDriver::UbloxDriver(UbloxSessionConfig session_config) : session_(std::move(session_config))
 {
 }
 
@@ -109,20 +107,20 @@ void UbloxDriver::Reset()
   session_.Reset();
 }
 
-ReceiverDriverProfileBuildResult UbloxDriver::BuildRoverProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UbloxDriver::BuildRoverProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   return BuildProfile(ReceiverConfigProfileKind::kRover, safety_level);
 }
 
-ReceiverDriverProfileBuildResult UbloxDriver::BuildDiagnosticsProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UbloxDriver::BuildDiagnosticsProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   return BuildProfile(ReceiverConfigProfileKind::kDiagnosticsOutput, safety_level);
 }
 
-ReceiverDriverProfileBuildResult UbloxDriver::BuildBaseProfile(
-    const ReceiverCommandSafetyLevel safety_level) const
+ReceiverDriverProfileBuildResult
+UbloxDriver::BuildBaseProfile(const ReceiverCommandSafetyLevel safety_level) const
 {
   return BuildProfile(ReceiverConfigProfileKind::kBase, safety_level);
 }
@@ -162,15 +160,14 @@ const std::vector<ReceiverConfigProfileKind>& UbloxDriver::SupportedProfileKinds
   return supported;
 }
 
-ReceiverDriverProfileBuildResult UbloxDriver::BuildProfile(
-    const ReceiverConfigProfileKind profile_kind,
-    const ReceiverCommandSafetyLevel safety_level)
+ReceiverDriverProfileBuildResult
+UbloxDriver::BuildProfile(const ReceiverConfigProfileKind profile_kind,
+                          const ReceiverCommandSafetyLevel safety_level)
 {
   if (safety_level == ReceiverCommandSafetyLevel::kFactoryReset)
   {
     return MakeUnsupportedSafetyResult(
-        profile_kind,
-        "u-blox driver does not support factory-reset profile generation");
+        profile_kind, "u-blox driver does not support factory-reset profile generation");
   }
 
   std::vector<UbxCfgLayer> layers = ResolveLayers(safety_level);
@@ -186,8 +183,7 @@ ReceiverDriverProfileBuildResult UbloxDriver::BuildProfile(
     case ReceiverConfigProfileKind::kBase:
       profile = UbloxConfigProfileBuilder::BuildUbloxBaseProfile(safety_level, layers);
       break;
-    default:
-    {
+    default: {
       ReceiverDriverProfileBuildResult result;
       result.status = ReceiverDriverProfileBuildStatus::kUnsupportedProfile;
       result.profile_kind = profile_kind;

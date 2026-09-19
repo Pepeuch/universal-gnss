@@ -15,8 +15,7 @@ class UnicoreDriver : public ReceiverDriver
 public:
   explicit UnicoreDriver(UnicoreSessionConfig session_config = {});
 
-  UnicoreDriver(std::string_view receiver_model,
-                UnicoreSessionConfig session_config = {});
+  UnicoreDriver(std::string_view receiver_model, UnicoreSessionConfig session_config = {});
 
   ReceiverVendor vendor() const override;
 
@@ -39,20 +38,21 @@ public:
 
   void Reset() override;
 
-  ReceiverDriverProfileBuildResult BuildRoverProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildRoverProfile(ReceiverCommandSafetyLevel safety_level =
+                        ReceiverCommandSafetyLevel::kRuntime) const override;
 
-  ReceiverDriverProfileBuildResult BuildDiagnosticsProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildDiagnosticsProfile(ReceiverCommandSafetyLevel safety_level =
+                              ReceiverCommandSafetyLevel::kRuntime) const override;
 
   const UnicoreSession& session() const;
 
 private:
   static const std::vector<ReceiverConfigProfileKind>& SupportedProfileKinds();
 
-  ReceiverDriverProfileBuildResult BuildProfile(
-      const ReceiverConfigProfileKind profile_kind,
-      ReceiverCommandSafetyLevel safety_level) const;
+  ReceiverDriverProfileBuildResult BuildProfile(const ReceiverConfigProfileKind profile_kind,
+                                                ReceiverCommandSafetyLevel safety_level) const;
 
   UnicoreSession session_;
   const UnicoreModelProfile* model_profile_{&ResolveUnicoreModelProfile()};

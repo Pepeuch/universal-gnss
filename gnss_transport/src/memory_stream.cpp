@@ -46,8 +46,7 @@ WriteResult MakeInjectedWriteResult(TransportMetrics& metrics, const TransportEr
 
 }  // namespace
 
-MemoryByteSource::MemoryByteSource(std::vector<std::uint8_t> input)
-    : input_(std::move(input))
+MemoryByteSource::MemoryByteSource(std::vector<std::uint8_t> input) : input_(std::move(input))
 {
 }
 
@@ -148,10 +147,7 @@ WriteResult MemoryByteSink::Write(const std::uint8_t* data, const std::size_t si
     return MakeInvalidWriteResult(metrics_);
   }
 
-  output_.insert(
-      output_.end(),
-      data,
-      data + static_cast<std::ptrdiff_t>(size));
+  output_.insert(output_.end(), data, data + static_cast<std::ptrdiff_t>(size));
   NoteWrittenBytes(metrics_, size);
   return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
 }
@@ -189,8 +185,7 @@ const TransportMetrics& MemoryByteSink::metrics() const
   return metrics_;
 }
 
-MemoryByteDuplex::MemoryByteDuplex(std::vector<std::uint8_t> input)
-    : input_(std::move(input))
+MemoryByteDuplex::MemoryByteDuplex(std::vector<std::uint8_t> input) : input_(std::move(input))
 {
 }
 
@@ -257,10 +252,7 @@ WriteResult MemoryByteDuplex::Write(const std::uint8_t* data, const std::size_t 
     return MakeInvalidWriteResult(metrics_);
   }
 
-  output_.insert(
-      output_.end(),
-      data,
-      data + static_cast<std::ptrdiff_t>(size));
+  output_.insert(output_.end(), data, data + static_cast<std::ptrdiff_t>(size));
   NoteWrittenBytes(metrics_, size);
   return WriteResult{size, TransportStatus::kOk, TransportError::kNone};
 }

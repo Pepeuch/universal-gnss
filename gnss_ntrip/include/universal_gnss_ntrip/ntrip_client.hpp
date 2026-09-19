@@ -10,8 +10,8 @@
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 #include "universal_gnss_ntrip/gga_generator.hpp"
-#include "universal_gnss_ntrip/gga_injector.hpp"
 #include "universal_gnss_ntrip/gga_injection_policy.hpp"
+#include "universal_gnss_ntrip/gga_injector.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
 #include "universal_gnss_ntrip/ntrip_correction_arrival_age.hpp"
 #include "universal_gnss_ntrip/ntrip_metrics.hpp"
@@ -92,40 +92,40 @@ public:
   void set_tcp_config(universal_gnss_transport::TcpClientConfig config);
   const universal_gnss_transport::TcpClientConfig& tcp_config() const;
 
-  NtripClientError Connect(
-      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
+  NtripClientError
+  Connect(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   NtripClientError AdoptConnectedSocket(int fd);
   void Disconnect(NtripClientError error = NtripClientError::kNone);
 
-  NtripClientError SendRequest(
-      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
+  NtripClientError
+  SendRequest(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   NtripGgaSendResult SendGga(const universal_gnss::GnssRuntimeState& state,
                              universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripGgaSendResult MaybeSendGga(const universal_gnss::GnssRuntimeState& state,
                                   universal_gnss::GnssTimestampNs now_timestamp_ns);
   NtripGgaSendResult MaybeInjectGga(const universal_gnss::GnssRuntimeState& state,
                                     universal_gnss::GnssTimestampNs now_timestamp_ns);
-  NtripClientReadResult Read(
-      std::uint8_t* destination,
-      std::size_t capacity,
-      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt,
-      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames = nullptr);
+  NtripClientReadResult
+  Read(std::uint8_t* destination,
+       std::size_t capacity,
+       std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt,
+       std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames = nullptr);
   std::size_t FeedRtcmMonitor(
       const std::uint8_t* data,
       std::size_t size,
       std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns = std::nullopt,
       std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames = nullptr);
 
-  universal_gnss::GnssHealthSummary BuildCorrectionHealth(
-      const universal_gnss_protocols::RtcmCorrectionHealthOptions& options) const;
+  universal_gnss::GnssHealthSummary
+  BuildCorrectionHealth(const universal_gnss_protocols::RtcmCorrectionHealthOptions& options) const;
 
   NtripClientState state() const;
   bool IsConnected() const;
   const NtripCorrectionFlowState& correction_flow_state() const;
   bool IsCorrectionFlowing() const;
   std::optional<float> EstimatedCorrectionArrivalAgeS() const;
-  std::optional<float> EstimatedCorrectionArrivalAgeS(
-      NtripCorrectionArrivalAgeEstimator::TimePoint now) const;
+  std::optional<float>
+  EstimatedCorrectionArrivalAgeS(NtripCorrectionArrivalAgeEstimator::TimePoint now) const;
   const NtripSourceIdentity& source_identity() const;
   const NtripReconnectState& reconnect_state() const;
   const GgaInjectionPolicy& gga_injection_policy() const;
@@ -137,35 +137,33 @@ public:
   const universal_gnss_protocols::RtcmCorrectionMonitor& correction_monitor() const;
 
 private:
-  NtripClientError FailWith(
-      NtripClientError error,
-      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
+  NtripClientError
+  FailWith(NtripClientError error,
+           std::optional<universal_gnss::GnssTimestampNs> timestamp_ns = std::nullopt);
   void ResetSessionState();
   void ResetSourceState();
   void ResetSessionMetrics();
-  bool CheckCorrectionFlowTimeout(
-      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns,
-      NtripClientReadResult& result);
-  void NoteCorrectionFlowProgress(
-      std::uint64_t valid_frame_count,
-      std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
-  NtripGgaSendResult MakeGgaSendErrorResult(
-      NtripGgaSendError error,
-      NtripClientError client_error = NtripClientError::kNone,
-      std::optional<GgaGenerationError> generation_error = std::nullopt);
+  bool CheckCorrectionFlowTimeout(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns,
+                                  NtripClientReadResult& result);
+  void NoteCorrectionFlowProgress(std::uint64_t valid_frame_count,
+                                  std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
+  NtripGgaSendResult
+  MakeGgaSendErrorResult(NtripGgaSendError error,
+                         NtripClientError client_error = NtripClientError::kNone,
+                         std::optional<GgaGenerationError> generation_error = std::nullopt);
   NtripGgaSendResult RunGgaInjector(const universal_gnss::GnssRuntimeState& state,
                                     universal_gnss::GnssTimestampNs now_timestamp_ns);
   void RecordReconnectFailure(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
   void RecordReconnectSuccess(std::optional<universal_gnss::GnssTimestampNs> timestamp_ns);
 
-  NtripClientError HandleResponseBytes(
-      const std::uint8_t* data,
-      std::size_t size,
-      std::uint8_t* destination,
-      std::size_t capacity,
-      std::size_t& payload_bytes_written,
-      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
-      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames);
+  NtripClientError
+  HandleResponseBytes(const std::uint8_t* data,
+                      std::size_t size,
+                      std::uint8_t* destination,
+                      std::size_t capacity,
+                      std::size_t& payload_bytes_written,
+                      std::optional<universal_gnss_protocols::ProtocolTimestampNs> timestamp_ns,
+                      std::vector<universal_gnss_protocols::RtcmFrame>* observed_frames);
 
   NtripConfig config_{};
   NtripSourceIdentity source_identity_{};
@@ -179,10 +177,8 @@ private:
   NtripConnectionMetrics metrics_{};
   NtripReconnectState reconnect_state_{};
   NtripCorrectionFlowState correction_flow_state_{};
-  std::optional<std::chrono::steady_clock::time_point>
-      response_accepted_steady_time_{};
-  std::optional<std::chrono::steady_clock::time_point>
-      last_valid_rtcm_frame_steady_time_{};
+  std::optional<std::chrono::steady_clock::time_point> response_accepted_steady_time_{};
+  std::optional<std::chrono::steady_clock::time_point> last_valid_rtcm_frame_steady_time_{};
   NtripCorrectionArrivalAgeEstimator correction_arrival_age_estimator_{};
   GgaInjectionPolicy gga_injection_policy_{};
   GgaInjector gga_injector_{};

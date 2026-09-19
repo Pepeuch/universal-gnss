@@ -11,15 +11,14 @@ namespace
 
 void PrintUsage(const char* program_name)
 {
-  std::cout
-      << "Usage: " << program_name
-      << " [--format jsonl|csv] [--output path] [--pretty] [path|-]\n"
-      << "Examples:\n"
-      << "  " << program_name << " log.bin\n"
-      << "  " << program_name << " --format jsonl log.bin\n"
-      << "  " << program_name << " --format csv log.bin\n"
-      << "  " << program_name << " --output runtime.jsonl log.bin\n"
-      << "  " << program_name << " --pretty log.bin\n";
+  std::cout << "Usage: " << program_name
+            << " [--format jsonl|csv] [--output path] [--pretty] [path|-]\n"
+            << "Examples:\n"
+            << "  " << program_name << " log.bin\n"
+            << "  " << program_name << " --format jsonl log.bin\n"
+            << "  " << program_name << " --format csv log.bin\n"
+            << "  " << program_name << " --output runtime.jsonl log.bin\n"
+            << "  " << program_name << " --pretty log.bin\n";
 }
 
 }  // namespace

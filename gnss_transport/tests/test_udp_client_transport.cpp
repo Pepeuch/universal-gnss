@@ -61,7 +61,10 @@ public:
            (port_ = ntohs(address.sin_port)) != 0u;
   }
 
-  std::uint16_t port() const { return port_; }
+  std::uint16_t port() const
+  {
+    return port_;
+  }
 
   bool Receive(std::vector<std::uint8_t>& data)
   {
@@ -74,8 +77,8 @@ public:
     }
     std::uint8_t buffer[256]{};
     peer_size_ = sizeof(peer_);
-    const ssize_t received = ::recvfrom(fd_, buffer, sizeof(buffer), 0,
-                                        reinterpret_cast<sockaddr*>(&peer_), &peer_size_);
+    const ssize_t received = ::recvfrom(
+        fd_, buffer, sizeof(buffer), 0, reinterpret_cast<sockaddr*>(&peer_), &peer_size_);
     if (received < 0)
     {
       return false;
@@ -86,9 +89,12 @@ public:
 
   bool Send(const std::vector<std::uint8_t>& data) const
   {
-    return peer_size_ > 0u &&
-           ::sendto(fd_, data.data(), data.size(), 0, reinterpret_cast<const sockaddr*>(&peer_),
-                    peer_size_) == static_cast<ssize_t>(data.size());
+    return peer_size_ > 0u && ::sendto(fd_,
+                                       data.data(),
+                                       data.size(),
+                                       0,
+                                       reinterpret_cast<const sockaddr*>(&peer_),
+                                       peer_size_) == static_cast<ssize_t>(data.size());
   }
 
 private:

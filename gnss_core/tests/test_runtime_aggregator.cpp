@@ -94,8 +94,7 @@ void TestMergingPartialStatesBuildsCoherentRuntime(TestContext& ctx)
                  state.longitude_deg == std::optional<double>(11.5166667) &&
                  state.altitude_m == std::optional<double>(545.4),
              "aggregator should preserve GGA-like position fields");
-  ctx.Expect(state.hdop == std::optional<float>(1.0f) &&
-                 state.vdop == std::optional<float>(1.5f) &&
+  ctx.Expect(state.hdop == std::optional<float>(1.0f) && state.vdop == std::optional<float>(1.5f) &&
                  state.satellites_used == std::optional<std::uint16_t>(8u),
              "aggregator should merge GSA-like DOP and satellites-used fields");
   ctx.Expect(state.satellites_visible == std::optional<std::uint16_t>(8u) &&
@@ -266,25 +265,23 @@ void TestBaselineFoundationFieldsMergeIndependently(TestContext& ctx)
   SetCapability(geometry, GnssCapability::kBaselineLength);
   ctx.Expect(SetOptionalValue(geometry, GnssCapability::kHeading, geometry.heading_deg, 182.25f),
              "baseline geometry fixture should accept compatibility heading");
-  ctx.Expect(SetOptionalValue(
-                 geometry, GnssCapability::kBaselineAzimuth, geometry.baseline_azimuth_deg, 182.25f),
-             "baseline geometry fixture should accept baseline azimuth");
-  ctx.Expect(SetOptionalValue(
-                 geometry, GnssCapability::kBaselinePitch, geometry.baseline_pitch_deg, 0.1f),
-             "baseline geometry fixture should accept baseline pitch");
-  ctx.Expect(SetOptionalValue(
-                 geometry, GnssCapability::kBaselineLength, geometry.baseline_length_m, 1.5f),
-             "baseline geometry fixture should accept baseline length");
+  ctx.Expect(
+      SetOptionalValue(
+          geometry, GnssCapability::kBaselineAzimuth, geometry.baseline_azimuth_deg, 182.25f),
+      "baseline geometry fixture should accept baseline azimuth");
+  ctx.Expect(
+      SetOptionalValue(geometry, GnssCapability::kBaselinePitch, geometry.baseline_pitch_deg, 0.1f),
+      "baseline geometry fixture should accept baseline pitch");
+  ctx.Expect(
+      SetOptionalValue(geometry, GnssCapability::kBaselineLength, geometry.baseline_length_m, 1.5f),
+      "baseline geometry fixture should accept baseline length");
 
   GnssRuntimeState status;
   status.timestamp_ns = 110;
   SetCapability(status, GnssCapability::kDualAntennaBaseline);
   SetCapability(status, GnssCapability::kBaselineSolutionStatus);
   ctx.Expect(SetOptionalValue(
-                 status,
-                 GnssCapability::kDualAntennaBaseline,
-                 status.dual_antenna_baseline,
-                 true),
+                 status, GnssCapability::kDualAntennaBaseline, status.dual_antenna_baseline, true),
              "baseline status fixture should accept boolean baseline state");
   ctx.Expect(SetOptionalValue(status,
                               GnssCapability::kBaselineSolutionStatus,
@@ -302,9 +299,8 @@ void TestBaselineFoundationFieldsMergeIndependently(TestContext& ctx)
                  state.baseline_length_m == std::optional<float>(1.5f),
              "aggregator should preserve additive baseline geometry fields");
   ctx.Expect(state.dual_antenna_baseline == std::optional<bool>(true) &&
-                 state.baseline_solution_status ==
-                     std::optional<GnssBaselineSolutionStatus>(
-                         GnssBaselineSolutionStatus::kComputed),
+                 state.baseline_solution_status == std::optional<GnssBaselineSolutionStatus>(
+                                                       GnssBaselineSolutionStatus::kComputed),
              "aggregator should merge additive baseline status fields");
 }
 
@@ -340,8 +336,7 @@ void TestExplicitClearIsDistinctFromOmission(TestContext& ctx)
   GnssRuntimeState omit;
   omit.timestamp_ns = 110;
   SetCapability(omit, GnssCapability::kSatellitesVisible);
-  SetOptionalValue(
-      omit, GnssCapability::kSatellitesVisible, omit.satellites_visible, 12u);
+  SetOptionalValue(omit, GnssCapability::kSatellitesVisible, omit.satellites_visible, 12u);
   ctx.Expect(aggregator.Merge(omit), "unrelated OMIT update should merge");
   ctx.Expect(aggregator.state().hdop == std::optional<float>(0.9f),
              "SET -> OMIT must preserve the existing value");
@@ -359,8 +354,7 @@ void TestExplicitClearIsDistinctFromOmission(TestContext& ctx)
   SetCapability(clear, GnssCapability::kHdop);
   ClearOptionalValue(clear, GnssCapability::kHdop, clear.hdop);
   ctx.Expect(aggregator.Merge(clear), "explicit CLEAR update should merge");
-  ctx.Expect(!aggregator.state().hdop.has_value(),
-             "SET -> CLEAR must remove the previous value");
+  ctx.Expect(!aggregator.state().hdop.has_value(), "SET -> CLEAR must remove the previous value");
   ctx.Expect(!HasValueAvailable(aggregator.state(), GnssCapability::kHdop),
              "CLEAR must remove the associated value-availability flag");
   ctx.Expect(HasCapability(aggregator.state(), GnssCapability::kHdop),
@@ -461,8 +455,10 @@ void TestUtcFieldsOrderClearAndReset(TestContext& ctx)
   newer.timestamp_ns = 20;
   SetCapability(newer, GnssCapability::kUtcDate);
   SetCapability(newer, GnssCapability::kUtcTime);
-  SetOptionalValue(newer, GnssCapability::kUtcDate, newer.utc_date, universal_gnss::GnssUtcDate{2025, 1, 2});
-  SetOptionalValue(newer, GnssCapability::kUtcTime, newer.utc_time, universal_gnss::GnssUtcTime{3, 4, 5, 0});
+  SetOptionalValue(
+      newer, GnssCapability::kUtcDate, newer.utc_date, universal_gnss::GnssUtcDate{2025, 1, 2});
+  SetOptionalValue(
+      newer, GnssCapability::kUtcTime, newer.utc_time, universal_gnss::GnssUtcTime{3, 4, 5, 0});
   aggregator.Merge(newer);
 
   GnssRuntimeState older = newer;

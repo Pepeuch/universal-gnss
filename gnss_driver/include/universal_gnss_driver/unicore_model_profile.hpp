@@ -51,16 +51,17 @@ std::optional<UnicoreModel> ParseUnicoreModel(std::string_view model);
 
 const char* ToString(UnicoreModel model);
 
-const UnicoreModelProfile& ResolveUnicoreModelProfile(
-    std::optional<std::string_view> model = std::nullopt);
+const UnicoreModelProfile&
+ResolveUnicoreModelProfile(std::optional<std::string_view> model = std::nullopt);
 
 ReceiverTargetSelector BuildUnicoreTargetSelector(const UnicoreModelProfile& profile);
 
-const UnicoreSignalGroupSelection* FindUnicoreSignalGroupSelection(
-    const UnicoreModelProfile& profile, const std::vector<std::uint8_t>& groups);
+const UnicoreSignalGroupSelection*
+FindUnicoreSignalGroupSelection(const UnicoreModelProfile& profile,
+                                const std::vector<std::uint8_t>& groups);
 
-const UnicoreSignalGroupSelection* FindUnicorePortableRoverSignalGroupSelection(
-    const UnicoreModelProfile& profile);
+const UnicoreSignalGroupSelection*
+FindUnicorePortableRoverSignalGroupSelection(const UnicoreModelProfile& profile);
 
 bool SupportsUnicorePortableRoverSurveyMow(const UnicoreModelProfile& profile);
 

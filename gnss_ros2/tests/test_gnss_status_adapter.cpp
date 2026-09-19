@@ -22,16 +22,14 @@ TEST(GnssStatusAdapterTest, CapabilityBitsMatchPublicMessageContract)
             Msg::CAP_VERTICAL_ACCURACY);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kHdop), Msg::CAP_HDOP);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kVdop), Msg::CAP_VDOP);
-  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kSatellitesUsed),
-            Msg::CAP_SATELLITES_USED);
+  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kSatellitesUsed), Msg::CAP_SATELLITES_USED);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kSatellitesVisible),
             Msg::CAP_SATELLITES_VISIBLE);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kSatellitesTracked),
             Msg::CAP_SATELLITES_TRACKED);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kMeanCn0), Msg::CAP_MEAN_CN0);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kMaxCn0), Msg::CAP_MAX_CN0);
-  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kCorrectionAge),
-            Msg::CAP_CORRECTION_AGE);
+  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kCorrectionAge), Msg::CAP_CORRECTION_AGE);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kHeading), Msg::CAP_HEADING);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kHeadingAccuracy),
             Msg::CAP_HEADING_ACCURACY);
@@ -43,18 +41,15 @@ TEST(GnssStatusAdapterTest, CapabilityBitsMatchPublicMessageContract)
             Msg::CAP_DUAL_ANTENNA_BASELINE);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselineAzimuth),
             Msg::CAP_BASELINE_AZIMUTH);
-  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselinePitch),
-            Msg::CAP_BASELINE_PITCH);
-  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselineLength),
-            Msg::CAP_BASELINE_LENGTH);
+  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselinePitch), Msg::CAP_BASELINE_PITCH);
+  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselineLength), Msg::CAP_BASELINE_LENGTH);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kBaselineSolutionStatus),
             Msg::CAP_BASELINE_SOLUTION_STATUS);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kDualAntennaHeading),
             Msg::CAP_DUAL_ANTENNA_HEADING);
   EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kInterferenceState),
             Msg::CAP_INTERFERENCE_STATE);
-  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kJammingState),
-            Msg::CAP_JAMMING_STATE);
+  EXPECT_EQ(static_cast<std::uint32_t>(GnssCapability::kJammingState), Msg::CAP_JAMMING_STATE);
   EXPECT_EQ(Msg::BASELINE_STATUS_COMPUTED, 1u);
   EXPECT_EQ(Msg::BASELINE_STATUS_NOT_CONFIGURED, 7u);
 }
@@ -183,25 +178,25 @@ TEST(GnssStatusAdapterTest, MapsRicherRtkStateWithExpectedFields)
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kMaxCn0);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeadingAccuracy);
-  universal_gnss::SetCapability(
-      state, universal_gnss::GnssCapability::kDifferentialCorrections);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDifferentialCorrections);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionsActive);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDualAntennaHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDualAntennaBaseline);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselineAzimuth);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselinePitch);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselineLength);
-  universal_gnss::SetCapability(
-      state, universal_gnss::GnssCapability::kBaselineSolutionStatus);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselineSolutionStatus);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kJammingState);
 
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kRtkMode, state.rtk_mode,
-      universal_gnss::GnssRtkMode::kFixed));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m,
-      0.02f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kRtkMode,
+                                               state.rtk_mode,
+                                               universal_gnss::GnssRtkMode::kFixed));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kHorizontalAccuracy,
+                                               state.horizontal_accuracy_m,
+                                               0.02f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kSatellitesVisible, state.satellites_visible, 24u));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
@@ -213,35 +208,37 @@ TEST(GnssStatusAdapterTest, MapsRicherRtkStateWithExpectedFields)
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kHeading, state.heading_deg, 182.0f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg,
-      0.6f));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
-                                               universal_gnss::GnssCapability::kDifferentialCorrections,
-                                               state.differential_corrections,
-                                               true));
+      state, universal_gnss::GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg, 0.6f));
+  EXPECT_TRUE(
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kDifferentialCorrections,
+                                       state.differential_corrections,
+                                       true));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kCorrectionsActive, state.corrections_active, false));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kDualAntennaHeading,
+                                               state.dual_antenna_heading,
+                                               true));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kDualAntennaBaseline,
+                                               state.dual_antenna_baseline,
+                                               true));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kDualAntennaHeading, state.dual_antenna_heading,
-      true));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state,
-      universal_gnss::GnssCapability::kDualAntennaBaseline,
-      state.dual_antenna_baseline,
-      true));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg,
-      182.0f));
+      state, universal_gnss::GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg, 182.0f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kBaselinePitch, state.baseline_pitch_deg, 0.1f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kBaselineLength, state.baseline_length_m, 1.5f));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kBaselineSolutionStatus,
-      state.baseline_solution_status, universal_gnss::GnssBaselineSolutionStatus::kComputed));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kInterferenceState, state.interference_detected,
-      false));
+  EXPECT_TRUE(
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kBaselineSolutionStatus,
+                                       state.baseline_solution_status,
+                                       universal_gnss::GnssBaselineSolutionStatus::kComputed));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kInterferenceState,
+                                               state.interference_detected,
+                                               false));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected, true));
 
@@ -309,28 +306,28 @@ TEST(GnssStatusAdapterTest, RoundTripsRicherStateBackToRuntimeModel)
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDualAntennaBaseline);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselineAzimuth);
-  universal_gnss::SetCapability(
-      state, universal_gnss::GnssCapability::kBaselineSolutionStatus);
+  universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kBaselineSolutionStatus);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kInterferenceState);
 
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kRtkMode, state.rtk_mode,
-      universal_gnss::GnssRtkMode::kFloat));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kRtkMode,
+                                               state.rtk_mode,
+                                               universal_gnss::GnssRtkMode::kFloat));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kCorrectionAge, state.correction_age_s, 0.7f));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
       state, universal_gnss::GnssCapability::kHeading, state.heading_deg, 123.4f));
+  EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
+                                               universal_gnss::GnssCapability::kDualAntennaBaseline,
+                                               state.dual_antenna_baseline,
+                                               true));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state,
-      universal_gnss::GnssCapability::kDualAntennaBaseline,
-      state.dual_antenna_baseline,
-      true));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg,
-      123.4f));
-  EXPECT_TRUE(universal_gnss::SetOptionalValue(
-      state, universal_gnss::GnssCapability::kBaselineSolutionStatus,
-      state.baseline_solution_status, universal_gnss::GnssBaselineSolutionStatus::kComputed));
+      state, universal_gnss::GnssCapability::kBaselineAzimuth, state.baseline_azimuth_deg, 123.4f));
+  EXPECT_TRUE(
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kBaselineSolutionStatus,
+                                       state.baseline_solution_status,
+                                       universal_gnss::GnssBaselineSolutionStatus::kComputed));
   EXPECT_TRUE(universal_gnss::SetOptionalValue(state,
                                                universal_gnss::GnssCapability::kInterferenceState,
                                                state.interference_detected,

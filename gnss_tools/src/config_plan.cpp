@@ -229,8 +229,8 @@ std::optional<std::uint32_t> ParsePlannedUnicoreConfigBaud(const ReceiverCommand
   }
 }
 
-std::optional<std::uint32_t> ExtractPlannedUnicoreConfigBaud(
-    const std::vector<ConfigPlanCommand>& commands)
+std::optional<std::uint32_t>
+ExtractPlannedUnicoreConfigBaud(const std::vector<ConfigPlanCommand>& commands)
 {
   for (const auto& command : commands)
   {

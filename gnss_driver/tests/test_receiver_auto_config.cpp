@@ -11,7 +11,8 @@
 #include "universal_gnss_driver/receiver_auto_config.hpp"
 #include "universal_gnss_driver/receiver_capabilities.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_driver::BuildReceiverAutoConfigPlan;
 using universal_gnss_driver::HasReceiverFeature;
@@ -49,7 +50,8 @@ struct TestContext
   }
 };
 
-ReceiverProbeResult MakeDiscoveryResult(const std::string& path, const std::uint32_t baud,
+ReceiverProbeResult MakeDiscoveryResult(const std::string& path,
+                                        const std::uint32_t baud,
                                         const ReceiverDetectedFamily family)
 {
   ReceiverProbeResult result;
@@ -166,7 +168,8 @@ void TestUbloxRuntimeOnlyPlan(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kRuntimeOnly, ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRuntimeOnly,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kOk,
              "u-blox runtime_only planning should succeed");
@@ -183,7 +186,8 @@ void TestUbloxRoverHighPrecisionPlans(TestContext& ctx)
 {
   const auto rover_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kRoverHighPrecision, ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
   const auto debug_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyACM0", 921600u, ReceiverDetectedFamily::kUblox),
       ReceiverAutoConfigProfile::kRoverHighPrecisionDebug,
@@ -206,7 +210,8 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
   ReceiverAutoConfigRequest request;
   request.receiver_family = ReceiverDetectedFamily::kUblox;
   request.discovery_result = MakeDiscoveryResult(
-      "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00", 921600u,
+      "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
+      921600u,
       ReceiverDetectedFamily::kUblox);
   request.transport_device_path = request.discovery_result->path;
   request.requested_profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
@@ -255,7 +260,8 @@ void TestUbloxOutputPortPlanning(TestContext& ctx)
       "u-blox auto output-port plans should resolve USB-attached receivers to USB output keys");
 
   request.discovery_result =
-      MakeDiscoveryResult("/dev/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00", 921600u,
+      MakeDiscoveryResult("/dev/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00",
+                          921600u,
                           ReceiverDetectedFamily::kUblox);
   request.transport_device_path = request.discovery_result->path;
   const auto auto_usb_alias_plan = BuildReceiverAutoConfigPlan(request);
@@ -285,7 +291,8 @@ void TestUbloxFactoryResetStub(TestContext& ctx)
 {
   const auto plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox),
-      ReceiverAutoConfigProfile::kFactoryReset, ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kFactoryReset,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedProfile &&
                  !plan.validation.profile_supported &&
@@ -882,10 +889,12 @@ void TestNmeaProfiles(TestContext& ctx)
 {
   const auto runtime_only_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
-      ReceiverAutoConfigProfile::kRuntimeOnly, ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRuntimeOnly,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
   const auto config_plan = BuildReceiverAutoConfigPlan(
       MakeDiscoveryResult("/dev/ttyUSB9", 115200u, ReceiverDetectedFamily::kNmea),
-      ReceiverAutoConfigProfile::kRoverHighPrecision, ReceiverAutoConfigApplyMode::kRuntimeOnly);
+      ReceiverAutoConfigProfile::kRoverHighPrecision,
+      ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(runtime_only_plan.status == ReceiverAutoConfigPlanStatus::kOk &&
                  runtime_only_plan.validation.generated_command_count == 0u,
@@ -922,9 +931,9 @@ void TestUnknownReceiverRejected(TestContext& ctx)
   unknown.discovery_score = 0;
   unknown.reason = "no_data";
 
-  const auto plan =
-      BuildReceiverAutoConfigPlan(unknown, ReceiverAutoConfigProfile::kRoverHighPrecision,
-                                  ReceiverAutoConfigApplyMode::kRuntimeOnly);
+  const auto plan = BuildReceiverAutoConfigPlan(unknown,
+                                                ReceiverAutoConfigProfile::kRoverHighPrecision,
+                                                ReceiverAutoConfigApplyMode::kRuntimeOnly);
 
   ctx.Expect(plan.status == ReceiverAutoConfigPlanStatus::kUnsupportedReceiver &&
                  plan.unsupported_reason == "no_data",
@@ -951,7 +960,7 @@ void TestExplicitFamilyIsRetainedWhenDiscoveryIsUnknown(TestContext& ctx)
              "an inconclusive discovery result must not override an explicit receiver family");
 }
 
-} // namespace
+}  // namespace
 
 void TestUnicoreSignalGroupOverride(TestContext& ctx)
 {

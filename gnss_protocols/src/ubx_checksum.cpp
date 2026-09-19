@@ -19,8 +19,7 @@ bool ValidateUbxChecksum(const std::uint8_t* data,
                          const UbxChecksum& expected_checksum)
 {
   const UbxChecksum computed = ComputeUbxChecksum(data, size);
-  return computed.ck_a == expected_checksum.ck_a &&
-         computed.ck_b == expected_checksum.ck_b;
+  return computed.ck_a == expected_checksum.ck_a && computed.ck_b == expected_checksum.ck_b;
 }
 
 }  // namespace universal_gnss_protocols

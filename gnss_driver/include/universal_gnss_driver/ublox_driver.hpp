@@ -35,14 +35,17 @@ public:
 
   void Reset() override;
 
-  ReceiverDriverProfileBuildResult BuildRoverProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildRoverProfile(ReceiverCommandSafetyLevel safety_level =
+                        ReceiverCommandSafetyLevel::kRuntime) const override;
 
-  ReceiverDriverProfileBuildResult BuildDiagnosticsProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildDiagnosticsProfile(ReceiverCommandSafetyLevel safety_level =
+                              ReceiverCommandSafetyLevel::kRuntime) const override;
 
-  ReceiverDriverProfileBuildResult BuildBaseProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildBaseProfile(ReceiverCommandSafetyLevel safety_level =
+                       ReceiverCommandSafetyLevel::kRuntime) const override;
 
   const UbloxSession& session() const;
 
@@ -51,9 +54,8 @@ private:
 
   static const std::vector<ReceiverConfigProfileKind>& SupportedProfileKinds();
 
-  static ReceiverDriverProfileBuildResult BuildProfile(
-      const ReceiverConfigProfileKind profile_kind,
-      ReceiverCommandSafetyLevel safety_level);
+  static ReceiverDriverProfileBuildResult BuildProfile(const ReceiverConfigProfileKind profile_kind,
+                                                       ReceiverCommandSafetyLevel safety_level);
 
   UbloxSession session_;
 };

@@ -29,7 +29,8 @@
 #include <unistd.h>
 #endif
 
-namespace {
+namespace
+{
 
 const diagnostic_msgs::msg::DiagnosticStatus*
 FindDiagnosticStatusByName(const diagnostic_msgs::msg::DiagnosticArray& array,
@@ -118,8 +119,10 @@ void AppendBit(std::vector<std::uint8_t>& payload, std::size_t& bit_offset, cons
   ++bit_offset;
 }
 
-void AppendUnsignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
-                        const std::uint64_t value, const std::size_t bit_count)
+void AppendUnsignedBits(std::vector<std::uint8_t>& payload,
+                        std::size_t& bit_offset,
+                        const std::uint64_t value,
+                        const std::size_t bit_count)
 {
   for (std::size_t i = 0u; i < bit_count; ++i)
   {
@@ -128,14 +131,17 @@ void AppendUnsignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_off
   }
 }
 
-void AppendSignedBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
-                      const std::int64_t value, const std::size_t bit_count)
+void AppendSignedBits(std::vector<std::uint8_t>& payload,
+                      std::size_t& bit_offset,
+                      const std::int64_t value,
+                      const std::size_t bit_count)
 {
   const std::uint64_t mask = (1ULL << bit_count) - 1ULL;
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
-void AppendZeroBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
+void AppendZeroBits(std::vector<std::uint8_t>& payload,
+                    std::size_t& bit_offset,
                     const std::size_t bit_count)
 {
   for (std::size_t index = 0u; index < bit_count; ++index)
@@ -144,21 +150,22 @@ void AppendZeroBits(std::vector<std::uint8_t>& payload, std::size_t& bit_offset,
   }
 }
 
-std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant, const std::size_t satellite_count,
+std::size_t GetRtcmMsmBodyBits(const std::uint8_t msm_variant,
+                               const std::size_t satellite_count,
                                const std::size_t populated_cell_count)
 {
   switch (msm_variant)
   {
-  case 4u:
-    return satellite_count * 18u + populated_cell_count * 48u;
-  case 5u:
-    return satellite_count * 36u + populated_cell_count * 63u;
-  case 6u:
-    return satellite_count * 18u + populated_cell_count * 65u;
-  case 7u:
-    return satellite_count * 36u + populated_cell_count * 80u;
-  default:
-    return 0u;
+    case 4u:
+      return satellite_count * 18u + populated_cell_count * 48u;
+    case 5u:
+      return satellite_count * 36u + populated_cell_count * 63u;
+    case 6u:
+      return satellite_count * 18u + populated_cell_count * 65u;
+    case 7u:
+      return satellite_count * 36u + populated_cell_count * 80u;
+    default:
+      return 0u;
   }
 }
 
@@ -205,8 +212,10 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
 
 std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
                                              const bool code_phase_bias_indicator,
-                                             const bool has_l1_ca_bias, const bool has_l1_p_bias,
-                                             const bool has_l2_ca_bias, const bool has_l2_p_bias,
+                                             const bool has_l1_ca_bias,
+                                             const bool has_l1_p_bias,
+                                             const bool has_l2_ca_bias,
+                                             const bool has_l2_p_bias,
                                              const std::optional<std::int16_t> l1_ca_bias_raw,
                                              const std::optional<std::int16_t> l1_p_bias_raw,
                                              const std::optional<std::int16_t> l2_ca_bias_raw,
@@ -299,9 +308,11 @@ std::vector<std::uint8_t> BuildRtcmMsmFrame(const std::uint16_t message_type,
     }
   }
 
-  AppendZeroBits(payload, bit_offset,
+  AppendZeroBits(payload,
+                 bit_offset,
                  GetRtcmMsmBodyBits(universal_gnss_protocols::GetRtcmMsmVariant(message_type),
-                                    satellite_ids.size(), populated_cell_count));
+                                    satellite_ids.size(),
+                                    populated_cell_count));
   return BuildRtcmFrameFromPayload(payload);
 }
 
@@ -1064,4 +1075,4 @@ TEST_F(NtripNodeTest, RejectsDelayedRetiredIncarnationAndDiagnosesCompetingSourc
 
 #endif
 
-} // namespace
+}  // namespace

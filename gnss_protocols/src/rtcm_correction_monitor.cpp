@@ -41,9 +41,8 @@ void AppendTimestamp(const std::optional<ProtocolTimestampNs>& timestamp_ns,
 
   timestamps.insert(*timestamp_ns);
   const ProtocolTimestampNs latest_timestamp_ns = *timestamps.rbegin();
-  if (latest_timestamp_ns <=
-      std::numeric_limits<ProtocolTimestampNs>::min() +
-          RtcmCorrectionMonitor::kTimestampHistoryRetentionNs)
+  if (latest_timestamp_ns <= std::numeric_limits<ProtocolTimestampNs>::min() +
+                                 RtcmCorrectionMonitor::kTimestampHistoryRetentionNs)
   {
     return;
   }
@@ -80,16 +79,15 @@ std::optional<double> ComputeRateHz(const std::multiset<ProtocolTimestampNs>& ti
     return std::nullopt;
   }
 
-  const double window_duration_s =
-      static_cast<double>(window_duration_ns) / 1000000000.0;
+  const double window_duration_s = static_cast<double>(window_duration_ns) / 1000000000.0;
   const std::size_t count_in_window =
       CountTimestampsInWindow(timestamps, window_end_timestamp_ns, window_duration_ns);
   return static_cast<double>(count_in_window) / window_duration_s;
 }
 
-std::optional<ProtocolTimestampNs> ComputeAgeSince(
-    const std::optional<ProtocolTimestampNs>& last_seen_timestamp_ns,
-    const ProtocolTimestampNs now_timestamp_ns)
+std::optional<ProtocolTimestampNs>
+ComputeAgeSince(const std::optional<ProtocolTimestampNs>& last_seen_timestamp_ns,
+                const ProtocolTimestampNs now_timestamp_ns)
 {
   if (!last_seen_timestamp_ns.has_value())
   {
@@ -129,8 +127,8 @@ bool HasActivityInWindow(const std::uint64_t observation_count,
          *last_seen_timestamp_ns >= *window_start_timestamp_ns;
 }
 
-std::optional<ProtocolTimestampNs> ComputeObservationWindowStart(
-    const RtcmCorrectionHealthOptions& options)
+std::optional<ProtocolTimestampNs>
+ComputeObservationWindowStart(const RtcmCorrectionHealthOptions& options)
 {
   if (!options.now_timestamp_ns.has_value() || options.required_observation_window_ns <= 0)
   {
@@ -340,8 +338,7 @@ void RtcmCorrectionMonitor::ResetDynamicState()
   const bool retained_1006 = seen_base_position_1006_;
   const auto retained_arp = last_base_station_arp_;
   const auto retained_arp_timestamp_ns = last_base_station_arp_timestamp_ns_;
-  const std::uint64_t retained_decode_success_count =
-      base_station_arp_decode_success_count_;
+  const std::uint64_t retained_decode_success_count = base_station_arp_decode_success_count_;
   const bool retained_1007 = seen_antenna_descriptor_1007_;
   const bool retained_1008 = seen_antenna_descriptor_1008_;
   const auto retained_antenna_descriptor = last_antenna_descriptor_;
@@ -598,7 +595,8 @@ void RtcmCorrectionMonitor::ObserveFrame(const RtcmFrame& frame)
 
   if (parsed_info.record->is_msm)
   {
-    RtcmMsmSummaryActivityStats& msm_stats = msm_summary_activity_[parsed_info.record->message_type];
+    RtcmMsmSummaryActivityStats& msm_stats =
+        msm_summary_activity_[parsed_info.record->message_type];
     if (parsed_msm_record.has_value())
     {
       ++msm_stats.decode_success_count;
@@ -713,15 +711,15 @@ std::uint64_t RtcmCorrectionMonitor::MessageCount(const std::uint16_t message_ty
   return it == message_type_activity_.end() ? 0u : it->second.count;
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastSeenMessageTimestampNs(
-    const std::uint16_t message_type) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::LastSeenMessageTimestampNs(const std::uint16_t message_type) const
 {
   const auto it = message_type_activity_.find(message_type);
   return it == message_type_activity_.end() ? std::nullopt : it->second.last_seen_timestamp_ns;
 }
 
-std::uint64_t RtcmCorrectionMonitor::MsmConstellationCount(
-    const RtcmConstellation constellation) const
+std::uint64_t
+RtcmCorrectionMonitor::MsmConstellationCount(const RtcmConstellation constellation) const
 {
   const auto it = msm_constellation_activity_.find(constellation);
   return it == msm_constellation_activity_.end() ? 0u : it->second.count;
@@ -851,8 +849,8 @@ std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastGlonassBias1230Tim
   return last_glonass_bias_1230_timestamp_ns_;
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::LastDecodedGlonassBias1230TimestampNs()
-    const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::LastDecodedGlonassBias1230TimestampNs() const
 {
   return last_decoded_glonass_bias_1230_timestamp_ns_;
 }
@@ -926,13 +924,11 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   }
 
   const auto window_start_timestamp_ns = ComputeObservationWindowStart(options);
-  const auto has_message_type = [&](const std::uint16_t message_type)
-  {
+  const auto has_message_type = [&](const std::uint16_t message_type) {
     const auto semantic_activity = semantic_message_type_activity_.find(message_type);
-    const std::uint64_t semantic_count =
-        semantic_activity == semantic_message_type_activity_.end()
-            ? 0u
-            : semantic_activity->second.count;
+    const std::uint64_t semantic_count = semantic_activity == semantic_message_type_activity_.end()
+                                             ? 0u
+                                             : semantic_activity->second.count;
     const std::optional<ProtocolTimestampNs> semantic_timestamp_ns =
         semantic_activity == semantic_message_type_activity_.end()
             ? std::nullopt
@@ -945,23 +941,19 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
     {
       return semantic_count > 0u;
     }
-    return HasActivityInWindow(semantic_count,
-                               semantic_timestamp_ns,
+    return HasActivityInWindow(
+        semantic_count, semantic_timestamp_ns, window_start_timestamp_ns, options.now_timestamp_ns);
+  };
+  const auto has_constellation = [&](const RtcmConstellation constellation) {
+    const auto semantic_activity = semantic_msm_constellation_activity_.find(constellation);
+    return HasActivityInWindow(semantic_activity == semantic_msm_constellation_activity_.end()
+                                   ? 0u
+                                   : semantic_activity->second.count,
+                               semantic_activity == semantic_msm_constellation_activity_.end()
+                                   ? std::nullopt
+                                   : semantic_activity->second.last_seen_timestamp_ns,
                                window_start_timestamp_ns,
                                options.now_timestamp_ns);
-  };
-  const auto has_constellation = [&](const RtcmConstellation constellation)
-  {
-    const auto semantic_activity = semantic_msm_constellation_activity_.find(constellation);
-    return HasActivityInWindow(
-        semantic_activity == semantic_msm_constellation_activity_.end()
-            ? 0u
-            : semantic_activity->second.count,
-        semantic_activity == semantic_msm_constellation_activity_.end()
-            ? std::nullopt
-            : semantic_activity->second.last_seen_timestamp_ns,
-        window_start_timestamp_ns,
-        options.now_timestamp_ns);
   };
 
   for (const std::uint16_t message_type : options.required_message_types)
@@ -1005,8 +997,7 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   const bool has_semantic_base_position =
       (semantic_1005 != semantic_message_type_activity_.end() &&
        semantic_1005->second.count > 0u) ||
-      (semantic_1006 != semantic_message_type_activity_.end() &&
-       semantic_1006->second.count > 0u);
+      (semantic_1006 != semantic_message_type_activity_.end() && semantic_1006->second.count > 0u);
   if (options.require_base_position && !has_semantic_base_position)
   {
     return false;
@@ -1020,68 +1011,68 @@ bool RtcmCorrectionMonitor::HasRequiredCorrectionMessages(
   return true;
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceLastFrameNs(
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceLastFrameNs(const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(last_frame_timestamp_ns_, now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceMessageTypeNs(
-    const std::uint16_t message_type,
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceMessageTypeNs(const std::uint16_t message_type,
+                                             const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(LastSeenMessageTimestampNs(message_type), now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceMsmConstellationNs(
-    const RtcmConstellation constellation,
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceMsmConstellationNs(const RtcmConstellation constellation,
+                                                  const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(LastSeenMsmConstellationTimestampNs(constellation), now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceBaseStationArpNs(
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceBaseStationArpNs(const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(last_base_station_arp_timestamp_ns_, now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceAntennaDescriptorNs(
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceAntennaDescriptorNs(const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(last_antenna_descriptor_timestamp_ns_, now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceGlonassBias1230Ns(
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceGlonassBias1230Ns(const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(last_glonass_bias_1230_timestamp_ns_, now_timestamp_ns);
 }
 
-std::optional<ProtocolTimestampNs> RtcmCorrectionMonitor::AgeSinceLastMsmNs(
-    const ProtocolTimestampNs now_timestamp_ns) const
+std::optional<ProtocolTimestampNs>
+RtcmCorrectionMonitor::AgeSinceLastMsmNs(const ProtocolTimestampNs now_timestamp_ns) const
 {
   return ComputeAgeSince(last_msm_timestamp_ns_, now_timestamp_ns);
 }
 
-std::optional<double> RtcmCorrectionMonitor::TotalFrameRateHz(
-    const ProtocolTimestampNs window_end_timestamp_ns,
-    const ProtocolTimestampNs window_duration_ns) const
+std::optional<double>
+RtcmCorrectionMonitor::TotalFrameRateHz(const ProtocolTimestampNs window_end_timestamp_ns,
+                                        const ProtocolTimestampNs window_duration_ns) const
 {
   return ComputeRateHz(total_frame_timestamps_, window_end_timestamp_ns, window_duration_ns);
 }
 
-std::optional<double> RtcmCorrectionMonitor::ValidFrameRateHz(
-    const ProtocolTimestampNs window_end_timestamp_ns,
-    const ProtocolTimestampNs window_duration_ns) const
+std::optional<double>
+RtcmCorrectionMonitor::ValidFrameRateHz(const ProtocolTimestampNs window_end_timestamp_ns,
+                                        const ProtocolTimestampNs window_duration_ns) const
 {
   return ComputeRateHz(valid_frame_timestamps_, window_end_timestamp_ns, window_duration_ns);
 }
 
-std::optional<double> RtcmCorrectionMonitor::MessageRateHz(
-    const std::uint16_t message_type,
-    const ProtocolTimestampNs window_end_timestamp_ns,
-    const ProtocolTimestampNs window_duration_ns) const
+std::optional<double>
+RtcmCorrectionMonitor::MessageRateHz(const std::uint16_t message_type,
+                                     const ProtocolTimestampNs window_end_timestamp_ns,
+                                     const ProtocolTimestampNs window_duration_ns) const
 {
   const auto it = message_type_timestamps_.find(message_type);
   if (it == message_type_timestamps_.end())
@@ -1092,10 +1083,10 @@ std::optional<double> RtcmCorrectionMonitor::MessageRateHz(
   return ComputeRateHz(it->second, window_end_timestamp_ns, window_duration_ns);
 }
 
-std::optional<double> RtcmCorrectionMonitor::MsmConstellationRateHz(
-    const RtcmConstellation constellation,
-    const ProtocolTimestampNs window_end_timestamp_ns,
-    const ProtocolTimestampNs window_duration_ns) const
+std::optional<double>
+RtcmCorrectionMonitor::MsmConstellationRateHz(const RtcmConstellation constellation,
+                                              const ProtocolTimestampNs window_end_timestamp_ns,
+                                              const ProtocolTimestampNs window_duration_ns) const
 {
   const auto it = msm_constellation_timestamps_.find(constellation);
   if (it == msm_constellation_timestamps_.end())
@@ -1106,9 +1097,8 @@ std::optional<double> RtcmCorrectionMonitor::MsmConstellationRateHz(
   return ComputeRateHz(it->second, window_end_timestamp_ns, window_duration_ns);
 }
 
-void RtcmCorrectionMonitor::RecordValidFrameMessage(
-    const RtcmMessageInfo& info,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+void RtcmCorrectionMonitor::RecordValidFrameMessage(const RtcmMessageInfo& info,
+                                                    std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (!first_valid_frame_timestamp_ns_.has_value() && timestamp_ns.has_value())
   {
@@ -1131,10 +1121,8 @@ void RtcmCorrectionMonitor::RecordValidFrameMessage(
 
   if (info.is_antenna_descriptor)
   {
-    seen_antenna_descriptor_1007_ =
-        seen_antenna_descriptor_1007_ || info.message_type == 1007u;
-    seen_antenna_descriptor_1008_ =
-        seen_antenna_descriptor_1008_ || info.message_type == 1008u;
+    seen_antenna_descriptor_1007_ = seen_antenna_descriptor_1007_ || info.message_type == 1007u;
+    seen_antenna_descriptor_1008_ = seen_antenna_descriptor_1008_ || info.message_type == 1008u;
   }
 
   if (info.is_glonass_bias)
@@ -1155,11 +1143,9 @@ void RtcmCorrectionMonitor::RecordValidFrameMessage(
 }
 
 void RtcmCorrectionMonitor::RecordSemanticMessage(
-    const RtcmMessageInfo& info,
-    const std::optional<ProtocolTimestampNs> timestamp_ns)
+    const RtcmMessageInfo& info, const std::optional<ProtocolTimestampNs> timestamp_ns)
 {
-  RtcmCorrectionActivityStats& message_stats =
-      semantic_message_type_activity_[info.message_type];
+  RtcmCorrectionActivityStats& message_stats = semantic_message_type_activity_[info.message_type];
   ++message_stats.count;
   UpdateLatestTimestamp(timestamp_ns, message_stats.last_seen_timestamp_ns);
 
@@ -1180,10 +1166,9 @@ void RtcmCorrectionMonitor::PrepareStationOwnership(const std::uint16_t station_
     unowned_decoded_state_from_other_station =
         last_glonass_code_phase_bias_.has_value() &&
         last_glonass_code_phase_bias_->station_id != station_id;
-    unowned_decoded_state_from_other_station =
-        unowned_decoded_state_from_other_station ||
-        (last_antenna_descriptor_.has_value() &&
-         last_antenna_descriptor_->station_id != station_id);
+    unowned_decoded_state_from_other_station = unowned_decoded_state_from_other_station ||
+                                               (last_antenna_descriptor_.has_value() &&
+                                                last_antenna_descriptor_->station_id != station_id);
     for (const auto& entry : msm_summary_activity_)
     {
       if (entry.second.last_summary.has_value() &&
@@ -1203,15 +1188,14 @@ void RtcmCorrectionMonitor::PrepareStationOwnership(const std::uint16_t station_
   station_id_ = station_id;
 }
 
-universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
-    const RtcmCorrectionMonitor& monitor,
-    const RtcmCorrectionHealthOptions& options)
+universal_gnss::GnssHealthSummary
+BuildRtcmCorrectionHealth(const RtcmCorrectionMonitor& monitor,
+                          const RtcmCorrectionHealthOptions& options)
 {
   universal_gnss::GnssHealthSummary summary;
-  summary.parser_healthy = monitor.invalid_frames() == 0u &&
-                           monitor.BaseStationArpMalformedCount() == 0u &&
-                           monitor.GlonassBias1230MalformedCount() == 0u &&
-                           monitor.MsmMalformedCount() == 0u;
+  summary.parser_healthy =
+      monitor.invalid_frames() == 0u && monitor.BaseStationArpMalformedCount() == 0u &&
+      monitor.GlonassBias1230MalformedCount() == 0u && monitor.MsmMalformedCount() == 0u;
 
   if (monitor.BaseStationArpMalformedCount() > 0u)
   {
@@ -1220,9 +1204,8 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
     const auto malformed_timestamp_ns =
         !timestamp_1005.has_value()
             ? timestamp_1006
-            : (!timestamp_1006.has_value() || *timestamp_1005 >= *timestamp_1006
-                   ? timestamp_1005
-                   : timestamp_1006);
+            : (!timestamp_1006.has_value() || *timestamp_1005 >= *timestamp_1006 ? timestamp_1005
+                                                                                 : timestamp_1006);
     summary.AddEvent({universal_gnss::GnssDiagnosticSeverity::kWarning,
                       universal_gnss::GnssDiagnosticCategory::kParser,
                       "rtcm.base_station_arp_malformed",
@@ -1338,20 +1321,19 @@ universal_gnss::GnssHealthSummary BuildRtcmCorrectionHealth(
   return summary;
 }
 
-RtcmSemanticObservations BuildRtcmSemanticObservations(
-    const RtcmCorrectionMonitor& monitor,
-    const std::optional<ProtocolTimestampNs> now_timestamp_ns)
+RtcmSemanticObservations
+BuildRtcmSemanticObservations(const RtcmCorrectionMonitor& monitor,
+                              const std::optional<ProtocolTimestampNs> now_timestamp_ns)
 {
   RtcmSemanticObservations observations;
 
   RtcmSemanticObservation base_station_arp;
   base_station_arp.name = "base_station_arp";
-  base_station_arp.message_type =
-      monitor.last_base_station_arp().has_value()
-          ? monitor.last_base_station_arp()->message_type
-          : (monitor.HasSeenBasePosition1006() ? 1006u
-             : monitor.HasSeenBasePosition1005() ? 1005u
-                                                 : 0u);
+  base_station_arp.message_type = monitor.last_base_station_arp().has_value()
+                                      ? monitor.last_base_station_arp()->message_type
+                                      : (monitor.HasSeenBasePosition1006()   ? 1006u
+                                         : monitor.HasSeenBasePosition1005() ? 1005u
+                                                                             : 0u);
   base_station_arp.seen = monitor.HasSeenBasePositionMessage();
   base_station_arp.decoded = monitor.last_base_station_arp().has_value();
   base_station_arp.valid = base_station_arp.decoded;
@@ -1359,8 +1341,8 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
   base_station_arp.decode_failure_count = monitor.BaseStationArpDecodeFailureCount();
   base_station_arp.malformed_count = monitor.BaseStationArpMalformedCount();
   base_station_arp.last_seen_timestamp_ns = monitor.LastSeenMessageTimestampNs(1005u);
-  UpdateLatestTimestamp(
-      monitor.LastSeenMessageTimestampNs(1006u), base_station_arp.last_seen_timestamp_ns);
+  UpdateLatestTimestamp(monitor.LastSeenMessageTimestampNs(1006u),
+                        base_station_arp.last_seen_timestamp_ns);
   base_station_arp.last_decoded_timestamp_ns = monitor.LastBaseStationArpTimestampNs();
   if (now_timestamp_ns.has_value())
   {
@@ -1389,7 +1371,8 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
           : (monitor.HasSeenAntennaDescriptorMessage() &&
                      monitor.LastSeenMessageTimestampNs(1008u).has_value()
                  ? 1008u
-                 : monitor.HasSeenAntennaDescriptorMessage() ? 1007u : 0u);
+             : monitor.HasSeenAntennaDescriptorMessage() ? 1007u
+                                                         : 0u);
   antenna_descriptor.seen = monitor.HasSeenAntennaDescriptorMessage();
   antenna_descriptor.decoded = monitor.HasAntennaDescriptor();
   antenna_descriptor.valid = antenna_descriptor.decoded;
@@ -1397,8 +1380,8 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
   antenna_descriptor.decode_failure_count = monitor.AntennaDescriptorDecodeFailureCount();
   antenna_descriptor.malformed_count = monitor.AntennaDescriptorMalformedCount();
   antenna_descriptor.last_seen_timestamp_ns = monitor.LastSeenMessageTimestampNs(1007u);
-  UpdateLatestTimestamp(
-      monitor.LastSeenMessageTimestampNs(1008u), antenna_descriptor.last_seen_timestamp_ns);
+  UpdateLatestTimestamp(monitor.LastSeenMessageTimestampNs(1008u),
+                        antenna_descriptor.last_seen_timestamp_ns);
   antenna_descriptor.last_decoded_timestamp_ns = monitor.LastAntennaDescriptorTimestampNs();
   if (now_timestamp_ns.has_value())
   {
@@ -1413,8 +1396,7 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
         {"antenna_setup_id", std::to_string(static_cast<unsigned int>(record.antenna_setup_id))});
     if (record.antenna_serial_number.has_value())
     {
-      antenna_descriptor.fields.push_back(
-          {"antenna_serial_number", *record.antenna_serial_number});
+      antenna_descriptor.fields.push_back({"antenna_serial_number", *record.antenna_serial_number});
     }
   }
   observations.push_back(std::move(antenna_descriptor));
@@ -1462,9 +1444,9 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
 
   RtcmSemanticObservation msm_summary;
   msm_summary.name = "msm_summary";
-  msm_summary.message_type =
-      monitor.last_msm_summary().has_value() ? monitor.last_msm_summary()->message_type
-                                             : FindLatestSeenMsmMessageType(monitor);
+  msm_summary.message_type = monitor.last_msm_summary().has_value()
+                                 ? monitor.last_msm_summary()->message_type
+                                 : FindLatestSeenMsmMessageType(monitor);
   msm_summary.seen = monitor.HasSeenAnyMsmMessage();
   msm_summary.decoded = monitor.HasDecodedAnyMsmSummary();
   msm_summary.valid = msm_summary.decoded;
@@ -1490,7 +1472,8 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
   {
     const auto& record = *monitor.last_msm_summary();
     msm_summary.fields.push_back({"station_id", std::to_string(record.station_id)});
-    msm_summary.fields.push_back({"constellation", DescribeRtcmConstellation(record.constellation)});
+    msm_summary.fields.push_back(
+        {"constellation", DescribeRtcmConstellation(record.constellation)});
     msm_summary.fields.push_back(
         {"msm_variant", std::to_string(static_cast<unsigned int>(record.msm_variant))});
     msm_summary.fields.push_back(
@@ -1510,8 +1493,8 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
     }
 
     RtcmSemanticObservation observation;
-    observation.name = BuildMsmObservationName(
-        GetRtcmMsmConstellation(entry.first), GetRtcmMsmVariant(entry.first));
+    observation.name = BuildMsmObservationName(GetRtcmMsmConstellation(entry.first),
+                                               GetRtcmMsmVariant(entry.first));
     observation.message_type = entry.first;
     observation.seen = entry.second.count > 0u;
     observation.valid = false;
@@ -1539,8 +1522,7 @@ RtcmSemanticObservations BuildRtcmSemanticObservations(
         observation.fields.push_back(
             {"msm_variant", std::to_string(static_cast<unsigned int>(record.msm_variant))});
         observation.fields.push_back(
-            {"satellite_count",
-             std::to_string(static_cast<unsigned int>(record.satellite_count))});
+            {"satellite_count", std::to_string(static_cast<unsigned int>(record.satellite_count))});
         observation.fields.push_back(
             {"signal_count", std::to_string(static_cast<unsigned int>(record.signal_count))});
         observation.fields.push_back(

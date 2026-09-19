@@ -25,13 +25,11 @@ struct UnicoreResponseRouterMetrics
 class UnicoreResponseRouter
 {
 public:
-  bool ProcessLine(
-      std::string_view line,
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  bool ProcessLine(std::string_view line,
+                   std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
-  void FeedBytes(
-      std::string_view data,
-      std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
+  void FeedBytes(std::string_view data,
+                 std::optional<ReceiverCommandTimestampNs> timestamp_ns = std::nullopt);
 
   bool TryGetResponse(ReceiverCommandResponse& response) const;
 

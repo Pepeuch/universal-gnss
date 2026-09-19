@@ -9,7 +9,8 @@
 #include "universal_gnss_driver/receiver_command_transaction_engine.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
 enum class ReceiverConfigApplicationState : std::uint8_t
 {
@@ -97,10 +98,12 @@ public:
 private:
   ReceiverConfigApplicationResult BuildResult() const;
 
-  ReceiverConfigApplicationResult
-  CompleteCurrentCommand(const EngineStepResult& engine_result, bool command_succeeded,
-                         bool response_applied, const char* fallback_error_message,
-                         std::string error_message = {}, bool allow_continuation = true);
+  ReceiverConfigApplicationResult CompleteCurrentCommand(const EngineStepResult& engine_result,
+                                                         bool command_succeeded,
+                                                         bool response_applied,
+                                                         const char* fallback_error_message,
+                                                         std::string error_message = {},
+                                                         bool allow_continuation = true);
 
   ReceiverConfigApplicationResult HandleCommandFailure(const EngineStepResult& engine_result,
                                                        bool response_applied,
@@ -121,4 +124,4 @@ private:
   std::size_t current_index_{0u};
 };
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

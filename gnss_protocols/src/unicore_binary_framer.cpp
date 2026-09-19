@@ -8,16 +8,13 @@ namespace
 
 std::uint16_t ReadLittleEndian16(const std::uint8_t* data)
 {
-  return static_cast<std::uint16_t>(data[0]) |
-         (static_cast<std::uint16_t>(data[1]) << 8);
+  return static_cast<std::uint16_t>(data[0]) | (static_cast<std::uint16_t>(data[1]) << 8);
 }
 
 std::uint32_t ReadLittleEndian32(const std::uint8_t* data)
 {
-  return static_cast<std::uint32_t>(data[0]) |
-         (static_cast<std::uint32_t>(data[1]) << 8) |
-         (static_cast<std::uint32_t>(data[2]) << 16) |
-         (static_cast<std::uint32_t>(data[3]) << 24);
+  return static_cast<std::uint32_t>(data[0]) | (static_cast<std::uint32_t>(data[1]) << 8) |
+         (static_cast<std::uint32_t>(data[2]) << 16) | (static_cast<std::uint32_t>(data[3]) << 24);
 }
 
 }  // namespace
@@ -41,10 +38,9 @@ std::uint32_t ComputeUnicoreBinaryCrc32(const std::uint8_t* data, std::size_t si
   return crc;
 }
 
-bool ValidateUnicoreBinaryCrc32(
-    const std::uint8_t* data,
-    std::size_t size,
-    std::uint32_t expected_crc32)
+bool ValidateUnicoreBinaryCrc32(const std::uint8_t* data,
+                                std::size_t size,
+                                std::uint32_t expected_crc32)
 {
   return ComputeUnicoreBinaryCrc32(data, size) == expected_crc32;
 }
@@ -54,9 +50,9 @@ UnicoreBinaryFrameFramer::UnicoreBinaryFrameFramer(std::size_t max_frame_length)
 {
 }
 
-ParserResult<UnicoreBinaryFrame> UnicoreBinaryFrameFramer::PushByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<UnicoreBinaryFrame>
+UnicoreBinaryFrameFramer::PushByte(std::uint8_t byte,
+                                   std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (buffer_.empty())
   {
@@ -169,9 +165,9 @@ void UnicoreBinaryFrameFramer::Reset()
   expected_frame_size_ = 0u;
 }
 
-ParserResult<UnicoreBinaryFrame> UnicoreBinaryFrameFramer::StartSync(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<UnicoreBinaryFrame>
+UnicoreBinaryFrameFramer::StartSync(std::uint8_t byte,
+                                    std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (byte != kUnicoreBinarySync1)
   {
@@ -184,9 +180,8 @@ ParserResult<UnicoreBinaryFrame> UnicoreBinaryFrameFramer::StartSync(
   return ParserResult<UnicoreBinaryFrame>::NeedMoreData();
 }
 
-void UnicoreBinaryFrameFramer::AppendByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+void UnicoreBinaryFrameFramer::AppendByte(std::uint8_t byte,
+                                          std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   buffer_.push_back(byte);
   byte_timestamps_.push_back(timestamp_ns);
@@ -207,19 +202,16 @@ std::optional<UnicoreBinaryFrame> UnicoreBinaryFrameFramer::FindEmbeddedValidFra
 
     const std::size_t payload_size =
         static_cast<std::size_t>(ReadLittleEndian16(buffer_.data() + frame_offset + 6u));
-    const std::size_t frame_size =
-        kUnicoreBinaryHeaderSize + payload_size + kUnicoreBinaryCrcSize;
+    const std::size_t frame_size = kUnicoreBinaryHeaderSize + payload_size + kUnicoreBinaryCrcSize;
     if (frame_size > max_frame_length_ || frame_size > buffer_.size() - frame_offset)
     {
       continue;
     }
 
-    const std::uint32_t expected_crc = ReadLittleEndian32(
-        buffer_.data() + frame_offset + frame_size - kUnicoreBinaryCrcSize);
+    const std::uint32_t expected_crc =
+        ReadLittleEndian32(buffer_.data() + frame_offset + frame_size - kUnicoreBinaryCrcSize);
     if (!ValidateUnicoreBinaryCrc32(
-            buffer_.data() + frame_offset,
-            frame_size - kUnicoreBinaryCrcSize,
-            expected_crc))
+            buffer_.data() + frame_offset, frame_size - kUnicoreBinaryCrcSize, expected_crc))
     {
       continue;
     }
@@ -235,16 +227,15 @@ UnicoreBinaryFrame UnicoreBinaryFrameFramer::BuildFrame() const
   return BuildFrame(0u, buffer_.size(), frame_timestamp_ns_);
 }
 
-UnicoreBinaryFrame UnicoreBinaryFrameFramer::BuildFrame(
-    std::size_t frame_offset,
-    std::size_t frame_size,
-    std::optional<ProtocolTimestampNs> timestamp_ns) const
+UnicoreBinaryFrame
+UnicoreBinaryFrameFramer::BuildFrame(std::size_t frame_offset,
+                                     std::size_t frame_size,
+                                     std::optional<ProtocolTimestampNs> timestamp_ns) const
 {
   UnicoreBinaryFrame frame;
   frame.timestamp_ns = timestamp_ns;
-  frame.raw_bytes.assign(
-      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset),
-      buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + frame_size));
+  frame.raw_bytes.assign(buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset),
+                         buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + frame_size));
   frame.cpu_idle = buffer_[frame_offset + 3u];
   frame.message_id = ReadLittleEndian16(buffer_.data() + frame_offset + 4u);
   frame.payload_length = ReadLittleEndian16(buffer_.data() + frame_offset + 6u);
@@ -258,16 +249,14 @@ UnicoreBinaryFrame UnicoreBinaryFrameFramer::BuildFrame(
   frame.delay_ms = ReadLittleEndian16(buffer_.data() + frame_offset + 22u);
   frame.payload.assign(
       buffer_.begin() + static_cast<std::ptrdiff_t>(frame_offset + kUnicoreBinaryHeaderSize),
-      buffer_.begin() + static_cast<std::ptrdiff_t>(
-          frame_offset + frame_size - kUnicoreBinaryCrcSize));
+      buffer_.begin() +
+          static_cast<std::ptrdiff_t>(frame_offset + frame_size - kUnicoreBinaryCrcSize));
   frame.reported_crc32 =
       ReadLittleEndian32(buffer_.data() + frame_offset + frame_size - kUnicoreBinaryCrcSize);
   frame.computed_crc32 =
-      ComputeUnicoreBinaryCrc32(
-          buffer_.data() + frame_offset, frame_size - kUnicoreBinaryCrcSize);
-  frame.checksum_status = (frame.reported_crc32 == frame.computed_crc32)
-                              ? ChecksumStatus::kValid
-                              : ChecksumStatus::kInvalid;
+      ComputeUnicoreBinaryCrc32(buffer_.data() + frame_offset, frame_size - kUnicoreBinaryCrcSize);
+  frame.checksum_status = (frame.reported_crc32 == frame.computed_crc32) ? ChecksumStatus::kValid
+                                                                         : ChecksumStatus::kInvalid;
   return frame;
 }
 

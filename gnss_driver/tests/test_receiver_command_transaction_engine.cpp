@@ -12,7 +12,8 @@
 #include "universal_gnss_transport/memory_stream.hpp"
 #include "universal_gnss_transport/transport_error.hpp"
 
-namespace {
+namespace
+{
 
 using universal_gnss_driver::ReceiverCommand;
 using universal_gnss_driver::ReceiverCommandKind;
@@ -44,10 +45,18 @@ public:
     return {0u, TransportStatus::kError, TransportError::kWriteFailure};
   }
 
-  bool IsOpen() const override { return true; }
-  void Close() override {}
+  bool IsOpen() const override
+  {
+    return true;
+  }
+  void Close() override
+  {
+  }
 
-  const std::vector<std::uint8_t>& written_bytes() const { return written_; }
+  const std::vector<std::uint8_t>& written_bytes() const
+  {
+    return written_;
+  }
 
 private:
   bool first_write_{true};
@@ -408,7 +417,7 @@ void TestResetCannotReleaseQuarantine(TestContext& ctx)
              "Reset must not clear a post-write quarantine or allow a new command");
 }
 
-} // namespace
+}  // namespace
 
 int main()
 {

@@ -87,10 +87,9 @@ void ExpectProfileMatchesDriver(TestContext& ctx,
 
 std::string BuildUnicoreAsciiFrame(const std::string& frame_without_crc)
 {
-  const auto crc =
-      universal_gnss_protocols::ComputeUnicoreBinaryCrc32(reinterpret_cast<const std::uint8_t*>(
-                                                              frame_without_crc.data() + 1u),
-                                                          frame_without_crc.size() - 1u);
+  const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
+      reinterpret_cast<const std::uint8_t*>(frame_without_crc.data() + 1u),
+      frame_without_crc.size() - 1u);
 
   std::ostringstream stream;
   stream << frame_without_crc << '*' << std::hex << std::nouppercase << std::setw(8)
@@ -372,8 +371,7 @@ void TestBuiltInProfileDriverConsistency(TestContext& ctx)
 {
   const ReceiverProfile* generic =
       universal_gnss_driver::FindBuiltInReceiverProfile("generic_nmea");
-  const ReceiverProfile* ublox =
-      universal_gnss_driver::FindBuiltInReceiverProfile("ublox_f9_f10");
+  const ReceiverProfile* ublox = universal_gnss_driver::FindBuiltInReceiverProfile("ublox_f9_f10");
   const ReceiverProfile* unicore =
       universal_gnss_driver::FindBuiltInReceiverProfile("unicore_um98x_placeholder");
   const ReceiverProfile* unicore_um960 =
@@ -387,11 +385,11 @@ void TestBuiltInProfileDriverConsistency(TestContext& ctx)
   const ReceiverProfile* unicore_ub9a0 =
       universal_gnss_driver::FindBuiltInReceiverProfile("unicore_ub9a0");
 
-  ctx.Expect(generic != nullptr && ublox != nullptr && unicore != nullptr &&
-                 unicore_um960 != nullptr && unicore_um980 != nullptr &&
-                 unicore_um981 != nullptr && unicore_um982 != nullptr &&
-                 unicore_ub9a0 != nullptr,
-             "every concrete built-in profile should remain available for driver consistency checks");
+  ctx.Expect(
+      generic != nullptr && ublox != nullptr && unicore != nullptr && unicore_um960 != nullptr &&
+          unicore_um980 != nullptr && unicore_um981 != nullptr && unicore_um982 != nullptr &&
+          unicore_ub9a0 != nullptr,
+      "every concrete built-in profile should remain available for driver consistency checks");
   if (generic == nullptr || ublox == nullptr || unicore == nullptr || unicore_um960 == nullptr ||
       unicore_um980 == nullptr || unicore_um981 == nullptr || unicore_um982 == nullptr ||
       unicore_ub9a0 == nullptr)
@@ -419,9 +417,9 @@ void TestBuiltInProfileDriverConsistency(TestContext& ctx)
 
   const ReceiverProfile* quectel =
       universal_gnss_driver::FindBuiltInReceiverProfile("quectel_placeholder");
-  ctx.Expect(quectel != nullptr && quectel->placeholder &&
-                 quectel->supported_config_profiles == 0u,
-             "placeholder profiles without a concrete driver must declare no generated config support");
+  ctx.Expect(
+      quectel != nullptr && quectel->placeholder && quectel->supported_config_profiles == 0u,
+      "placeholder profiles without a concrete driver must declare no generated config support");
 }
 
 void TestRuntimeStateAccess(TestContext& ctx)
@@ -446,9 +444,8 @@ void TestRuntimeStateAccess(TestContext& ctx)
 
   ublox_driver.FeedBytes(BuildUbxFrame(0x01u, 0x07u, MakeNavPvtPayload()), 1000);
   unicore_driver.FeedString(kBestNavLine, 2000);
-  nmea_driver.FeedBytes(BuildNmeaSentence(
-                            "GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"),
-                        3000);
+  nmea_driver.FeedBytes(
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"), 3000);
   nmea_driver.FeedBytes(BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
 
   ctx.Expect(ublox_driver.current_state().fix_valid &&

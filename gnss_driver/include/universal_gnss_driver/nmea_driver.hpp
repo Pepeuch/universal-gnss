@@ -35,11 +35,13 @@ public:
 
   void Reset() override;
 
-  ReceiverDriverProfileBuildResult BuildRoverProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildRoverProfile(ReceiverCommandSafetyLevel safety_level =
+                        ReceiverCommandSafetyLevel::kRuntime) const override;
 
-  ReceiverDriverProfileBuildResult BuildDiagnosticsProfile(
-      ReceiverCommandSafetyLevel safety_level = ReceiverCommandSafetyLevel::kRuntime) const override;
+  ReceiverDriverProfileBuildResult
+  BuildDiagnosticsProfile(ReceiverCommandSafetyLevel safety_level =
+                              ReceiverCommandSafetyLevel::kRuntime) const override;
 
   const NmeaSession& session() const;
 
@@ -48,8 +50,8 @@ private:
 
   static const std::vector<ReceiverConfigProfileKind>& SupportedProfileKinds();
 
-  static ReceiverDriverProfileBuildResult MakeUnsupportedProfileResult(
-      ReceiverConfigProfileKind profile_kind);
+  static ReceiverDriverProfileBuildResult
+  MakeUnsupportedProfileResult(ReceiverConfigProfileKind profile_kind);
 
   NmeaSession session_;
 };

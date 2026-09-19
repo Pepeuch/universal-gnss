@@ -6,12 +6,12 @@
 #include <string>
 #include <vector>
 
+#include "testdata_utils.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_tools/gnss_stream_inspector.hpp"
-#include "testdata_utils.hpp"
 
 namespace
 {
@@ -69,7 +69,8 @@ std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
 
   const auto checksum =
       universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
-  bytes.push_back(valid_checksum ? checksum.ck_a : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
+  bytes.push_back(valid_checksum ? checksum.ck_a
+                                 : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
   bytes.push_back(checksum.ck_b);
   return bytes;
 }
@@ -89,8 +90,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -120,17 +120,10 @@ std::string NormalizeUnicoreAsciiLine(std::string line)
   }
 
   const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
-      reinterpret_cast<const std::uint8_t*>(line.data() + 1u),
-      line.size() - 1u);
+      reinterpret_cast<const std::uint8_t*>(line.data() + 1u), line.size() - 1u);
 
   std::ostringstream stream;
-  stream << line
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
+  stream << line << '*' << std::hex << std::nouppercase << std::setw(8) << std::setfill('0') << crc
          << "\r\n";
   return stream.str();
 }
@@ -199,8 +192,8 @@ struct SyntheticStream
 SyntheticStream BuildSyntheticStream()
 {
   const std::vector<std::uint8_t> noise = {0x00u, 0xFFu, 0x13u};
-  const auto gga = BuildNmeaSentence(
-      "GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto gga =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
   const auto nav_pvt = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(92u, 0u));
   const auto rtcm = BuildRtcmFrame(1005u);
   const auto invalid_nav_status =
@@ -237,8 +230,7 @@ void TestMixedStreamInspection(TestContext& ctx)
   ctx.Expect(result.summary.noise_bytes == 3u && result.summary.noise_spans == 1u,
              "inspection should report the leading noise span");
 
-  ctx.Expect(result.items.size() == 4u,
-             "inspection should retain per-item records by default");
+  ctx.Expect(result.items.size() == 4u, "inspection should retain per-item records by default");
   ctx.Expect(result.items[0].byte_offset == stream.gga_offset &&
                  result.items[1].byte_offset == stream.ubx_offset &&
                  result.items[2].byte_offset == stream.rtcm_offset &&
@@ -248,14 +240,14 @@ void TestMixedStreamInspection(TestContext& ctx)
   ctx.Expect(result.items[0].identity == "GPGGA" &&
                  result.items[0].protocol == universal_gnss_protocols::ProtocolType::kNmea,
              "inspection should identify the NMEA sentence");
-  ctx.Expect(result.items[1].identity == "01:07" &&
-                 result.items[1].ubx_message_name == "NAV-PVT",
+  ctx.Expect(result.items[1].identity == "01:07" && result.items[1].ubx_message_name == "NAV-PVT",
              "inspection should identify the UBX NAV-PVT frame");
   ctx.Expect(result.items[2].rtcm_message_type == 1005u &&
                  result.items[2].classification == "station_arp",
              "inspection should classify the RTCM frame");
   ctx.Expect(result.items[3].ubx_message_name == "NAV-STATUS" &&
-                 result.items[3].checksum_status == universal_gnss_protocols::ChecksumStatus::kInvalid,
+                 result.items[3].checksum_status ==
+                     universal_gnss_protocols::ChecksumStatus::kInvalid,
              "inspection should keep checksum-invalid UBX frames as recognized items");
 
   ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 1u &&
@@ -281,7 +273,8 @@ void TestSummaryOnlyAndFormatting(TestContext& ctx)
 
   const auto full_result = universal_gnss_tools::InspectGnssStreamBytes(stream.bytes);
   const std::string text = universal_gnss_tools::FormatGnssStreamInspectionText(full_result);
-  const std::string summary = universal_gnss_tools::FormatGnssStreamInspectionText(full_result, true);
+  const std::string summary =
+      universal_gnss_tools::FormatGnssStreamInspectionText(full_result, true);
   const std::string json = universal_gnss_tools::FormatGnssStreamInspectionJson(full_result);
 
   ctx.Expect(text.find("proto=nmea") != std::string::npos &&
@@ -294,10 +287,12 @@ void TestSummaryOnlyAndFormatting(TestContext& ctx)
   ctx.Expect(text.find("proto=rtcm3") != std::string::npos &&
                  text.find("type=1005 class=station_arp") != std::string::npos,
              "text output should include RTCM classifications");
-  ctx.Expect(summary.find("summary total_bytes=") != std::string::npos &&
-                 summary.find("items=4 valid=3 invalid=1 malformed=1 truncated=1 noise_bytes=3 noise_spans=1") !=
-                     std::string::npos,
-             "summary output should include the expected aggregate counters");
+  ctx.Expect(
+      summary.find("summary total_bytes=") != std::string::npos &&
+          summary.find(
+              "items=4 valid=3 invalid=1 malformed=1 truncated=1 noise_bytes=3 noise_spans=1") !=
+              std::string::npos,
+      "summary output should include the expected aggregate counters");
   ctx.Expect(summary.find("protocols nmea=1 rtcm3=1 ubx=2") != std::string::npos &&
                  summary.find("nmea_types GGA=1") != std::string::npos &&
                  summary.find("ubx_messages 01:03=1 01:07=1") != std::string::npos &&
@@ -318,20 +313,20 @@ void TestStreamInput(TestContext& ctx)
   std::istringstream input(input_bytes);
 
   const auto result = universal_gnss_tools::InspectGnssStreamStream(input);
-  ctx.Expect(result.summary.total_items_found == 4u &&
-                 result.summary.truncated_items == 1u,
+  ctx.Expect(result.summary.total_items_found == 4u && result.summary.truncated_items == 1u,
              "stream inspection should match byte-vector inspection");
 }
 
 void TestUnicoreInspection(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes = {0x99u};
-  Append(bytes,
-         BuildAsciiLine(
-             "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-             "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
-             "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-             "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+  Append(
+      bytes,
+      BuildAsciiLine("#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+                     "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,"
+                     "1.2221,1.1053,"
+                     "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+                     "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
 
   const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
   ctx.Expect(result.summary.total_items_found == 1u &&
@@ -357,20 +352,19 @@ void TestUnicoreInspection(TestContext& ctx)
 
 void TestEmbeddedUnicoreTextResync(TestContext& ctx)
 {
-  const std::string corrupted_prefix =
-      "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;TRUNCATED";
+  const std::string corrupted_prefix = "#PVTSLNA,97,GPS,FINE,2190,364536000,0,0,18,13;TRUNCATED";
   std::vector<std::uint8_t> bytes(corrupted_prefix.begin(), corrupted_prefix.end());
-  Append(bytes,
-         BuildAsciiLine(
-             "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-             "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
-             "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-             "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+  Append(
+      bytes,
+      BuildAsciiLine("#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+                     "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,"
+                     "1.2221,1.1053,"
+                     "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+                     "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
 
   const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
 
-  ctx.Expect(result.summary.total_items_found == 1u &&
-                 result.summary.valid_items == 1u &&
+  ctx.Expect(result.summary.total_items_found == 1u && result.summary.valid_items == 1u &&
                  result.summary.invalid_items == 0u,
              "embedded-text resync should still recover the later valid Unicore record");
   ctx.Expect(result.summary.malformed_events == 1u &&
@@ -401,20 +395,16 @@ void TestUnicoreBinaryInspection(TestContext& ctx)
 
 void TestFileBackedMixedInspection(TestContext& ctx)
 {
-  const auto bytes = universal_gnss_tools::test::ReadBinaryFile(
-      "mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
   const auto result = universal_gnss_tools::InspectGnssStreamBytes(bytes);
 
   ctx.Expect(result.summary.total_bytes_read == bytes.size(),
              "file-backed mixed inspection should report the file byte size");
-  ctx.Expect(result.summary.total_items_found == 10u &&
-                 result.summary.valid_items == 9u &&
+  ctx.Expect(result.summary.total_items_found == 10u && result.summary.valid_items == 9u &&
                  result.summary.invalid_items == 1u,
              "file-backed mixed inspection should recognize the expected records");
-  ctx.Expect(result.summary.malformed_events == 1u &&
-                 result.summary.truncated_items == 1u &&
-                 result.summary.noise_bytes == 3u &&
-                 result.summary.noise_spans == 1u,
+  ctx.Expect(result.summary.malformed_events == 1u && result.summary.truncated_items == 1u &&
+                 result.summary.noise_bytes == 3u && result.summary.noise_spans == 1u,
              "file-backed mixed inspection should retain malformed and noise statistics");
   ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 3u &&
                  result.summary.counts_by_protocol.at("ubx") == 3u &&
@@ -426,8 +416,7 @@ void TestFileBackedMixedInspection(TestContext& ctx)
                  result.summary.counts_by_rtcm_message_type.at(1005u) == 1u &&
                  result.summary.counts_by_rtcm_message_type.at(1077u) == 1u,
              "file-backed mixed inspection should classify Unicore and RTCM records");
-  ctx.Expect(result.items.size() == 10u &&
-                 result.items.front().identity == "GPGGA" &&
+  ctx.Expect(result.items.size() == 10u && result.items.front().identity == "GPGGA" &&
                  result.items.back().identity == "01:03",
              "file-backed mixed inspection should keep the expected timeline identities");
 }

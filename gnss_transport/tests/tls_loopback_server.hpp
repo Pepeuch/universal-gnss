@@ -32,7 +32,9 @@ public:
   };
 
   TlsLoopbackServer() = default;
-  explicit TlsLoopbackServer(Options options) : options_(std::move(options)) {}
+  explicit TlsLoopbackServer(Options options) : options_(std::move(options))
+  {
+  }
 
   ~TlsLoopbackServer()
   {
@@ -72,7 +74,10 @@ public:
     return true;
   }
 
-  std::uint16_t port() const { return port_; }
+  std::uint16_t port() const
+  {
+    return port_;
+  }
 
   bool Join()
   {
@@ -88,7 +93,8 @@ public:
     std::size_t offset = 0u;
     while (offset < size)
     {
-      const int read_size = SSL_read(session, destination + offset, static_cast<int>(size - offset));
+      const int read_size =
+          SSL_read(session, destination + offset, static_cast<int>(size - offset));
       if (read_size <= 0)
       {
         return false;
@@ -132,16 +138,16 @@ private:
     SSL_CTX* context = SSL_CTX_new(TLS_server_method());
     SSL* session = nullptr;
     const std::string fixture_dir = UNIVERSAL_GNSS_TLS_FIXTURE_DIR;
-    const bool configured = context != nullptr && SSL_CTX_set_max_proto_version(context, TLS1_2_VERSION) == 1 &&
-                            SSL_CTX_use_certificate_chain_file(
-                                context, (fixture_dir + "/server.crt").c_str()) == 1 &&
-                            SSL_CTX_use_PrivateKey_file(context, (fixture_dir + "/server.key").c_str(),
-                                                        SSL_FILETYPE_PEM) == 1 &&
-                            SSL_CTX_check_private_key(context) == 1;
+    const bool configured =
+        context != nullptr && SSL_CTX_set_max_proto_version(context, TLS1_2_VERSION) == 1 &&
+        SSL_CTX_use_certificate_chain_file(context, (fixture_dir + "/server.crt").c_str()) == 1 &&
+        SSL_CTX_use_PrivateKey_file(
+            context, (fixture_dir + "/server.key").c_str(), SSL_FILETYPE_PEM) == 1 &&
+        SSL_CTX_check_private_key(context) == 1;
     if (configured && options_.require_client_certificate)
     {
-      session_succeeded_ = SSL_CTX_load_verify_locations(context, (fixture_dir + "/ca.crt").c_str(),
-                                                          nullptr) == 1;
+      session_succeeded_ =
+          SSL_CTX_load_verify_locations(context, (fixture_dir + "/ca.crt").c_str(), nullptr) == 1;
       if (session_succeeded_)
       {
         SSL_CTX_set_verify(context, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, nullptr);
@@ -154,8 +160,8 @@ private:
     if (session_succeeded_)
     {
       session = SSL_new(context);
-      session_succeeded_ = session != nullptr && SSL_set_fd(session, connection_fd) == 1 &&
-                           SSL_accept(session) == 1;
+      session_succeeded_ =
+          session != nullptr && SSL_set_fd(session, connection_fd) == 1 && SSL_accept(session) == 1;
       if (session_succeeded_ && options_.session)
       {
         session_succeeded_ = options_.session(session);

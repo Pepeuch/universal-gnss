@@ -42,8 +42,7 @@ std::optional<std::uint64_t> ReadRtcmUnsignedBits(const ByteVector& payload,
     const std::size_t absolute_bit = bit_offset + i;
     const std::size_t byte_index = absolute_bit / 8u;
     const std::size_t bit_index = 7u - (absolute_bit % 8u);
-    const std::uint8_t bit =
-        static_cast<std::uint8_t>((payload[byte_index] >> bit_index) & 0x01u);
+    const std::uint8_t bit = static_cast<std::uint8_t>((payload[byte_index] >> bit_index) & 0x01u);
     value = (value << 1u) | static_cast<std::uint64_t>(bit);
   }
 
@@ -151,8 +150,7 @@ std::optional<std::uint16_t> ExtractRtcmMessageType(const ByteVector& payload)
 
 std::optional<std::uint16_t> ExtractRtcmMessageType(const RtcmFrame& frame)
 {
-  if (frame.protocol != ProtocolType::kRtcm3 ||
-      frame.checksum_status != ChecksumStatus::kValid)
+  if (frame.protocol != ProtocolType::kRtcm3 || frame.checksum_status != ChecksumStatus::kValid)
   {
     return std::nullopt;
   }
@@ -305,8 +303,7 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
   record.ecef_x_m = static_cast<double>(*ecef_x) * kRtcmArpCoordinateScaleM;
   record.ecef_y_m = static_cast<double>(*ecef_y) * kRtcmArpCoordinateScaleM;
   record.ecef_z_m = static_cast<double>(*ecef_z) * kRtcmArpCoordinateScaleM;
-  record.single_receiver_oscillator_indicator =
-      *single_receiver_oscillator_indicator != 0u;
+  record.single_receiver_oscillator_indicator = *single_receiver_oscillator_indicator != 0u;
   record.quarter_cycle_indicator = static_cast<std::uint8_t>(*quarter_cycle_indicator);
 
   if (*message_type == 1006u)
@@ -317,15 +314,13 @@ ParserResult<RtcmBaseStationArpRecord> ParseRtcmBaseStationArp(const RtcmFrame& 
       return ParserResult<RtcmBaseStationArpRecord>::InvalidData();
     }
 
-    record.antenna_height_m =
-        static_cast<double>(*antenna_height) * kRtcmArpCoordinateScaleM;
+    record.antenna_height_m = static_cast<double>(*antenna_height) * kRtcmArpCoordinateScaleM;
   }
 
   return ParserResult<RtcmBaseStationArpRecord>::RecordReady(record);
 }
 
-ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(
-    const RtcmFrame& frame)
+ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(const RtcmFrame& frame)
 {
   const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
   if (!message_type.has_value() || !IsRtcmAntennaDescriptorMessage(*message_type))
@@ -365,8 +360,7 @@ ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(
   const auto parsed_message_type = read_u(12u);
   const auto station_id = read_u(12u);
   const auto descriptor_length = read_u(8u);
-  if (!parsed_message_type.has_value() || !station_id.has_value() ||
-      !descriptor_length.has_value())
+  if (!parsed_message_type.has_value() || !station_id.has_value() || !descriptor_length.has_value())
   {
     return ParserResult<RtcmAntennaDescriptorRecord>::InvalidData();
   }
@@ -402,8 +396,7 @@ ParserResult<RtcmAntennaDescriptorRecord> ParseRtcmAntennaDescriptor(
   return ParserResult<RtcmAntennaDescriptorRecord>::RecordReady(record);
 }
 
-ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
-    const RtcmFrame& frame)
+ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(const RtcmFrame& frame)
 {
   const std::optional<std::uint16_t> message_type = ExtractRtcmMessageType(frame);
   if (!message_type.has_value() || !IsRtcmGlonassBiasMessage(*message_type))
@@ -447,8 +440,7 @@ ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
 
   if (!parsed_message_type.has_value() || !station_id.has_value() ||
       !code_phase_bias_indicator.has_value() || !has_l1_ca_bias.has_value() ||
-      !has_l1_p_bias.has_value() || !has_l2_ca_bias.has_value() ||
-      !has_l2_p_bias.has_value())
+      !has_l1_p_bias.has_value() || !has_l2_ca_bias.has_value() || !has_l2_p_bias.has_value())
   {
     return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
   }
@@ -458,10 +450,8 @@ ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
   record.station_id = static_cast<std::uint16_t>(*station_id);
   record.code_phase_bias_indicator = *code_phase_bias_indicator != 0u;
   record.signal_mask = static_cast<std::uint8_t>(
-      ((*has_l1_ca_bias != 0u) ? 0x01u : 0x00u) |
-      ((*has_l1_p_bias != 0u) ? 0x02u : 0x00u) |
-      ((*has_l2_ca_bias != 0u) ? 0x04u : 0x00u) |
-      ((*has_l2_p_bias != 0u) ? 0x08u : 0x00u));
+      ((*has_l1_ca_bias != 0u) ? 0x01u : 0x00u) | ((*has_l1_p_bias != 0u) ? 0x02u : 0x00u) |
+      ((*has_l2_ca_bias != 0u) ? 0x04u : 0x00u) | ((*has_l2_p_bias != 0u) ? 0x08u : 0x00u));
 
   const auto read_optional_bias = [&](const bool present, std::optional<double>& destination) {
     if (!present)
@@ -487,10 +477,8 @@ ParserResult<RtcmGlonassCodePhaseBiasRecord> ParseRtcmGlonassCodePhaseBias(
     return ParserResult<RtcmGlonassCodePhaseBiasRecord>::InvalidData();
   }
 
-  record.has_any_bias_values = record.l1_ca_bias_m.has_value() ||
-                               record.l1_p_bias_m.has_value() ||
-                               record.l2_ca_bias_m.has_value() ||
-                               record.l2_p_bias_m.has_value();
+  record.has_any_bias_values = record.l1_ca_bias_m.has_value() || record.l1_p_bias_m.has_value() ||
+                               record.l2_ca_bias_m.has_value() || record.l2_p_bias_m.has_value();
   record.valid = record.code_phase_bias_indicator && record.has_any_bias_values;
 
   return ParserResult<RtcmGlonassCodePhaseBiasRecord>::RecordReady(record);
@@ -538,15 +526,13 @@ ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
       !multiple_message.has_value() || !issue_of_data_station.has_value() ||
       !session_transmission_time.has_value() || !clock_steering_indicator.has_value() ||
       !external_clock_indicator.has_value() || !divergence_free_smoothing.has_value() ||
-      !smoothing_interval.has_value() || !satellite_mask.has_value() ||
-      !signal_mask.has_value())
+      !smoothing_interval.has_value() || !satellite_mask.has_value() || !signal_mask.has_value())
   {
     return ParserResult<RtcmMsmSummaryRecord>::InvalidData();
   }
 
   const std::uint8_t satellite_count = CountSetBits(*satellite_mask);
-  const std::uint8_t signal_count =
-      CountSetBits(static_cast<std::uint64_t>(*signal_mask));
+  const std::uint8_t signal_count = CountSetBits(static_cast<std::uint64_t>(*signal_mask));
   const std::size_t cell_mask_bits =
       static_cast<std::size_t>(satellite_count) * static_cast<std::size_t>(signal_count);
   if (cell_mask_bits > kRtcmMsmMaximumCellMaskBits)
@@ -562,9 +548,7 @@ ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
 
   const std::uint8_t msm_variant =
       GetRtcmMsmVariant(static_cast<std::uint16_t>(*parsed_message_type));
-  const auto body_bits = ComputeRtcmMsmBodyBits(msm_variant,
-                                                satellite_count,
-                                                *cell_count);
+  const auto body_bits = ComputeRtcmMsmBodyBits(msm_variant, satellite_count, *cell_count);
   if (!body_bits.has_value() ||
       bit_offset + cell_mask_bits + *body_bits > frame.payload.size() * 8u)
   {
@@ -578,12 +562,9 @@ ParserResult<RtcmMsmSummaryRecord> ParseRtcmMsmSummary(const RtcmFrame& frame)
   record.msm_variant = msm_variant;
   record.multiple_message = *multiple_message != 0u;
   record.issue_of_data_station = static_cast<std::uint8_t>(*issue_of_data_station);
-  record.session_transmission_time =
-      static_cast<std::uint8_t>(*session_transmission_time);
-  record.clock_steering_indicator =
-      static_cast<std::uint8_t>(*clock_steering_indicator);
-  record.external_clock_indicator =
-      static_cast<std::uint8_t>(*external_clock_indicator);
+  record.session_transmission_time = static_cast<std::uint8_t>(*session_transmission_time);
+  record.clock_steering_indicator = static_cast<std::uint8_t>(*clock_steering_indicator);
+  record.external_clock_indicator = static_cast<std::uint8_t>(*external_clock_indicator);
   record.divergence_free_smoothing = *divergence_free_smoothing != 0u;
   record.smoothing_interval = static_cast<std::uint8_t>(*smoothing_interval);
   record.satellite_count = satellite_count;

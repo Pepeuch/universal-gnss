@@ -126,8 +126,7 @@ bool AppendBuilderFrame(UbloxConfigProfileBuildResult& result,
     return false;
   }
 
-  result.commands.push_back(
-      MakeUbloxCommand(kind, safety_level, builder_result.frame));
+  result.commands.push_back(MakeUbloxCommand(kind, safety_level, builder_result.frame));
   return true;
 }
 
@@ -311,9 +310,8 @@ std::uint32_t ResolveMessageRateKey(const UbloxOutputMessageKind message,
   return 0u;
 }
 
-std::vector<UbloxMessageRate> MakeMessageRates(
-    const std::vector<UbloxOutputMessageKind>& messages,
-    const std::vector<UbloxInterfacePort>& output_ports)
+std::vector<UbloxMessageRate> MakeMessageRates(const std::vector<UbloxOutputMessageKind>& messages,
+                                               const std::vector<UbloxInterfacePort>& output_ports)
 {
   std::vector<UbloxMessageRate> rates;
   rates.reserve(messages.size() * output_ports.size());
@@ -335,8 +333,7 @@ std::vector<UbloxMessageRate> MakeMessageRates(
 
 }  // namespace
 
-UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
-    const UbloxConfigProfile& profile)
+UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(const UbloxConfigProfile& profile)
 {
   UbloxConfigProfileBuildResult result;
   if (!ValidateProfile(result, profile))
@@ -348,11 +345,11 @@ UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
 
   if (profile.port.uart1_baudrate.has_value())
   {
-    if (!AppendBuilderFrame(result,
-                            ResolveCommandKind(false),
-                            safety_level,
-                            BuildUart1BaudrateFrame(*profile.port.uart1_baudrate,
-                                                    profile.target_layers)))
+    if (!AppendBuilderFrame(
+            result,
+            ResolveCommandKind(false),
+            safety_level,
+            BuildUart1BaudrateFrame(*profile.port.uart1_baudrate, profile.target_layers)))
     {
       return result;
     }
@@ -360,11 +357,11 @@ UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
 
   if (profile.port.uart2_baudrate.has_value())
   {
-    if (!AppendBuilderFrame(result,
-                            ResolveCommandKind(false),
-                            safety_level,
-                            BuildUart2BaudrateFrame(*profile.port.uart2_baudrate,
-                                                    profile.target_layers)))
+    if (!AppendBuilderFrame(
+            result,
+            ResolveCommandKind(false),
+            safety_level,
+            BuildUart2BaudrateFrame(*profile.port.uart2_baudrate, profile.target_layers)))
     {
       return result;
     }
@@ -375,8 +372,7 @@ UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
     if (!AppendBuilderFrame(result,
                             ResolveCommandKind(false),
                             safety_level,
-                            BuildRateHzFrame(*profile.measurement_rate_hz,
-                                             profile.target_layers)))
+                            BuildRateHzFrame(*profile.measurement_rate_hz, profile.target_layers)))
     {
       return result;
     }
@@ -400,8 +396,7 @@ UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
     if (!AppendBuilderFrame(result,
                             ResolveCommandKind(true),
                             safety_level,
-                            BuildDisableMessageFrame(message_rate_key,
-                                                     profile.target_layers)))
+                            BuildDisableMessageFrame(message_rate_key, profile.target_layers)))
     {
       return result;
     }
@@ -423,10 +418,10 @@ UbloxConfigProfileBuildResult UbloxConfigProfileBuilder::Build(
   return result;
 }
 
-UbloxConfigProfile UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
-    const ReceiverCommandSafetyLevel safety_level,
-    std::vector<UbxCfgLayer> layers,
-    std::vector<UbloxInterfacePort> output_ports)
+UbloxConfigProfile
+UbloxConfigProfileBuilder::BuildUbloxRoverProfile(const ReceiverCommandSafetyLevel safety_level,
+                                                  std::vector<UbxCfgLayer> layers,
+                                                  std::vector<UbloxInterfacePort> output_ports)
 {
   UbloxConfigProfile profile;
   profile.config_kind = ReceiverConfigProfileKind::kRover;
@@ -446,10 +441,10 @@ UbloxConfigProfile UbloxConfigProfileBuilder::BuildUbloxRoverProfile(
   return profile;
 }
 
-UbloxConfigProfile UbloxConfigProfileBuilder::BuildUbloxBaseProfile(
-    const ReceiverCommandSafetyLevel safety_level,
-    std::vector<UbxCfgLayer> layers,
-    std::vector<UbloxInterfacePort> output_ports)
+UbloxConfigProfile
+UbloxConfigProfileBuilder::BuildUbloxBaseProfile(const ReceiverCommandSafetyLevel safety_level,
+                                                 std::vector<UbxCfgLayer> layers,
+                                                 std::vector<UbloxInterfacePort> output_ports)
 {
   UbloxConfigProfile profile;
   profile.config_kind = ReceiverConfigProfileKind::kBase;

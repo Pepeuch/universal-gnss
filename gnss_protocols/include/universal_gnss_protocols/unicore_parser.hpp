@@ -38,37 +38,33 @@ universal_gnss::GnssRuntimeState UnicorePvtslnToRuntimeState(const UnicorePvtsln
 
 universal_gnss::GnssRuntimeState UnicoreBestNavToRuntimeState(const UnicoreBestNavRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(
-    const UnicoreBestNavBRecord& record);
+universal_gnss::GnssRuntimeState UnicoreBestNavBToRuntimeState(const UnicoreBestNavBRecord& record);
 
-universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(
-    const UnicorePvtslnBRecord& record);
+universal_gnss::GnssRuntimeState UnicorePvtslnBToRuntimeState(const UnicorePvtslnBRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreRtkStatusToRuntimeState(
-    const UnicoreRtkStatusRecord& record);
+universal_gnss::GnssRuntimeState
+UnicoreRtkStatusToRuntimeState(const UnicoreRtkStatusRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreRtcmStatusToRuntimeState(
-    const UnicoreRtcmStatusRecord& record);
+universal_gnss::GnssRuntimeState
+UnicoreRtcmStatusToRuntimeState(const UnicoreRtcmStatusRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreBestSatToRuntimeState(
-    const UnicoreBestSatRecord& record);
+universal_gnss::GnssRuntimeState UnicoreBestSatToRuntimeState(const UnicoreBestSatRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(
-    const UnicoreSatsInfoRecord& record);
+universal_gnss::GnssRuntimeState UnicoreSatsInfoToRuntimeState(const UnicoreSatsInfoRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreJamStatusToRuntimeState(
-    const UnicoreJamStatusRecord& record);
+universal_gnss::GnssRuntimeState
+UnicoreJamStatusToRuntimeState(const UnicoreJamStatusRecord& record);
 
-universal_gnss::GnssRuntimeState UnicoreFreqJamStatusToRuntimeState(
-    const UnicoreFreqJamStatusRecord& record);
+universal_gnss::GnssRuntimeState
+UnicoreFreqJamStatusToRuntimeState(const UnicoreFreqJamStatusRecord& record);
 
-universal_gnss::GnssDiagnosticEvent UnicoreJamStatusToDiagnosticEvent(
-    const UnicoreJamStatusRecord& record);
+universal_gnss::GnssDiagnosticEvent
+UnicoreJamStatusToDiagnosticEvent(const UnicoreJamStatusRecord& record);
 
-universal_gnss::GnssDiagnosticEvent UnicoreFreqJamStatusToDiagnosticEvent(
-    const UnicoreFreqJamStatusRecord& record);
+universal_gnss::GnssDiagnosticEvent
+UnicoreFreqJamStatusToDiagnosticEvent(const UnicoreFreqJamStatusRecord& record);
 
-universal_gnss::GnssDiagnosticEvent UnicoreHwStatusToDiagnosticEvent(
-    const UnicoreHwStatusRecord& record);
+universal_gnss::GnssDiagnosticEvent
+UnicoreHwStatusToDiagnosticEvent(const UnicoreHwStatusRecord& record);
 
 }  // namespace universal_gnss_protocols

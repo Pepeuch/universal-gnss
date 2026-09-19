@@ -125,12 +125,12 @@ void AppendText(std::vector<std::uint8_t>& payload,
   }
 }
 
-std::vector<std::uint8_t> BuildRtcmAntennaDescriptorPayload(
-    const std::uint16_t message_type,
-    const std::uint16_t station_id,
-    const std::string& descriptor,
-    const std::uint8_t setup_id,
-    const std::optional<std::string>& serial_number = std::nullopt)
+std::vector<std::uint8_t>
+BuildRtcmAntennaDescriptorPayload(const std::uint16_t message_type,
+                                  const std::uint16_t station_id,
+                                  const std::string& descriptor,
+                                  const std::uint8_t setup_id,
+                                  const std::optional<std::string>& serial_number = std::nullopt)
 {
   std::vector<std::uint8_t> payload;
   std::size_t bit_offset = 0u;
@@ -320,8 +320,7 @@ void TestClassificationHelpers(TestContext& ctx)
              "1097 should classify as an MSM message");
   ctx.Expect(universal_gnss_protocols::IsRtcmMsmMessage(1127u),
              "1127 should classify as an MSM message");
-  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1077u) ==
-                 RtcmConstellation::kGps,
+  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1077u) == RtcmConstellation::kGps,
              "1077 should classify as GPS MSM");
   ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1087u) ==
                  RtcmConstellation::kGlonass,
@@ -329,11 +328,9 @@ void TestClassificationHelpers(TestContext& ctx)
   ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1097u) ==
                  RtcmConstellation::kGalileo,
              "1097 should classify as Galileo MSM");
-  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1127u) ==
-                 RtcmConstellation::kBeiDou,
+  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1127u) == RtcmConstellation::kBeiDou,
              "1127 should classify as BeiDou MSM");
-  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1137u) ==
-                 RtcmConstellation::kNavIc,
+  ctx.Expect(universal_gnss_protocols::GetRtcmMsmConstellation(1137u) == RtcmConstellation::kNavIc,
              "1137 should classify as NavIC MSM");
   ctx.Expect(!universal_gnss_protocols::IsRtcmMsmMessage(1005u),
              "1005 should not classify as an MSM message");
@@ -341,8 +338,8 @@ void TestClassificationHelpers(TestContext& ctx)
 
 void TestFrameParsingBehavior(TestContext& ctx)
 {
-  const auto info_1005 = universal_gnss_protocols::ParseRtcmMessageInfo(
-      MakeValidRtcmFrame(1005u, 42));
+  const auto info_1005 =
+      universal_gnss_protocols::ParseRtcmMessageInfo(MakeValidRtcmFrame(1005u, 42));
   ctx.Expect(info_1005.status == ParserStatus::kRecordReady && info_1005.record.has_value(),
              "valid 1005 frame should parse successfully");
   if (info_1005.record.has_value())
@@ -351,12 +348,10 @@ void TestFrameParsingBehavior(TestContext& ctx)
                "parsed RTCM info should expose the 1005 message type");
     ctx.Expect(info_1005.record->is_station_arp,
                "parsed RTCM info should classify 1005 as a station ARP message");
-    ctx.Expect(!info_1005.record->is_msm,
-               "parsed RTCM info should not classify 1005 as MSM");
+    ctx.Expect(!info_1005.record->is_msm, "parsed RTCM info should not classify 1005 as MSM");
   }
 
-  const auto info_1077 = universal_gnss_protocols::ParseRtcmMessageInfo(
-      MakeValidRtcmFrame(1077u));
+  const auto info_1077 = universal_gnss_protocols::ParseRtcmMessageInfo(MakeValidRtcmFrame(1077u));
   ctx.Expect(info_1077.status == ParserStatus::kRecordReady && info_1077.record.has_value(),
              "valid 1077 frame should parse successfully");
   if (info_1077.record.has_value())
@@ -378,16 +373,7 @@ void TestFrameParsingBehavior(TestContext& ctx)
 void TestGlonassCodePhaseBiasParsing(TestContext& ctx)
 {
   RtcmFrame frame = MakeValidRtcmFrame(1230u, 123456789LL);
-  frame.payload = BuildRtcm1230Payload(42u,
-                                       true,
-                                       true,
-                                       false,
-                                       true,
-                                       true,
-                                       10,
-                                       std::nullopt,
-                                       -5,
-                                       7);
+  frame.payload = BuildRtcm1230Payload(42u, true, true, false, true, true, 10, std::nullopt, -5, 7);
 
   const auto parsed = universal_gnss_protocols::ParseRtcmGlonassCodePhaseBias(frame);
   ctx.Expect(parsed.status == ParserStatus::kRecordReady && parsed.record.has_value(),
@@ -413,16 +399,8 @@ void TestGlonassCodePhaseBiasParsing(TestContext& ctx)
 void TestGlonassCodePhaseBiasRejectsTruncatedPayload(TestContext& ctx)
 {
   RtcmFrame frame = MakeValidRtcmFrame(1230u);
-  frame.payload = BuildRtcm1230Payload(42u,
-                                       true,
-                                       true,
-                                       true,
-                                       false,
-                                       false,
-                                       10,
-                                       12,
-                                       std::nullopt,
-                                       std::nullopt);
+  frame.payload =
+      BuildRtcm1230Payload(42u, true, true, true, false, false, 10, 12, std::nullopt, std::nullopt);
   frame.payload.pop_back();
 
   const auto parsed = universal_gnss_protocols::ParseRtcmGlonassCodePhaseBias(frame);
@@ -433,8 +411,7 @@ void TestGlonassCodePhaseBiasRejectsTruncatedPayload(TestContext& ctx)
 void TestAntennaDescriptorParsing(TestContext& ctx)
 {
   RtcmFrame descriptor = MakeValidRtcmFrame(1007u);
-  descriptor.payload = BuildRtcmAntennaDescriptorPayload(
-      1007u, 42u, "TRM59800.00", 3u);
+  descriptor.payload = BuildRtcmAntennaDescriptorPayload(1007u, 42u, "TRM59800.00", 3u);
   const auto parsed_descriptor = universal_gnss_protocols::ParseRtcmAntennaDescriptor(descriptor);
   ctx.Expect(parsed_descriptor.status == ParserStatus::kRecordReady &&
                  parsed_descriptor.record.has_value(),
@@ -449,8 +426,7 @@ void TestAntennaDescriptorParsing(TestContext& ctx)
   }
 
   RtcmFrame serial = MakeValidRtcmFrame(1008u);
-  serial.payload = BuildRtcmAntennaDescriptorPayload(
-      1008u, 42u, "TRM59800.00", 3u, "12345");
+  serial.payload = BuildRtcmAntennaDescriptorPayload(1008u, 42u, "TRM59800.00", 3u, "12345");
   const auto parsed_serial = universal_gnss_protocols::ParseRtcmAntennaDescriptor(serial);
   ctx.Expect(parsed_serial.status == ParserStatus::kRecordReady &&
                  parsed_serial.record.has_value() &&
@@ -466,16 +442,14 @@ void TestAntennaDescriptorRejectsInvalidPayload(TestContext& ctx)
              "non-1007/1008 RTCM messages should not parse as antenna descriptors");
 
   RtcmFrame truncated = MakeValidRtcmFrame(1008u);
-  truncated.payload = BuildRtcmAntennaDescriptorPayload(
-      1008u, 42u, "TRM59800.00", 3u, "12345");
+  truncated.payload = BuildRtcmAntennaDescriptorPayload(1008u, 42u, "TRM59800.00", 3u, "12345");
   truncated.payload.pop_back();
   ctx.Expect(universal_gnss_protocols::ParseRtcmAntennaDescriptor(truncated).status ==
                  ParserStatus::kInvalidData,
              "truncated RTCM 1008 descriptor fields should be rejected");
 
   RtcmFrame overlength = MakeValidRtcmFrame(1007u);
-  overlength.payload = BuildRtcmAntennaDescriptorPayload(
-      1007u, 42u, std::string(32u, 'A'), 3u);
+  overlength.payload = BuildRtcmAntennaDescriptorPayload(1007u, 42u, std::string(32u, 'A'), 3u);
   ctx.Expect(universal_gnss_protocols::ParseRtcmAntennaDescriptor(overlength).status ==
                  ParserStatus::kInvalidData,
              "RTCM antenna descriptor lengths above 31 characters should be rejected");
@@ -506,21 +480,18 @@ void TestGpsMsmSummaryParsing(TestContext& ctx)
     return;
   }
 
-  ctx.Expect(parsed.record->message_type == 1077u &&
-                 parsed.record->station_id == 42u &&
+  ctx.Expect(parsed.record->message_type == 1077u && parsed.record->station_id == 42u &&
                  parsed.record->constellation == RtcmConstellation::kGps &&
                  parsed.record->msm_variant == 7u,
              "GPS MSM7 summary should preserve type, station id, constellation, and variant");
-  ctx.Expect(parsed.record->multiple_message &&
-                 parsed.record->issue_of_data_station == 5u &&
+  ctx.Expect(parsed.record->multiple_message && parsed.record->issue_of_data_station == 5u &&
                  parsed.record->session_transmission_time == 17u &&
                  parsed.record->clock_steering_indicator == 2u &&
                  parsed.record->external_clock_indicator == 1u &&
                  parsed.record->divergence_free_smoothing &&
                  parsed.record->smoothing_interval == 4u,
              "GPS MSM7 summary should preserve common header metadata");
-  ctx.Expect(parsed.record->satellite_count == 2u &&
-                 parsed.record->signal_count == 2u &&
+  ctx.Expect(parsed.record->satellite_count == 2u && parsed.record->signal_count == 2u &&
                  parsed.record->cell_count == 3u,
              "GPS MSM7 summary should count satellites, signals, and populated cells");
 }
@@ -550,13 +521,11 @@ void TestGlonassMsmSummaryParsing(TestContext& ctx)
     return;
   }
 
-  ctx.Expect(parsed.record->message_type == 1087u &&
-                 parsed.record->station_id == 7u &&
+  ctx.Expect(parsed.record->message_type == 1087u && parsed.record->station_id == 7u &&
                  parsed.record->constellation == RtcmConstellation::kGlonass &&
                  parsed.record->msm_variant == 7u,
              "GLONASS MSM7 summary should preserve type, station id, constellation, and variant");
-  ctx.Expect(parsed.record->satellite_count == 1u &&
-                 parsed.record->signal_count == 3u &&
+  ctx.Expect(parsed.record->satellite_count == 1u && parsed.record->signal_count == 3u &&
                  parsed.record->cell_count == 2u,
              "GLONASS MSM7 summary should count satellites, signals, and populated cells");
 }
@@ -567,19 +536,8 @@ void TestMsmSummaryRejectsTruncatedPayload(TestContext& ctx)
   {
     const std::uint16_t message_type = static_cast<std::uint16_t>(1070u + variant);
     RtcmFrame frame = MakeValidRtcmFrame(message_type);
-    frame.payload = BuildRtcmMsmPayload(message_type,
-                                        42u,
-                                        123456u,
-                                        false,
-                                        1u,
-                                        1u,
-                                        0u,
-                                        0u,
-                                        false,
-                                        0u,
-                                        {1u},
-                                        {1u},
-                                        {true});
+    frame.payload = BuildRtcmMsmPayload(
+        message_type, 42u, 123456u, false, 1u, 1u, 0u, 0u, false, 0u, {1u}, {1u}, {true});
 
     const auto complete = universal_gnss_protocols::ParseRtcmMsmSummary(frame);
     ctx.Expect(complete.status == ParserStatus::kRecordReady,

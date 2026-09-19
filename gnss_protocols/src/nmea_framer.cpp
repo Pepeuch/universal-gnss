@@ -27,9 +27,8 @@ NmeaSentenceFramer::NmeaSentenceFramer(std::size_t max_frame_length)
 {
 }
 
-ParserResult<NmeaSentence> NmeaSentenceFramer::PushByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<NmeaSentence>
+NmeaSentenceFramer::PushByte(std::uint8_t byte, std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (buffer_.empty())
   {
@@ -117,8 +116,8 @@ NmeaSentence NmeaSentenceFramer::BuildSentence() const
     }
   }
 
-  sentence.checksum_status = ValidateNmeaChecksum(
-      frame, &sentence.reported_checksum, &sentence.computed_checksum);
+  sentence.checksum_status =
+      ValidateNmeaChecksum(frame, &sentence.reported_checksum, &sentence.computed_checksum);
   return sentence;
 }
 

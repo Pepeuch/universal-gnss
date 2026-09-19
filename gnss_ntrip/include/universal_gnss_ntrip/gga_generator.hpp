@@ -8,8 +8,8 @@ namespace universal_gnss_ntrip
 using GgaGenerationError = GgaSentenceBuildError;
 using GgaGenerationResult = GgaSentenceBuildResult;
 
-inline GgaGenerationResult GenerateGgaFromRuntimeState(
-    const universal_gnss::GnssRuntimeState& state)
+inline GgaGenerationResult
+GenerateGgaFromRuntimeState(const universal_gnss::GnssRuntimeState& state)
 {
   return BuildNmeaGgaSentence(state);
 }

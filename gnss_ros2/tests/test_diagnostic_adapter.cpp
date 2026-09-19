@@ -4,18 +4,17 @@
 #include <gtest/gtest.h>
 
 #include "diagnostic_msgs/msg/diagnostic_status.hpp"
+#include "rtcm_diagnostic_projection.hpp"
 #include "universal_gnss/gnss_diagnostic.hpp"
 #include "universal_gnss/gnss_health.hpp"
 #include "universal_gnss_protocols/rtcm_correction_monitor.hpp"
 #include "universal_gnss_ros2/diagnostic_adapter.hpp"
-#include "rtcm_diagnostic_projection.hpp"
 
 namespace
 {
 
-const diagnostic_msgs::msg::KeyValue* FindKeyValue(
-    const diagnostic_msgs::msg::DiagnosticStatus& status,
-    const std::string& key)
+const diagnostic_msgs::msg::KeyValue*
+FindKeyValue(const diagnostic_msgs::msg::DiagnosticStatus& status, const std::string& key)
 {
   for (const auto& entry : status.values)
   {
@@ -54,8 +53,7 @@ TEST(DiagnosticAdapterTest, MapsSingleDiagnosticEventWithPortableMetadata)
   event.timestamp_ns = 4200000007LL;
   event.source = "ublox";
 
-  const auto status =
-      universal_gnss_ros2::ToDiagnosticStatusMessage(event, "gnss", "receiver-1");
+  const auto status = universal_gnss_ros2::ToDiagnosticStatusMessage(event, "gnss", "receiver-1");
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
   EXPECT_EQ(status.name, "gnss/antenna_open");
@@ -144,8 +142,8 @@ TEST(DiagnosticAdapterTest, DecodedButNotValidSemanticObservationIsNotAWarning)
   observation.valid = false;
   observation.decode_success_count = 1u;
 
-  const auto status =
-      universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(observation, "universal_gnss", "gnss");
+  const auto status = universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(
+      observation, "universal_gnss", "gnss");
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::OK);
   EXPECT_EQ(status.name, "universal_gnss/rtcm_semantic/glonass_code_phase_bias");
@@ -162,8 +160,8 @@ TEST(DiagnosticAdapterTest, MalformedSemanticObservationRemainsAWarning)
   observation.valid = true;
   observation.malformed_count = 1u;
 
-  const auto status =
-      universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(observation, "universal_gnss", "gnss");
+  const auto status = universal_gnss_ros2::ToRtcmSemanticDiagnosticStatusMessage(
+      observation, "universal_gnss", "gnss");
 
   EXPECT_EQ(status.level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
 }

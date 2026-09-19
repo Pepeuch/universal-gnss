@@ -188,9 +188,10 @@ void TestRtkFloatAndFixedMapping(TestContext& ctx)
     return;
   }
 
-  const GnssRuntimeState float_state = universal_gnss_protocols::UbxNavPvtToRuntimeState(*float_record);
-  ctx.Expect(float_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
-                                     universal_gnss::GnssRtkMode::kFloat),
+  const GnssRuntimeState float_state =
+      universal_gnss_protocols::UbxNavPvtToRuntimeState(*float_record);
+  ctx.Expect(float_state.rtk_mode ==
+                 std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFloat),
              "carrier solution 1 should map to RTK float");
   ctx.Expect(float_state.differential_corrections == std::optional<bool>(false) &&
                  float_state.corrections_active == std::optional<bool>(false),
@@ -206,9 +207,10 @@ void TestRtkFloatAndFixedMapping(TestContext& ctx)
     return;
   }
 
-  const GnssRuntimeState fixed_state = universal_gnss_protocols::UbxNavPvtToRuntimeState(*fixed_record);
-  ctx.Expect(fixed_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
-                                     universal_gnss::GnssRtkMode::kFixed),
+  const GnssRuntimeState fixed_state =
+      universal_gnss_protocols::UbxNavPvtToRuntimeState(*fixed_record);
+  ctx.Expect(fixed_state.rtk_mode ==
+                 std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFixed),
              "carrier solution 2 should map to RTK fixed");
   ctx.Expect(fixed_state.fix_type == GnssFixType::kFix,
              "carrier solution should not replace the generic fix type mapping");
@@ -223,7 +225,8 @@ void TestNoFixMapping(TestContext& ctx)
   payload[20u] = static_cast<std::uint8_t>(UbxNavPvtFixType::kNoFix);
   payload[21u] = 0x00u;
   payload[23u] = 0u;
-  const auto result = universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, payload));
+  const auto result =
+      universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, payload));
 
   ctx.Expect(result.record.has_value(), "no-fix test requires a parsed NAV-PVT record");
   if (!result.record.has_value())
@@ -236,8 +239,8 @@ void TestNoFixMapping(TestContext& ctx)
              "fixType 0 should map to no-fix");
   ctx.Expect(!state.latitude_deg.has_value() && !state.altitude_m.has_value(),
              "no-fix mapping should not invent valid position values");
-  ctx.Expect(state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
-                                   universal_gnss::GnssRtkMode::kNone),
+  ctx.Expect(state.rtk_mode ==
+                 std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kNone),
              "no carrier solution should map to explicit RTK none");
   ctx.Expect(state.differential_corrections == std::optional<bool>(false) &&
                  state.corrections_active == std::optional<bool>(false),
@@ -247,7 +250,8 @@ void TestNoFixMapping(TestContext& ctx)
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
   const UbxFrame wrong_message = BuildUbxFrame(0x01u, 0x35u, std::vector<std::uint8_t>(8u, 0u));
-  ctx.Expect(universal_gnss_protocols::ParseUbxNavPvt(wrong_message).status == ParserStatus::kSkipped,
+  ctx.Expect(universal_gnss_protocols::ParseUbxNavPvt(wrong_message).status ==
+                 ParserStatus::kSkipped,
              "wrong UBX class/id should be skipped");
 
   UbxFrame short_payload = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(91u, 0u));
@@ -266,7 +270,8 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
 {
   auto payload = MakeNavPvtPayload();
   payload[21u] = static_cast<std::uint8_t>(0x01u | (1u << 5));
-  const auto result = universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, payload, 2222));
+  const auto result =
+      universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, payload, 2222));
 
   ctx.Expect(result.record.has_value(), "runtime mapping test requires a parsed NAV-PVT record");
   if (!result.record.has_value())
@@ -300,26 +305,26 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
                  state.vertical_accuracy_m == std::optional<float>(0.5f) &&
                  state.satellites_used == std::optional<std::uint16_t>(18u),
              "runtime mapping should convert accuracy and numSV");
-  ctx.Expect(HasCapability(state, GnssCapability::kHeading) &&
-                 HasValueAvailable(state, GnssCapability::kHeading) &&
-                 state.heading_deg.has_value() && NearlyEqual(*state.heading_deg, 123.45678) &&
-                 state.heading_accuracy_deg.has_value() &&
-                 NearlyEqual(*state.heading_accuracy_deg, 0.05),
-             "runtime mapping should expose heading and heading accuracy only when headVehValid is set");
+  ctx.Expect(
+      HasCapability(state, GnssCapability::kHeading) &&
+          HasValueAvailable(state, GnssCapability::kHeading) && state.heading_deg.has_value() &&
+          NearlyEqual(*state.heading_deg, 123.45678) && state.heading_accuracy_deg.has_value() &&
+          NearlyEqual(*state.heading_accuracy_deg, 0.05),
+      "runtime mapping should expose heading and heading accuracy only when headVehValid is set");
 }
 
 void TestInvalidFixClearsPreviouslyMappedValues(TestContext& ctx)
 {
   auto valid_payload = MakeNavPvtPayload();
   valid_payload[21u] = static_cast<std::uint8_t>(0x01u | (1u << 5));
-  const auto valid_result = universal_gnss_protocols::ParseUbxNavPvt(
-      BuildUbxFrame(0x01u, 0x07u, valid_payload, 3000));
+  const auto valid_result =
+      universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, valid_payload, 3000));
 
   auto invalid_payload = MakeNavPvtPayload();
   invalid_payload[20u] = static_cast<std::uint8_t>(UbxNavPvtFixType::kNoFix);
   invalid_payload[21u] = 0x00u;
-  const auto invalid_result = universal_gnss_protocols::ParseUbxNavPvt(
-      BuildUbxFrame(0x01u, 0x07u, invalid_payload, 3001));
+  const auto invalid_result =
+      universal_gnss_protocols::ParseUbxNavPvt(BuildUbxFrame(0x01u, 0x07u, invalid_payload, 3001));
 
   ctx.Expect(valid_result.record.has_value() && invalid_result.record.has_value(),
              "runtime invalidation test requires two parsed NAV-PVT records");
@@ -329,10 +334,8 @@ void TestInvalidFixClearsPreviouslyMappedValues(TestContext& ctx)
   }
 
   universal_gnss::GnssRuntimeAggregator aggregator;
-  aggregator.Merge(
-      universal_gnss_protocols::UbxNavPvtToRuntimeState(*valid_result.record));
-  aggregator.Merge(
-      universal_gnss_protocols::UbxNavPvtToRuntimeState(*invalid_result.record));
+  aggregator.Merge(universal_gnss_protocols::UbxNavPvtToRuntimeState(*valid_result.record));
+  aggregator.Merge(universal_gnss_protocols::UbxNavPvtToRuntimeState(*invalid_result.record));
 
   const auto& state = aggregator.state();
   ctx.Expect(!state.fix_valid && state.fix_type == GnssFixType::kNoFix,
@@ -340,8 +343,7 @@ void TestInvalidFixClearsPreviouslyMappedValues(TestContext& ctx)
   ctx.Expect(!state.latitude_deg.has_value() && !state.longitude_deg.has_value() &&
                  !state.altitude_m.has_value(),
              "invalid NAV-PVT position validity must clear cached coordinates");
-  ctx.Expect(!state.horizontal_accuracy_m.has_value() &&
-                 !state.vertical_accuracy_m.has_value(),
+  ctx.Expect(!state.horizontal_accuracy_m.has_value() && !state.vertical_accuracy_m.has_value(),
              "invalid NAV-PVT position validity must clear position accuracy");
   ctx.Expect(!state.heading_deg.has_value() && !state.heading_accuracy_deg.has_value(),
              "invalid NAV-PVT heading/position validity must clear cached heading values");

@@ -18,8 +18,8 @@ using universal_gnss::GnssFixType;
 using universal_gnss::GnssRtkMode;
 using universal_gnss::GnssRuntimeState;
 using universal_gnss_ntrip::BuildNmeaGgaSentence;
-using universal_gnss_ntrip::GgaSentenceBuildError;
 using universal_gnss_ntrip::GgaSentenceBuilderOptions;
+using universal_gnss_ntrip::GgaSentenceBuildError;
 using universal_gnss_ntrip::GgaSentenceTalker;
 using universal_gnss_ntrip::MapRuntimeStateToGgaFixQuality;
 using universal_gnss_protocols::ChecksumStatus;
@@ -92,8 +92,10 @@ void TestCoordinateAndTimeFormatting(TestContext& ctx)
     return;
   }
 
-  ctx.Expect(generated.sentence.find("$GNGGA,123456.78,4807.03800,N,01131.00000,E,1,08,0.9,545.4,M") == 0,
-             "generated GGA should format talker, UTC, coordinates, quality, and altitude deterministically");
+  ctx.Expect(
+      generated.sentence.find("$GNGGA,123456.78,4807.03800,N,01131.00000,E,1,08,0.9,545.4,M") == 0,
+      "generated GGA should format talker, UTC, coordinates, quality, and altitude "
+      "deterministically");
 }
 
 void TestHemisphereSigns(TestContext& ctx)
@@ -114,8 +116,7 @@ void TestHemisphereSigns(TestContext& ctx)
              "generated GGA should encode hemisphere signs");
 
   const auto parsed = universal_gnss_protocols::ParseNmeaGga(FrameSentence(generated.sentence));
-  ctx.Expect(parsed.record.has_value() &&
-                 parsed.record->latitude_deg.has_value() &&
+  ctx.Expect(parsed.record.has_value() && parsed.record->latitude_deg.has_value() &&
                  parsed.record->longitude_deg.has_value() &&
                  NearlyEqual(*parsed.record->latitude_deg, -49.2741667) &&
                  NearlyEqual(*parsed.record->longitude_deg, -123.1853333),

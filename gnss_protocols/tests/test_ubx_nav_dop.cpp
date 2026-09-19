@@ -44,13 +44,17 @@ bool NearlyEqual(const double lhs, const double rhs, const double tolerance = 1e
   return std::fabs(lhs - rhs) <= tolerance;
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8) & 0xFFu);
@@ -124,26 +128,21 @@ void TestValidNavDopParsing(TestContext& ctx)
   ctx.Expect(record.timestamp_ns == std::optional<std::int64_t>(999),
              "NAV-DOP should preserve the framing timestamp");
   ctx.Expect(record.i_tow_ms == 567890u, "NAV-DOP should decode iTOW");
-  ctx.Expect(NearlyEqual(record.g_dop, 1.45) &&
-                 NearlyEqual(record.p_dop, 1.23) &&
-                 NearlyEqual(record.t_dop, 0.99) &&
-                 NearlyEqual(record.v_dop, 0.87) &&
-                 NearlyEqual(record.h_dop, 0.65) &&
-                 NearlyEqual(record.n_dop, 1.11) &&
+  ctx.Expect(NearlyEqual(record.g_dop, 1.45) && NearlyEqual(record.p_dop, 1.23) &&
+                 NearlyEqual(record.t_dop, 0.99) && NearlyEqual(record.v_dop, 0.87) &&
+                 NearlyEqual(record.h_dop, 0.65) && NearlyEqual(record.n_dop, 1.11) &&
                  NearlyEqual(record.e_dop, 1.09),
              "NAV-DOP should scale all DOP values from 0.01 units");
 }
 
 void TestMalformedOrWrongFrames(TestContext& ctx)
 {
-  const UbxFrame wrong_message =
-      BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(18u, 0u));
+  const UbxFrame wrong_message = BuildUbxFrame(0x01u, 0x07u, std::vector<std::uint8_t>(18u, 0u));
   ctx.Expect(universal_gnss_protocols::ParseUbxNavDop(wrong_message).status ==
                  ParserStatus::kSkipped,
              "wrong UBX class/id should be skipped");
 
-  const UbxFrame short_payload =
-      BuildUbxFrame(0x01u, 0x04u, std::vector<std::uint8_t>(17u, 0u));
+  const UbxFrame short_payload = BuildUbxFrame(0x01u, 0x04u, std::vector<std::uint8_t>(17u, 0u));
   ctx.Expect(universal_gnss_protocols::ParseUbxNavDop(short_payload).status ==
                  ParserStatus::kInvalidData,
              "wrong NAV-DOP payload length should be rejected");
@@ -174,15 +173,12 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   ctx.Expect(HasValueAvailable(state, GnssCapability::kHdop) &&
                  HasValueAvailable(state, GnssCapability::kVdop),
              "runtime mapping should expose present NAV-DOP values");
-  ctx.Expect(state.hdop.has_value() && NearlyEqual(*state.hdop, 0.65) &&
-                 state.vdop.has_value() && NearlyEqual(*state.vdop, 0.87),
+  ctx.Expect(state.hdop.has_value() && NearlyEqual(*state.hdop, 0.65) && state.vdop.has_value() &&
+                 NearlyEqual(*state.vdop, 0.87),
              "runtime mapping should project hDOP and vDOP conservatively");
-  ctx.Expect(!state.fix_valid &&
-                 state.fix_type == universal_gnss::GnssFixType::kUnknown &&
-                 !state.latitude_deg.has_value() &&
-                 !state.longitude_deg.has_value() &&
-                 !state.horizontal_accuracy_m.has_value() &&
-                 !state.satellites_used.has_value() &&
+  ctx.Expect(!state.fix_valid && state.fix_type == universal_gnss::GnssFixType::kUnknown &&
+                 !state.latitude_deg.has_value() && !state.longitude_deg.has_value() &&
+                 !state.horizontal_accuracy_m.has_value() && !state.satellites_used.has_value() &&
                  !state.mean_cn0_db_hz.has_value(),
              "NAV-DOP should not invent fix, position, accuracy, satellite, or CN0 fields");
 }

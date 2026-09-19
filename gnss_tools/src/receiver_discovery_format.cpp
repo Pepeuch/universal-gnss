@@ -2,9 +2,11 @@
 
 #include <sstream>
 
-namespace universal_gnss_tools {
+namespace universal_gnss_tools
+{
 
-namespace {
+namespace
+{
 
 std::string EscapeJson(const std::string& input)
 {
@@ -14,24 +16,24 @@ std::string EscapeJson(const std::string& input)
   {
     switch (ch)
     {
-    case '\\':
-      escaped += "\\\\";
-      break;
-    case '"':
-      escaped += "\\\"";
-      break;
-    case '\n':
-      escaped += "\\n";
-      break;
-    case '\r':
-      escaped += "\\r";
-      break;
-    case '\t':
-      escaped += "\\t";
-      break;
-    default:
-      escaped.push_back(ch);
-      break;
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(ch);
+        break;
     }
   }
   return escaped;
@@ -49,7 +51,7 @@ void AppendEvidenceText(std::ostringstream& output,
          << " bytes:" << evidence.bytes_read;
 }
 
-} // namespace
+}  // namespace
 
 std::string
 FormatReceiverDiscoveryText(const std::vector<universal_gnss_driver::ReceiverProbeResult>& results)
@@ -118,7 +120,8 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
     if (result.stable_id.has_value())
     {
       output << '"' << EscapeJson(*result.stable_id) << '"';
-    } else
+    }
+    else
     {
       output << "null";
     }
@@ -127,7 +130,8 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
     if (result.identity.receiver_identity.has_value())
     {
       output << '"' << EscapeJson(*result.identity.receiver_identity) << '"';
-    } else
+    }
+    else
     {
       output << "null";
     }
@@ -136,7 +140,8 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
     if (result.identity.model.has_value())
     {
       output << '"' << EscapeJson(*result.identity.model) << '"';
-    } else
+    }
+    else
     {
       output << "null";
     }
@@ -145,7 +150,8 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
     if (result.identity.firmware_version.has_value())
     {
       output << '"' << EscapeJson(*result.identity.firmware_version) << '"';
-    } else
+    }
+    else
     {
       output << "null";
     }
@@ -160,7 +166,8 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
     if (result.selected_baud.has_value())
     {
       output << *result.selected_baud;
-    } else
+    }
+    else
     {
       output << "null";
     }
@@ -195,4 +202,4 @@ FormatReceiverDiscoveryJson(const std::vector<universal_gnss_driver::ReceiverPro
   return output.str();
 }
 
-} // namespace universal_gnss_tools
+}  // namespace universal_gnss_tools

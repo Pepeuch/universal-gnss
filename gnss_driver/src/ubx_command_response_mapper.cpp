@@ -37,8 +37,7 @@ std::string BuildAckMessage(const universal_gnss_protocols::UbxAckRecord& record
 
 }  // namespace
 
-std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(
-    const ReceiverCommand& command)
+std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(const ReceiverCommand& command)
 {
   if (command.payload.kind != ReceiverCommandPayloadKind::kBinary)
   {
@@ -46,18 +45,15 @@ std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(
   }
 
   const auto& bytes = command.payload.binary;
-  if (bytes.size() < (kUbxHeaderSize + kUbxChecksumSize) ||
-      bytes[0] != kUbxSync1 ||
+  if (bytes.size() < (kUbxHeaderSize + kUbxChecksumSize) || bytes[0] != kUbxSync1 ||
       bytes[1] != kUbxSync2)
   {
     return std::nullopt;
   }
 
   const std::size_t payload_size =
-      static_cast<std::size_t>(bytes[4u]) |
-      (static_cast<std::size_t>(bytes[5u]) << 8u);
-  const std::size_t expected_frame_size =
-      kUbxHeaderSize + payload_size + kUbxChecksumSize;
+      static_cast<std::size_t>(bytes[4u]) | (static_cast<std::size_t>(bytes[5u]) << 8u);
+  const std::size_t expected_frame_size = kUbxHeaderSize + payload_size + kUbxChecksumSize;
   if (bytes.size() != expected_frame_size)
   {
     return std::nullopt;
@@ -66,8 +62,8 @@ std::optional<UbxMessageIdentity> TryGetUbxCommandMessageIdentity(
   return UbxMessageIdentity{bytes[2u], bytes[3u]};
 }
 
-ReceiverCommandResponse MapUbxAckRecordToReceiverCommandResponse(
-    const universal_gnss_protocols::UbxAckRecord& record)
+ReceiverCommandResponse
+MapUbxAckRecordToReceiverCommandResponse(const universal_gnss_protocols::UbxAckRecord& record)
 {
   ReceiverCommandResponse response;
   response.kind = record.kind == universal_gnss_protocols::UbxAckMessageKind::kAck

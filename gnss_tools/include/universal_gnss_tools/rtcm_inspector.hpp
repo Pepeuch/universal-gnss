@@ -35,8 +35,7 @@ struct RtcmInspectionSummary
   std::size_t malformed_events{0};
   std::size_t truncated_frames{0};
   std::map<std::uint16_t, std::size_t> counts_by_message_type{};
-  std::map<universal_gnss_protocols::RtcmConstellation, std::size_t>
-      msm_counts_by_constellation{};
+  std::map<universal_gnss_protocols::RtcmConstellation, std::size_t> msm_counts_by_constellation{};
   universal_gnss_protocols::RtcmSemanticObservations semantic_observations{};
   std::optional<universal_gnss_protocols::RtcmBaseStationArpRecord> last_base_station_arp{};
 };
@@ -47,17 +46,14 @@ struct RtcmInspectionResult
   RtcmInspectionSummary summary{};
 };
 
-RtcmInspectionResult InspectRtcmBytes(
-    const std::vector<std::uint8_t>& bytes,
-    bool include_frames = true);
+RtcmInspectionResult InspectRtcmBytes(const std::vector<std::uint8_t>& bytes,
+                                      bool include_frames = true);
 
 RtcmInspectionResult InspectRtcmStream(std::istream& input, bool include_frames = true);
 
-std::string DescribeRtcmConstellation(
-    universal_gnss_protocols::RtcmConstellation constellation);
+std::string DescribeRtcmConstellation(universal_gnss_protocols::RtcmConstellation constellation);
 
-std::string DescribeRtcmMessageInfo(
-    const universal_gnss_protocols::RtcmMessageInfo& message_info);
+std::string DescribeRtcmMessageInfo(const universal_gnss_protocols::RtcmMessageInfo& message_info);
 
 std::string DescribeChecksumStatus(universal_gnss_protocols::ChecksumStatus status);
 
@@ -65,15 +61,10 @@ std::string FormatRtcmSemanticObservationText(
     const universal_gnss_protocols::RtcmSemanticObservation& observation);
 
 void WriteRtcmSemanticObservationsJson(
-    std::ostream& output,
-    const universal_gnss_protocols::RtcmSemanticObservations& observations);
+    std::ostream& output, const universal_gnss_protocols::RtcmSemanticObservations& observations);
 
-std::string FormatRtcmInspectionText(
-    const RtcmInspectionResult& result,
-    bool summary_only = false);
+std::string FormatRtcmInspectionText(const RtcmInspectionResult& result, bool summary_only = false);
 
-std::string FormatRtcmInspectionJson(
-    const RtcmInspectionResult& result,
-    bool summary_only = false);
+std::string FormatRtcmInspectionJson(const RtcmInspectionResult& result, bool summary_only = false);
 
 }  // namespace universal_gnss_tools

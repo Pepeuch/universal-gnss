@@ -10,8 +10,7 @@ NtripCasterOrchestrator::NtripCasterOrchestrator(std::vector<NtripConfig> caster
   (void)set_casters(std::move(casters));
 }
 
-NtripCasterOrchestratorError NtripCasterOrchestrator::set_casters(
-    std::vector<NtripConfig> casters)
+NtripCasterOrchestratorError NtripCasterOrchestrator::set_casters(std::vector<NtripConfig> casters)
 {
   ClearActiveSource();
   casters_.clear();
@@ -82,7 +81,7 @@ const NtripCasterOrchestratorMetrics& NtripCasterOrchestrator::metrics() const
 }
 
 NtripCasterOrchestratorError NtripCasterOrchestrator::SelectIndex(const std::size_t index,
-                                                                    const bool is_failover)
+                                                                  const bool is_failover)
 {
   if (casters_.empty())
   {

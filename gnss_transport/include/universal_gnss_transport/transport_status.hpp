@@ -20,8 +20,7 @@ inline bool IsTransportReady(const TransportStatus status)
 
 inline bool IsTransportTerminal(const TransportStatus status)
 {
-  return status == TransportStatus::kEndOfStream ||
-         status == TransportStatus::kClosed ||
+  return status == TransportStatus::kEndOfStream || status == TransportStatus::kClosed ||
          status == TransportStatus::kError;
 }
 

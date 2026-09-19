@@ -6,13 +6,15 @@
 #include <string>
 #include <vector>
 
-namespace universal_gnss_transport {
+namespace universal_gnss_transport
+{
 
 class ByteDuplex;
 
-} // namespace universal_gnss_transport
+}  // namespace universal_gnss_transport
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
 enum class ReceiverTransportType : std::uint8_t
 {
@@ -181,4 +183,4 @@ const char* ToString(ReceiverDetectedFamily family);
 const char* ToString(ReceiverProbeConfidence confidence);
 const char* ToString(ReceiverModelQueryMethod method);
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

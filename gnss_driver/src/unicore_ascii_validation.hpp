@@ -9,15 +9,13 @@ namespace detail
 {
 
 template <typename RecordT>
-bool IsParsedUnicoreAsciiRecord(
-    const universal_gnss_protocols::ParserResult<RecordT>& result)
+bool IsParsedUnicoreAsciiRecord(const universal_gnss_protocols::ParserResult<RecordT>& result)
 {
   return result.status == universal_gnss_protocols::ParserStatus::kRecordReady &&
          result.record.has_value();
 }
 
-inline bool IsVerifiedUnicoreAsciiRecord(
-    const universal_gnss_protocols::UnicoreFrame& frame)
+inline bool IsVerifiedUnicoreAsciiRecord(const universal_gnss_protocols::UnicoreFrame& frame)
 {
   using universal_gnss_protocols::ChecksumStatus;
 
@@ -56,8 +54,7 @@ inline bool IsVerifiedUnicoreAsciiRecord(
   }
   if (frame.message_name == "FREQJAMSTATUSA")
   {
-    return IsParsedUnicoreAsciiRecord(
-        universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame));
+    return IsParsedUnicoreAsciiRecord(universal_gnss_protocols::ParseUnicoreFreqJamStatus(frame));
   }
   if (frame.message_name == "HWSTATUSA")
   {

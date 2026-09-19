@@ -31,12 +31,10 @@ bool GgaInjectionResult::skipped() const
 
 bool GgaInjectionResult::ok() const
 {
-  return status != GgaInjectionStatus::kBuildError &&
-         status != GgaInjectionStatus::kWriteError;
+  return status != GgaInjectionStatus::kBuildError && status != GgaInjectionStatus::kWriteError;
 }
 
-GgaInjector::GgaInjector(GgaInjectorConfig config)
-    : config_(std::move(config))
+GgaInjector::GgaInjector(GgaInjectorConfig config) : config_(std::move(config))
 {
 }
 
@@ -103,10 +101,10 @@ void GgaInjector::Reset()
   config_.policy.last_sent_timestamp_ns.reset();
 }
 
-GgaInjectionResult GgaInjector::BuildAndWriteSentence(
-    universal_gnss_transport::ByteSink& sink,
-    const universal_gnss::GnssRuntimeState& state,
-    const universal_gnss::GnssTimestampNs now_timestamp_ns)
+GgaInjectionResult
+GgaInjector::BuildAndWriteSentence(universal_gnss_transport::ByteSink& sink,
+                                   const universal_gnss::GnssRuntimeState& state,
+                                   const universal_gnss::GnssTimestampNs now_timestamp_ns)
 {
   const auto built = BuildNmeaGgaSentence(state, config_.sentence_builder_options);
   if (!built.ok())
@@ -120,10 +118,10 @@ GgaInjectionResult GgaInjector::BuildAndWriteSentence(
   std::size_t offset = 0u;
   while (offset < built.sentence.size())
   {
-    const auto write_result = sink.Write(
-        reinterpret_cast<const std::uint8_t*>(built.sentence.data()) +
-            static_cast<std::ptrdiff_t>(offset),
-        built.sentence.size() - offset);
+    const auto write_result =
+        sink.Write(reinterpret_cast<const std::uint8_t*>(built.sentence.data()) +
+                       static_cast<std::ptrdiff_t>(offset),
+                   built.sentence.size() - offset);
 
     if (write_result.status != universal_gnss_transport::TransportStatus::kOk)
     {

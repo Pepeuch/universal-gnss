@@ -33,7 +33,7 @@ GnssLogComparison CompareGnssQualityReports(const GnssQualityReport& left,
                                             const GnssQualityReport& right);
 
 GnssLogComparison BuildGnssLogComparisonBytes(const std::vector<std::uint8_t>& left,
-                                               const std::vector<std::uint8_t>& right);
+                                              const std::vector<std::uint8_t>& right);
 
 std::string FormatGnssLogComparisonText(const GnssLogComparison& comparison);
 

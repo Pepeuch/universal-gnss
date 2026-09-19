@@ -51,8 +51,7 @@ inline bool ShouldInjectGga(const GgaInjectionPolicy& policy,
     return true;
   }
 
-  const std::int64_t interval_ns =
-      static_cast<std::int64_t>(policy.interval_s) * 1000000000LL;
+  const std::int64_t interval_ns = static_cast<std::int64_t>(policy.interval_s) * 1000000000LL;
   return (*now_timestamp_ns - *policy.last_sent_timestamp_ns) >= interval_ns;
 }
 

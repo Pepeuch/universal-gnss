@@ -60,9 +60,8 @@ UnicoreFrameFramer::UnicoreFrameFramer(std::size_t max_frame_length)
 {
 }
 
-ParserResult<UnicoreFrame> UnicoreFrameFramer::PushByte(
-    std::uint8_t byte,
-    std::optional<ProtocolTimestampNs> timestamp_ns)
+ParserResult<UnicoreFrame>
+UnicoreFrameFramer::PushByte(std::uint8_t byte, std::optional<ProtocolTimestampNs> timestamp_ns)
 {
   if (buffer_.empty())
   {
@@ -137,9 +136,8 @@ UnicoreFrame UnicoreFrameFramer::BuildFrame() const
     return frame;
   }
 
-  const std::string_view payload_text(
-      reinterpret_cast<const char*>(frame.payload.data()),
-      frame.payload.size());
+  const std::string_view payload_text(reinterpret_cast<const char*>(frame.payload.data()),
+                                      frame.payload.size());
   const std::size_t star = payload_text.rfind('*');
   if (star == std::string_view::npos)
   {
@@ -159,12 +157,10 @@ UnicoreFrame UnicoreFrameFramer::BuildFrame() const
     return frame;
   }
 
-  frame.computed_crc32 = ComputeUnicoreBinaryCrc32(
-      reinterpret_cast<const std::uint8_t*>(payload_text.data()),
-      star);
-  frame.checksum_status =
-      frame.reported_crc32 == frame.computed_crc32 ? ChecksumStatus::kValid
-                                                   : ChecksumStatus::kInvalid;
+  frame.computed_crc32 =
+      ComputeUnicoreBinaryCrc32(reinterpret_cast<const std::uint8_t*>(payload_text.data()), star);
+  frame.checksum_status = frame.reported_crc32 == frame.computed_crc32 ? ChecksumStatus::kValid
+                                                                       : ChecksumStatus::kInvalid;
 
   return frame;
 }

@@ -88,8 +88,8 @@ KeyValue MakeKeyValue(std::string key, std::string value)
   return entry;
 }
 
-std::uint8_t RtcmSemanticDiagnosticLevel(
-    const universal_gnss_protocols::RtcmSemanticObservation& observation)
+std::uint8_t
+RtcmSemanticDiagnosticLevel(const universal_gnss_protocols::RtcmSemanticObservation& observation)
 {
   // Only actual decode faults (malformed payloads or failed decodes) are
   // warnings. A cleanly decoded observation whose payload advertises itself as
@@ -105,8 +105,8 @@ std::uint8_t RtcmSemanticDiagnosticLevel(
   return DiagnosticStatus::OK;
 }
 
-std::string BuildRtcmSemanticMessage(
-    const universal_gnss_protocols::RtcmSemanticObservation& observation)
+std::string
+BuildRtcmSemanticMessage(const universal_gnss_protocols::RtcmSemanticObservation& observation)
 {
   if (observation.decoded && observation.valid)
   {
@@ -126,8 +126,8 @@ std::string BuildRtcmSemanticMessage(
   return "RTCM semantic observation not seen";
 }
 
-std::optional<universal_gnss::GnssTimestampNs> LatestDiagnosticTimestamp(
-    const universal_gnss::GnssDiagnosticEvents& events)
+std::optional<universal_gnss::GnssTimestampNs>
+LatestDiagnosticTimestamp(const universal_gnss::GnssDiagnosticEvents& events)
 {
   std::optional<universal_gnss::GnssTimestampNs> latest{};
   for (const auto& event : events)
@@ -172,14 +172,14 @@ DiagnosticStatus ToDiagnosticStatusMessage(const universal_gnss::GnssDiagnosticE
 {
   DiagnosticStatus status;
   status.level = ToDiagnosticLevel(event.severity);
-  status.name = event.code.empty() ? (name_prefix + "/diagnostic") : (name_prefix + "/" + event.code);
+  status.name =
+      event.code.empty() ? (name_prefix + "/diagnostic") : (name_prefix + "/" + event.code);
   status.message = event.message.empty() ? "universal_gnss diagnostic event" : event.message;
   status.hardware_id = hardware_id;
 
   status.values.push_back(
       MakeKeyValue("original_severity", DescribeDiagnosticSeverity(event.severity)));
-  status.values.push_back(
-      MakeKeyValue("category", DescribeDiagnosticCategory(event.category)));
+  status.values.push_back(MakeKeyValue("category", DescribeDiagnosticCategory(event.category)));
   status.values.push_back(MakeKeyValue("code", event.code));
   if (event.source.has_value())
   {
@@ -187,8 +187,7 @@ DiagnosticStatus ToDiagnosticStatusMessage(const universal_gnss::GnssDiagnosticE
   }
   if (event.timestamp_ns.has_value())
   {
-    status.values.push_back(
-        MakeKeyValue("timestamp_ns", std::to_string(*event.timestamp_ns)));
+    status.values.push_back(MakeKeyValue("timestamp_ns", std::to_string(*event.timestamp_ns)));
   }
   return status;
 }
@@ -209,14 +208,11 @@ DiagnosticStatus ToHealthDiagnosticStatusMessage(const universal_gnss::GnssHealt
   status.values.push_back(MakeKeyValue("rtk_available", BoolString(summary.rtk_available)));
   status.values.push_back(
       MakeKeyValue("correction_available", BoolString(summary.correction_available)));
-  status.values.push_back(
-      MakeKeyValue("receiver_healthy", BoolString(summary.receiver_healthy)));
-  status.values.push_back(
-      MakeKeyValue("transport_healthy", BoolString(summary.transport_healthy)));
+  status.values.push_back(MakeKeyValue("receiver_healthy", BoolString(summary.receiver_healthy)));
+  status.values.push_back(MakeKeyValue("transport_healthy", BoolString(summary.transport_healthy)));
   status.values.push_back(MakeKeyValue("parser_healthy", BoolString(summary.parser_healthy)));
   status.values.push_back(MakeKeyValue("stale_data", BoolString(summary.stale_data)));
-  status.values.push_back(
-      MakeKeyValue("event_count", std::to_string(summary.events.size())));
+  status.values.push_back(MakeKeyValue("event_count", std::to_string(summary.events.size())));
   return status;
 }
 
@@ -247,26 +243,25 @@ DiagnosticStatus ToRtcmSemanticDiagnosticStatusMessage(
   status.hardware_id = hardware_id;
 
   status.values.push_back(MakeKeyValue("observation_name", observation.name));
-  status.values.push_back(
-      MakeKeyValue("message_type", std::to_string(observation.message_type)));
+  status.values.push_back(MakeKeyValue("message_type", std::to_string(observation.message_type)));
   status.values.push_back(MakeKeyValue("seen", BoolString(observation.seen)));
   status.values.push_back(MakeKeyValue("decoded", BoolString(observation.decoded)));
   status.values.push_back(MakeKeyValue("valid", BoolString(observation.valid)));
-  status.values.push_back(MakeKeyValue(
-      "decode_success_count", std::to_string(observation.decode_success_count)));
-  status.values.push_back(MakeKeyValue(
-      "decode_failure_count", std::to_string(observation.decode_failure_count)));
+  status.values.push_back(
+      MakeKeyValue("decode_success_count", std::to_string(observation.decode_success_count)));
+  status.values.push_back(
+      MakeKeyValue("decode_failure_count", std::to_string(observation.decode_failure_count)));
   status.values.push_back(
       MakeKeyValue("malformed_count", std::to_string(observation.malformed_count)));
   if (observation.last_seen_timestamp_ns.has_value())
   {
-    status.values.push_back(
-        MakeKeyValue("last_seen_timestamp_ns", std::to_string(*observation.last_seen_timestamp_ns)));
+    status.values.push_back(MakeKeyValue("last_seen_timestamp_ns",
+                                         std::to_string(*observation.last_seen_timestamp_ns)));
   }
   if (observation.last_decoded_timestamp_ns.has_value())
   {
-    status.values.push_back(MakeKeyValue(
-        "last_decoded_timestamp_ns", std::to_string(*observation.last_decoded_timestamp_ns)));
+    status.values.push_back(MakeKeyValue("last_decoded_timestamp_ns",
+                                         std::to_string(*observation.last_decoded_timestamp_ns)));
   }
   if (observation.age_ns.has_value())
   {

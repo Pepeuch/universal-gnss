@@ -90,8 +90,8 @@ void TestUnicoreRoverHighPrecisionPreview(TestContext& ctx)
   const auto result = BuildProfilePreview(options);
   const std::string text = FormatProfilePreviewText(result);
 
-  ctx.Expect(result.status == ProfilePreviewStatus::kUnsupportedVendor &&
-                 result.commands.empty() && result.summary.commands_total == 0u,
+  ctx.Expect(result.status == ProfilePreviewStatus::kUnsupportedVendor && result.commands.empty() &&
+                 result.summary.commands_total == 0u,
              "Unicore rover_high_precision preview must block mutation when the model is unknown");
   ctx.Expect(text.find("requires an explicitly recognized model") != std::string::npos &&
                  !HasTextCommand(result, "MODE ROVER") &&

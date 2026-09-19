@@ -13,9 +13,9 @@ class NmeaSentenceFramer : public StreamParserBase<NmeaSentence>
 public:
   explicit NmeaSentenceFramer(std::size_t max_frame_length = 512);
 
-  ParserResult<NmeaSentence> PushByte(
-      std::uint8_t byte,
-      std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
+  ParserResult<NmeaSentence>
+  PushByte(std::uint8_t byte,
+           std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
 
   ParserResult<NmeaSentence> Finalize() override;
 

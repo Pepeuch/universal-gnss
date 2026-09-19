@@ -284,24 +284,20 @@ void WriteRuntimeStateJson(std::ostringstream& output, const GnssRuntimeState& s
   output << '{';
   bool first_field = true;
 
-  auto write_bool = [&](const char* name, const bool value)
-  {
+  auto write_bool = [&](const char* name, const bool value) {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":" << (value ? "true" : "false");
   };
-  auto write_number = [&](const char* name, const auto value)
-  {
+  auto write_number = [&](const char* name, const auto value) {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":" << value;
   };
-  auto write_coordinate = [&](const char* name, const double value)
-  {
+  auto write_coordinate = [&](const char* name, const double value) {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":";
     output << FormatCoordinate(value);
   };
-  auto write_string = [&](const char* name, const std::string& value)
-  {
+  auto write_string = [&](const char* name, const std::string& value) {
     AppendJsonFieldSeparator(output, first_field);
     output << '"' << name << "\":\"" << EscapeJsonString(value) << '"';
   };
@@ -541,8 +537,8 @@ std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUbx(const std::vector<std:
   return std::nullopt;
 }
 
-std::optional<GnssRuntimeState> BuildRuntimeUpdateFromUnicore(
-    const std::vector<std::uint8_t>& bytes, const std::size_t byte_offset)
+std::optional<GnssRuntimeState>
+BuildRuntimeUpdateFromUnicore(const std::vector<std::uint8_t>& bytes, const std::size_t byte_offset)
 {
   if (byte_offset >= bytes.size())
   {
@@ -694,9 +690,8 @@ GnssReplayResult ReplayGnssStream(std::istream& input, const bool include_events
   return ReplayGnssBytes(ReadAllBytes(input), include_events);
 }
 
-std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(
-    const GnssReplayResult& result,
-    const GnssReplayTimingConfig& config)
+std::vector<GnssReplayTimingStep> BuildGnssReplayTimingPlan(const GnssReplayResult& result,
+                                                            const GnssReplayTimingConfig& config)
 {
   std::vector<GnssReplayTimingStep> plan;
   plan.reserve(result.events.size());
@@ -865,13 +860,11 @@ std::string FormatGnssReplayJson(const GnssReplayResult& result, const bool summ
       const auto& event = result.events[index];
       output << '{';
       bool first_event_field = true;
-      auto write_event_number = [&](const char* name, const auto value)
-      {
+      auto write_event_number = [&](const char* name, const auto value) {
         AppendJsonFieldSeparator(output, first_event_field);
         output << '"' << name << "\":" << value;
       };
-      auto write_event_string = [&](const char* name, const std::string& value)
-      {
+      auto write_event_string = [&](const char* name, const std::string& value) {
         AppendJsonFieldSeparator(output, first_event_field);
         output << '"' << name << "\":\"" << EscapeJsonString(value) << '"';
       };
@@ -896,8 +889,7 @@ std::string FormatGnssReplayJson(const GnssReplayResult& result, const bool summ
   AppendJsonFieldSeparator(output, first_root_field);
   output << "\"summary\":{";
   bool first_summary_field = true;
-  auto write_summary_number = [&](const char* name, const std::size_t value)
-  {
+  auto write_summary_number = [&](const char* name, const std::size_t value) {
     AppendJsonFieldSeparator(output, first_summary_field);
     output << '"' << name << "\":" << value;
   };

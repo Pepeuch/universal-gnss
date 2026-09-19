@@ -104,8 +104,7 @@ void TestGeneratedSentenceHasValidChecksum(TestContext& ctx)
   ctx.Expect(parsed.record->altitude_m.has_value() &&
                  NearlyEqual(*parsed.record->altitude_m, 545.4),
              "generated GGA should preserve altitude");
-  ctx.Expect(parsed.record->hdop.has_value() &&
-                 NearlyEqual(*parsed.record->hdop, 0.9),
+  ctx.Expect(parsed.record->hdop.has_value() && NearlyEqual(*parsed.record->hdop, 0.9),
              "generated GGA should preserve HDOP");
   ctx.Expect(parsed.record->satellites_used == std::optional<std::uint16_t>(8u),
              "generated GGA should preserve satellites used");
@@ -131,8 +130,7 @@ void TestHemisphereHandling(TestContext& ctx)
              "generated GGA sentences should encode southern and western hemispheres");
 
   const auto parsed = universal_gnss_protocols::ParseNmeaGga(FrameSentence(generated.sentence));
-  ctx.Expect(parsed.record.has_value() &&
-                 parsed.record->latitude_deg.has_value() &&
+  ctx.Expect(parsed.record.has_value() && parsed.record->latitude_deg.has_value() &&
                  parsed.record->longitude_deg.has_value() &&
                  NearlyEqual(*parsed.record->latitude_deg, -49.2741667) &&
                  NearlyEqual(*parsed.record->longitude_deg, -123.1853333),

@@ -59,7 +59,8 @@ void TestInvalidSetsHaveNoActiveSource(TestContext& ctx)
 {
   NtripCasterOrchestrator orchestrator;
   ctx.Expect(orchestrator.set_casters({}) == NtripCasterOrchestratorError::kEmptyCasterSet &&
-                 !orchestrator.active_config() && !orchestrator.active_source_identity().has_value(),
+                 !orchestrator.active_config() &&
+                 !orchestrator.active_source_identity().has_value(),
              "empty caster sets must leave no active source");
   ctx.Expect(orchestrator.set_casters({Caster("same.example", 2101u, "mount"),
                                        Caster("SAME.example", 2101u, "/mount")}) ==

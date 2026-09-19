@@ -612,37 +612,36 @@ void TestReplayUnicoreBinaryAndAsciiRouting(TestContext& ctx)
                  result.summary.counts_by_unicore_message.at("SATSINFOA") == 1u &&
                  result.summary.counts_by_unicore_message.at("JAMSTATUSA") == 1u,
              "replay should route both Unicore binary and ASCII runtime updates");
-  ctx.Expect(final_state.fix_valid &&
-                 final_state.fix_type == universal_gnss::GnssFixType::kRtkFixed &&
-                 final_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
-                                             universal_gnss::GnssRtkMode::kFixed) &&
-                 final_state.latitude_deg.has_value() &&
-                 std::fabs(*final_state.latitude_deg - 40.07898130522) < 1e-6 &&
-                 final_state.longitude_deg.has_value() &&
-                 std::fabs(*final_state.longitude_deg - 116.23663134427) < 1e-6 &&
-                 final_state.altitude_m.has_value() &&
-                 std::fabs(*final_state.altitude_m - 60.5060) < 1e-4,
-             "binary replay should preserve the routed Unicore position and RTK state");
   ctx.Expect(
-      final_state.horizontal_accuracy_m.has_value() &&
-          std::fabs(*final_state.horizontal_accuracy_m - 0.18f) < 1e-6f &&
-          final_state.vertical_accuracy_m.has_value() &&
-          std::fabs(*final_state.vertical_accuracy_m - 0.2f) < 1e-6f &&
-          final_state.hdop.has_value() && std::fabs(*final_state.hdop - 0.684f) < 1e-6f &&
-          final_state.satellites_used == std::optional<std::uint16_t>(28u) &&
-          final_state.satellites_tracked == std::optional<std::uint16_t>(3u) &&
-          final_state.mean_cn0_db_hz == std::optional<float>(46.0f) &&
-          final_state.max_cn0_db_hz == std::optional<float>(50.0f) &&
-          final_state.correction_age_s == std::optional<float>(0.9f) &&
-          final_state.dual_antenna_baseline == std::optional<bool>(true) &&
-          final_state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
-          final_state.baseline_pitch_deg == std::optional<float>(0.1f) &&
-          final_state.baseline_length_m == std::optional<float>(1.5f) &&
-          final_state.heading_deg.has_value() &&
-          std::fabs(*final_state.heading_deg - 182.25) < 1e-6 &&
-          final_state.interference_detected == std::optional<bool>(true) &&
-          final_state.jamming_detected == std::optional<bool>(true),
-      "mixed Unicore replay should expose accuracy, baseline geometry, DOP, satellites, CN0, heading, and RF state");
+      final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::kRtkFixed &&
+          final_state.rtk_mode ==
+              std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFixed) &&
+          final_state.latitude_deg.has_value() &&
+          std::fabs(*final_state.latitude_deg - 40.07898130522) < 1e-6 &&
+          final_state.longitude_deg.has_value() &&
+          std::fabs(*final_state.longitude_deg - 116.23663134427) < 1e-6 &&
+          final_state.altitude_m.has_value() && std::fabs(*final_state.altitude_m - 60.5060) < 1e-4,
+      "binary replay should preserve the routed Unicore position and RTK state");
+  ctx.Expect(final_state.horizontal_accuracy_m.has_value() &&
+                 std::fabs(*final_state.horizontal_accuracy_m - 0.18f) < 1e-6f &&
+                 final_state.vertical_accuracy_m.has_value() &&
+                 std::fabs(*final_state.vertical_accuracy_m - 0.2f) < 1e-6f &&
+                 final_state.hdop.has_value() && std::fabs(*final_state.hdop - 0.684f) < 1e-6f &&
+                 final_state.satellites_used == std::optional<std::uint16_t>(28u) &&
+                 final_state.satellites_tracked == std::optional<std::uint16_t>(3u) &&
+                 final_state.mean_cn0_db_hz == std::optional<float>(46.0f) &&
+                 final_state.max_cn0_db_hz == std::optional<float>(50.0f) &&
+                 final_state.correction_age_s == std::optional<float>(0.9f) &&
+                 final_state.dual_antenna_baseline == std::optional<bool>(true) &&
+                 final_state.baseline_azimuth_deg == std::optional<float>(182.25f) &&
+                 final_state.baseline_pitch_deg == std::optional<float>(0.1f) &&
+                 final_state.baseline_length_m == std::optional<float>(1.5f) &&
+                 final_state.heading_deg.has_value() &&
+                 std::fabs(*final_state.heading_deg - 182.25) < 1e-6 &&
+                 final_state.interference_detected == std::optional<bool>(true) &&
+                 final_state.jamming_detected == std::optional<bool>(true),
+             "mixed Unicore replay should expose accuracy, baseline geometry, DOP, satellites, "
+             "CN0, heading, and RF state");
 }
 
 void TestReplayMergesMixedRuntimeState(TestContext& ctx)
@@ -680,11 +679,11 @@ void TestReplayMergesMixedRuntimeState(TestContext& ctx)
              "RTCM events should stay metadata-only for now");
 
   const auto& final_state = result.final_state;
-  ctx.Expect(final_state.fix_valid &&
-                 final_state.fix_type == universal_gnss::GnssFixType::kRtkFloat &&
-                 final_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
-                                             universal_gnss::GnssRtkMode::kFloat),
-             "final state should reflect the last Unicore RTK float position update");
+  ctx.Expect(
+      final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::kRtkFloat &&
+          final_state.rtk_mode ==
+              std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFloat),
+      "final state should reflect the last Unicore RTK float position update");
   ctx.Expect(final_state.latitude_deg.has_value() && *final_state.latitude_deg == 40.0789588272 &&
                  final_state.longitude_deg.has_value() &&
                  *final_state.longitude_deg == 116.2365102982 &&
@@ -749,13 +748,11 @@ void TestReplayCountsRtcm1230WithoutChangingRuntimeState(TestContext& ctx)
 
   const auto result = universal_gnss_tools::ReplayGnssBytes(bytes);
 
-  ctx.Expect(result.summary.recognized_records == 1u &&
-                 result.summary.runtime_updates == 0u &&
+  ctx.Expect(result.summary.recognized_records == 1u && result.summary.runtime_updates == 0u &&
                  result.summary.counts_by_protocol.at("rtcm3") == 1u &&
                  result.summary.counts_by_rtcm_message_type.at(1230u) == 1u,
              "replay should preserve RTCM 1230 as a first-class RTCM message");
-  ctx.Expect(result.events.size() == 1u &&
-                 result.events[0].identity == "1230" &&
+  ctx.Expect(result.events.size() == 1u && result.events[0].identity == "1230" &&
                  !result.events[0].produced_runtime_update,
              "RTCM 1230 replay events should remain metadata-only");
   ctx.Expect(!result.final_state.fix_valid &&
@@ -846,7 +843,8 @@ void TestReplayTimingPlan(TestContext& ctx)
                  plan[1].delay_before_event == std::chrono::nanoseconds(1000) &&
                  plan[2].delay_before_event == std::chrono::nanoseconds(0) &&
                  plan[3].delay_before_event == std::chrono::milliseconds(7),
-             "timing plan should scale positive deltas, keep equal timestamps immediate, and fall back for missing timestamps");
+             "timing plan should scale positive deltas, keep equal timestamps immediate, and fall "
+             "back for missing timestamps");
 
   result.events[2].state_after_event.timestamp_ns = 500;
   const auto decreasing_plan = universal_gnss_tools::BuildGnssReplayTimingPlan(result, config);

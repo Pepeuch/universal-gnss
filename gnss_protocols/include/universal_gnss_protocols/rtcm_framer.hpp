@@ -14,28 +14,26 @@ class RtcmFrameFramer : public StreamParserBase<RtcmFrame>
 public:
   explicit RtcmFrameFramer(std::size_t max_frame_length = 1029);
 
-  ParserResult<RtcmFrame> PushByte(
-      std::uint8_t byte,
-      std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
+  ParserResult<RtcmFrame>
+  PushByte(std::uint8_t byte,
+           std::optional<ProtocolTimestampNs> timestamp_ns = std::nullopt) override;
 
   ParserResult<RtcmFrame> Finalize() override;
 
   void Reset() override;
 
 private:
-  ParserResult<RtcmFrame> StartFrame(
-      std::uint8_t byte,
-      std::optional<ProtocolTimestampNs> timestamp_ns);
+  ParserResult<RtcmFrame> StartFrame(std::uint8_t byte,
+                                     std::optional<ProtocolTimestampNs> timestamp_ns);
 
   void AppendByte(std::uint8_t byte, std::optional<ProtocolTimestampNs> timestamp_ns);
 
   std::optional<RtcmFrame> FindEmbeddedValidFrame() const;
 
   RtcmFrame BuildFrame() const;
-  RtcmFrame BuildFrame(
-      std::size_t frame_offset,
-      std::size_t frame_size,
-      std::optional<ProtocolTimestampNs> timestamp_ns) const;
+  RtcmFrame BuildFrame(std::size_t frame_offset,
+                       std::size_t frame_size,
+                       std::optional<ProtocolTimestampNs> timestamp_ns) const;
 
   std::size_t max_frame_length_;
   std::vector<std::uint8_t> buffer_;

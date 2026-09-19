@@ -190,8 +190,7 @@ bool ValidateOutputRate(UnicoreConfigProfileBuildResult& result,
 
   if (std::none_of(kSupportedUnicoreOutputPeriodsS.begin(),
                    kSupportedUnicoreOutputPeriodsS.end(),
-                   [&](const double supported_period_s)
-                   {
+                   [&](const double supported_period_s) {
                      return NearlyEqual(*output.period_s, supported_period_s);
                    }))
   {
@@ -307,8 +306,8 @@ void SetOutputPeriod(UnicoreConfigProfile& profile,
 
 }  // namespace
 
-UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
-    const UnicoreConfigProfile& profile)
+UnicoreConfigProfileBuildResult
+UnicoreConfigProfileBuilder::Build(const UnicoreConfigProfile& profile)
 {
   UnicoreConfigProfileBuildResult result;
   if (!ValidateProfile(result, profile))
@@ -430,14 +429,15 @@ UnicoreConfigProfileBuildResult UnicoreConfigProfileBuilder::Build(
   return result;
 }
 
-UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-    const UnicorePersistenceTarget persistence)
+UnicoreConfigProfile
+UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(const UnicorePersistenceTarget persistence)
 {
   return BuildUnicoreRoverProfile(ResolveUnicoreModelProfile(), persistence);
 }
 
-UnicoreConfigProfile UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(
-    const UnicoreModelProfile& model_profile, const UnicorePersistenceTarget persistence)
+UnicoreConfigProfile
+UnicoreConfigProfileBuilder::BuildUnicoreRoverProfile(const UnicoreModelProfile& model_profile,
+                                                      const UnicorePersistenceTarget persistence)
 {
   UnicoreConfigProfile profile;
   profile.target = BuildUnicoreTargetSelector(model_profile);

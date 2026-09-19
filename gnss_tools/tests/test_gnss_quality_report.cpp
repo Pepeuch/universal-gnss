@@ -7,13 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "testdata_utils.hpp"
 #include "universal_gnss/gnss_types.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
-#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/ubx_checksum.hpp"
+#include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_tools/gnss_quality_report.hpp"
-#include "testdata_utils.hpp"
 
 namespace
 {
@@ -74,13 +74,17 @@ void AppendSignedBits(std::vector<std::uint8_t>& payload,
   AppendUnsignedBits(payload, bit_offset, static_cast<std::uint64_t>(value) & mask, bit_count);
 }
 
-void WriteLeU2(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint16_t value)
+void WriteLeU2(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint16_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
 }
 
-void WriteLeU4(std::vector<std::uint8_t>& payload, const std::size_t offset, const std::uint32_t value)
+void WriteLeU4(std::vector<std::uint8_t>& payload,
+               const std::size_t offset,
+               const std::uint32_t value)
 {
   payload[offset] = static_cast<std::uint8_t>(value & 0xFFu);
   payload[offset + 1u] = static_cast<std::uint8_t>((value >> 8u) & 0xFFu);
@@ -105,7 +109,8 @@ std::vector<std::uint8_t> BuildUbxFrame(const std::uint8_t class_id,
 
   const auto checksum =
       universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2u, bytes.size() - 2u);
-  bytes.push_back(valid_checksum ? checksum.ck_a : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
+  bytes.push_back(valid_checksum ? checksum.ck_a
+                                 : static_cast<std::uint8_t>(checksum.ck_a ^ 0x01u));
   bytes.push_back(checksum.ck_b);
   return bytes;
 }
@@ -125,8 +130,7 @@ std::vector<std::uint8_t> BuildRtcmFrame(const std::uint16_t message_type,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   if (!valid_crc)
   {
     crc ^= 0x01u;
@@ -168,8 +172,7 @@ std::vector<std::uint8_t> BuildRtcm1006Frame(const std::uint16_t station_id,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -221,8 +224,7 @@ std::vector<std::uint8_t> BuildRtcm1230Frame(const std::uint16_t station_id,
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -267,8 +269,7 @@ std::vector<std::uint8_t> BuildRtcmFrameFromPayload(const std::vector<std::uint8
   };
   bytes.insert(bytes.end(), payload.begin(), payload.end());
 
-  const std::uint32_t crc =
-      universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
+  const std::uint32_t crc = universal_gnss_protocols::ComputeRtcmCrc24Q(bytes.data(), bytes.size());
   bytes.push_back(static_cast<std::uint8_t>((crc >> 16u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>((crc >> 8u) & 0xFFu));
   bytes.push_back(static_cast<std::uint8_t>(crc & 0xFFu));
@@ -409,23 +410,9 @@ std::vector<std::uint8_t> BuildSyntheticRtkFixedQualityStream()
   Append(bytes, BuildUbxFrame(0x02u, 0x32u, MakeRxmRtcmPayload(0x01u, 0u, 42u, 1005u)));
   Append(bytes, BuildUbxFrame(0x0Au, 0x09u, MakeMonHwPayload(3u, 0u, 3u)));
   Append(bytes, BuildRtcm1006Frame(42u, 1234567LL, -2345678LL, 3456789LL, 4321u));
-  Append(bytes, BuildRtcm1230Frame(42u,
-                                   true,
-                                   true,
-                                   false,
-                                   true,
-                                   true,
-                                   10,
-                                   std::nullopt,
-                                   -5,
-                                   7));
-  Append(bytes, BuildRtcmMsmFrame(1077u,
-                                  42u,
-                                  {1u, 3u},
-                                  {1u, 5u},
-                                  {true, false, true, true},
-                                  true,
-                                  5u));
+  Append(bytes, BuildRtcm1230Frame(42u, true, true, false, true, true, 10, std::nullopt, -5, 7));
+  Append(bytes,
+         BuildRtcmMsmFrame(1077u, 42u, {1u, 3u}, {1u, 5u}, {true, false, true, true}, true, 5u));
   Append(bytes, BuildRtcmMsmFrame(1087u, 42u, {2u}, {1u, 3u, 4u}, {true, false, true}));
 
   auto malformed_msm_payload = BuildRtcmMsmPayload(1077u, 42u, {1u}, {1u}, {true});
@@ -452,17 +439,10 @@ std::string NormalizeUnicoreAsciiLine(std::string line)
   }
 
   const auto crc = universal_gnss_protocols::ComputeUnicoreBinaryCrc32(
-      reinterpret_cast<const std::uint8_t*>(line.data() + 1u),
-      line.size() - 1u);
+      reinterpret_cast<const std::uint8_t*>(line.data() + 1u), line.size() - 1u);
 
   std::ostringstream stream;
-  stream << line
-         << '*'
-         << std::hex
-         << std::nouppercase
-         << std::setw(8)
-         << std::setfill('0')
-         << crc
+  stream << line << '*' << std::hex << std::nouppercase << std::setw(8) << std::setfill('0') << crc
          << "\r\n";
   return stream.str();
 }
@@ -480,8 +460,7 @@ void TestReportFromNmeaLog(TestContext& ctx)
 
   ctx.Expect(report.summary.total_bytes_read == bytes.size(),
              "quality report should preserve the total byte count");
-  ctx.Expect(report.summary.records_processed == 5u &&
-                 report.summary.runtime_updates == 5u &&
+  ctx.Expect(report.summary.records_processed == 5u && report.summary.runtime_updates == 5u &&
                  report.summary.counts_by_protocol.at("nmea") == 5u,
              "quality report should summarize the NMEA file through replay");
   ctx.Expect(report.final_state.fix_valid &&
@@ -496,21 +475,18 @@ void TestReportFromNmeaLog(TestContext& ctx)
   ctx.Expect(report.summary.latest_hdop == std::optional<float>(1.0f) &&
                  report.summary.latest_vdop == std::optional<float>(1.5f),
              "quality report should preserve the latest DOP values");
-  ctx.Expect(report.rtcm.total_frames == 0u &&
-                 report.diagnostics.empty(),
+  ctx.Expect(report.rtcm.total_frames == 0u && report.diagnostics.empty(),
              "plain NMEA reports should not invent RTCM activity or diagnostics");
 }
 
 void TestReportFromMixedLog(TestContext& ctx)
 {
-  const auto bytes =
-      universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
+  const auto bytes = universal_gnss_tools::test::ReadBinaryFile("mixed/nmea_ubx_rtcm_unicore.bin");
   const auto report = universal_gnss_tools::BuildGnssQualityReportBytes(bytes);
 
   ctx.Expect(report.summary.total_bytes_read == bytes.size(),
              "mixed quality report should preserve the total byte count");
-  ctx.Expect(report.summary.records_processed == 10u &&
-                 report.summary.runtime_updates == 7u &&
+  ctx.Expect(report.summary.records_processed == 10u && report.summary.runtime_updates == 7u &&
                  report.summary.counts_by_protocol.at("nmea") == 3u &&
                  report.summary.counts_by_protocol.at("ubx") == 3u &&
                  report.summary.counts_by_protocol.at("unicore") == 2u &&
@@ -519,17 +495,15 @@ void TestReportFromMixedLog(TestContext& ctx)
   ctx.Expect(report.summary.quality_level == GnssQualityLevel::kRtkFloat,
              "mixed report should classify the final Unicore state as RTK float");
   ctx.Expect(report.final_state.fix_valid &&
-                 report.final_state.rtk_mode ==
-                     std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFloat),
+                 report.final_state.rtk_mode == std::optional<universal_gnss::GnssRtkMode>(
+                                                    universal_gnss::GnssRtkMode::kFloat),
              "mixed report should preserve the final RTK float mode");
-  ctx.Expect(report.rtcm.total_frames == 2u &&
-                 report.rtcm.valid_frames == 2u &&
+  ctx.Expect(report.rtcm.total_frames == 2u && report.rtcm.valid_frames == 2u &&
                  report.rtcm.invalid_frames == 0u &&
                  report.rtcm.message_type_counts.at(1005u) == 1u &&
                  report.rtcm.message_type_counts.at(1077u) == 1u,
              "mixed report should summarize RTCM activity");
-  ctx.Expect(report.summary.warning_count > 0u &&
-                 !report.diagnostics.empty(),
+  ctx.Expect(report.summary.warning_count > 0u && !report.diagnostics.empty(),
              "mixed report should surface parser warnings for invalid/truncated data");
 
   const std::string text = universal_gnss_tools::FormatGnssQualityReportText(report);
@@ -541,10 +515,12 @@ void TestReportFromMixedLog(TestContext& ctx)
                  text.find("lon_deg=116.236510298") != std::string::npos,
              "text report should preserve at least nine decimal places for coordinates");
   ctx.Expect(json.find("\"quality_level\":\"rtk_float\"") != std::string::npos &&
-                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1}") != std::string::npos &&
+                 json.find("\"message_type_counts\":{\"1005\":1,\"1077\":1}") !=
+                     std::string::npos &&
                  json.find("\"latitude_deg\":40.078958827") != std::string::npos &&
                  json.find("\"longitude_deg\":116.236510298") != std::string::npos,
-             "JSON report should include the expected RTK level, RTCM counters, and high-precision coordinates");
+             "JSON report should include the expected RTK level, RTCM counters, and high-precision "
+             "coordinates");
 }
 
 void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
@@ -554,8 +530,7 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
 
   ctx.Expect(report.summary.quality_level == GnssQualityLevel::kRtkFixed,
              "receiver-side fixed RTK state should classify as rtk_fixed");
-  ctx.Expect(report.rtcm.total_frames == 5u &&
-                 report.rtcm.receiver_side.events_observed == 2u &&
+  ctx.Expect(report.rtcm.total_frames == 5u && report.rtcm.receiver_side.events_observed == 2u &&
                  report.rtcm.receiver_side.accepted_messages == 1u &&
                  report.rtcm.receiver_side.not_used_messages == 0u &&
                  report.rtcm.receiver_side.crc_failed_messages == 1u,
@@ -567,11 +542,14 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
              "quality report should retain the last decoded base station ARP record");
   ctx.Expect(report.rtcm.message_type_counts.at(1077u) == 2u &&
                  report.rtcm.message_type_counts.at(1087u) == 1u &&
-                 report.rtcm.msm_constellation_counts.at(universal_gnss_protocols::RtcmConstellation::kGps) == 2u &&
-                 report.rtcm.msm_constellation_counts.at(universal_gnss_protocols::RtcmConstellation::kGlonass) == 1u,
+                 report.rtcm.msm_constellation_counts.at(
+                     universal_gnss_protocols::RtcmConstellation::kGps) == 2u &&
+                 report.rtcm.msm_constellation_counts.at(
+                     universal_gnss_protocols::RtcmConstellation::kGlonass) == 1u,
              "quality report should preserve per-message and per-constellation MSM counters");
   ctx.Expect(report.summary.warning_count >= 2u && report.summary.error_count >= 2u,
-             "receiver-side CRC failure, malformed MSM, and MON-HW faults should surface warning and error diagnostics");
+             "receiver-side CRC failure, malformed MSM, and MON-HW faults should surface warning "
+             "and error diagnostics");
 
   bool saw_crc_failed = false;
   bool saw_msm_malformed = false;
@@ -591,15 +569,16 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
 
   const std::string text = universal_gnss_tools::FormatGnssQualityReportText(report, true);
   const std::string json = universal_gnss_tools::FormatGnssQualityReportJson(report, true);
-  ctx.Expect(text.find("rtcm_base station_id=42") != std::string::npos &&
-                 text.find("antenna_height_m=0.4321") != std::string::npos &&
-                 text.find("rtcm_semantic msm_summary seen=true decoded=true valid=true decode_success=2 decode_failure=1 malformed=1 message_type=1087") !=
-                     std::string::npos &&
-                 text.find("constellations_seen=gps,glonass") != std::string::npos &&
-                 text.find("rtcm_semantic glonass_code_phase_bias seen=true decoded=true valid=true") !=
-                     std::string::npos &&
-                 text.find("signal_mask=0xD") != std::string::npos,
-             "text quality report should include decoded RTCM semantic details");
+  ctx.Expect(
+      text.find("rtcm_base station_id=42") != std::string::npos &&
+          text.find("antenna_height_m=0.4321") != std::string::npos &&
+          text.find("rtcm_semantic msm_summary seen=true decoded=true valid=true decode_success=2 "
+                    "decode_failure=1 malformed=1 message_type=1087") != std::string::npos &&
+          text.find("constellations_seen=gps,glonass") != std::string::npos &&
+          text.find("rtcm_semantic glonass_code_phase_bias seen=true decoded=true valid=true") !=
+              std::string::npos &&
+          text.find("signal_mask=0xD") != std::string::npos,
+      "text quality report should include decoded RTCM semantic details");
   ctx.Expect(json.find("\"base_station_arp\":{\"message_type\":1006") != std::string::npos &&
                  json.find("\"station_id\":42") != std::string::npos &&
                  json.find("\"semantic_observations\":[") != std::string::npos &&
@@ -613,15 +592,19 @@ void TestReceiverSideRtcmDiagnosticsAndRtkFixedClassification(TestContext& ctx)
 void TestUnicoreRfDiagnostics(TestContext& ctx)
 {
   std::vector<std::uint8_t> bytes;
-  Append(bytes, BuildUnicoreLine(
-                    "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
-                    "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
-                    "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
-                    "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
-  Append(bytes, BuildUnicoreLine(
-                    "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n"));
-  Append(bytes, BuildUnicoreLine(
-                    "#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,0,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n"));
+  Append(bytes,
+         BuildUnicoreLine(
+             "#BESTNAVA,97,GPS,FINE,2294,472312000,0,0,18,16;"
+             "SOL_COMPUTED,NARROW_FLOAT,40.0789588272,116.2365102982,65.8312,-8.4925,WGS84,1.2221,"
+             "1.1053,"
+             "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
+             "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123*c1b4f7fe\r\n"));
+  Append(bytes,
+         BuildUnicoreLine(
+             "#JAMSTATUSA,97,GPS,FINE,2190,365412000,0,0,18,14;SINGLE,120,2,0,0*e31418ea\r\n"));
+  Append(bytes,
+         BuildUnicoreLine("#HWSTATUSA,97,GPS,FINE,2221,111183000,0,0,18,15;66807,0.920,1.020,0.908,"
+                          "0,0.693,0.0,0x00,0,0x0377,0,0*9d7ce51d\r\n"));
 
   const auto report = universal_gnss_tools::BuildGnssQualityReportBytes(bytes);
 
@@ -675,8 +658,7 @@ void TestUbxMonHwDiagnostics(TestContext& ctx)
     }
   }
 
-  ctx.Expect(saw_antenna_short && saw_jamming_critical &&
-                 report.summary.error_count >= 2u,
+  ctx.Expect(saw_antenna_short && saw_jamming_critical && report.summary.error_count >= 2u,
              "MON-HW antenna and jamming faults should surface as receiver diagnostics");
 }
 

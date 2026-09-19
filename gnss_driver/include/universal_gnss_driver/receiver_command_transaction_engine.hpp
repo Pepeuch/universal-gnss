@@ -10,7 +10,8 @@
 #include "universal_gnss_driver/ubx_command_response_mapper.hpp"
 #include "universal_gnss_transport/byte_stream.hpp"
 
-namespace universal_gnss_driver {
+namespace universal_gnss_driver
+{
 
 struct ReceiverCommandResponseMatchMetadata
 {
@@ -103,7 +104,8 @@ public:
 private:
   DispatchResult DispatchCommand(const ReceiverCommand& command);
 
-  void MarkFailed(ReceiverCommandTransaction& transaction, const DispatchResult& dispatch_result,
+  void MarkFailed(ReceiverCommandTransaction& transaction,
+                  const DispatchResult& dispatch_result,
                   std::optional<ReceiverCommandTimestampNs> timestamp_ns);
 
   bool ResponseMatchesCurrent(const ReceiverCommandResponseMatchMetadata& match_metadata) const;
@@ -121,4 +123,4 @@ private:
   ReceiverCommandTransactionId next_transaction_id_{1u};
 };
 
-} // namespace universal_gnss_driver
+}  // namespace universal_gnss_driver

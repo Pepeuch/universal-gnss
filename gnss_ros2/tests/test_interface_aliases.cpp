@@ -16,4 +16,7 @@ static_assert(
 static_assert(std::is_same_v<universal_gnss_ros2::srv::GetReceiverSnapshot,
                              universal_gnss_msgs::srv::GetReceiverSnapshot>);
 
-TEST(InterfaceAliasesTest, CompatibilityHeadersAliasCanonicalGeneratedTypes) { SUCCEED(); }
+TEST(InterfaceAliasesTest, CompatibilityHeadersAliasCanonicalGeneratedTypes)
+{
+  SUCCEED();
+}

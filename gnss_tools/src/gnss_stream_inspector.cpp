@@ -10,15 +10,15 @@
 #include <sstream>
 #include <utility>
 
-#include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/mixed_stream_resync.hpp"
+#include "universal_gnss_protocols/nmea_framer.hpp"
 #include "universal_gnss_protocols/parser_result.hpp"
 #include "universal_gnss_protocols/parser_status.hpp"
 #include "universal_gnss_protocols/rtcm_framer.hpp"
 #include "universal_gnss_protocols/rtcm_parser.hpp"
+#include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
-#include "universal_gnss_protocols/ubx_framer.hpp"
 #include "universal_gnss_tools/rtcm_inspector.hpp"
 
 namespace universal_gnss_tools
@@ -31,18 +31,18 @@ using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::NmeaSentenceFramer;
 using universal_gnss_protocols::ParserResult;
-    using universal_gnss_protocols::ParserStatus;
-    using universal_gnss_protocols::ProtocolType;
+using universal_gnss_protocols::ParserStatus;
+using universal_gnss_protocols::ProtocolType;
 using universal_gnss_protocols::RtcmConstellation;
 using universal_gnss_protocols::RtcmFrame;
 using universal_gnss_protocols::RtcmFrameFramer;
 using universal_gnss_protocols::RtcmMessageInfo;
+using universal_gnss_protocols::UbxFrame;
+using universal_gnss_protocols::UbxFrameFramer;
 using universal_gnss_protocols::UnicoreBinaryFrame;
 using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
-using universal_gnss_protocols::UbxFrame;
-using universal_gnss_protocols::UbxFrameFramer;
 
 template <typename RecordT>
 struct ProbeResult
@@ -134,9 +134,7 @@ bool ConsumeEmbeddedTextResyncAtOffset(const std::vector<std::uint8_t>& bytes,
                                        bool& in_noise_span)
 {
   const auto resync_offset = universal_gnss_protocols::FindEmbeddedMixedRecordResyncOffset(
-      bytes.size(),
-      [&](const std::size_t index) { return bytes[index]; },
-      start_offset);
+      bytes.size(), [&](const std::size_t index) { return bytes[index]; }, start_offset);
   if (!resync_offset.has_value())
   {
     return false;
@@ -159,8 +157,7 @@ RtcmMessageInfo BuildRtcmMessageInfo(const RtcmFrame& frame)
   info.message_type = frame.message_type;
   info.is_station_arp = universal_gnss_protocols::IsRtcmStationArpMessage(info.message_type);
   info.is_glonass_bias = universal_gnss_protocols::IsRtcmGlonassBiasMessage(info.message_type);
-  info.msm_constellation =
-      universal_gnss_protocols::GetRtcmMsmConstellation(info.message_type);
+  info.msm_constellation = universal_gnss_protocols::GetRtcmMsmConstellation(info.message_type);
   info.is_msm = info.msm_constellation != RtcmConstellation::kUnknown;
   info.msm_variant = universal_gnss_protocols::GetRtcmMsmVariant(info.message_type);
   return info;
@@ -182,9 +179,8 @@ GnssStreamInspectionItem MakeNmeaItem(const NmeaSentence& sentence,
   return item;
 }
 
-GnssStreamInspectionItem MakeUbxItem(const UbxFrame& frame,
-                                     const std::size_t byte_offset,
-                                     const std::size_t item_index)
+GnssStreamInspectionItem
+MakeUbxItem(const UbxFrame& frame, const std::size_t byte_offset, const std::size_t item_index)
 {
   GnssStreamInspectionItem item;
   item.item_index = item_index;
@@ -200,9 +196,8 @@ GnssStreamInspectionItem MakeUbxItem(const UbxFrame& frame,
   return item;
 }
 
-GnssStreamInspectionItem MakeRtcmItem(const RtcmFrame& frame,
-                                      const std::size_t byte_offset,
-                                      const std::size_t item_index)
+GnssStreamInspectionItem
+MakeRtcmItem(const RtcmFrame& frame, const std::size_t byte_offset, const std::size_t item_index)
 {
   GnssStreamInspectionItem item;
   item.item_index = item_index;
@@ -283,9 +278,8 @@ void AccumulateItem(const GnssStreamInspectionItem& item,
 
   if (item.protocol == ProtocolType::kUbx)
   {
-    ++result.summary.counts_by_ubx_message[FormatUbxMessageKey(
-        item.ubx_class_id,
-        item.ubx_message_id)];
+    ++result.summary
+          .counts_by_ubx_message[FormatUbxMessageKey(item.ubx_class_id, item.ubx_message_id)];
   }
 
   if (item.protocol == ProtocolType::kUnicore && !item.identity.empty())
@@ -299,8 +293,7 @@ void AccumulateItem(const GnssStreamInspectionItem& item,
     if (item.rtcm_message_info.is_msm &&
         item.rtcm_message_info.msm_constellation != RtcmConstellation::kUnknown)
     {
-      ++result.summary
-            .rtcm_msm_counts_by_constellation[item.rtcm_message_info.msm_constellation];
+      ++result.summary.rtcm_msm_counts_by_constellation[item.rtcm_message_info.msm_constellation];
     }
   }
 
@@ -318,8 +311,7 @@ bool ConsumeNmeaAtOffset(const std::vector<std::uint8_t>& bytes,
                          bool& stop_scan,
                          bool& in_noise_span)
 {
-  if (ConsumeEmbeddedTextResyncAtOffset(
-          bytes, start_offset, result, next_offset, in_noise_span))
+  if (ConsumeEmbeddedTextResyncAtOffset(bytes, start_offset, result, next_offset, in_noise_span))
   {
     return true;
   }
@@ -334,10 +326,7 @@ bool ConsumeNmeaAtOffset(const std::vector<std::uint8_t>& bytes,
     if (IsRecognizedNmeaSentence(sentence))
     {
       EndNoiseSpan(in_noise_span);
-      const auto item = MakeNmeaItem(
-          sentence,
-          start_offset,
-          result.summary.total_items_found + 1u);
+      const auto item = MakeNmeaItem(sentence, start_offset, result.summary.total_items_found + 1u);
       AccumulateItem(item, include_items, result);
       next_offset = start_offset + sentence.raw_bytes.size();
       return true;
@@ -377,8 +366,7 @@ bool ConsumeUnicoreAtOffset(const std::vector<std::uint8_t>& bytes,
                             bool& stop_scan,
                             bool& in_noise_span)
 {
-  if (ConsumeEmbeddedTextResyncAtOffset(
-          bytes, start_offset, result, next_offset, in_noise_span))
+  if (ConsumeEmbeddedTextResyncAtOffset(bytes, start_offset, result, next_offset, in_noise_span))
   {
     return true;
   }
@@ -390,10 +378,8 @@ bool ConsumeUnicoreAtOffset(const std::vector<std::uint8_t>& bytes,
   if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
   {
     EndNoiseSpan(in_noise_span);
-    const auto item = MakeUnicoreItem(
-        *probe.record,
-        start_offset,
-        result.summary.total_items_found + 1u);
+    const auto item =
+        MakeUnicoreItem(*probe.record, start_offset, result.summary.total_items_found + 1u);
     AccumulateItem(item, include_items, result);
     next_offset = start_offset + probe.record->raw_bytes.size();
     return true;
@@ -434,10 +420,8 @@ bool ConsumeUbxAtOffset(const std::vector<std::uint8_t>& bytes,
   if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
   {
     EndNoiseSpan(in_noise_span);
-    const auto item = MakeUbxItem(
-        *probe.record,
-        start_offset,
-        result.summary.total_items_found + 1u);
+    const auto item =
+        MakeUbxItem(*probe.record, start_offset, result.summary.total_items_found + 1u);
     AccumulateItem(item, include_items, result);
     next_offset = start_offset + probe.record->raw_bytes.size();
     return true;
@@ -478,10 +462,8 @@ bool ConsumeRtcmAtOffset(const std::vector<std::uint8_t>& bytes,
   if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
   {
     EndNoiseSpan(in_noise_span);
-    const auto item = MakeRtcmItem(
-        *probe.record,
-        start_offset,
-        result.summary.total_items_found + 1u);
+    const auto item =
+        MakeRtcmItem(*probe.record, start_offset, result.summary.total_items_found + 1u);
     AccumulateItem(item, include_items, result);
     next_offset = start_offset + probe.record->raw_bytes.size();
     return true;
@@ -522,10 +504,8 @@ bool ConsumeUnicoreBinaryAtOffset(const std::vector<std::uint8_t>& bytes,
   if (probe.status == ParserStatus::kRecordReady && probe.record.has_value())
   {
     EndNoiseSpan(in_noise_span);
-    const auto item = MakeUnicoreBinaryItem(
-        *probe.record,
-        start_offset,
-        result.summary.total_items_found + 1u);
+    const auto item =
+        MakeUnicoreBinaryItem(*probe.record, start_offset, result.summary.total_items_found + 1u);
     AccumulateItem(item, include_items, result);
     next_offset = start_offset + probe.record->raw_bytes.size();
     return true;
@@ -591,9 +571,7 @@ std::string EscapeJsonString(const std::string& text)
       default:
         if (ch < 0x20u)
         {
-          output << "\\u"
-                 << std::hex << std::setw(4) << std::setfill('0')
-                 << static_cast<int>(ch)
+          output << "\\u" << std::hex << std::setw(4) << std::setfill('0') << static_cast<int>(ch)
                  << std::dec << std::setfill(' ');
         }
         else
@@ -644,13 +622,7 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
     if (byte == '$' || byte == '!')
     {
       ConsumeNmeaAtOffset(
-          bytes,
-          offset,
-          include_items,
-          result,
-          next_offset,
-          stop_scan,
-          in_noise_span);
+          bytes, offset, include_items, result, next_offset, stop_scan, in_noise_span);
       offset = next_offset;
       continue;
     }
@@ -658,13 +630,7 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
     if (byte == 0xB5u)
     {
       ConsumeUbxAtOffset(
-          bytes,
-          offset,
-          include_items,
-          result,
-          next_offset,
-          stop_scan,
-          in_noise_span);
+          bytes, offset, include_items, result, next_offset, stop_scan, in_noise_span);
       offset = next_offset;
       continue;
     }
@@ -672,13 +638,7 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
     if (byte == '#' || byte == '%')
     {
       ConsumeUnicoreAtOffset(
-          bytes,
-          offset,
-          include_items,
-          result,
-          next_offset,
-          stop_scan,
-          in_noise_span);
+          bytes, offset, include_items, result, next_offset, stop_scan, in_noise_span);
       offset = next_offset;
       continue;
     }
@@ -686,13 +646,7 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
     if (byte == universal_gnss_protocols::kUnicoreBinarySync1)
     {
       ConsumeUnicoreBinaryAtOffset(
-          bytes,
-          offset,
-          include_items,
-          result,
-          next_offset,
-          stop_scan,
-          in_noise_span);
+          bytes, offset, include_items, result, next_offset, stop_scan, in_noise_span);
       offset = next_offset;
       continue;
     }
@@ -700,13 +654,7 @@ GnssStreamInspectionResult InspectGnssStreamBytes(const std::vector<std::uint8_t
     if (byte == 0xD3u)
     {
       ConsumeRtcmAtOffset(
-          bytes,
-          offset,
-          include_items,
-          result,
-          next_offset,
-          stop_scan,
-          in_noise_span);
+          bytes, offset, include_items, result, next_offset, stop_scan, in_noise_span);
       offset = next_offset;
       continue;
     }
@@ -744,11 +692,9 @@ const char* DescribeProtocolType(const ProtocolType protocol)
 std::string FormatUbxMessageKey(const std::uint8_t class_id, const std::uint8_t message_id)
 {
   std::ostringstream output;
-  output << std::hex
-         << std::uppercase
-         << std::setw(2) << std::setfill('0') << static_cast<int>(class_id)
-         << ':'
-         << std::setw(2) << std::setfill('0') << static_cast<int>(message_id);
+  output << std::hex << std::uppercase << std::setw(2) << std::setfill('0')
+         << static_cast<int>(class_id) << ':' << std::setw(2) << std::setfill('0')
+         << static_cast<int>(message_id);
   return output.str();
 }
 
@@ -806,10 +752,8 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
   {
     for (const auto& item : result.items)
     {
-      output << item.item_index
-             << " offset=" << item.byte_offset
-             << " proto=" << DescribeProtocolType(item.protocol)
-             << " len=" << item.length_bytes;
+      output << item.item_index << " offset=" << item.byte_offset
+             << " proto=" << DescribeProtocolType(item.protocol) << " len=" << item.length_bytes;
 
       if (item.protocol == ProtocolType::kNmea)
       {
@@ -817,8 +761,7 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
       }
       else if (item.protocol == ProtocolType::kUbx)
       {
-        output << " id=" << item.identity
-               << " name=" << item.ubx_message_name;
+        output << " id=" << item.identity << " name=" << item.ubx_message_name;
       }
       else if (item.protocol == ProtocolType::kUnicore)
       {
@@ -826,8 +769,7 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
       }
       else if (item.protocol == ProtocolType::kRtcm3)
       {
-        output << " type=" << item.rtcm_message_type
-               << " class=" << item.classification;
+        output << " type=" << item.rtcm_message_type << " class=" << item.classification;
       }
 
       output << " crc=" << DescribeChecksumStatus(item.checksum_status) << '\n';
@@ -836,14 +778,12 @@ std::string FormatGnssStreamInspectionText(const GnssStreamInspectionResult& res
 
   output << "summary"
          << " total_bytes=" << result.summary.total_bytes_read
-         << " items=" << result.summary.total_items_found
-         << " valid=" << result.summary.valid_items
+         << " items=" << result.summary.total_items_found << " valid=" << result.summary.valid_items
          << " invalid=" << result.summary.invalid_items
          << " malformed=" << result.summary.malformed_events
          << " truncated=" << result.summary.truncated_items
          << " noise_bytes=" << result.summary.noise_bytes
-         << " noise_spans=" << result.summary.noise_spans
-         << '\n';
+         << " noise_spans=" << result.summary.noise_spans << '\n';
 
   if (!result.summary.counts_by_protocol.empty())
   {
@@ -927,19 +867,17 @@ std::string FormatGnssStreamInspectionJson(const GnssStreamInspectionResult& res
       }
 
       const auto& item = result.items[index];
-      output << '{'
-             << "\"index\":" << item.item_index << ','
-             << "\"byte_offset\":" << item.byte_offset << ','
-             << "\"protocol\":\"" << DescribeProtocolType(item.protocol) << "\","
-             << "\"length_bytes\":" << item.length_bytes << ','
-             << "\"checksum_status\":\"" << DescribeChecksumStatus(item.checksum_status) << "\","
+      output << '{' << "\"index\":" << item.item_index << ','
+             << "\"byte_offset\":" << item.byte_offset << ',' << "\"protocol\":\""
+             << DescribeProtocolType(item.protocol) << "\","
+             << "\"length_bytes\":" << item.length_bytes << ',' << "\"checksum_status\":\""
+             << DescribeChecksumStatus(item.checksum_status) << "\","
              << "\"identity\":\"" << EscapeJsonString(item.identity) << "\"";
 
       if (item.protocol == ProtocolType::kNmea)
       {
         output << ",\"nmea_talker\":\"" << EscapeJsonString(item.nmea_talker) << "\""
-               << ",\"nmea_sentence_type\":\"" << EscapeJsonString(item.nmea_sentence_type)
-               << "\"";
+               << ",\"nmea_sentence_type\":\"" << EscapeJsonString(item.nmea_sentence_type) << "\"";
       }
       else if (item.protocol == ProtocolType::kUbx)
       {
@@ -953,8 +891,8 @@ std::string FormatGnssStreamInspectionJson(const GnssStreamInspectionResult& res
       }
       else if (item.protocol == ProtocolType::kRtcm3)
       {
-        output << ",\"message_type\":" << item.rtcm_message_type
-               << ",\"classification\":\"" << EscapeJsonString(item.classification) << "\"";
+        output << ",\"message_type\":" << item.rtcm_message_type << ",\"classification\":\""
+               << EscapeJsonString(item.classification) << "\"";
       }
 
       output << '}';

@@ -188,12 +188,12 @@ UbxMonRfJammingState DecodeMonHwJammingState(const std::uint8_t flags)
   return DecodeMonRfJammingState(static_cast<std::uint8_t>((flags & kMonHwJammingMask) >> 2u));
 }
 
-universal_gnss::GnssDiagnosticEvent BuildReceiverDiagnostic(
-    const universal_gnss::GnssDiagnosticSeverity severity,
-    const std::string& code,
-    const std::string& message,
-    const std::optional<ProtocolTimestampNs>& timestamp_ns,
-    const std::string& source)
+universal_gnss::GnssDiagnosticEvent
+BuildReceiverDiagnostic(const universal_gnss::GnssDiagnosticSeverity severity,
+                        const std::string& code,
+                        const std::string& message,
+                        const std::optional<ProtocolTimestampNs>& timestamp_ns,
+                        const std::string& source)
 {
   universal_gnss::GnssDiagnosticEvent event;
   event.severity = severity;
@@ -233,8 +233,7 @@ std::string FormatRtcmTypeAndStationMessage(const UbxRxmRtcmRecord& record)
   return message;
 }
 
-void SetCorrectionState(universal_gnss::GnssRuntimeState& state,
-                        const bool differential_solution)
+void SetCorrectionState(universal_gnss::GnssRuntimeState& state, const bool differential_solution)
 {
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kDifferentialCorrections);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kCorrectionsActive);
@@ -256,17 +255,14 @@ void ClearPositionSolutionValues(universal_gnss::GnssRuntimeState& state)
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kVerticalAccuracy);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeading);
   universal_gnss::SetCapability(state, universal_gnss::GnssCapability::kHeadingAccuracy);
-  universal_gnss::ClearOptionalValue(state,
-                                     universal_gnss::GnssCapability::kHorizontalAccuracy,
-                                     state.horizontal_accuracy_m);
-  universal_gnss::ClearOptionalValue(state,
-                                     universal_gnss::GnssCapability::kVerticalAccuracy,
-                                     state.vertical_accuracy_m);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kHorizontalAccuracy, state.horizontal_accuracy_m);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kVerticalAccuracy, state.vertical_accuracy_m);
   universal_gnss::ClearOptionalValue(
       state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
-  universal_gnss::ClearOptionalValue(state,
-                                     universal_gnss::GnssCapability::kHeadingAccuracy,
-                                     state.heading_accuracy_deg);
+  universal_gnss::ClearOptionalValue(
+      state, universal_gnss::GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg);
 }
 
 }  // namespace
@@ -289,8 +285,8 @@ ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame)
 
   UbxAckRecord record;
   record.timestamp_ns = frame.timestamp_ns;
-  record.kind = frame.message_id == kUbxAckAckId ? UbxAckMessageKind::kAck
-                                                 : UbxAckMessageKind::kNak;
+  record.kind =
+      frame.message_id == kUbxAckAckId ? UbxAckMessageKind::kAck : UbxAckMessageKind::kNak;
   record.target_class_id = frame.payload[0u];
   record.target_message_id = frame.payload[1u];
   return ParserResult<UbxAckRecord>::RecordReady(std::move(record));
@@ -641,8 +637,7 @@ ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame)
   return ParserResult<UbxMonRfRecord>::RecordReady(std::move(record));
 }
 
-universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
-    const UbxRxmRtcmRecord& record)
+universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(const UbxRxmRtcmRecord& record)
 {
   using universal_gnss::GnssDiagnosticCategory;
   using universal_gnss::GnssDiagnosticEvent;
@@ -658,8 +653,7 @@ universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
     event.severity = GnssDiagnosticSeverity::kWarning;
     event.code = "ubx_rxm_rtcm.crc_failed";
     event.message =
-        FormatRtcmTypeAndStationMessage(record) +
-        " failed receiver-side CRC validation";
+        FormatRtcmTypeAndStationMessage(record) + " failed receiver-side CRC validation";
     return event;
   }
 
@@ -667,9 +661,7 @@ universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
   {
     event.severity = GnssDiagnosticSeverity::kOk;
     event.code = "ubx_rxm_rtcm.accepted";
-    event.message =
-        FormatRtcmTypeAndStationMessage(record) +
-        " was accepted by the receiver";
+    event.message = FormatRtcmTypeAndStationMessage(record) + " was accepted by the receiver";
     return event;
   }
 
@@ -678,16 +670,14 @@ universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
     event.severity = GnssDiagnosticSeverity::kWarning;
     event.code = "ubx_rxm_rtcm.not_used";
     event.message =
-        FormatRtcmTypeAndStationMessage(record) +
-        " was received but not used by the receiver";
+        FormatRtcmTypeAndStationMessage(record) + " was received but not used by the receiver";
     return event;
   }
 
   event.severity = GnssDiagnosticSeverity::kInfo;
   event.code = "ubx_rxm_rtcm.usage_unknown";
   event.message =
-      FormatRtcmTypeAndStationMessage(record) +
-      " was parsed by the receiver but usage is unknown";
+      FormatRtcmTypeAndStationMessage(record) + " was parsed by the receiver but usage is unknown";
   return event;
 }
 
@@ -706,41 +696,44 @@ universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(const UbxMonHwRe
   {
     switch (*record.antenna_status)
     {
-      case UbxAntennaStatus::kOk:
-      {
+      case UbxAntennaStatus::kOk: {
         const bool powered =
             record.antenna_power.has_value() && *record.antenna_power == UbxAntennaPower::kOn;
         if (powered)
         {
-          events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
-                                                   "ubx_mon_hw.antenna_ok",
-                                                   "u-blox antenna supervisor reports antenna OK and powered",
-                                                   record.timestamp_ns,
-                                                   "ubx.mon_hw"));
+          events.push_back(
+              BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                      "ubx_mon_hw.antenna_ok",
+                                      "u-blox antenna supervisor reports antenna OK and powered",
+                                      record.timestamp_ns,
+                                      "ubx.mon_hw"));
         }
         else
         {
-          events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kInfo,
-                                                   "ubx_mon_hw.antenna_ok_power_unknown",
-                                                   "u-blox antenna supervisor reports antenna OK but antenna power is not confirmed on",
-                                                   record.timestamp_ns,
-                                                   "ubx.mon_hw"));
+          events.push_back(BuildReceiverDiagnostic(
+              GnssDiagnosticSeverity::kInfo,
+              "ubx_mon_hw.antenna_ok_power_unknown",
+              "u-blox antenna supervisor reports antenna OK but antenna power is not confirmed on",
+              record.timestamp_ns,
+              "ubx.mon_hw"));
         }
         break;
       }
       case UbxAntennaStatus::kOpen:
-        events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
-                                                 "ubx_mon_hw.antenna_open",
-                                                 "u-blox antenna supervisor reports an open antenna condition",
-                                                 record.timestamp_ns,
-                                                 "ubx.mon_hw"));
+        events.push_back(
+            BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
+                                    "ubx_mon_hw.antenna_open",
+                                    "u-blox antenna supervisor reports an open antenna condition",
+                                    record.timestamp_ns,
+                                    "ubx.mon_hw"));
         break;
       case UbxAntennaStatus::kShort:
-        events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
-                                                 "ubx_mon_hw.antenna_short",
-                                                 "u-blox antenna supervisor reports an antenna short condition",
-                                                 record.timestamp_ns,
-                                                 "ubx.mon_hw"));
+        events.push_back(
+            BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
+                                    "ubx_mon_hw.antenna_short",
+                                    "u-blox antenna supervisor reports an antenna short condition",
+                                    record.timestamp_ns,
+                                    "ubx.mon_hw"));
         break;
       case UbxAntennaStatus::kInit:
       case UbxAntennaStatus::kDontKnow:
@@ -753,10 +746,8 @@ universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(const UbxMonHwRe
     }
   }
 
-  if (record.antenna_power.has_value() &&
-      *record.antenna_power == UbxAntennaPower::kOff &&
-      record.antenna_status.has_value() &&
-      *record.antenna_status != UbxAntennaStatus::kInit &&
+  if (record.antenna_power.has_value() && *record.antenna_power == UbxAntennaPower::kOff &&
+      record.antenna_status.has_value() && *record.antenna_status != UbxAntennaStatus::kInit &&
       *record.antenna_status != UbxAntennaStatus::kDontKnow)
   {
     events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
@@ -769,25 +760,28 @@ universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(const UbxMonHwRe
   switch (record.jamming_state)
   {
     case UbxMonRfJammingState::kOk:
-      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
-                                               "ubx_mon_hw.jamming_ok",
-                                               "u-blox hardware monitor reports no significant jamming",
-                                               record.timestamp_ns,
-                                               "ubx.mon_hw"));
+      events.push_back(
+          BuildReceiverDiagnostic(GnssDiagnosticSeverity::kOk,
+                                  "ubx_mon_hw.jamming_ok",
+                                  "u-blox hardware monitor reports no significant jamming",
+                                  record.timestamp_ns,
+                                  "ubx.mon_hw"));
       break;
     case UbxMonRfJammingState::kWarning:
-      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kWarning,
-                                               "ubx_mon_hw.jamming_warning",
-                                               "u-blox hardware monitor reports visible interference but fix remains available",
-                                               record.timestamp_ns,
-                                               "ubx.mon_hw"));
+      events.push_back(BuildReceiverDiagnostic(
+          GnssDiagnosticSeverity::kWarning,
+          "ubx_mon_hw.jamming_warning",
+          "u-blox hardware monitor reports visible interference but fix remains available",
+          record.timestamp_ns,
+          "ubx.mon_hw"));
       break;
     case UbxMonRfJammingState::kCritical:
-      events.push_back(BuildReceiverDiagnostic(GnssDiagnosticSeverity::kError,
-                                               "ubx_mon_hw.jamming_critical",
-                                               "u-blox hardware monitor reports critical interference with no fix",
-                                               record.timestamp_ns,
-                                               "ubx.mon_hw"));
+      events.push_back(BuildReceiverDiagnostic(
+          GnssDiagnosticSeverity::kError,
+          "ubx_mon_hw.jamming_critical",
+          "u-blox hardware monitor reports critical interference with no fix",
+          record.timestamp_ns,
+          "ubx.mon_hw"));
       break;
     case UbxMonRfJammingState::kUnknown:
     default:
@@ -847,26 +841,23 @@ universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRe
   switch (record.carrier_solution)
   {
     case UbxCarrierSolutionStatus::kFloat:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kFloat);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kFloat);
       break;
     case UbxCarrierSolutionStatus::kFixed:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kFixed);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kFixed);
       break;
     case UbxCarrierSolutionStatus::kNone:
     default:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kNone);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kNone);
       break;
   }
 
@@ -880,8 +871,7 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
 
   const bool position_valid =
       !record.invalid_llh &&
-      (record.fix_type == UbxNavPvtFixType::k2D ||
-       record.fix_type == UbxNavPvtFixType::k3D ||
+      (record.fix_type == UbxNavPvtFixType::k2D || record.fix_type == UbxNavPvtFixType::k3D ||
        record.fix_type == UbxNavPvtFixType::kGnssDeadReckoningCombined) &&
       record.gnss_fix_ok;
 
@@ -898,8 +888,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
     case UbxNavPvtFixType::k2D:
     case UbxNavPvtFixType::k3D:
       state.fix_valid = position_valid;
-      state.fix_type = position_valid ? universal_gnss::GnssFixType::kFix
-                                      : universal_gnss::GnssFixType::kNoFix;
+      state.fix_type =
+          position_valid ? universal_gnss::GnssFixType::kFix : universal_gnss::GnssFixType::kNoFix;
       break;
     case UbxNavPvtFixType::kGnssDeadReckoningCombined:
       state.fix_valid = position_valid;
@@ -930,41 +920,37 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   switch (record.carrier_solution)
   {
     case UbxCarrierSolutionStatus::kFloat:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kFloat);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kFloat);
       break;
     case UbxCarrierSolutionStatus::kFixed:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kFixed);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kFixed);
       break;
     case UbxCarrierSolutionStatus::kNone:
     default:
-      universal_gnss::SetOptionalValue(
-          state,
-          universal_gnss::GnssCapability::kRtkMode,
-          state.rtk_mode,
-          universal_gnss::GnssRtkMode::kNone);
+      universal_gnss::SetOptionalValue(state,
+                                       universal_gnss::GnssCapability::kRtkMode,
+                                       state.rtk_mode,
+                                       universal_gnss::GnssRtkMode::kNone);
       break;
   }
 
-  universal_gnss::SetOptionalValue(state,
-                                   universal_gnss::GnssCapability::kSatellitesUsed,
-                                   state.satellites_used,
-                                   record.num_sv);
+  universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kSatellitesUsed, state.satellites_used, record.num_sv);
   SetCorrectionState(state, record.differential_solution);
 
   if (record.valid_date)
   {
-    universal_gnss::SetOptionalValue(state,
-                                     universal_gnss::GnssCapability::kUtcDate,
-                                     state.utc_date,
-                                     universal_gnss::GnssUtcDate{record.year, record.month, record.day});
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kUtcDate,
+        state.utc_date,
+        universal_gnss::GnssUtcDate{record.year, record.month, record.day});
   }
   else
   {
@@ -973,11 +959,11 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   }
   if (record.valid_time)
   {
-    universal_gnss::SetOptionalValue(state,
-                                     universal_gnss::GnssCapability::kUtcTime,
-                                     state.utc_time,
-                                     universal_gnss::GnssUtcTime{
-                                         record.hour, record.minute, record.second, record.nano_ns});
+    universal_gnss::SetOptionalValue(
+        state,
+        universal_gnss::GnssCapability::kUtcTime,
+        state.utc_time,
+        universal_gnss::GnssUtcTime{record.hour, record.minute, record.second, record.nano_ns});
   }
   else
   {
@@ -1014,9 +1000,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kSpeedOverGround,
-                                       state.speed_over_ground_m_s);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kSpeedOverGround, state.speed_over_ground_m_s);
   }
   if (position_valid && record.course_over_ground_deg >= 0.0f &&
       record.course_over_ground_deg < 360.0f)
@@ -1028,15 +1013,16 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   }
   else
   {
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kCourseOverGround,
-                                       state.course_over_ground_deg);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kCourseOverGround, state.course_over_ground_deg);
   }
 
   if (record.heading_vehicle_valid && position_valid)
   {
-    universal_gnss::SetOptionalValue(
-        state, universal_gnss::GnssCapability::kHeading, state.heading_deg, record.heading_vehicle_deg);
+    universal_gnss::SetOptionalValue(state,
+                                     universal_gnss::GnssCapability::kHeading,
+                                     state.heading_deg,
+                                     record.heading_vehicle_deg);
     universal_gnss::SetOptionalValue(state,
                                      universal_gnss::GnssCapability::kHeadingAccuracy,
                                      state.heading_accuracy_deg,
@@ -1046,9 +1032,8 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
   {
     universal_gnss::ClearOptionalValue(
         state, universal_gnss::GnssCapability::kHeading, state.heading_deg);
-    universal_gnss::ClearOptionalValue(state,
-                                       universal_gnss::GnssCapability::kHeadingAccuracy,
-                                       state.heading_accuracy_deg);
+    universal_gnss::ClearOptionalValue(
+        state, universal_gnss::GnssCapability::kHeadingAccuracy, state.heading_accuracy_deg);
   }
 
   return state;
@@ -1143,10 +1128,8 @@ universal_gnss::GnssRuntimeState UbxMonHwToRuntimeState(const UbxMonHwRecord& re
                                    universal_gnss::GnssCapability::kInterferenceState,
                                    state.interference_detected,
                                    issue_detected);
-  universal_gnss::SetOptionalValue(state,
-                                   universal_gnss::GnssCapability::kJammingState,
-                                   state.jamming_detected,
-                                   issue_detected);
+  universal_gnss::SetOptionalValue(
+      state, universal_gnss::GnssCapability::kJammingState, state.jamming_detected, issue_detected);
   return state;
 }
 

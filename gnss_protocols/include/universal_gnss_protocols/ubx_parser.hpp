@@ -27,11 +27,9 @@ ParserResult<UbxMonHw2Record> ParseUbxMonHw2(const UbxFrame& frame);
 
 ParserResult<UbxMonRfRecord> ParseUbxMonRf(const UbxFrame& frame);
 
-universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(
-    const UbxRxmRtcmRecord& record);
+universal_gnss::GnssDiagnosticEvent UbxRxmRtcmToDiagnosticEvent(const UbxRxmRtcmRecord& record);
 
-universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(
-    const UbxMonHwRecord& record);
+universal_gnss::GnssDiagnosticEvents UbxMonHwToDiagnosticEvents(const UbxMonHwRecord& record);
 
 universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRecord& record);
 

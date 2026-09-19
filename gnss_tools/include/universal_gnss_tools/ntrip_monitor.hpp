@@ -98,23 +98,19 @@ struct NtripMonitorSnapshot
   std::optional<universal_gnss::GnssTimestampNs> last_gga_sent_timestamp_ns{};
   std::optional<std::int64_t> elapsed_time_ns{};
 
-  universal_gnss_ntrip::NtripClientError last_error{
-      universal_gnss_ntrip::NtripClientError::kNone};
+  universal_gnss_ntrip::NtripClientError last_error{universal_gnss_ntrip::NtripClientError::kNone};
   universal_gnss::GnssHealthSummary correction_health{};
   std::map<std::uint16_t, std::uint64_t> message_type_counts{};
-  std::map<universal_gnss_protocols::RtcmConstellation, std::uint64_t>
-      msm_constellation_counts{};
+  std::map<universal_gnss_protocols::RtcmConstellation, std::uint64_t> msm_constellation_counts{};
   NtripMonitorStopReason stop_reason{NtripMonitorStopReason::kCompleted};
 };
 
-NtripMonitorValidationResult ValidateNtripMonitorOptions(
-    const NtripMonitorOptions& options);
+NtripMonitorValidationResult ValidateNtripMonitorOptions(const NtripMonitorOptions& options);
 
-universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(
-    const NtripMonitorOptions& options);
+universal_gnss_ntrip::NtripConfig BuildNtripMonitorConfig(const NtripMonitorOptions& options);
 
-std::optional<universal_gnss::GnssRuntimeState> BuildNtripMonitorRuntimeState(
-    const NtripMonitorOptions& options);
+std::optional<universal_gnss::GnssRuntimeState>
+BuildNtripMonitorRuntimeState(const NtripMonitorOptions& options);
 
 NtripMonitorSnapshot BuildNtripMonitorSnapshot(
     const NtripMonitorOptions& options,
@@ -127,11 +123,9 @@ NtripMonitorSnapshot BuildNtripMonitorSnapshot(
     std::string response_header = {},
     std::optional<universal_gnss::GnssTimestampNs> now_timestamp_ns = std::nullopt);
 
-std::string DescribeGnssDiagnosticSeverity(
-    universal_gnss::GnssDiagnosticSeverity severity);
+std::string DescribeGnssDiagnosticSeverity(universal_gnss::GnssDiagnosticSeverity severity);
 
-std::string DescribeNtripClientError(
-    universal_gnss_ntrip::NtripClientError error);
+std::string DescribeNtripClientError(universal_gnss_ntrip::NtripClientError error);
 
 std::string DescribeNtripMonitorStopReason(NtripMonitorStopReason stop_reason);
 

@@ -148,18 +148,18 @@ struct ReceiverAutoConfigPlan
 
 ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(const ReceiverAutoConfigRequest& request);
 
-ReceiverAutoConfigPlan BuildReceiverAutoConfigPlan(
-    const ReceiverProbeResult& discovery_result,
-    ReceiverAutoConfigProfile requested_profile,
-    ReceiverAutoConfigApplyMode apply_mode,
-    std::optional<std::uint32_t> config_baud = std::nullopt,
-    std::optional<double> rate_hz = std::nullopt);
+ReceiverAutoConfigPlan
+BuildReceiverAutoConfigPlan(const ReceiverProbeResult& discovery_result,
+                            ReceiverAutoConfigProfile requested_profile,
+                            ReceiverAutoConfigApplyMode apply_mode,
+                            std::optional<std::uint32_t> config_baud = std::nullopt,
+                            std::optional<double> rate_hz = std::nullopt);
 
 std::optional<ReceiverAutoConfigProfile> ParseReceiverAutoConfigProfile(std::string_view profile);
-std::optional<ReceiverAutoConfigSignalProfile> ParseReceiverAutoConfigSignalProfile(
-    std::string_view signal_profile);
-std::optional<ReceiverAutoConfigRoverDynamicMode> ParseReceiverAutoConfigRoverDynamicMode(
-    std::string_view rover_dynamic_mode);
+std::optional<ReceiverAutoConfigSignalProfile>
+ParseReceiverAutoConfigSignalProfile(std::string_view signal_profile);
+std::optional<ReceiverAutoConfigRoverDynamicMode>
+ParseReceiverAutoConfigRoverDynamicMode(std::string_view rover_dynamic_mode);
 // Parses an enabled Unicore correction-age window in whole seconds. Zero
 // disables the corresponding receiver engine and is deliberately not an
 // accepted timeout override.
@@ -168,10 +168,10 @@ std::optional<std::uint32_t> ParseUnicoreCorrectionAgeTimeout(std::string_view t
 // two group bytes. Returns nullopt on empty input, ambiguous collapsed input
 // such as "36", non-numeric tokens, out-of-range values, or anything other
 // than exactly two groups.
-std::optional<std::vector<std::uint8_t>> ParseUnicoreSignalGroupOverride(
-    std::string_view signal_group);
-std::optional<ReceiverAutoConfigOutputPort> ParseReceiverAutoConfigOutputPort(
-    std::string_view output_port);
+std::optional<std::vector<std::uint8_t>>
+ParseUnicoreSignalGroupOverride(std::string_view signal_group);
+std::optional<ReceiverAutoConfigOutputPort>
+ParseReceiverAutoConfigOutputPort(std::string_view output_port);
 
 const char* ToString(ReceiverAutoConfigProfile profile);
 const char* ToString(ReceiverAutoConfigApplyMode apply_mode);

@@ -29,8 +29,7 @@ bool HasExplicitRtkFixed(const universal_gnss::GnssRuntimeState& state)
   }
 
   return universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kRtkMode) &&
-         state.rtk_mode.has_value() &&
-         *state.rtk_mode == universal_gnss::GnssRtkMode::kFixed;
+         state.rtk_mode.has_value() && *state.rtk_mode == universal_gnss::GnssRtkMode::kFixed;
 }
 
 void PopulateConservativeCovariance(const universal_gnss::GnssRuntimeState& state,
@@ -43,8 +42,10 @@ void PopulateConservativeCovariance(const universal_gnss::GnssRuntimeState& stat
   // conservative diagonal approximation only when both standard-deviation-like
   // terms are present. If either term is missing, we leave covariance unknown
   // rather than inventing partial precision.
-  if (!universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kHorizontalAccuracy) ||
-      !universal_gnss::HasValueAvailable(state, universal_gnss::GnssCapability::kVerticalAccuracy) ||
+  if (!universal_gnss::HasValueAvailable(state,
+                                         universal_gnss::GnssCapability::kHorizontalAccuracy) ||
+      !universal_gnss::HasValueAvailable(state,
+                                         universal_gnss::GnssCapability::kVerticalAccuracy) ||
       !state.horizontal_accuracy_m.has_value() || !state.vertical_accuracy_m.has_value())
   {
     message.position_covariance_type = NavSatFix::COVARIANCE_TYPE_UNKNOWN;
@@ -88,15 +89,14 @@ sensor_msgs::msg::NavSatFix ToNavSatFixMessage(const universal_gnss::GnssRuntime
   message.longitude = *state.longitude_deg;
   message.altitude = state.altitude_m.has_value() ? *state.altitude_m : QuietNaN();
 
-  if (!state.fix_valid ||
-      state.fix_type == universal_gnss::GnssFixType::kUnknown ||
+  if (!state.fix_valid || state.fix_type == universal_gnss::GnssFixType::kUnknown ||
       state.fix_type == universal_gnss::GnssFixType::kNoFix)
   {
     return message;
   }
 
-  message.status.status = HasExplicitRtkFixed(state) ? NavSatStatus::STATUS_GBAS_FIX
-                                                     : NavSatStatus::STATUS_FIX;
+  message.status.status =
+      HasExplicitRtkFixed(state) ? NavSatStatus::STATUS_GBAS_FIX : NavSatStatus::STATUS_FIX;
   PopulateConservativeCovariance(state, message);
   return message;
 }

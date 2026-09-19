@@ -23,7 +23,9 @@ struct TestContext
     }
   }
 
-  void ExpectNear(const double actual, const double expected, const double tolerance,
+  void ExpectNear(const double actual,
+                  const double expected,
+                  const double tolerance,
                   const std::string& message)
   {
     Expect(std::fabs(actual - expected) <= tolerance, message);

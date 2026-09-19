@@ -36,8 +36,8 @@ public:
 
     bool applied = false;
 
-    const GnssCapabilityFlags merged_capabilities = static_cast<GnssCapabilityFlags>(
-        state_.capability_flags | update.capability_flags);
+    const GnssCapabilityFlags merged_capabilities =
+        static_cast<GnssCapabilityFlags>(state_.capability_flags | update.capability_flags);
     if (merged_capabilities != state_.capability_flags)
     {
       state_.capability_flags = merged_capabilities;

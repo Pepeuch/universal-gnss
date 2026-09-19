@@ -272,11 +272,8 @@ void WriteJsonOptionalBool(std::ostream& output,
   }
 }
 
-void WriteJsonOptionalString(std::ostream& output,
-                             const char* key,
-                             const char* value,
-                             const bool pretty,
-                             bool& first_field)
+void WriteJsonOptionalString(
+    std::ostream& output, const char* key, const char* value, const bool pretty, bool& first_field)
 {
   WriteFieldPrefix(output, pretty, first_field);
   output << '"' << key << '"' << (pretty ? ": " : ":");
@@ -395,9 +392,7 @@ void WriteCsvText(std::ostream& output, const std::string& value, bool& first_fi
 }
 
 template <typename T>
-void WriteCsvOptionalNumber(std::ostream& output,
-                            const std::optional<T>& value,
-                            bool& first_field)
+void WriteCsvOptionalNumber(std::ostream& output, const std::optional<T>& value, bool& first_field)
 {
   WriteCsvSeparator(output, first_field);
   if (value.has_value())
@@ -424,9 +419,7 @@ void WriteCsvBool(std::ostream& output, const bool value, bool& first_field)
   WriteCsvText(output, value ? "true" : "false", first_field);
 }
 
-void WriteCsvOptionalBool(std::ostream& output,
-                          const std::optional<bool>& value,
-                          bool& first_field)
+void WriteCsvOptionalBool(std::ostream& output, const std::optional<bool>& value, bool& first_field)
 {
   WriteCsvText(output, value.has_value() ? (*value ? "true" : "false") : "", first_field);
 }
@@ -437,8 +430,7 @@ void WriteRuntimeUpdateCsv(std::ostream& output, const GnssReplayEvent& event)
   bool first_field = true;
 
   WriteCsvText(output, "1", first_field);
-  WriteCsvOptionalNumber(
-      output, std::optional<std::size_t>(event.event_index), first_field);
+  WriteCsvOptionalNumber(output, std::optional<std::size_t>(event.event_index), first_field);
   WriteCsvOptionalNumber(output, state.timestamp_ns, first_field);
   WriteCsvText(output, DescribeExportProtocol(event.protocol), first_field);
   WriteCsvText(output, DescribeExportMessage(event), first_field);
