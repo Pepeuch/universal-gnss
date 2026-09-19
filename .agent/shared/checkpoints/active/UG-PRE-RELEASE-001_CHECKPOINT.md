@@ -20,10 +20,12 @@ read-only, with no production/test edits, reformatting, commit, or push. The
 subsequent user request authorizes this checkpoint and its index entry only.
 It does not authorize implementing the proposed corrections.
 
-Audit recommendation: do not merge/tag the audited HEAD until the five HIGH
-software findings below are resolved and regression-tested. The three MEDIUM
-findings were reported as non-blocking. This is a software assessment, not a
-claim that every release qualification gate is satisfied.
+Audit recommendation: do not merge/tag the audited HEAD until the HIGH
+software findings below are resolved and regression-tested. F01 is remediated
+in the current uncommitted worktree; F02-F05 remain unresolved at the audited
+HEAD. The three MEDIUM findings were reported as non-blocking. This is a
+software assessment, not a claim that every release qualification gate is
+satisfied.
 
 Finding references `F01` through `F08` are stable within this audit only, not
 new UGA IDs or replacements for canonical backlog items. All remain unresolved.
@@ -51,7 +53,7 @@ does not change their classifications, conservation accounting, or progress.
 
 ## Release-blocking findings
 
-### F01 — HIGH — Optional partial write can escape quarantine through apply phases
+### F01 — IMPLEMENTED IN CURRENT WORKTREE — Optional partial write can escape quarantine through apply phases
 
 Scope: DRIVER / TOOLS. Related backlog: `UGA-126`, with failure reporting under
 `UGA-127`. Evidence: complete static call-path trace; deterministic with injected
@@ -78,11 +80,36 @@ Coverage: `TestPartialWriteQuarantinesSession` covers the engine alone;
 whose separate handler explicitly forbids continuation. Neither covers optional
 partial-write propagation across phases.
 
-Smallest correction direction: make engine indeterminacy terminal regardless of
-optional/continue-on-error policy; carry that state through all phase outcomes
-and prohibit recovery/probes/new command phases after this failure.
-Acceptance: partial write -> hard stop; no reopen, MODEL probe, later command,
-or persistence operation; result explicitly indeterminate.
+Implemented in the current uncommitted worktree based on
+`ccb9d8ad8dd4811ab6006d83f22795bdd4bf4140`:
+
+- `ReceiverConfigApplication` now makes engine indeterminacy terminal before
+  optional/`continue_on_error` policy and exposes it in its result.
+- `CommandPhaseOutcome` carries the fact explicitly; SIGNALGROUP, recovery,
+  and runtime baud-switch wrappers return immediately when it is set.
+- The direct SIGNALGROUP result now takes the flag from its phase rather than
+  inferring it from `kTimedOut`.
+- The generic result log now says a dispatched command (not only a timeout)
+  may have been applied.
+
+Regression evidence:
+
+- `TestOptionalPartialWriteStopsIndeterminateApplyDespiteContinueOnError`:
+  optional partial write, then zero-progress/error; no later application
+  dispatch despite `continue_on_error`.
+- `TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupWriteIsPartial`:
+  runtime Unicore SIGNALGROUP receives a five-byte accepted prefix then a
+  failed remainder; result is `kDispatchFailed` plus
+  `receiver_state_indeterminate=true`, and no post-write reopen, VERSIONA,
+  later command, or `SAVECONFIG` occurs.
+
+Validation at the current worktree: full build PASS; direct engine/application/
+config-apply tests PASS; CTest 62/67 with five pre-existing sandbox loopback/
+SIGPIPE failures unrelated to F01; clang-format and `git diff --check` PASS.
+
+Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
+HARDWARE_REQUIRED`; this software containment does not establish an automatic
+recovery/incarnation cutoff.
 
 ### F02 — HIGH — Already-received responses can acknowledge later commands
 

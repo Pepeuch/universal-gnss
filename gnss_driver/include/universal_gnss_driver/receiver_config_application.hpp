@@ -53,6 +53,7 @@ struct ReceiverConfigApplicationResult
   bool advanced_to_next_command{false};
   bool response_applied{false};
   bool retry_dispatched{false};
+  bool receiver_state_indeterminate{false};
   std::string error_message{};
   std::optional<EngineStepResult> engine_result{};
 };

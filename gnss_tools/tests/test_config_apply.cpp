@@ -350,8 +350,24 @@ public:
       return WriteResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
     }
 
-    written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
+    if (partial_signalgroup_write_pending_)
+    {
+      partial_signalgroup_write_pending_ = false;
+      return WriteResult{0u, TransportStatus::kError, TransportError::kWriteFailure};
+    }
+
     const std::string_view text(reinterpret_cast<const char*>(data), size);
+    if (partial_signalgroup_write_bytes_.has_value() &&
+        text.find("CONFIG SIGNALGROUP ") != std::string_view::npos)
+    {
+      const auto bytes_to_write = std::min(*partial_signalgroup_write_bytes_, size);
+      written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(bytes_to_write));
+      partial_signalgroup_write_bytes_.reset();
+      partial_signalgroup_write_pending_ = true;
+      return WriteResult{bytes_to_write, TransportStatus::kOk, TransportError::kNone};
+    }
+
+    written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
     if (disconnect_after_signalgroup_response_ &&
         text.find("CONFIG SIGNALGROUP ") != std::string_view::npos)
     {
@@ -407,6 +423,11 @@ public:
     signalgroup_response_ = std::move(response);
   }
 
+  void FailAfterPartialSignalGroupWrite(const std::size_t bytes_to_write)
+  {
+    partial_signalgroup_write_bytes_ = bytes_to_write;
+  }
+
   bool stale_write_attempted() const
   {
     return stale_write_attempted_;
@@ -427,6 +448,8 @@ private:
   bool stale_after_signalgroup_{false};
   bool stale_write_attempted_{false};
   bool auto_text_ok_responses_{false};
+  std::optional<std::size_t> partial_signalgroup_write_bytes_{};
+  bool partial_signalgroup_write_pending_{false};
   std::string signalgroup_response_{"<OK\r\n"};
   std::vector<std::uint8_t> ublox_mon_ver_response_{};
 };
@@ -1270,6 +1293,41 @@ void TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(TestContext& ct
              "an optional SIGNALGROUP timeout must not enter recovery or dispatch later commands");
 }
 
+void TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupWriteIsPartial(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.confirm = true;
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.FailAfterPartialSignalGroupWrite(5u);
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kDispatchFailed && result.executed &&
+                 result.receiver_state_indeterminate &&
+                 result.execution_summary.commands_failed == 1u &&
+                 result.execution_summary.optional_commands_failed == 1u &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "a partial optional SIGNALGROUP write must stop with an indeterminate result");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() && written == "CONFIG\r\nCONFI" &&
+                 written.find("VERSIONA\r\n") == std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos,
+             "a partial optional SIGNALGROUP write must not reopen, probe, persist, or dispatch a "
+             "later command");
+}
+
 void TestUnicoreRecoveryProbeRejectsGenericAck(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -2058,6 +2116,7 @@ int main()
   TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(ctx);
   TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(ctx);
+  TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupWriteIsPartial(ctx);
   TestUnicoreRecoveryProbeRejectsGenericAck(ctx);
   TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(ctx);
   TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(ctx);

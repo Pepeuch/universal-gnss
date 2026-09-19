@@ -217,6 +217,7 @@ ReceiverConfigApplicationResult ReceiverConfigApplication::BuildResult() const
   ReceiverConfigApplicationResult result;
   result.state = state_;
   result.command_index = current_index_;
+  result.receiver_state_indeterminate = engine_.session_indeterminate();
   return result;
 }
 
@@ -231,6 +232,7 @@ ReceiverConfigApplication::CompleteCurrentCommand(const EngineStepResult& engine
   const ReceiverCommand* command = current_command();
   const bool command_required = command == nullptr || IsRequiredCommand(*command);
   const bool command_failed = !command_succeeded;
+  const bool receiver_state_indeterminate = engine_.session_indeterminate();
 
   if (command_succeeded)
   {
@@ -250,9 +252,10 @@ ReceiverConfigApplication::CompleteCurrentCommand(const EngineStepResult& engine
   }
 
   const bool should_continue =
-      !command_failed ||
-      (allow_continuation &&
-       (config_.continue_on_error || (command != nullptr && !IsRequiredCommand(*command))));
+      !receiver_state_indeterminate &&
+      (!command_failed ||
+       (allow_continuation &&
+        (config_.continue_on_error || (command != nullptr && !IsRequiredCommand(*command)))));
   const bool has_more_commands = (current_index_ + 1u) < commands_.size();
 
   if (should_continue)
@@ -280,6 +283,7 @@ ReceiverConfigApplication::CompleteCurrentCommand(const EngineStepResult& engine
   result.failure_ignored = command_failed && should_continue;
   result.advanced_to_next_command = should_continue && has_more_commands;
   result.response_applied = response_applied;
+  result.receiver_state_indeterminate = receiver_state_indeterminate;
   result.engine_result = engine_result;
   result.error_message = std::move(error_message);
   return result;

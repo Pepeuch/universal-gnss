@@ -1550,7 +1550,7 @@ bool FinalizeIfApplicationStopped(ConfigApplyResult& result,
     if (result.receiver_state_indeterminate)
     {
       result.progress_log.push_back(
-          "Receiver state indeterminate: the timed-out command may have been applied; "
+          "Receiver state indeterminate: a dispatched command may have been applied; "
           "further configuration is quarantined");
     }
     return true;
@@ -1670,8 +1670,27 @@ struct CommandPhaseOutcome
 {
   ConfigApplyStatus status{ConfigApplyStatus::kOk};
   ConfigApplyExecutionSummary summary{};
+  bool receiver_state_indeterminate{false};
   std::string error_message{};
 };
+
+void MarkReceiverStateIndeterminate(ConfigApplyResult& result, std::string& error_message)
+{
+  constexpr std::string_view kPrefix =
+      "receiver state indeterminate: command may have been applied; ";
+  const bool already_indeterminate = result.receiver_state_indeterminate;
+  result.receiver_state_indeterminate = true;
+  if (error_message.rfind(kPrefix, 0u) != 0u)
+  {
+    error_message = std::string(kPrefix) + error_message;
+  }
+  if (!already_indeterminate)
+  {
+    result.progress_log.push_back(
+        "Receiver state indeterminate: a dispatched command may have been applied; "
+        "further configuration is quarantined");
+  }
+}
 
 CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
                                                ByteDuplex& transport,
@@ -1867,6 +1886,7 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
   outcome.summary.optional_commands_failed = application.metrics().optional_commands_failed;
   outcome.summary.commands_retried = application.metrics().commands_retried;
   outcome.summary.responses_applied = application.metrics().responses_applied;
+  outcome.receiver_state_indeterminate = application.transaction_engine().session_indeterminate();
 
   if (outcome.status == ConfigApplyStatus::kReadFailed)
   {
@@ -1892,6 +1912,10 @@ CommandPhaseOutcome ExecuteUnicoreCommandPhase(ConfigApplyResult& result,
                               : (application_result.engine_result.has_value()
                                      ? application_result.engine_result->error_message
                                      : std::string{"configuration apply failed"});
+  if (outcome.receiver_state_indeterminate)
+  {
+    MarkReceiverStateIndeterminate(result, outcome.error_message);
+  }
   outcome.summary.final_status = ToString(outcome.status);
   return outcome;
 }
@@ -1987,10 +2011,11 @@ ExecuteUnicoreSignalGroupAwarePhase(ConfigApplyResult& result,
     const auto pre_outcome = ExecuteUnicoreCommandPhase(
         result, transport, pre_signalgroup_commands, options, command_index_offset);
     MergeExecutionSummaries(outcome.summary, pre_outcome.summary);
-    if (!IsSuccessfulApplyStatus(pre_outcome.status))
+    if (pre_outcome.receiver_state_indeterminate || !IsSuccessfulApplyStatus(pre_outcome.status))
     {
       outcome.status = pre_outcome.status;
       outcome.error_message = pre_outcome.error_message;
+      outcome.receiver_state_indeterminate = pre_outcome.receiver_state_indeterminate;
       outcome.summary.final_status = pre_outcome.summary.final_status;
       return outcome;
     }
@@ -2025,10 +2050,11 @@ ExecuteUnicoreSignalGroupAwarePhase(ConfigApplyResult& result,
                                    options,
                                    command_index_offset + *signalgroup_index + 1u);
     MergeExecutionSummaries(outcome.summary, post_outcome.summary);
-    if (!IsSuccessfulApplyStatus(post_outcome.status))
+    if (post_outcome.receiver_state_indeterminate || !IsSuccessfulApplyStatus(post_outcome.status))
     {
       outcome.status = post_outcome.status;
       outcome.error_message = post_outcome.error_message;
+      outcome.receiver_state_indeterminate = post_outcome.receiver_state_indeterminate;
       outcome.summary.final_status = post_outcome.summary.final_status;
       return outcome;
     }
@@ -2048,10 +2074,12 @@ ExecuteUnicoreSignalGroupAwarePhase(ConfigApplyResult& result,
   MergeExecutionSummaries(outcome.summary, signalgroup_outcome.summary);
   const bool signalgroup_failure_was_optional =
       signalgroup_outcome.summary.optional_commands_failed > 0u;
-  if (!IsSuccessfulApplyStatus(signalgroup_outcome.status))
+  if (signalgroup_outcome.receiver_state_indeterminate ||
+      !IsSuccessfulApplyStatus(signalgroup_outcome.status))
   {
     outcome.status = signalgroup_outcome.status;
     outcome.error_message = signalgroup_outcome.error_message;
+    outcome.receiver_state_indeterminate = signalgroup_outcome.receiver_state_indeterminate;
     outcome.summary.final_status = signalgroup_outcome.summary.final_status;
     return outcome;
   }
@@ -2183,10 +2211,11 @@ ExecuteUnicoreSignalGroupAwarePhase(ConfigApplyResult& result,
   const auto pre_outcome = ExecuteUnicoreCommandPhase(
       result, transport, pre_signalgroup_commands, options, command_index_offset);
   MergeExecutionSummaries(outcome.summary, pre_outcome.summary);
-  if (!IsSuccessfulApplyStatus(pre_outcome.status))
+  if (pre_outcome.receiver_state_indeterminate || !IsSuccessfulApplyStatus(pre_outcome.status))
   {
     outcome.status = pre_outcome.status;
     outcome.error_message = pre_outcome.error_message;
+    outcome.receiver_state_indeterminate = pre_outcome.receiver_state_indeterminate;
     outcome.summary.final_status = pre_outcome.summary.final_status;
     return outcome;
   }
@@ -2221,10 +2250,11 @@ ExecuteUnicoreSignalGroupAwarePhase(ConfigApplyResult& result,
                                  options,
                                  command_index_offset + *signalgroup_index + 1u);
   MergeExecutionSummaries(outcome.summary, post_outcome.summary);
-  if (!IsSuccessfulApplyStatus(post_outcome.status))
+  if (post_outcome.receiver_state_indeterminate || !IsSuccessfulApplyStatus(post_outcome.status))
   {
     outcome.status = post_outcome.status;
     outcome.error_message = post_outcome.error_message;
+    outcome.receiver_state_indeterminate = post_outcome.receiver_state_indeterminate;
     outcome.summary.final_status = post_outcome.summary.final_status;
     return outcome;
   }
@@ -2286,8 +2316,9 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (!IsSuccessfulApplyStatus(phase.status))
+  if (phase.receiver_state_indeterminate || !IsSuccessfulApplyStatus(phase.status))
   {
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     result.status = phase.status;
     result.error_message = phase.error_message;
     result.execution_summary.final_status = phase.summary.final_status;
@@ -2351,8 +2382,9 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (!IsSuccessfulApplyStatus(phase.status))
+  if (phase.receiver_state_indeterminate || !IsSuccessfulApplyStatus(phase.status))
   {
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     result.status = phase.status;
     result.error_message = phase.error_message;
     result.execution_summary.final_status = phase.summary.final_status;
@@ -2435,8 +2467,9 @@ ConfigApplyResult ExecuteUnicoreRecoveryWorkflow(ByteDuplex& transport,
   result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (!IsSuccessfulApplyStatus(phase.status))
+  if (phase.receiver_state_indeterminate || !IsSuccessfulApplyStatus(phase.status))
   {
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     result.status = phase.status;
     result.error_message = phase.error_message;
     result.execution_summary.final_status = phase.summary.final_status;
@@ -2491,8 +2524,9 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (!IsSuccessfulApplyStatus(phase.status))
+  if (phase.receiver_state_indeterminate || !IsSuccessfulApplyStatus(phase.status))
   {
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     result.status = phase.status;
     result.error_message = phase.error_message;
     result.execution_summary.final_status = phase.summary.final_status;
@@ -2617,8 +2651,9 @@ ConfigApplyResult ExecuteUnicoreRuntimeBaudSwitchWorkflow(ByteDuplex& transport,
   result.execution_summary.optional_commands_failed += phase.summary.optional_commands_failed;
   result.execution_summary.commands_retried += phase.summary.commands_retried;
   result.execution_summary.responses_applied += phase.summary.responses_applied;
-  if (!IsSuccessfulApplyStatus(phase.status))
+  if (phase.receiver_state_indeterminate || !IsSuccessfulApplyStatus(phase.status))
   {
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     result.status = phase.status;
     result.error_message = phase.error_message;
     result.execution_summary.final_status = phase.summary.final_status;
@@ -2856,14 +2891,10 @@ ConfigApplyResult ExecuteConfigApply(ByteDuplex& transport,
     result.execution_summary = phase.summary;
     result.status = phase.status;
     result.error_message = phase.error_message;
-    result.receiver_state_indeterminate = result.status == ConfigApplyStatus::kTimedOut;
+    result.receiver_state_indeterminate = phase.receiver_state_indeterminate;
     if (result.receiver_state_indeterminate)
     {
-      result.error_message =
-          "receiver state indeterminate: command may have been applied; " + result.error_message;
-      result.progress_log.push_back(
-          "Receiver state indeterminate: the timed-out command may have been applied; "
-          "further configuration is quarantined");
+      MarkReceiverStateIndeterminate(result, result.error_message);
     }
     if (result.execution_summary.final_status.empty())
     {

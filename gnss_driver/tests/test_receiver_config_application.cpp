@@ -23,7 +23,11 @@ using universal_gnss_driver::ReceiverConfigApplication;
 using universal_gnss_driver::ReceiverConfigApplicationConfig;
 using universal_gnss_driver::ReceiverConfigApplicationState;
 using universal_gnss_driver::ReceiverResponseKind;
+using universal_gnss_transport::ByteSink;
 using universal_gnss_transport::MemoryByteSink;
+using universal_gnss_transport::TransportError;
+using universal_gnss_transport::TransportStatus;
+using universal_gnss_transport::WriteResult;
 
 struct TestContext
 {
@@ -37,6 +41,46 @@ struct TestContext
       std::cerr << "FAILED: " << message << '\n';
     }
   }
+};
+
+class PartialWriteByteSink final : public ByteSink
+{
+public:
+  WriteResult Write(const std::uint8_t* data, const std::size_t size) override
+  {
+    if (data == nullptr)
+    {
+      return WriteResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
+    }
+
+    if (partial_write_returned_)
+    {
+      return WriteResult{0u, TransportStatus::kError, TransportError::kWriteFailure};
+    }
+
+    const auto prefix_size = size < 5u ? size : 5u;
+    written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(prefix_size));
+    partial_write_returned_ = true;
+    return WriteResult{prefix_size, TransportStatus::kOk, TransportError::kNone};
+  }
+
+  bool IsOpen() const override
+  {
+    return true;
+  }
+
+  void Close() override
+  {
+  }
+
+  const std::vector<std::uint8_t>& written_bytes() const
+  {
+    return written_;
+  }
+
+private:
+  std::vector<std::uint8_t> written_{};
+  bool partial_write_returned_{false};
 };
 
 ReceiverCommand MakeBinaryCommand(const std::vector<std::uint8_t>& payload,
@@ -349,6 +393,32 @@ void TestOptionalCommandTimeoutStopsIndeterminateApply(TestContext& ctx)
              "an indeterminate timeout must not dispatch the next command");
 }
 
+void TestOptionalPartialWriteStopsIndeterminateApplyDespiteContinueOnError(TestContext& ctx)
+{
+  PartialWriteByteSink sink;
+  ReceiverConfigApplicationConfig config;
+  config.continue_on_error = true;
+  ReceiverConfigApplication application(sink, config);
+
+  const auto partial =
+      application.Start({MakeTextCommand("CONFIG SIGNALGROUP 3 6\r\n",
+                                         ReceiverCommandFailurePolicy::kContinueOnFailure),
+                         MakeTextCommand("GPGGA 1\r\n")},
+                        9000);
+  const auto after_failure = application.Step(9100);
+
+  ctx.Expect(partial.state == ReceiverConfigApplicationState::kFailed && partial.command_finished &&
+                 partial.command_failed && !partial.command_required && !partial.failure_ignored &&
+                 !partial.advanced_to_next_command && partial.receiver_state_indeterminate &&
+                 application.current_index() == 0u &&
+                 application.transaction_engine().session_indeterminate(),
+             "an optional partial write must stop the application even with continue_on_error");
+  ctx.Expect(after_failure.state == ReceiverConfigApplicationState::kFailed &&
+                 !after_failure.command_started &&
+                 sink.written_bytes() == std::vector<std::uint8_t>({'C', 'O', 'N', 'F', 'I'}),
+             "an indeterminate partial write must not dispatch the next command on a later step");
+}
+
 void TestSafetyRejectionFailsApplication(TestContext& ctx)
 {
   MemoryByteSink sink;
@@ -415,6 +485,7 @@ int main()
   TestTimeoutQuarantinesApplication(ctx);
   TestRetryExhaustionFails(ctx);
   TestOptionalCommandTimeoutStopsIndeterminateApply(ctx);
+  TestOptionalPartialWriteStopsIndeterminateApplyDespiteContinueOnError(ctx);
   TestSafetyRejectionFailsApplication(ctx);
   TestResetClearsStateAndMetrics(ctx);
 
