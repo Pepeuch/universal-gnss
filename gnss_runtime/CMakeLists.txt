@@ -23,7 +23,16 @@ install(DIRECTORY include/ DESTINATION include)
 if(BUILD_TESTING)
   add_executable(gnss_runtime_test_receiver_supervisor tests/test_receiver_supervisor.cpp)
   target_link_libraries(gnss_runtime_test_receiver_supervisor PRIVATE universal_gnss_runtime)
+  target_include_directories(
+    gnss_runtime_test_receiver_supervisor
+    PRIVATE ${CMAKE_SOURCE_DIR}/gnss_transport/tests
+  )
+  target_compile_definitions(
+    gnss_runtime_test_receiver_supervisor
+    PRIVATE UNIVERSAL_GNSS_TLS_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/gnss_transport/tests/fixtures/tls"
+  )
   add_test(NAME gnss_runtime_test_receiver_supervisor COMMAND gnss_runtime_test_receiver_supervisor)
+  set_tests_properties(gnss_runtime_test_receiver_supervisor PROPERTIES TIMEOUT 8)
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(
       gnss_runtime_test_posix_receiver_supervisor

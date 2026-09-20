@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "silent_tls_loopback_server.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
 #endif
 
@@ -540,6 +541,42 @@ void TestNtripStopAndRedaction(TestContext& ctx)
   }
 }
 
+void TestStopCancelsSilentTlsHandshake(TestContext& ctx)
+{
+  universal_gnss_transport::test::SilentTlsLoopbackServer silent_server;
+  ctx.Expect(silent_server.Start(), "silent NTRIP/TLS server should start");
+  if (silent_server.port() == 0u)
+  {
+    return;
+  }
+
+  auto config = BaseConfig();
+  config.transport_factory = [] {
+    return TransportFactoryResult{std::make_unique<FakeTransport>(std::vector<ReadResult>{}), {}};
+  };
+  universal_gnss_runtime::NtripSupervisorConfig ntrip;
+  ntrip.ntrip.host = "localhost";
+  ntrip.ntrip.port = silent_server.port();
+  ntrip.ntrip.mountpoint = "RTCM";
+  ntrip.ntrip.tls_enabled = true;
+  ntrip.ntrip.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/ca.crt";
+  ntrip.tcp.connect_timeout_ms = 5000u;
+  config.ntrip = std::move(ntrip);
+
+  ReceiverSupervisor supervisor(std::move(config));
+  ctx.Expect(supervisor.Start(), "NTRIP/TLS supervisor should start");
+  ctx.Expect(WaitFor([&] { return silent_server.received_client_hello(); }),
+             "NTRIP worker must reach TLS handshake with an accepted, silent TCP peer");
+  const auto started = std::chrono::steady_clock::now();
+  supervisor.Stop();
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  silent_server.Join();
+  ctx.Expect(elapsed < std::chrono::seconds(1),
+             "Stop must cancel the stalled TLS handshake and join the NTRIP worker promptly");
+  ctx.Expect(silent_server.accepted() && silent_server.peer_closed(),
+             "cancelled NTRIP handshake must close its socket without server TLS traffic");
+}
+
 void TestNtripForwardingAndIndependentReconnects(TestContext& ctx)
 {
   SocketPair first_ntrip;
@@ -648,6 +685,7 @@ int main()
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
   TestGgaUsesFreshAuthoritativePosition(ctx);
   TestNtripStopAndRedaction(ctx);
+  TestStopCancelsSilentTlsHandshake(ctx);
   TestNtripForwardingAndIndependentReconnects(ctx);
 #endif
   return ctx.failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

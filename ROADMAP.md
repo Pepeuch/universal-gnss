@@ -104,8 +104,9 @@ BlueOS-specific implementation.
   boundaries, snapshots, fake-transport and silent-PTY lifecycle tests, and a
   native CLI. Real USB/UART
   lifecycle validation and configuration loading/projection remain.
-- Phase 2 deterministic supervisor NTRIP/RTCM composition is complete; physical
-  receiver/caster/reconnect/hotplug evidence remains pending.
+- Phase 2 deterministic supervisor NTRIP/RTCM composition is complete, including
+  a bounded TLS setup deadline and cancellation of a stalled handshake on Stop;
+  physical receiver/caster/reconnect/hotplug evidence remains pending.
 - Phase A ROS2-first Docker evidence is established for Kilted and Lyrical
   amd64 build/runtime, shared runtime-library packaging, non-root 1000:1000,
   tini-managed clean shutdown, read-only external configuration, and same-host

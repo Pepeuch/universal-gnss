@@ -2,7 +2,9 @@
 
 #if defined(__linux__)
 
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -88,7 +90,67 @@ enum class WaitForSocketResult : std::uint8_t
   kReady = 0,
   kTimeout = 1,
   kError = 2,
+  kCancelled = 3,
 };
+
+using SteadyTime = std::chrono::steady_clock::time_point;
+constexpr std::uint32_t kDefaultTlsConnectTimeoutMs = 5000u;
+constexpr int kCancellationPollIntervalMs = 25;
+
+SteadyTime TlsConnectDeadline(const TcpClientConfig& config)
+{
+  const auto timeout =
+      config.connect_timeout_ms == 0u ? kDefaultTlsConnectTimeoutMs : config.connect_timeout_ms;
+  return std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout);
+}
+
+WaitForSocketResult WaitForSocketUntil(const int fd,
+                                       const short requested_events,
+                                       const SteadyTime deadline,
+                                       const TcpClientConfig& config)
+{
+  for (;;)
+  {
+    if (config.connect_cancelled && config.connect_cancelled())
+    {
+      return WaitForSocketResult::kCancelled;
+    }
+    const auto remaining = deadline - std::chrono::steady_clock::now();
+    if (remaining <= SteadyTime::duration::zero())
+    {
+      return WaitForSocketResult::kTimeout;
+    }
+    const auto remaining_ms = std::chrono::duration_cast<std::chrono::milliseconds>(remaining);
+    int poll_timeout =
+        remaining_ms.count() > INT_MAX ? INT_MAX : static_cast<int>(remaining_ms.count());
+    if (poll_timeout == 0)
+    {
+      poll_timeout = 1;
+    }
+    if (config.connect_cancelled)
+    {
+      poll_timeout = std::min(poll_timeout, kCancellationPollIntervalMs);
+    }
+
+    pollfd descriptor{};
+    descriptor.fd = fd;
+    descriptor.events = requested_events;
+    const int result = ::poll(&descriptor, 1, poll_timeout);
+    if (result > 0)
+    {
+      if ((descriptor.revents & POLLNVAL) != 0)
+      {
+        return WaitForSocketResult::kError;
+      }
+      // Let connect/SSL report the actual socket or peer-close failure.
+      return WaitForSocketResult::kReady;
+    }
+    if (result < 0 && errno != EINTR)
+    {
+      return WaitForSocketResult::kError;
+    }
+  }
+}
 
 WaitForSocketResult
 WaitForSocketEvent(const int fd, const short requested_events, const std::uint32_t timeout_ms)
@@ -218,6 +280,65 @@ TransportError ConnectWithTimeout(const int fd,
   }
 }
 
+TransportError ConnectWithDeadline(const int fd,
+                                   const sockaddr* address,
+                                   const socklen_t address_length,
+                                   const SteadyTime deadline,
+                                   const TcpClientConfig& config)
+{
+  if (config.connect_cancelled && config.connect_cancelled())
+  {
+    return TransportError::kClosed;
+  }
+  if (std::chrono::steady_clock::now() >= deadline)
+  {
+    return TransportError::kTimeout;
+  }
+  if (!SetSocketNonBlocking(fd, true))
+  {
+    return TransportError::kUnknown;
+  }
+  if (::connect(fd, address, address_length) == 0)
+  {
+    return TransportError::kNone;
+  }
+  if (errno != EINPROGRESS && errno != EALREADY && errno != EINTR)
+  {
+    return TransportError::kConnectFailure;
+  }
+
+  for (;;)
+  {
+    const auto wait = WaitForSocketUntil(fd, POLLOUT, deadline, config);
+    if (wait == WaitForSocketResult::kTimeout)
+    {
+      return TransportError::kTimeout;
+    }
+    if (wait == WaitForSocketResult::kCancelled)
+    {
+      return TransportError::kClosed;
+    }
+    if (wait == WaitForSocketResult::kError)
+    {
+      return TransportError::kUnknown;
+    }
+    int socket_error = 0;
+    socklen_t socket_error_size = sizeof(socket_error);
+    if (::getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_size) != 0)
+    {
+      return TransportError::kUnknown;
+    }
+    if (socket_error == 0)
+    {
+      return TransportError::kNone;
+    }
+    if (socket_error != EINPROGRESS && socket_error != EALREADY)
+    {
+      return socket_error == ETIMEDOUT ? TransportError::kTimeout : TransportError::kConnectFailure;
+    }
+  }
+}
+
 ReadResult MakeClosedReadResult(TransportMetrics& metrics)
 {
   NoteReadError(metrics, TransportError::kClosed);
@@ -256,8 +377,38 @@ void ReleaseTls(::ssl_ctx_st*& context, ::ssl_st*& session)
   }
 }
 
-TransportError
-StartTls(const int fd, const TcpClientConfig& config, ::ssl_ctx_st*& context, ::ssl_st*& session)
+class ScopedSigpipeBlock
+{
+public:
+  ScopedSigpipeBlock()
+  {
+    sigemptyset(&sigpipe_set_);
+    sigaddset(&sigpipe_set_, SIGPIPE);
+    blocked_ = pthread_sigmask(SIG_BLOCK, &sigpipe_set_, &previous_signal_mask_) == 0;
+  }
+
+  ~ScopedSigpipeBlock()
+  {
+    if (blocked_)
+    {
+      // Consume a handshake write's SIGPIPE before restoring this thread's mask.
+      timespec no_wait{};
+      (void)sigtimedwait(&sigpipe_set_, nullptr, &no_wait);
+      (void)pthread_sigmask(SIG_SETMASK, &previous_signal_mask_, nullptr);
+    }
+  }
+
+private:
+  sigset_t sigpipe_set_{};
+  sigset_t previous_signal_mask_{};
+  bool blocked_{false};
+};
+
+TransportError StartTls(const int fd,
+                        const TcpClientConfig& config,
+                        const SteadyTime deadline,
+                        ::ssl_ctx_st*& context,
+                        ::ssl_st*& session)
 {
   if (config.nonblocking)
   {
@@ -328,34 +479,66 @@ StartTls(const int fd, const TcpClientConfig& config, ::ssl_ctx_st*& context, ::
     return TransportError::kTlsVerificationFailure;
   }
 
-  sigset_t sigpipe_set{};
-  sigset_t previous_signal_mask{};
-  sigemptyset(&sigpipe_set);
-  sigaddset(&sigpipe_set, SIGPIPE);
-  const bool sigpipe_blocked = pthread_sigmask(SIG_BLOCK, &sigpipe_set, &previous_signal_mask) == 0;
-  const int handshake_result = SSL_connect(tls_session);
-  if (sigpipe_blocked)
-  {
-    // Consume a handshake write's SIGPIPE before restoring this thread's mask.
-    timespec no_wait{};
-    (void)sigtimedwait(&sigpipe_set, nullptr, &no_wait);
-    (void)pthread_sigmask(SIG_SETMASK, &previous_signal_mask, nullptr);
-  }
-
-  if (handshake_result != 1)
-  {
-    const TransportError error =
-        config.tls_verify_peer && SSL_get_verify_result(tls_session) != X509_V_OK
-            ? TransportError::kTlsVerificationFailure
-            : TransportError::kTlsHandshakeFailure;
+  const auto fail = [&](const TransportError error) {
     SSL_free(tls_session);
     SSL_CTX_free(tls_context);
     return error;
+  };
+  if (!SetSocketNonBlocking(fd, true))
+  {
+    return fail(TransportError::kUnknown);
   }
+  ScopedSigpipeBlock sigpipe_block;
 
-  context = reinterpret_cast<::ssl_ctx_st*>(tls_context);
-  session = reinterpret_cast<::ssl_st*>(tls_session);
-  return TransportError::kNone;
+  for (;;)
+  {
+    if (config.connect_cancelled && config.connect_cancelled())
+    {
+      return fail(TransportError::kClosed);
+    }
+    if (std::chrono::steady_clock::now() >= deadline)
+    {
+      return fail(TransportError::kTimeout);
+    }
+    ERR_clear_error();
+    const int handshake_result = SSL_connect(tls_session);
+    if (handshake_result == 1)
+    {
+      if (config.connect_cancelled && config.connect_cancelled())
+      {
+        return fail(TransportError::kClosed);
+      }
+      if (!SetSocketNonBlocking(fd, false))
+      {
+        return fail(TransportError::kUnknown);
+      }
+      context = reinterpret_cast<::ssl_ctx_st*>(tls_context);
+      session = reinterpret_cast<::ssl_st*>(tls_session);
+      return TransportError::kNone;
+    }
+    const int ssl_error = SSL_get_error(tls_session, handshake_result);
+    if (ssl_error != SSL_ERROR_WANT_READ && ssl_error != SSL_ERROR_WANT_WRITE)
+    {
+      return fail(config.tls_verify_peer && SSL_get_verify_result(tls_session) != X509_V_OK
+                      ? TransportError::kTlsVerificationFailure
+                      : TransportError::kTlsHandshakeFailure);
+    }
+
+    const auto wait = WaitForSocketUntil(
+        fd, ssl_error == SSL_ERROR_WANT_READ ? POLLIN : POLLOUT, deadline, config);
+    if (wait == WaitForSocketResult::kTimeout)
+    {
+      return fail(TransportError::kTimeout);
+    }
+    if (wait == WaitForSocketResult::kCancelled)
+    {
+      return fail(TransportError::kClosed);
+    }
+    if (wait == WaitForSocketResult::kError)
+    {
+      return fail(TransportError::kTlsHandshakeFailure);
+    }
+  }
 }
 
 }  // namespace
@@ -399,6 +582,9 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
   }
 
   TransportError last_error = TransportError::kConnectFailure;
+  // DNS resolution is outside this socket-setup deadline. All candidate TCP
+  // connects and the TLS handshake share one monotonic budget.
+  const SteadyTime tls_deadline = config.tls_enabled ? TlsConnectDeadline(config) : SteadyTime{};
   for (const addrinfo* candidate = results; candidate != nullptr; candidate = candidate->ai_next)
   {
     const int fd = ::socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
@@ -408,8 +594,12 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
       continue;
     }
 
-    const TransportError connect_error = ConnectWithTimeout(
-        fd, candidate->ai_addr, candidate->ai_addrlen, config.connect_timeout_ms);
+    const TransportError connect_error =
+        config.tls_enabled
+            ? ConnectWithDeadline(
+                  fd, candidate->ai_addr, candidate->ai_addrlen, tls_deadline, config)
+            : ConnectWithTimeout(
+                  fd, candidate->ai_addr, candidate->ai_addrlen, config.connect_timeout_ms);
     if (connect_error != TransportError::kNone)
     {
       ::close(fd);
@@ -429,7 +619,8 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
     use_generic_fd_io_ = false;
     if (config.tls_enabled)
     {
-      const TransportError tls_error = StartTls(fd_, config, tls_context_, tls_session_);
+      const TransportError tls_error =
+          StartTls(fd_, config, tls_deadline, tls_context_, tls_session_);
       if (tls_error != TransportError::kNone)
       {
         Close();
@@ -470,7 +661,8 @@ TransportError TcpClientTransport::AdoptConnectedSocket(const int fd, const TcpC
   config_ = config;
   if (config.tls_enabled)
   {
-    const TransportError tls_error = StartTls(fd_, config, tls_context_, tls_session_);
+    const TransportError tls_error =
+        StartTls(fd_, config, TlsConnectDeadline(config), tls_context_, tls_session_);
     if (tls_error != TransportError::kNone)
     {
       Close();

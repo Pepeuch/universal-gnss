@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 
 #include "universal_gnss_transport/byte_stream.hpp"
@@ -19,6 +20,8 @@ struct TcpClientConfig
 {
   std::string host{};
   std::uint16_t port{0u};
+  // TLS: one socket-connect plus handshake deadline; zero selects 5000 ms.
+  // Plain TCP: per-address connect timeout; zero retains blocking connect.
   std::uint32_t connect_timeout_ms{0u};
   std::uint32_t read_timeout_ms{0u};
   std::uint32_t write_timeout_ms{0u};
@@ -34,6 +37,11 @@ struct TcpClientConfig
   std::string tls_ca_file{};
   std::string tls_client_certificate_file{};
   std::string tls_client_private_key_file{};
+  // Optional synchronous TLS-setup cancellation check. The callback
+  // must remain valid until Open/AdoptConnectedSocket returns and may be
+  // called repeatedly from that same thread. It must be thread-safe if
+  // another thread changes the state it observes, and return promptly.
+  std::function<bool()> connect_cancelled{};
 };
 
 class TcpClientTransport : public ByteDuplex

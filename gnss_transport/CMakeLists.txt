@@ -79,6 +79,7 @@ if(BUILD_TESTING)
       NAME gnss_transport_test_tcp_client_transport
       COMMAND gnss_transport_test_tcp_client_transport
     )
+    set_tests_properties(gnss_transport_test_tcp_client_transport PROPERTIES TIMEOUT 8)
 
     add_executable(
       gnss_transport_test_udp_client_transport

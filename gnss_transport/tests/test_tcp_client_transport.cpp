@@ -1,20 +1,25 @@
+#include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(__linux__)
 
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "silent_tls_loopback_server.hpp"
 #include "tls_loopback_server.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 
@@ -78,6 +83,13 @@ public:
   {
     const int fd = client_fd_;
     client_fd_ = -1;
+    return fd;
+  }
+
+  int ReleasePeerFd()
+  {
+    const int fd = peer_fd_;
+    peer_fd_ = -1;
     return fd;
   }
 
@@ -621,6 +633,139 @@ void TestVerifiedTlsLoopback(TestContext& ctx)
   expect_verification_failure(wrong_ca, "TLS with an unrelated CA bundle must fail verification");
 }
 
+void TestSilentTlsHandshakeDeadlineAndReconnect(TestContext& ctx)
+{
+  universal_gnss_transport::test::SilentTlsLoopbackServer silent_server;
+  ctx.Expect(silent_server.Start(), "silent TLS loopback server should start");
+  if (silent_server.port() == 0u)
+  {
+    return;
+  }
+
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.port = silent_server.port();
+  config.connect_timeout_ms = 100u;
+  config.tls_enabled = true;
+  config.tls_ca_file = std::string(UNIVERSAL_GNSS_TLS_FIXTURE_DIR) + "/ca.crt";
+  TcpClientTransport client;
+  const auto started = std::chrono::steady_clock::now();
+  const auto result = client.Open(config);
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  silent_server.Join();
+  ctx.Expect(silent_server.accepted() && silent_server.received_client_hello(),
+             "TCP peer must accept and observe the client's TLS hello before remaining silent");
+  ctx.Expect(result == TransportError::kTimeout &&
+                 client.metrics().last_error == TransportError::kTimeout,
+             "silent TLS peer must be classified as a handshake timeout");
+  ctx.Expect(elapsed < std::chrono::seconds(1),
+             "silent TLS peer must return within the generous test bound");
+  ctx.Expect(!client.IsOpen() && client.native_fd() == -1 && silent_server.peer_closed(),
+             "handshake timeout must release the client descriptor and TLS session");
+
+  universal_gnss_transport::test::TlsLoopbackServer verified_server;
+  ctx.Expect(verified_server.Start(), "verified TLS server should start after timeout");
+  if (verified_server.port() == 0u)
+  {
+    return;
+  }
+  config.port = verified_server.port();
+  config.connect_timeout_ms = 1000u;
+  const auto reconnect = client.Open(config);
+  ctx.Expect(reconnect == TransportError::kNone && client.IsOpen(),
+             "the same transport must reconnect after a stalled handshake");
+  if (client.IsOpen())
+  {
+    ctx.Expect((::fcntl(client.native_fd(), F_GETFL, 0) & O_NONBLOCK) == 0,
+               "successful synchronous TLS connection must restore blocking socket mode");
+  }
+  client.Close();
+  ctx.Expect(verified_server.Join(), "reconnected verified TLS session should close cleanly");
+}
+
+void TestSilentTlsHandshakeCancellation(TestContext& ctx)
+{
+  universal_gnss_transport::test::SilentTlsLoopbackServer silent_server;
+  ctx.Expect(silent_server.Start(), "silent TLS cancellation server should start");
+  if (silent_server.port() == 0u)
+  {
+    return;
+  }
+
+  std::atomic<bool> cancel{false};
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.port = silent_server.port();
+  config.connect_timeout_ms = 5000u;
+  config.tls_enabled = true;
+  config.connect_cancelled = [&] { return cancel.load(); };
+  TcpClientTransport client;
+  TransportError result = TransportError::kNone;
+  std::thread connector([&] { result = client.Open(config); });
+  const auto observation_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  while (!silent_server.received_client_hello() &&
+         std::chrono::steady_clock::now() < observation_deadline)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  const bool handshake_started = silent_server.received_client_hello();
+  const auto started = std::chrono::steady_clock::now();
+  cancel = true;
+  connector.join();
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  silent_server.Join();
+  ctx.Expect(handshake_started,
+             "cancellation test must observe an accepted TCP connection and TLS hello");
+  ctx.Expect(result == TransportError::kClosed && elapsed < std::chrono::seconds(1),
+             "TLS setup cancellation must interrupt the wait without exhausting the deadline");
+  ctx.Expect(!client.IsOpen() && client.native_fd() == -1 && silent_server.peer_closed(),
+             "cancelled TLS setup must release the descriptor after its owner exits");
+}
+
+void TestTlsHandshakeDeadlineIsTotal(TestContext& ctx)
+{
+  SocketPair sockets;
+  ctx.Expect(sockets.Open(), "socketpair should open for paced TLS handshake test");
+  const int peer = sockets.ReleasePeerFd();
+  if (peer < 0)
+  {
+    return;
+  }
+  std::atomic<bool> stop_sending{false};
+  std::atomic<std::size_t> bytes_sent{0u};
+  std::thread sender([&] {
+    // A fragmented TLS record advertises a body that this peer never finishes.
+    // Every byte makes the socket readable without completing the handshake.
+    const std::uint8_t partial_record[] = {0x16u, 0x03u, 0x03u, 0x00u, 0x7fu};
+    for (std::size_t index = 0u; index < 40u && !stop_sending; ++index)
+    {
+      const std::uint8_t byte = index < sizeof(partial_record) ? partial_record[index] : 0u;
+      if (::send(peer, &byte, 1, MSG_NOSIGNAL) != 1)
+      {
+        break;
+      }
+      ++bytes_sent;
+      std::this_thread::sleep_for(std::chrono::milliseconds(40));
+    }
+    ::close(peer);
+  });
+
+  TcpClientTransport client;
+  TcpClientConfig config;
+  config.host = "localhost";
+  config.connect_timeout_ms = 150u;
+  config.tls_enabled = true;
+  const auto started = std::chrono::steady_clock::now();
+  const auto result = client.AdoptConnectedSocket(sockets.ReleaseClientFd(), config);
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  stop_sending = true;
+  sender.join();
+  ctx.Expect(bytes_sent >= 2u, "paced TLS peer must create repeated handshake readiness");
+  ctx.Expect(result == TransportError::kTimeout && elapsed < std::chrono::seconds(1) &&
+                 !client.IsOpen(),
+             "repeated TLS readiness must not extend the one total handshake deadline");
+}
+
 void TestMutualTlsLoopback(TestContext& ctx)
 {
   universal_gnss_transport::test::TlsLoopbackServer server({true, {}});
@@ -668,6 +813,9 @@ int main()
   TestConnectFailureAndInvalidConfiguration(ctx);
   TestClosedReadWriteBehavior(ctx);
   TestTlsConfigurationAndHandshakeFailure(ctx);
+  TestSilentTlsHandshakeDeadlineAndReconnect(ctx);
+  TestSilentTlsHandshakeCancellation(ctx);
+  TestTlsHandshakeDeadlineIsTotal(ctx);
   TestVerifiedTlsLoopback(ctx);
   TestMutualTlsLoopback(ctx);
   TestClosedPeerWritesDoNotRaiseSigpipe(ctx);

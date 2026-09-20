@@ -18,12 +18,12 @@ Execution identity: `ubuntu`, UID 1000; no forced-identity exception.
 Preserve the final release-blocker audit for direct continuation. The audit was
 read-only, with no production/test edits, reformatting, commit, or push. The
 original checkpoint request authorized only this record and its index entry.
-The 2026-09-20 remediation request authorizes the scoped F03/F04/F07 work
-recorded below; it does not authorize commit or push.
+The 2026-09-20 remediation requests authorized the scoped F03/F04/F07 and
+subsequent F05 work recorded below; neither authorizes commit or push.
 
-## F03/F04/F07 remediation in the current worktree (2026-09-20)
+## F03/F04/F07 remediation at current HEAD (2026-09-20)
 
-All three software findings are IMPLEMENTED in this uncommitted worktree.
+All three software findings are IMPLEMENTED at `b17f0cd`.
 This checkpoint remains `ACTIVE` for the other audit findings. No canonical
 UGA classification or progress count changed.
 
@@ -72,13 +72,14 @@ UGA classification or progress count changed.
   `unexpected memory mapping`. The NTRIP suite also needs unrestricted socket
   fixtures in this sandbox.
 
-Current release recommendation: F05 remains a HIGH software finding and
-F06/F08 remain MEDIUM. These and independent release qualification gates are
-not closed by the F03/F04/F07 correction.
+F05 is independently IMPLEMENTED in the current uncommitted worktree as
+recorded below. F06/F08 remain MEDIUM, and independent release qualification
+gates remain open.
 
 Finding references `F01` through `F08` are stable within this audit only, not
 new UGA IDs or replacements for canonical backlog items. F01/F02 are
-implemented at HEAD; F03/F04/F07 are implemented in the current worktree.
+implemented at HEAD; F03/F04/F07 are implemented at `b17f0cd`; F05 is
+implemented in the current uncommitted worktree.
 `TODO.md` and `docs/status/uga_backlog.json` remain authoritative; this checkpoint
 does not change their classifications, conservation accounting, or progress.
 
@@ -91,9 +92,9 @@ does not change their classifications, conservation accounting, or progress.
   attestations. No reproduction scripts or large logs were saved.
 - PTY reproductions used newly allocated local pseudo-terminals, never a
   physical receiver. Their compact recipes/results are preserved below.
-- Static findings are explicitly distinguished from executed reproductions;
-  no ThreadSanitizer, stalled-TLS reproduction, or injected partial-write
-  end-to-end regression was run.
+- During the read-only audit, no ThreadSanitizer, stalled-TLS reproduction, or
+  injected partial-write end-to-end regression was run. Later F05 loopback
+  reproduction and TSan evidence are recorded in its remediation section.
 - The blocked response-fence and transport-incarnation checkpoints remain
   valid for the physical cutoff boundary. Their broad implementation summaries
   must not be read as proof of end-to-end apply safety: F01/F02 and F06 qualify
@@ -223,7 +224,7 @@ Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
 HARDWARE_REQUIRED`; this filters software-already-captured responses only and
 does not prove cutoff of kernel, bridge, UART, firmware, or device queues.
 
-### F03 — HIGH / IMPLEMENTED IN CURRENT WORKTREE — Native supervisor stop hangs on a silent serial receiver
+### F03 — HIGH / IMPLEMENTED AT HEAD — Native supervisor stop hangs on a silent serial receiver
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001` / `UG-PLAN-002` lifecycle.
 Evidence: source trace and Linux PTY reproduction; software-reproducible.
@@ -251,7 +252,7 @@ real-PTY regression are recorded above. The old CLI reproduction was observed
 at audited HEAD; the new regression passed in the current worktree without
 injecting serial traffic.
 
-### F04 — HIGH / IMPLEMENTED IN CURRENT WORKTREE — Concurrent POSIX descriptor lifecycle is unsynchronized
+### F04 — HIGH / IMPLEMENTED AT HEAD — Concurrent POSIX descriptor lifecycle is unsynchronized
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001` / `UG-PLAN-002`.
 Evidence: source-level C++ race; scheduling-dependent; no sanitizer run.
@@ -283,14 +284,14 @@ Dedicated real-PTY concurrent read/write/close and blocked RTCM flush tests,
 the existing supervisor forwarding suite, and focused TSan runs pass. This is
 software evidence, not qualification of physical USB/receiver behavior.
 
-### F05 — HIGH — TLS handshake is not bounded by configured timeouts
+### F05 — HIGH / IMPLEMENTED IN CURRENT WORKTREE — TLS handshake is not bounded by configured timeouts
 
 Scope: NTRIP / transport. Related backlog: `UGA-142`.
-Evidence: static call-path trace; deterministic with a silent TLS peer;
-runtime reproduction still pending.
+Evidence: source trace, accepted-but-silent TCP/TLS reproduction before the
+fix, deterministic loopback regressions after the fix.
 
-Locations: `gnss_transport/src/tcp_client_transport.cpp`, `Open`, `StartTls`
-(line 336); `gnss_ntrip/src/ntrip_client.cpp`, `Connect`;
+Locations: `gnss_transport/src/tcp_client_transport.cpp`, `Open`, `StartTls`;
+`gnss_ntrip/src/ntrip_client.cpp`, `Connect`;
 `gnss_runtime/src/receiver_supervisor.cpp`, `RunNtrip`, `Stop`.
 
 Trigger: peer accepts TCP, leaves the connection open, and never completes TLS.
@@ -302,10 +303,46 @@ Coverage: `TestTlsConfigurationAndHandshakeFailure` covers closed peer and
 configuration rejection; `TestVerifiedTlsLoopback` covers prompt handshake and
 certificate verification. Neither exercises an open, silent handshake peer.
 
-Smallest correction direction: enforce a TLS handshake deadline and cancellation
-while retaining synchronous public semantics if desired. Add a controlled
-stalled-handshake test including supervisor shutdown. No TLS SIGPIPE defect was
-established/reported by this audit; do not infer one from this finding.
+Implemented correction: TLS setup remains synchronous, but temporarily uses
+`O_NONBLOCK` and repeats `SSL_connect()` on `SSL_ERROR_WANT_READ` / `WANT_WRITE`
+after `poll()`. One `steady_clock` deadline spans TCP candidate connects and
+the entire TLS handshake; remaining time is recalculated after every poll,
+EINTR, and readiness event. `connect_timeout_ms=0` means a finite 5000 ms
+default for TLS only. DNS resolution remains outside that budget; plain TCP
+timeout semantics are unchanged. The socket returns to blocking mode on
+success. Timeout maps to `kTimeout`; verification failure, peer close, and
+other fatal TLS errors retain their own classifications. Failed setup frees
+SSL/SSL_CTX and closes the candidate socket.
+
+Cancellation: `TcpClientConfig::connect_cancelled` is an optional synchronous
+TLS setup check. TLS socket waits sample it at most every 25 ms. The native
+supervisor composes its atomic `stopping_` state into that check, so Stop wakes
+the NTRIP worker through its owned handshake path and joins it; Stop never
+cross-thread closes the in-flight TLS descriptor. The callback must be
+thread-safe, remain valid through setup, and return promptly.
+
+Regression evidence: `SilentTlsLoopbackServer` accepts real TCP and reads the
+client hello but sends no TLS bytes or close. Before production edits, the
+new transport regression exceeded an external 3-second watchdog (exit 124).
+After the fix, a configured 100 ms handshake returns `kTimeout` under the
+generous 1-second test bound; `IsOpen()==false`, `native_fd()==-1`, and the
+server observes client EOF. The same transport reconnects to a verified TLS
+server, whose socket mode is restored to blocking. A paced partial TLS record
+creates repeated readiness without extending a 150 ms total deadline. An
+explicit cross-thread cancellation regression returns `kClosed` and releases
+the socket before its 5000 ms deadline. The NTRIP supervisor test reaches the
+same accepted, silent handshake and proves `Stop()` joins in under 1 second
+without server TLS traffic or a detached worker. Both fixture threads join.
+
+Validation: full build PASS; full CTest 68/68 PASS with loopback access,
+including verified TLS, certificate-chain/hostname rejection, peer close,
+mTLS, plain TCP, NTRIP client, supervisor, and preserved POSIX PTY tests.
+Focused GCC TSan TCP/TLS and NTRIP supervisor suites PASS with no reports
+using `setarch x86_64 -R`; supervisor TSan suite passed ten repeats. Direct
+TSan launch requires the previously established address-layout workaround.
+This is bounded software setup evidence, not a claim about DNS resolver
+latency, post-connect I/O cancellation, or physical serial/USB recovery.
+No TLS SIGPIPE defect was established by this finding.
 
 ## High-confidence non-blocking findings
 
@@ -399,9 +436,10 @@ PASS during the audit, using existing binaries:
 Defective behavior reproduced at the audited baseline: F02, F03, F06, as
 described above. That read-only audit did not run a fresh build, full CTest,
 new ROS2 stress run, Kilted/Lyrical CI, Docker image validation, TSan, or
-physical hardware tests. Current F03/F04/F07 build, CTest, PTY, and TSan
-results are recorded in the remediation section above. ROS2 CI and physical
-hardware validation were not repeated in this software pass.
+physical hardware tests. Current F03/F04/F07 and F05 build, CTest, PTY,
+loopback TLS, and TSan results are recorded in the remediation sections above.
+ROS2 CI and physical hardware validation were not repeated in this software
+pass.
 
 Physical boundaries remain in
 `../blocked/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` and
@@ -412,14 +450,13 @@ Persistence/power-cycle, USB and per-model reset qualifications remain separate.
 
 ## Exact next step / do not touch
 
-F03/F04/F07 have no remaining software remediation in this scope. The next
-HIGH audit finding is F05 (stalled TLS handshake), which needs separate
-authorization and its own regression. F06/F08 remain separate MEDIUM work.
-Do not begin a fresh repository-wide audit. Reuse the audited baseline and
-the current worktree evidence when resuming another finding.
+F03/F04/F07 are implemented at `b17f0cd`; F05 is implemented in the current
+uncommitted worktree. F06/F08 remain separate MEDIUM work. Do not begin a
+fresh repository-wide audit. Reuse the audited baseline and current test
+evidence when resuming another finding.
 
 Invalidate only evidence whose source/tests/contracts/build environment changed.
 Preserve hardware boundaries and exact provenance assertions; no speculative
 recovery fence, unrelated feature work, automatic staging, commit, or push.
-The local F03 working note remains `LOCAL_ONLY`. This shared record remains
-`ACTIVE` because the wider pre-release audit has open findings.
+The local F03 and F05 working notes remain `LOCAL_ONLY`. This shared record
+remains `ACTIVE` because the wider pre-release audit has open findings.

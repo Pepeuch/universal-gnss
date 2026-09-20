@@ -472,7 +472,7 @@ BlueOS validation:
   `v0.6.x`
 - [ ] extend RTCM semantic observations beyond `1005` / `1006` / `1230` / MSM summary
 - [x] `gnss_replay` timing mode outside the ROS2 replay node
-- [x] TLS support
+- [x] TLS support, including bounded/cancellable NTRIP handshake setup
 - [x] client certificate authentication
 - [x] custom CA certificate support
 - [x] UDP transport

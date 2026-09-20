@@ -243,7 +243,7 @@ Current scope:
 
 Current non-goals:
 
-- nonblocking TLS handshakes
+- asynchronous/nonblocking public TLS connection API
 - reconnect or backoff
 - NTRIP HTTP request logic
 - async I/O
@@ -266,8 +266,22 @@ host verification use the host system trust store by default. A non-empty
 configure a matching PEM client credential pair for mTLS; supplying only one
 or invalid/mismatched material fails closed. The `tls_verify_peer=false`
 escape hatch exists only for deterministic local test fixtures; production
-NTRIP callers must retain verification. Nonblocking handshake ownership
-remains out of scope.
+NTRIP callers must retain verification.
+
+TLS setup remains a synchronous public call, but the socket is temporarily
+nonblocking while OpenSSL advances the handshake. `connect_timeout_ms` is one
+monotonic deadline for TCP socket connection across resolved candidates and
+the complete TLS handshake; DNS resolution is not covered by this deadline.
+For TLS only, zero selects a finite 5000 ms default. `read_timeout_ms` applies
+after connection and does not extend the handshake budget. On success the
+socket returns to blocking mode. Timeout returns `kTimeout`, while certificate
+validation remains `kTlsVerificationFailure` and other fatal TLS/peer-close
+errors remain `kTlsHandshakeFailure`. Failed setup releases the TLS objects
+and socket. A caller may supply a thread-safe `connect_cancelled` callback;
+setup then returns `kClosed` and cleans up, with checks during socket waits
+at most 25 ms apart. The native supervisor uses this to cancel NTRIP setup
+before joining its worker; it never closes the in-flight TLS descriptor from
+another thread. Plain TCP timeout and I/O behavior are unchanged.
 
 ## UDP Client Transport
 

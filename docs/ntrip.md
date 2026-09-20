@@ -364,6 +364,8 @@ Current behavior:
 
 - connect through `TcpClientTransport`
 - optionally establish a synchronous TLS session through the same transport
+- bound TLS setup by one monotonic connect deadline and let native supervisor
+  shutdown cancel a stalled handshake before joining its NTRIP worker
 - build and send one NTRIP GET request with `BuildNtripGetRequest(...)`
 - accept `ICY 200 OK`, `HTTP/1.0 200`, and `HTTP/1.1 200`
 - reject non-200 responses as HTTP failures
@@ -379,7 +381,7 @@ Current behavior:
 
 Current non-goals:
 
-- nonblocking TLS handshakes
+- asynchronous/nonblocking public TLS connection API
 - reconnect loop or background timers
 - live sourcetable fetch workflow
 - chunked transfer support

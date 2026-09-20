@@ -357,6 +357,13 @@ void ReceiverSupervisor::RunNtrip()
   {
     tcp.read_timeout_ms = 100u;
   }
+  if (config.ntrip.tls_enabled)
+  {
+    const auto configured_cancel = tcp.connect_cancelled;
+    tcp.connect_cancelled = [this, configured_cancel] {
+      return stopping_.load() || (configured_cancel && configured_cancel());
+    };
+  }
   universal_gnss_ntrip::NtripClient client(config.ntrip, tcp);
   std::vector<std::uint8_t> read_buffer(std::max<std::size_t>(1u, config.read_chunk_size));
   std::uint64_t gga_incarnation = 0u;
