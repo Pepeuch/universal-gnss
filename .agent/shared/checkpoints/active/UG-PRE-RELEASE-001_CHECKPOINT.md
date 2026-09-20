@@ -18,8 +18,8 @@ Execution identity: `ubuntu`, UID 1000; no forced-identity exception.
 Preserve the final release-blocker audit for direct continuation. The audit was
 read-only, with no production/test edits, reformatting, commit, or push. The
 original checkpoint request authorized only this record and its index entry.
-The 2026-09-20 remediation requests authorized scoped F03/F04/F07, F05, and
-subsequent F06 work recorded below; none authorizes commit or push.
+The 2026-09-20 remediation requests authorized scoped F03/F04/F07, F05, F06,
+and subsequent F08 work recorded below; none authorizes commit or push.
 
 ## F03/F04/F07 remediation at current HEAD (2026-09-20)
 
@@ -72,15 +72,15 @@ UGA classification or progress count changed.
   `unexpected memory mapping`. The NTRIP suite also needs unrestricted socket
   fixtures in this sandbox.
 
-F05 is independently IMPLEMENTED at `46acb9a`. F06 is IMPLEMENTED in the
-current uncommitted worktree as recorded below. F08 and independent release
-qualification gates remain open.
+F05 is independently IMPLEMENTED at `46acb9a`; F06 is IMPLEMENTED at
+`d70bee1`. F08 is IMPLEMENTED in the current uncommitted worktree as recorded
+below. Independent release qualification gates remain open.
 
 Finding references `F01` through `F08` are stable within this audit only, not
 new UGA IDs or replacements for canonical backlog items. F01/F02 are
 implemented at HEAD; F03/F04/F07 are implemented at `b17f0cd`; F05 is
-implemented at `46acb9a`; F06 is implemented in the current uncommitted
-worktree.
+implemented at `46acb9a`; F06 is implemented at `d70bee1`; F08 is implemented
+in the current uncommitted worktree.
 `TODO.md` and `docs/status/uga_backlog.json` remain authoritative; this checkpoint
 does not change their classifications, conservation accounting, or progress.
 
@@ -347,7 +347,7 @@ No TLS SIGPIPE defect was established by this finding.
 
 ## High-confidence non-blocking findings
 
-### F06 — MEDIUM / IMPLEMENTED IN CURRENT WORKTREE — Indeterminate state is lost in some apply results
+### F06 — MEDIUM / IMPLEMENTED AT `d70bee1` — Indeterminate state is lost in some apply results
 
 Scope: TOOLS. Related backlog: `UGA-127`. Evidence: source trace and PTY reproduction.
 `gnss_tools/src/config_apply.cpp`: `CommandPhaseOutcome` (line 1669) omits the
@@ -424,17 +424,36 @@ GGA sentence, and retained runtime observation/timestamp through later idle
 reads. A separate peer-hangup case confirms genuine disconnect still
 reconnects. The existing data-only `StepOnce()` contract is unchanged.
 
-### F08 — MEDIUM — Docker contract assertions can be masked by later success
+### F08 — MEDIUM / IMPLEMENTED IN CURRENT WORKTREE — Docker contract assertions can be masked by later success
 
-Scope: DEPLOYMENT / CI. Evidence: deterministic shell-control-flow inspection;
-no Docker fault-injection run.
-`.github/workflows/docker.yml`, `Verify image contract`, inner `bash -lc`
-(line 51), lacks `errexit`/`pipefail`. An early executable/dependency/interface
-assertion may fail, then a successful final `test ! -e .../install/log` makes
-the container command return 0. The outer shell does not enforce errors inside
-this child shell. Existing assertions are present but not all are fail-closed.
-Direction: enable error propagation in the inner script and verify a deliberately
-failed early assertion causes a failing job.
+Scope: DEPLOYMENT / CI. Root cause: `.github/workflows/docker.yml` ran the
+image-contract and external-runtime-persistence assertions in separate
+`docker run ... bash -lc` children without `errexit` or `pipefail`. Outer-step
+error handling did not propagate into either child. An early executable check
+or pipeline producer could fail, later checks could pass, and the child exit 0.
+
+Regression-first: `scripts/tests/test_docker_entrypoint_contract.py` extracts
+the actual image-contract child body and runs it under `bash -lc` with controlled
+command stubs. Before the fix, the early assertion, failing left side of the
+ROS executable pipeline, and a synthetic early failure in the second child
+all incorrectly returned 0. The normal image-contract body with successful
+stubs returned 0. After the fix, all six focused behavioral cases pass,
+including failures of `ldd` and `ros2 pkg executables universal_gnss_msgs`.
+
+Mechanism: the image-contract outer step explicitly selects Bash and enables
+`set -euo pipefail`; both Docker child shells enable the same options inside
+their own command bodies. Intentional `! grep` no-match checks still pass.
+Producer results from `docker image inspect`, `ldd`, and the ROS message-package
+listing are assigned before the negative test so a producer failure cannot
+masquerade as a successful absence assertion. The two deliberate Docker
+exit-code inspections retain their scoped `set +e` / `set -e` handling.
+
+Validation: required Python compile list PASS; requested six-module unittest
+suite PASS (34 tests); workflow YAML parses and `bash -n` passes for all four
+run steps; checkpoint audit, backlog check, and `git diff --check` PASS.
+Docker CLI is installed, but daemon access is denied to user `ubuntu`; no
+real-image execution was claimed. The software shell contract is implemented;
+image-build CI and unrelated release/hardware acceptance remain pending.
 
 ## Established safe behavior and rejected false positives
 
@@ -485,14 +504,14 @@ Persistence/power-cycle, USB and per-model reset qualifications remain separate.
 
 ## Exact next step / do not touch
 
-F03/F04/F07 are implemented at `b17f0cd`; F05 is implemented at `46acb9a`;
-F06 is implemented in the current uncommitted worktree. F08 remains separate
-MEDIUM work. Do not begin a
-fresh repository-wide audit. Reuse the audited baseline and current test
-evidence when resuming another finding.
+F03/F04/F07 are implemented at `b17f0cd`; F05 at `46acb9a`; F06 at
+`d70bee1`; F08 is implemented in the current uncommitted worktree. F01–F08
+software findings are remediated at these committed/worktree states. Do not
+begin a fresh repository-wide audit. Reuse the established evidence when
+resuming independent release and hardware qualification.
 
 Invalidate only evidence whose source/tests/contracts/build environment changed.
 Preserve hardware boundaries and exact provenance assertions; no speculative
 recovery fence, unrelated feature work, automatic staging, commit, or push.
-The local F03, F05, and F06 working notes remain `LOCAL_ONLY`. This shared record
-remains `ACTIVE` because the wider pre-release audit has open findings.
+The local F03, F05, F06, and F08 working notes remain `LOCAL_ONLY`. This shared
+record remains `ACTIVE` because the wider pre-release audit has open gates.

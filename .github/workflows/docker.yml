@@ -30,7 +30,9 @@ jobs:
             .
 
       - name: Verify image contract
+        shell: bash
         run: |
+          set -euo pipefail
           test "$(docker image inspect --format '{{.Config.User}}' "${IMAGE}")" = "1000:1000"
           test "$(docker image inspect --format '{{.Config.StopSignal}}' "${IMAGE}")" = "SIGINT"
           test "$(docker image inspect --format '{{index .Config.Entrypoint 0}}' "${IMAGE}")" = "/usr/bin/tini"
@@ -47,8 +49,10 @@ jobs:
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.created"}}' "${IMAGE}")" = "$(git show -s --format=%cI "${GITHUB_SHA}")"
           docker run --rm --entrypoint /usr/bin/env "${IMAGE}" | grep -Fx "UNIVERSAL_GNSS_VERSION=ci-${GITHUB_SHA}"
           docker run --rm --entrypoint /usr/bin/env "${IMAGE}" | grep -Fx "UNIVERSAL_GNSS_REVISION=${GITHUB_SHA}"
-          ! docker image inspect --format '{{json .Config.Env}}' "${IMAGE}" | grep -Eqi 'ntrip|password|token|secret'
+          image_env="$(docker image inspect --format '{{json .Config.Env}}' "${IMAGE}")"
+          ! grep -Eqi 'ntrip|password|token|secret' <<< "${image_env}"
           docker run --rm "${IMAGE}" bash -lc '
+            set -euo pipefail
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node
             test -x /opt/universal_gnss/install/lib/universal_gnss_ros2/ntrip_node
             test -x /usr/local/bin/universal-gnss-healthcheck
@@ -60,13 +64,15 @@ jobs:
             for executable in \
               /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node \
               /opt/universal_gnss/install/lib/universal_gnss_ros2/ntrip_node; do
-              ! ldd "${executable}" | grep -F "not found"
+              dependencies="$(ldd "${executable}")"
+              ! grep -F "not found" <<< "${dependencies}"
             done
             ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 receiver_node"
             ros2 pkg executables universal_gnss_ros2 | grep -Fx "universal_gnss_ros2 ntrip_node"
             ros2 interface show universal_gnss_msgs/msg/GnssStatus >/dev/null
             ros2 interface show universal_gnss_msgs/msg/RtcmFrame >/dev/null
-            test -z "$(ros2 pkg executables universal_gnss_msgs)"
+            msgs_executables="$(ros2 pkg executables universal_gnss_msgs)"
+            test -z "${msgs_executables}"
             test ! -e /opt/universal_gnss/src
             test ! -e /opt/universal_gnss/build
             test ! -e /opt/universal_gnss/log
@@ -106,6 +112,7 @@ jobs:
               --mount "type=bind,src=${runtime_root}/log,dst=/var/log/universal_gnss" \
               --mount "type=bind,src=${runtime_root}/export,dst=/var/lib/universal_gnss/export" \
               "${IMAGE}" bash -lc '
+                set -euo pipefail
                 test ! -w "${UNIVERSAL_GNSS_PARAMETERS_FILE}"
                 test -w "${ROS_LOG_DIR}"
                 test -w "${UNIVERSAL_GNSS_EXPORT_DIR}"

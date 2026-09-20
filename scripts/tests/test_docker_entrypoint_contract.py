@@ -15,6 +15,98 @@ DOCKERFILE = Path(__file__).resolve().parents[2] / "Dockerfile"
 COMPOSE = Path(__file__).resolve().parents[2] / "docker" / "compose.yaml"
 KILTED_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ros2-kilted.yml"
 LYRICAL_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ros2-lyrical.yml"
+DOCKER_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docker.yml"
+
+
+def docker_child_scripts() -> list[str]:
+    """Extract the bodies passed to the workflow's actual Docker bash -lc calls."""
+    lines = DOCKER_WORKFLOW.read_text(encoding="utf-8").splitlines()
+    scripts = []
+    for index, line in enumerate(lines):
+        if " bash -lc '" not in line:
+            continue
+        body = []
+        for following in lines[index + 1 :]:
+            if following.strip() == "'":
+                break
+            body.append(following)
+        else:
+            raise AssertionError("unterminated Docker child shell")
+        scripts.append("\n".join(body))
+    return scripts
+
+
+IMAGE_CONTRACT_STUBS = """
+test() {
+  if [[ "${FAIL_EARLY:-0}" == 1 && "$*" == "-x /opt/universal_gnss/install/lib/universal_gnss_ros2/receiver_node" ]]; then
+    return 1
+  fi
+  return 0
+}
+command() { return 0; }
+ldd() {
+  if [[ "${FAIL_LDD:-0}" == 1 ]]; then return 1; fi
+  printf 'libexample.so => /lib/libexample.so\\n'
+}
+ros2() {
+  if [[ "$*" == "pkg executables universal_gnss_ros2" ]]; then
+    printf 'universal_gnss_ros2 receiver_node\\nuniversal_gnss_ros2 ntrip_node\\n'
+    if [[ "${FAIL_PIPELINE:-0}" == 1 ]]; then return 1; fi
+  fi
+  if [[ "$*" == "pkg executables universal_gnss_msgs" && "${FAIL_MSGS_ROS2:-0}" == 1 ]]; then
+    return 1
+  fi
+  return 0
+}
+"""
+
+
+class DockerWorkflowChildShellTests(unittest.TestCase):
+    def run_image_contract(self, **environment_overrides: str) -> subprocess.CompletedProcess[str]:
+        scripts = docker_child_scripts()
+        self.assertEqual(2, len(scripts), "expected both Docker verification child shells")
+        environment = os.environ.copy()
+        environment.update(environment_overrides)
+        return subprocess.run(
+            ["bash", "-lc", IMAGE_CONTRACT_STUBS + scripts[0]],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_early_image_assertion_failure_is_not_masked_by_later_success(self) -> None:
+        result = self.run_image_contract(FAIL_EARLY="1")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_left_side_of_image_pipeline_failure_is_not_masked(self) -> None:
+        result = self.run_image_contract(FAIL_PIPELINE="1")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_normal_image_contract_and_intentional_negative_probe_succeed(self) -> None:
+        result = self.run_image_contract()
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("universal_gnss_ros2 receiver_node", result.stdout)
+
+    def test_failed_dependency_inspection_is_not_a_successful_negative_probe(self) -> None:
+        result = self.run_image_contract(FAIL_LDD="1")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_failed_message_interface_listing_is_not_mistaken_for_empty_listing(self) -> None:
+        result = self.run_image_contract(FAIL_MSGS_ROS2="1")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+
+    def test_persistence_child_shell_does_not_mask_early_failure(self) -> None:
+        scripts = docker_child_scripts()
+        self.assertEqual(2, len(scripts))
+        prelude = scripts[1].split("test ! -w", maxsplit=1)[0]
+        result = subprocess.run(
+            ["bash", "-lc", prelude + "false\nprintf 'later command succeeds\\n'"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
 
 
 class DockerEntrypointContractTests(unittest.TestCase):
