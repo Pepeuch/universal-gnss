@@ -34,6 +34,11 @@ ReceiverSessionRunner::ReceiverSessionRunner(universal_gnss_transport::ByteSourc
 
 bool ReceiverSessionRunner::StepOnce()
 {
+  return StepOnceWithResult() == ReceiverSessionRunnerStepResult::kData;
+}
+
+ReceiverSessionRunnerStepResult ReceiverSessionRunner::StepOnceWithResult()
+{
   std::vector<std::uint8_t> buffer(config_.read_chunk_size, 0u);
   const auto read_result = source_.Read(buffer.data(), buffer.size());
   metrics_.last_status = read_result.status;
@@ -43,7 +48,7 @@ bool ReceiverSessionRunner::StepOnce()
   {
     if (read_result.bytes_read == 0u)
     {
-      return false;
+      return ReceiverSessionRunnerStepResult::kIdle;
     }
 
     ++metrics_.chunks_read;
@@ -55,7 +60,7 @@ bool ReceiverSessionRunner::StepOnce()
     const std::size_t before_runtime_updates = session_.metrics().runtime_updates;
     session_.FeedBytes(buffer.data(), read_result.bytes_read, receipt_timestamp_ns);
     NoteRuntimeUpdateDelta(before_runtime_updates);
-    return true;
+    return ReceiverSessionRunnerStepResult::kData;
   }
 
   if (read_result.status == universal_gnss_transport::TransportStatus::kEndOfStream)
@@ -68,7 +73,7 @@ bool ReceiverSessionRunner::StepOnce()
   }
 
   FinalizeSessionForTerminalStatus(read_result.status);
-  return false;
+  return ReceiverSessionRunnerStepResult::kTerminal;
 }
 
 void ReceiverSessionRunner::RunUntilEof()

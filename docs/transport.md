@@ -175,6 +175,23 @@ Current policy:
 - opening a transport must not perform any receiver configuration writes by
   itself; guarded live apply remains an explicit higher-layer action
 
+The serial adapter keeps its synchronous interface while using nonblocking
+descriptor syscalls internally. A read or write waits in `poll()` on both the
+serial descriptor and a transport-owned wake pipe. `Close()` signals that pipe,
+waits for active I/O to retire, then closes the descriptors. `Open()` and
+`Close()` are serialized across the complete descriptor replacement. A
+concurrent receiver read and correction write can therefore be cancelled
+without closing an fd while either operation still uses it.
+`config()` and `metrics()` return locked value snapshots; `native_fd()` is
+diagnostic only and must not be retained across lifecycle operations.
+
+A read timeout or temporary absence of data returns `kOk` with zero bytes;
+callers that own reconnect policy must treat this as idle. Peer hangup and
+transport errors remain terminal. Normal shutdown returns `kClosed` to a
+waiting read or write without incrementing I/O failure counters. The native
+supervisor keeps the same receiver session
+and parser state during idle reads and reconnects only after a terminal result.
+
 ### Stable serial device paths
 
 For robots and field rigs, prefer the udev-created stable symlinks under

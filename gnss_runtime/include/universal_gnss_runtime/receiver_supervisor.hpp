@@ -19,7 +19,8 @@
 #include "universal_gnss_transport/byte_stream.hpp"
 #include "universal_gnss_transport/rtcm_frame_writer.hpp"
 
-namespace universal_gnss_runtime {
+namespace universal_gnss_runtime
+{
 
 enum class ReceiverSupervisorLifecycle : std::uint8_t
 {
@@ -66,6 +67,10 @@ struct ReceiverSupervisorConfig
 #if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
   std::optional<NtripSupervisorConfig> ntrip{};
 #endif
+  // Applies only after a transport reports a normal zero-byte read. It keeps
+  // nonblocking transports from busy-spinning without redefining idle as a
+  // receiver disconnect.
+  std::chrono::milliseconds idle_read_poll_interval{10};
 };
 
 struct ReceiverSupervisorSnapshot
@@ -139,4 +144,4 @@ private:
 #endif
 };
 
-} // namespace universal_gnss_runtime
+}  // namespace universal_gnss_runtime

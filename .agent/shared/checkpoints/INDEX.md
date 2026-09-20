@@ -1,10 +1,11 @@
 # Shared checkpoint index
 
 - `active/UG-PRE-RELEASE-001_CHECKPOINT.md` — release-blocker audit at
-  `5c50f6c`: F01 is remediated in the current baseline; F02 is remediated in
-  the current worktree; F03-F05 remain HIGH and F06-F08 MEDIUM. Includes
-  source/PTY evidence and exact remediation entry points. Engine quarantine is implemented; this audit
-  records apply-layer gaps separately from hardware recovery limits.
+  `5c50f6c`: F01/F02 are committed at the current HEAD; F03/F04/F07 are
+  implemented and regression-tested in the current worktree. F05 remains HIGH;
+  F06/F08 remain MEDIUM. Includes source/PTY evidence and remediation entry
+  points. Engine quarantine is implemented; this audit records apply-layer
+  gaps separately from hardware recovery limits.
 - `retained/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
   `retained/REPOSITORY_BASELINE_AUDIT_LEDGER.md` — frozen audit baseline,
   stable IDs, duplicate graph, and reusable evidence; current classifications

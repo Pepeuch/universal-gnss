@@ -36,6 +36,13 @@ struct ReceiverSessionRunnerMetrics
       universal_gnss_transport::TransportError::kNone};
 };
 
+enum class ReceiverSessionRunnerStepResult : std::uint8_t
+{
+  kData,
+  kIdle,
+  kTerminal,
+};
+
 class ReceiverSessionRunner
 {
 public:
@@ -44,6 +51,12 @@ public:
                         ReceiverSessionRunnerConfig config = {});
 
   bool StepOnce();
+
+  // Unlike StepOnce(), this preserves the distinction between a normal
+  // zero-byte successful read and a terminal transport result. Supervisors
+  // that own reconnect policy should use it so idle receivers do not create a
+  // new transport incarnation.
+  ReceiverSessionRunnerStepResult StepOnceWithResult();
 
   void RunUntilEof();
 

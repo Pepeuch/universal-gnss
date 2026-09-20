@@ -59,6 +59,7 @@ if(BUILD_TESTING)
       NAME gnss_transport_test_posix_serial_transport
       COMMAND gnss_transport_test_posix_serial_transport
     )
+    set_tests_properties(gnss_transport_test_posix_serial_transport PROPERTIES TIMEOUT 5)
 
     add_executable(
       gnss_transport_test_tcp_client_transport

@@ -101,7 +101,8 @@ BlueOS-specific implementation.
 
 - `universal_gnss_supervisor` Phase 1 is implemented for one explicitly chosen
   serial receiver: lifecycle/session ownership, bounded reconnect, incarnation
-  boundaries, snapshots, fake-transport tests, and a native CLI. Real USB/UART
+  boundaries, snapshots, fake-transport and silent-PTY lifecycle tests, and a
+  native CLI. Real USB/UART
   lifecycle validation and configuration loading/projection remain.
 - Phase 2 deterministic supervisor NTRIP/RTCM composition is complete; physical
   receiver/caster/reconnect/hotplug evidence remains pending.

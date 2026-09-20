@@ -3,22 +3,24 @@
 #include <algorithm>
 #include <utility>
 
-namespace universal_gnss_runtime {
-namespace {
+namespace universal_gnss_runtime
+{
+namespace
+{
 
 const char* ToString(const universal_gnss_transport::TransportStatus status)
 {
   using universal_gnss_transport::TransportStatus;
   switch (status)
   {
-  case TransportStatus::kOk:
-    return "ok";
-  case TransportStatus::kEndOfStream:
-    return "end_of_stream";
-  case TransportStatus::kClosed:
-    return "closed";
-  case TransportStatus::kError:
-    return "error";
+    case TransportStatus::kOk:
+      return "ok";
+    case TransportStatus::kEndOfStream:
+      return "end_of_stream";
+    case TransportStatus::kClosed:
+      return "closed";
+    case TransportStatus::kError:
+      return "error";
   }
   return "unknown";
 }
@@ -28,30 +30,30 @@ const char* ToString(const universal_gnss_transport::TransportError error)
   using universal_gnss_transport::TransportError;
   switch (error)
   {
-  case TransportError::kNone:
-    return "none";
-  case TransportError::kClosed:
-    return "closed";
-  case TransportError::kInvalidArgument:
-    return "invalid_argument";
-  case TransportError::kOverflow:
-    return "overflow";
-  case TransportError::kConnectFailure:
-    return "connect_failure";
-  case TransportError::kTimeout:
-    return "timeout";
-  case TransportError::kReadFailure:
-    return "read_failure";
-  case TransportError::kWriteFailure:
-    return "write_failure";
-  case TransportError::kUnsupported:
-    return "unsupported";
-  case TransportError::kUnknown:
-    return "unknown";
-  case TransportError::kTlsHandshakeFailure:
-    return "tls_handshake_failure";
-  case TransportError::kTlsVerificationFailure:
-    return "tls_verification_failure";
+    case TransportError::kNone:
+      return "none";
+    case TransportError::kClosed:
+      return "closed";
+    case TransportError::kInvalidArgument:
+      return "invalid_argument";
+    case TransportError::kOverflow:
+      return "overflow";
+    case TransportError::kConnectFailure:
+      return "connect_failure";
+    case TransportError::kTimeout:
+      return "timeout";
+    case TransportError::kReadFailure:
+      return "read_failure";
+    case TransportError::kWriteFailure:
+      return "write_failure";
+    case TransportError::kUnsupported:
+      return "unsupported";
+    case TransportError::kUnknown:
+      return "unknown";
+    case TransportError::kTlsHandshakeFailure:
+      return "tls_handshake_failure";
+    case TransportError::kTlsVerificationFailure:
+      return "tls_verification_failure";
   }
   return "unknown";
 }
@@ -67,22 +69,22 @@ const char* ToString(const universal_gnss_ntrip::NtripClientError error)
   using universal_gnss_ntrip::NtripClientError;
   switch (error)
   {
-  case NtripClientError::kNone:
-    return "none";
-  case NtripClientError::kConfiguration:
-    return "configuration";
-  case NtripClientError::kAuthentication:
-    return "authentication";
-  case NtripClientError::kHttp:
-    return "http";
-  case NtripClientError::kProtocol:
-    return "protocol";
-  case NtripClientError::kTimeout:
-    return "timeout";
-  case NtripClientError::kDisconnected:
-    return "disconnected";
-  case NtripClientError::kUnknown:
-    return "unknown";
+    case NtripClientError::kNone:
+      return "none";
+    case NtripClientError::kConfiguration:
+      return "configuration";
+    case NtripClientError::kAuthentication:
+      return "authentication";
+    case NtripClientError::kHttp:
+      return "http";
+    case NtripClientError::kProtocol:
+      return "protocol";
+    case NtripClientError::kTimeout:
+      return "timeout";
+    case NtripClientError::kDisconnected:
+      return "disconnected";
+    case NtripClientError::kUnknown:
+      return "unknown";
   }
   return "unknown";
 }
@@ -95,12 +97,13 @@ universal_gnss::GnssTimestampNs SteadyNowNs()
 }
 #endif
 
-} // namespace
+}  // namespace
 
 struct ReceiverSupervisor::ReceiverLink
 {
   std::shared_ptr<universal_gnss_transport::ByteDuplex> transport{};
   universal_gnss_transport::RtcmFrameWriter writer{};
+  std::mutex writer_mutex{};
   std::uint64_t incarnation{0u};
 };
 
@@ -108,16 +111,16 @@ const char* ToString(const ReceiverSupervisorLifecycle lifecycle)
 {
   switch (lifecycle)
   {
-  case ReceiverSupervisorLifecycle::kStopped:
-    return "stopped";
-  case ReceiverSupervisorLifecycle::kStarting:
-    return "starting";
-  case ReceiverSupervisorLifecycle::kConnected:
-    return "connected";
-  case ReceiverSupervisorLifecycle::kReconnecting:
-    return "reconnecting";
-  case ReceiverSupervisorLifecycle::kStopping:
-    return "stopping";
+    case ReceiverSupervisorLifecycle::kStopped:
+      return "stopped";
+    case ReceiverSupervisorLifecycle::kStarting:
+      return "starting";
+    case ReceiverSupervisorLifecycle::kConnected:
+      return "connected";
+    case ReceiverSupervisorLifecycle::kReconnecting:
+      return "reconnecting";
+    case ReceiverSupervisorLifecycle::kStopping:
+      return "stopping";
   }
   return "unknown";
 }
@@ -128,9 +131,14 @@ ReceiverSupervisor::ReceiverSupervisor(ReceiverSupervisorConfig config) : config
       std::max(config_.initial_reconnect_backoff, std::chrono::milliseconds(1));
   config_.maximum_reconnect_backoff =
       std::max(config_.maximum_reconnect_backoff, config_.initial_reconnect_backoff);
+  config_.idle_read_poll_interval =
+      std::max(config_.idle_read_poll_interval, std::chrono::milliseconds(1));
 }
 
-ReceiverSupervisor::~ReceiverSupervisor() { Stop(); }
+ReceiverSupervisor::~ReceiverSupervisor()
+{
+  Stop();
+}
 
 bool ReceiverSupervisor::Start()
 {
@@ -168,7 +176,6 @@ void ReceiverSupervisor::Stop()
     link = active_;
     if (link)
     {
-      link->writer.Abandon();
       active_.reset();
     }
   }
@@ -187,6 +194,8 @@ void ReceiverSupervisor::Stop()
   if (link)
   {
     static_cast<universal_gnss_transport::ByteSource&>(*link->transport).Close();
+    std::lock_guard<std::mutex> lock(link->writer_mutex);
+    link->writer.Abandon();
   }
   if (worker_.joinable())
   {
@@ -255,21 +264,43 @@ void ReceiverSupervisor::Run()
       active_ = link;
     }
 
-    while (!stopping_ && runner.StepOnce())
+    bool terminal_read = false;
+    while (!stopping_)
+    {
+      const auto step = runner.StepOnceWithResult();
       Update(session, runner);
+      if (step == universal_gnss_driver::ReceiverSessionRunnerStepResult::kTerminal)
+      {
+        terminal_read = true;
+        break;
+      }
+      if (step == universal_gnss_driver::ReceiverSessionRunnerStepResult::kIdle &&
+          !Wait(config_.idle_read_poll_interval))
+      {
+        break;
+      }
+    }
     Update(session, runner);
-    if (stopping_)
-      break;
-
+    // Stop may race link publication. The receiver worker always retires the
+    // transport it published, even when Stop observed no active link yet.
     static_cast<universal_gnss_transport::ByteSource&>(*transport).Close();
     {
       std::lock_guard<std::mutex> lock(correction_mutex_);
       if (active_ == link)
       {
-        link->writer.Abandon();
         active_.reset();
       }
     }
+    {
+      std::lock_guard<std::mutex> lock(link->writer_mutex);
+      link->writer.Abandon();
+    }
+    if (stopping_)
+      break;
+
+    if (!terminal_read)
+      break;
+
     {
       std::lock_guard<std::mutex> lock(mutex_);
       snapshot_.lifecycle = ReceiverSupervisorLifecycle::kReconnecting;
@@ -440,33 +471,37 @@ void ReceiverSupervisor::ForwardRtcm(const universal_gnss_protocols::RtcmFrame& 
   std::uint64_t bytes = 0u;
   std::uint64_t frames = 0u;
   bool overflow = false;
-  bool active = false;
+  std::shared_ptr<ReceiverLink> link;
   {
     std::lock_guard<std::mutex> lock(correction_mutex_);
-    if (!active_ || !static_cast<universal_gnss_transport::ByteSink&>(*active_->transport).IsOpen())
+    link = active_;
+  }
+  if (!link)
+  {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(link->writer_mutex);
+    if (!static_cast<universal_gnss_transport::ByteSink&>(*link->transport).IsOpen())
     {
       return;
     }
-    active = true;
-    if (!active_->writer.Enqueue({frame.raw_bytes, frame.message_type}))
+    if (!link->writer.Enqueue({frame.raw_bytes, frame.message_type}))
     {
       overflow = true;
-      queue_depth = active_->writer.size();
-    } else
+      queue_depth = link->writer.size();
+    }
+    else
     {
-      const auto outcome = active_->writer.Flush(*active_->transport);
+      const auto outcome = link->writer.Flush(*link->transport);
       bytes = outcome.bytes_written;
       frames = outcome.frames_written;
-      queue_depth = active_->writer.size();
+      queue_depth = link->writer.size();
       if (outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
       {
-        static_cast<universal_gnss_transport::ByteSource&>(*active_->transport).Close();
+        static_cast<universal_gnss_transport::ByteSource&>(*link->transport).Close();
       }
     }
-  }
-  if (!active)
-  {
-    return;
   }
   std::lock_guard<std::mutex> lock(mutex_);
   snapshot_.rtcm_forward_queue_depth = queue_depth;
@@ -488,20 +523,29 @@ void ReceiverSupervisor::FlushPendingRtcm()
   std::size_t queue_depth = 0u;
   std::uint64_t bytes = 0u;
   std::uint64_t frames = 0u;
+  std::shared_ptr<ReceiverLink> link;
   {
     std::lock_guard<std::mutex> lock(correction_mutex_);
-    if (!active_ || active_->writer.empty() ||
-        !static_cast<universal_gnss_transport::ByteSink&>(*active_->transport).IsOpen())
+    link = active_;
+  }
+  if (!link)
+  {
+    return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(link->writer_mutex);
+    if (link->writer.empty() ||
+        !static_cast<universal_gnss_transport::ByteSink&>(*link->transport).IsOpen())
     {
       return;
     }
-    const auto outcome = active_->writer.Flush(*active_->transport);
+    const auto outcome = link->writer.Flush(*link->transport);
     bytes = outcome.bytes_written;
     frames = outcome.frames_written;
-    queue_depth = active_->writer.size();
+    queue_depth = link->writer.size();
     if (outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
     {
-      static_cast<universal_gnss_transport::ByteSource&>(*active_->transport).Close();
+      static_cast<universal_gnss_transport::ByteSource&>(*link->transport).Close();
     }
   }
   std::lock_guard<std::mutex> lock(mutex_);
@@ -521,4 +565,4 @@ bool ReceiverSupervisor::Wait(const std::chrono::milliseconds delay)
   return !condition_.wait_for(lock, delay, [this] { return stopping_.load(); });
 }
 
-} // namespace universal_gnss_runtime
+}  // namespace universal_gnss_runtime

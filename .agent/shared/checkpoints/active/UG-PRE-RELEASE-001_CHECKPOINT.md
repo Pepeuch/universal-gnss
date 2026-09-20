@@ -17,24 +17,75 @@ Execution identity: `ubuntu`, UID 1000; no forced-identity exception.
 
 Preserve the final release-blocker audit for direct continuation. The audit was
 read-only, with no production/test edits, reformatting, commit, or push. The
-subsequent user request authorizes this checkpoint and its index entry only.
-It does not authorize implementing the proposed corrections.
+original checkpoint request authorized only this record and its index entry.
+The 2026-09-20 remediation request authorizes the scoped F03/F04/F07 work
+recorded below; it does not authorize commit or push.
 
-Audit recommendation: do not merge/tag the audited HEAD until the HIGH
-software findings below are resolved and regression-tested. F01 is remediated
-in the current baseline HEAD; F02 is remediated in the current uncommitted
-worktree; F03-F05 remain unresolved. The three MEDIUM findings were reported
-as non-blocking. This is a software assessment, not a claim that every release
-qualification gate is satisfied.
+## F03/F04/F07 remediation in the current worktree (2026-09-20)
+
+All three software findings are IMPLEMENTED in this uncommitted worktree.
+This checkpoint remains `ACTIVE` for the other audit findings. No canonical
+UGA classification or progress count changed.
+
+- Root cause: `ReceiverSupervisor::Stop()` closed a plain POSIX descriptor
+  from one thread while the receiver worker was blocked in `read()` with
+  `VMIN=1` and `VTIME=0`. Linux does not guarantee that cross-thread close
+  wakes that read. The same unsynchronized descriptor was also available to
+  the NTRIP forwarding thread.
+- Selected lifecycle: `PosixSerialTransport` owns a private nonblocking wake
+  pipe and puts its serial fd in nonblocking mode. Every read/write acquires a
+  lifecycle operation lease, waits in `poll()` on serial-or-wakeup, then does
+  the syscall. `Close()` marks closing, signals the pipe, waits for all leases
+  to retire, and only then closes the serial/wakeup fds. Whole `Open()` and
+  `Close()` operations are serialized; no in-flight operation can use a
+  descriptor after close/reuse. Metrics/config snapshots are locked copies.
+- Supervisor ownership: `active_` only owns/replaces the current link under
+  `correction_mutex_`; each link now serializes its RTCM writer independently.
+  Stop removes the active link, closes/cancels its transport, then abandons the
+  writer. The receiver worker also retires its published link on every exit,
+  including Stop racing publication. The active-link mutex is not held over
+  a potentially blocking write, so a blocked forward cannot prevent close.
+- F07: `ReceiverSessionRunner::StepOnceWithResult()` distinguishes data, idle
+  (`kOk/0`), and terminal reads. Existing `StepOnce()` retains its old
+  data-only boolean contract. `ReceiverSupervisor` waits its configured idle
+  poll interval on idle and preserves session/incarnation and parser/runtime
+  state. PTY hangup still reconnects. Normal cancellation returns `kClosed`
+  without counting an I/O failure or reporting a terminal receiver error.
+- F03 regression: `gnss_runtime_test_posix_receiver_supervisor` opens a real
+  PTY slave with `read_timeout_ms=0`, leaves its master open and silent, and
+  performs 50 bounded Stop cycles without injecting bytes. Its CTest timeout
+  is five seconds, so the old blocked-read path cannot pass indefinitely. The
+  audited baseline separately reproduced the old >1.5 s hang, released only
+  by an injected GGA; the new test was not run on that old binary.
+- F04/F07 regressions: the direct POSIX test exercises simultaneous silent
+  read, RTCM queue flush with pending suffix, and Close; it proves bounded
+  cancellation and suffix abandonment. The timeout PTY test splits a valid
+  GGA across several idle intervals, proves the parser completes it, then
+  proves the runtime timestamp/observation count and incarnation stay fixed
+  through further silence. A separate PTY peer-hangup case proves reconnect.
+- Validation at `591d09f` plus this worktree: full build and focused tests
+  PASS; full CTest 68/68 PASS outside the network-restricted sandbox. The
+  same suite inside the sandbox gave 63/68 with the five pre-existing
+  socket/TLS/SIGPIPE fixture failures. GCC ThreadSanitizer builds of both
+  focused PTY tests and the existing NTRIP supervisor suite PASS with no
+  reports when launched through `setarch x86_64 -R`; ordinary launch hit
+  `unexpected memory mapping`. The NTRIP suite also needs unrestricted socket
+  fixtures in this sandbox.
+
+Current release recommendation: F05 remains a HIGH software finding and
+F06/F08 remain MEDIUM. These and independent release qualification gates are
+not closed by the F03/F04/F07 correction.
 
 Finding references `F01` through `F08` are stable within this audit only, not
-new UGA IDs or replacements for canonical backlog items. All remain unresolved.
+new UGA IDs or replacements for canonical backlog items. F01/F02 are
+implemented at HEAD; F03/F04/F07 are implemented in the current worktree.
 `TODO.md` and `docs/status/uga_backlog.json` remain authoritative; this checkpoint
 does not change their classifications, conservation accounting, or progress.
 
 ## Evidence interpretation and dependencies
 
-- CURRENT: the exact source paths/symbols below at the audited HEAD.
+- AUDITED BASELINE: the source paths/symbols below at `5c50f6c`; current
+  implementation and validation are summarized above.
 - Reproductions used existing `build/` executables, not a fresh build during
   the audit. They corroborate the source traces but are not clean-build or CI
   attestations. No reproduction scripts or large logs were saved.
@@ -53,7 +104,7 @@ does not change their classifications, conservation accounting, or progress.
 
 ## Release-blocking findings
 
-### F01 — IMPLEMENTED IN CURRENT WORKTREE — Optional partial write can escape quarantine through apply phases
+### F01 — IMPLEMENTED AT HEAD — Optional partial write can escape quarantine through apply phases
 
 Scope: DRIVER / TOOLS. Related backlog: `UGA-126`, with failure reporting under
 `UGA-127`. Evidence: complete static call-path trace; deterministic with injected
@@ -80,7 +131,7 @@ Coverage: `TestPartialWriteQuarantinesSession` covers the engine alone;
 whose separate handler explicitly forbids continuation. Neither covers optional
 partial-write propagation across phases.
 
-Implemented in the current uncommitted worktree based on
+Implemented at current HEAD after
 `ccb9d8ad8dd4811ab6006d83f22795bdd4bf4140`:
 
 - `ReceiverConfigApplication` now makes engine indeterminacy terminal before
@@ -111,7 +162,7 @@ Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
 HARDWARE_REQUIRED`; this software containment does not establish an automatic
 recovery/incarnation cutoff.
 
-### F02 — IMPLEMENTED IN CURRENT WORKTREE — Already-received responses can acknowledge later commands
+### F02 — IMPLEMENTED AT HEAD — Already-received responses can acknowledge later commands
 
 Scope: TOOLS / DRIVER. Related backlog: `UGA-126`. Evidence: source trace and PTY
 reproduction; deterministic for a pre-dispatch response batch.
@@ -136,7 +187,7 @@ Coverage: `TestUbloxRuntimeApplyStillWorks` and
 `TestUnicoreRuntimeApplyStillWorks` preload the complete response sequence and
 therefore accept the defective behavior rather than prove causal acknowledgment.
 
-Implemented in the current uncommitted worktree based on
+Implemented at current HEAD after
 `b9fd3abf8fead45ecd8330dade0d090bb9fd5c73`:
 
 - Apply-layer `ResponseCausalityFence` assigns monotonic software observation
@@ -172,7 +223,7 @@ Canonical UGA accounting is unchanged: UGA-126 remains `PARTIAL /
 HARDWARE_REQUIRED`; this filters software-already-captured responses only and
 does not prove cutoff of kernel, bridge, UART, firmware, or device queues.
 
-### F03 — HIGH — Native supervisor stop hangs on a silent serial receiver
+### F03 — HIGH / IMPLEMENTED IN CURRENT WORKTREE — Native supervisor stop hangs on a silent serial receiver
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001` / `UG-PLAN-002` lifecycle.
 Evidence: source trace and Linux PTY reproduction; software-reproducible.
@@ -195,7 +246,12 @@ Smallest correction direction: bounded/cancellable acquisition with an explicit
 wakeup and owner-controlled close. Add a silent-PTY shutdown regression; also
 preserve nonterminal idle-read semantics from F07.
 
-### F04 — HIGH — Concurrent POSIX descriptor lifecycle is unsynchronized
+Current disposition: IMPLEMENTED. The cancellation architecture and 50-cycle
+real-PTY regression are recorded above. The old CLI reproduction was observed
+at audited HEAD; the new regression passed in the current worktree without
+injecting serial traffic.
+
+### F04 — HIGH / IMPLEMENTED IN CURRENT WORKTREE — Concurrent POSIX descriptor lifecycle is unsynchronized
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001` / `UG-PLAN-002`.
 Evidence: source-level C++ race; scheduling-dependent; no sanitizer run.
@@ -219,6 +275,13 @@ Smallest correction direction: define one I/O/lifecycle owner or a synchronized,
 cancellable transport protocol. An atomic integer alone does not protect the
 OS descriptor lifetime. Verify forced close/read/write schedules and TSan where
 available, without holding an uncancellable blocking read under a close mutex.
+
+Current disposition: IMPLEMENTED for the POSIX transport and native supervisor.
+Descriptor state and metrics are locked; active I/O leases prevent close/reuse
+until read/write returns; complete Open/Close operations are serialized.
+Dedicated real-PTY concurrent read/write/close and blocked RTCM flush tests,
+the existing supervisor forwarding suite, and focused TSan runs pass. This is
+software evidence, not qualification of physical USB/receiver behavior.
 
 ### F05 — HIGH — TLS handshake is not bounded by configured timeouts
 
@@ -267,7 +330,7 @@ timeout only. Direction: propagate indeterminacy as a fact through every phase
 and failure exit, including partial writes and read failure after dispatch;
 test each wrapper rather than infer the flag from one terminal status.
 
-### F07 — MEDIUM — Idle read is mistaken for receiver disconnection
+### F07 — MEDIUM / IMPLEMENTED IN CURRENT WORKTREE — Idle read is mistaken for receiver disconnection
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001`.
 Evidence: deterministic static trace, not an executed regression.
@@ -282,6 +345,12 @@ Coverage: supervisor fakes block when their scripted reads are exhausted;
 there is no explicit idle `kOk/0` preservation case. Direction: distinguish
 no progress from terminal status, with bounded waiting and a regression proving
 unchanged incarnation/parser/runtime across idle reads.
+
+Current disposition: IMPLEMENTED. A dedicated real-PTY timeout regression
+checks the same incarnation, no reconnect, parser continuity across a split
+GGA sentence, and retained runtime observation/timestamp through later idle
+reads. A separate peer-hangup case confirms genuine disconnect still
+reconnects. The existing data-only `StepOnce()` contract is unchanged.
 
 ### F08 — MEDIUM — Docker contract assertions can be masked by later success
 
@@ -308,15 +377,15 @@ failed early assertion causes a failing job.
 - The ROS2 snapshot test fix freezes input and retains exact timestamp and
   no-write assertions. BuildSnapshot was not changed. The supervisor test fix
   synchronizes fake availability/control and preserves its assertions.
-- `TestNtripForwardingAndIndependentReconnects` replaces the receiver after
-  the first frame is fully flushed: its old-suffix assertion does not prove
-  abandonment during a pending partial write. This is a coverage limit, not
-  evidence that production queue abandonment is broken.
+- At the audited baseline, `TestNtripForwardingAndIndependentReconnects`
+  replaced the receiver after the first frame was fully flushed. The current
+  POSIX test additionally cancels a blocked RTCM flush with a pending suffix
+  and proves the writer abandons it.
 - Formatting commit `a6c1746`: all 196 changed C/C++ files were reproduced
   byte-for-byte by clang-format-21 applied to their parent versions using the
   current root configuration. No additional change was found in that pass.
 
-## Validation already performed / remaining
+## Audited-baseline validation / current validation
 
 PASS during the audit, using existing binaries:
 
@@ -327,10 +396,12 @@ PASS during the audit, using existing binaries:
 - `bash scripts/clang_format_21.sh --check --all` (script-selected roots only).
 - `git diff --check`; clean final audit worktree.
 
-Defective behavior reproduced: F02, F03, F06, as described above.
-Not run during this audit: fresh build, full CTest, new ROS2 stress run,
-Kilted/Lyrical CI, Docker image validation, TSan, physical hardware tests.
-Passing existing tests does not close the findings or prove the uncovered paths.
+Defective behavior reproduced at the audited baseline: F02, F03, F06, as
+described above. That read-only audit did not run a fresh build, full CTest,
+new ROS2 stress run, Kilted/Lyrical CI, Docker image validation, TSan, or
+physical hardware tests. Current F03/F04/F07 build, CTest, PTY, and TSan
+results are recorded in the remediation section above. ROS2 CI and physical
+hardware validation were not repeated in this software pass.
 
 Physical boundaries remain in
 `../blocked/UG-DRIVER-RESPONSE-FENCE-001_CHECKPOINT.md` and
@@ -341,20 +412,14 @@ Persistence/power-cycle, USB and per-model reset qualifications remain separate.
 
 ## Exact next step / do not touch
 
-On an authorized remediation turn, verify HEAD/diff, reuse this evidence, and
-start with F01: add an optional-SIGNALGROUP partial-write regression at the
-application/workflow boundary, then enforce terminal quarantine propagation.
-Do not begin a fresh repository-wide audit. F02 is the next independent safety
-regression; coordinate F03/F04/F07 as one transport-lifecycle correction.
-
-After fixes, rerun focused regressions, affected suites, clean build/full CTest,
-ROS2 Kilted/Lyrical and applicable Docker checks, formatting and diff checks.
-Reconcile canonical backlog/release dependency classifications and existing
-checkpoint summaries when implementation/status changes are authorized and
-proven; do not count these open findings or HARDWARE_REQUIRED items as complete.
+F03/F04/F07 have no remaining software remediation in this scope. The next
+HIGH audit finding is F05 (stalled TLS handshake), which needs separate
+authorization and its own regression. F06/F08 remain separate MEDIUM work.
+Do not begin a fresh repository-wide audit. Reuse the audited baseline and
+the current worktree evidence when resuming another finding.
 
 Invalidate only evidence whose source/tests/contracts/build environment changed.
 Preserve hardware boundaries and exact provenance assertions; no speculative
 recovery fence, unrelated feature work, automatic staging, commit, or push.
-No local scratch checkpoint is promoted or staged. This shared ACTIVE record
-and its index entry are the only changes authorized by the checkpoint request.
+The local F03 working note remains `LOCAL_ONLY`. This shared record remains
+`ACTIVE` because the wider pre-release audit has open findings.

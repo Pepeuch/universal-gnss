@@ -24,4 +24,19 @@ if(BUILD_TESTING)
   add_executable(gnss_runtime_test_receiver_supervisor tests/test_receiver_supervisor.cpp)
   target_link_libraries(gnss_runtime_test_receiver_supervisor PRIVATE universal_gnss_runtime)
   add_test(NAME gnss_runtime_test_receiver_supervisor COMMAND gnss_runtime_test_receiver_supervisor)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_executable(
+      gnss_runtime_test_posix_receiver_supervisor
+      tests/test_posix_receiver_supervisor.cpp
+    )
+    target_link_libraries(
+      gnss_runtime_test_posix_receiver_supervisor
+      PRIVATE universal_gnss_runtime
+    )
+    add_test(
+      NAME gnss_runtime_test_posix_receiver_supervisor
+      COMMAND gnss_runtime_test_posix_receiver_supervisor
+    )
+    set_tests_properties(gnss_runtime_test_posix_receiver_supervisor PROPERTIES TIMEOUT 5)
+  endif()
 endif()

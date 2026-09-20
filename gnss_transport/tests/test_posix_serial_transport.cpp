@@ -1,10 +1,13 @@
+#include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(__linux__)
@@ -15,12 +18,14 @@
 #include <unistd.h>
 
 #include "universal_gnss_transport/posix_serial_transport.hpp"
+#include "universal_gnss_transport/rtcm_frame_writer.hpp"
 
 namespace
 {
 
 using universal_gnss_transport::PosixSerialConfig;
 using universal_gnss_transport::PosixSerialTransport;
+using universal_gnss_transport::ReadResult;
 using universal_gnss_transport::TransportError;
 using universal_gnss_transport::TransportStatus;
 
@@ -185,6 +190,111 @@ void TestNonblockingReadWithoutData(TestContext& ctx)
              "nonblocking read without data should return zero bytes without error");
 }
 
+void TestCloseCancelsSilentReadAndCoordinatesConcurrentWrite(TestContext& ctx)
+{
+  PseudoTerminal pty;
+  ctx.Expect(pty.Open(), "pseudo-terminal fixture should open for cancellation test");
+
+  PosixSerialTransport serial;
+  ctx.Expect(serial.Open(PosixSerialConfig{pty.slave_path(), 115200u, false, 0u}) ==
+                 TransportError::kNone,
+             "cancellation test serial transport should open");
+  if (!serial.IsOpen())
+  {
+    return;
+  }
+
+  std::atomic<bool> read_started{false};
+  ReadResult read_result{};
+  std::thread reader([&] {
+    std::uint8_t byte = 0u;
+    read_started.store(true, std::memory_order_release);
+    read_result = serial.Read(&byte, 1u);
+  });
+  while (!read_started.load(std::memory_order_acquire))
+  {
+    std::this_thread::yield();
+  }
+
+  const std::vector<std::uint8_t> outbound = {0xA5u};
+  const auto write_result = serial.Write(outbound.data(), outbound.size());
+  ctx.Expect(write_result.status == TransportStatus::kOk && write_result.bytes_written == 1u &&
+                 pty.ReadMasterExact(outbound.size()) == outbound,
+             "a concurrent serial write must remain usable while the receive side waits");
+
+  const auto close_started = std::chrono::steady_clock::now();
+  serial.Close();
+  const auto close_elapsed = std::chrono::steady_clock::now() - close_started;
+  reader.join();
+
+  ctx.Expect(close_elapsed < std::chrono::milliseconds(250),
+             "closing a silent blocking serial read must be bounded without peer traffic");
+  ctx.Expect(read_result.status == TransportStatus::kClosed &&
+                 read_result.error == TransportError::kClosed,
+             "cancellation wakeup must retire the blocked read as a closed transport");
+  ctx.Expect(serial.metrics().read_errors == 0u && serial.metrics().write_errors == 0u,
+             "normal read cancellation must not count as a receiver I/O failure");
+}
+
+void TestCloseCancelsBlockedRtcmFlush(TestContext& ctx)
+{
+  PseudoTerminal pty;
+  ctx.Expect(pty.Open(), "pseudo-terminal fixture should open for RTCM cancellation test");
+  if (pty.slave_path().empty())
+  {
+    return;
+  }
+
+  PosixSerialTransport serial;
+  ctx.Expect(serial.Open(PosixSerialConfig{pty.slave_path(), 115200u, false, 0u}) ==
+                 TransportError::kNone,
+             "RTCM cancellation test serial transport should open");
+  if (!serial.IsOpen())
+  {
+    return;
+  }
+
+  universal_gnss_transport::RtcmFrameWriter writer(256u);
+  for (std::size_t index = 0u; index < 256u; ++index)
+  {
+    ctx.Expect(writer.Enqueue({std::vector<std::uint8_t>(1024u, 0xA5u), 1077u}),
+               "RTCM cancellation fixture should queue a bounded frame");
+  }
+
+  ReadResult read_result{};
+  std::thread receiver([&] {
+    std::uint8_t byte = 0u;
+    read_result = serial.Read(&byte, 1u);
+  });
+  universal_gnss_transport::RtcmFrameWriter::FlushOutcome outcome{};
+  std::thread forwarder([&] { outcome = writer.Flush(serial); });
+
+  const auto progress_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+  while (serial.metrics().bytes_written == 0u &&
+         std::chrono::steady_clock::now() < progress_deadline)
+  {
+    std::this_thread::yield();
+  }
+  ctx.Expect(serial.metrics().bytes_written > 0u,
+             "RTCM forwarder should write a prefix before shutdown");
+
+  const auto close_started = std::chrono::steady_clock::now();
+  serial.Close();
+  const auto close_elapsed = std::chrono::steady_clock::now() - close_started;
+  forwarder.join();
+  receiver.join();
+
+  ctx.Expect(close_elapsed < std::chrono::milliseconds(250),
+             "shutdown must cancel a blocked RTCM flush and silent receiver read");
+  ctx.Expect(outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed &&
+                 outcome.status == TransportStatus::kClosed && writer.empty(),
+             "RTCM forwarder must abandon pending suffix bytes after transport cancellation");
+  ctx.Expect(read_result.status == TransportStatus::kClosed,
+             "receiver read must also retire on the same transport cancellation");
+  ctx.Expect(serial.metrics().read_errors == 0u && serial.metrics().write_errors == 0u,
+             "normal RTCM and read cancellation must not count as an I/O failure");
+}
+
 void TestOpenClearsInheritedRawModeFlags(TestContext& ctx)
 {
   PseudoTerminal pty;
@@ -329,6 +439,8 @@ int main()
 
   TestOpenReadWriteClose(ctx);
   TestNonblockingReadWithoutData(ctx);
+  TestCloseCancelsSilentReadAndCoordinatesConcurrentWrite(ctx);
+  TestCloseCancelsBlockedRtcmFlush(ctx);
   TestOpenClearsInheritedRawModeFlags(ctx);
   TestReadTimeoutConversionRejectsUnrepresentableValues(ctx);
   TestInvalidConfigurationRejected(ctx);
