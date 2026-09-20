@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>universal_gnss_mavros</name>
-  <version>0.1.0</version>
+  <version>0.7.0</version>
   <description>Optional external MAVROS source transport for Universal GNSS.</description>
   <maintainer email="opensource@example.com">Universal GNSS</maintainer>
   <license>LGPL-3.0-or-later</license>
