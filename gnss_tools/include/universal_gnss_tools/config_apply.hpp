@@ -102,6 +102,8 @@ struct ConfigApplyResult
   bool dry_run{true};
   bool execute_requested{false};
   bool executed{false};
+  // Independent, monotonic fact for this apply attempt. A post-dispatch read
+  // failure is indeterminate even when status is kReadFailed.
   bool receiver_state_indeterminate{false};
   bool requires_runtime_confirmation{false};
   bool requires_persistent_confirmation{false};

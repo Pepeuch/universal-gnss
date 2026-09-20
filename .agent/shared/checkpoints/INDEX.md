@@ -1,11 +1,11 @@
 # Shared checkpoint index
 
 - `active/UG-PRE-RELEASE-001_CHECKPOINT.md` — release-blocker audit at
-  `5c50f6c`: F01–F04/F07 are committed at `b17f0cd`; F05 is implemented and
-  regression-tested in the current uncommitted worktree. F06/F08 remain MEDIUM.
-  Includes source, PTY, and stalled-TLS evidence. Engine quarantine is
-  implemented; this audit records apply-layer gaps separately from hardware
-  recovery limits.
+  `5c50f6c`: F01–F05/F07 are committed at `46acb9a`; F06 is implemented and
+  regression-tested in the current uncommitted worktree. F08 remains MEDIUM.
+  Includes source, PTY, stalled-TLS, and indeterminate-apply evidence. Engine
+  quarantine is implemented; this audit records apply-layer gaps separately
+  from hardware recovery limits.
 - `retained/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
   `retained/REPOSITORY_BASELINE_AUDIT_LEDGER.md` — frozen audit baseline,
   stable IDs, duplicate graph, and reusable evidence; current classifications

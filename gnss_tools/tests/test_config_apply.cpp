@@ -296,6 +296,12 @@ public:
       return ReadResult{0u, TransportStatus::kError, TransportError::kInvalidArgument};
     }
 
+    if (fail_next_read_)
+    {
+      fail_next_read_ = false;
+      return ReadResult{0u, TransportStatus::kError, TransportError::kReadFailure};
+    }
+
     if (pending_signalgroup_disconnect_)
     {
       const auto bytes_to_copy = std::min(capacity, signalgroup_response_.size());
@@ -378,6 +384,14 @@ public:
     }
 
     written_.insert(written_.end(), data, data + static_cast<std::ptrdiff_t>(size));
+    if (fail_read_after_any_write_ ||
+        (fail_read_after_write_containing_.has_value() &&
+         text.find(*fail_read_after_write_containing_) != std::string_view::npos))
+    {
+      fail_next_read_ = true;
+      fail_read_after_any_write_ = false;
+      fail_read_after_write_containing_.reset();
+    }
     if (text.find("\r\n") != std::string_view::npos && read_offset_ >= input_.size())
     {
       ++write_response_credit_;
@@ -461,6 +475,16 @@ public:
     partial_signalgroup_write_bytes_ = bytes_to_write;
   }
 
+  void FailReadAfterWriteContaining(std::string text)
+  {
+    fail_read_after_write_containing_ = std::move(text);
+  }
+
+  void FailReadAfterAnyWrite()
+  {
+    fail_read_after_any_write_ = true;
+  }
+
   bool stale_write_attempted() const
   {
     return stale_write_attempted_;
@@ -509,6 +533,9 @@ private:
   std::deque<std::string> queued_text_responses_{};
   std::optional<std::size_t> partial_signalgroup_write_bytes_{};
   bool partial_signalgroup_write_pending_{false};
+  bool fail_read_after_any_write_{false};
+  bool fail_next_read_{false};
+  std::optional<std::string> fail_read_after_write_containing_{};
   std::string signalgroup_response_{"<OK\r\n"};
   std::vector<std::uint8_t> ublox_mon_ver_response_{};
 };
@@ -1133,6 +1160,7 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   const auto result = ExecuteConfigApply(transport, options);
 
   ctx.Expect(result.status == ConfigApplyStatus::kOk && !result.dry_run && result.executed &&
+                 !result.receiver_state_indeterminate &&
                  result.execution_summary.commands_total == 13u &&
                  result.execution_summary.commands_completed == 13u &&
                  result.execution_summary.commands_failed == 0u &&
@@ -1148,6 +1176,70 @@ void TestUnicoreRuntimeApplyStillWorks(TestContext& ctx)
   ctx.Expect(written.find("CONFIG SIGNALGROUP") == std::string::npos,
              "runtime-only Unicore apply should not emit CONFIG SIGNALGROUP without an explicit "
              "override");
+}
+
+void TestUnicoreDispatchedTimeoutCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.timeout_ms = 1u;
+  options.confirm = true;
+
+  ScriptedByteDuplex transport;
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 1u, {}});
+  const std::string target_probe = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       460800u,
+                       1u,
+                       std::vector<std::uint8_t>(target_probe.begin(), target_probe.end())});
+  hooks.AddReopenStep({"/dev/ttyUSB0", 460800u, 1u, {}});
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kTimedOut && result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "the audited UM982 runtime-baud timeout must report the dispatched command as "
+             "indeterminate");
+  ctx.Expect(written.find("CONFIG COM1 460800") != std::string::npos &&
+                 written.find("MODE ROVER SURVEY MOW\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos && hooks.AllStepsConsumed() &&
+                 hooks.failure().empty(),
+             "the audited timeout must occur after active-baud verification and stop before later "
+             "profile commands");
+}
+
+void TestUnicoreGenericReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport;
+  transport.ProvideTextOkResponses();
+  transport.FailReadAfterWriteContaining("MODE ROVER SURVEY MOW");
+  const auto result = ExecuteConfigApply(transport, options);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos &&
+                 universal_gnss_tools::FormatConfigApplyJson(result).find(
+                     "\"receiver_state_indeterminate\": true") != std::string::npos,
+             "a generic Unicore read failure after dispatch must preserve indeterminacy");
+  ctx.Expect(written.find("MODE ROVER SURVEY MOW\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos,
+             "a post-dispatch read failure must stop before later configuration or persistence");
 }
 
 void TestUnicorePreDispatchQueuedResponseCannotAcknowledgeNextCommand(TestContext& ctx)
@@ -1209,6 +1301,7 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(TestCon
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kPartialSuccess && result.executed &&
+                 !result.receiver_state_indeterminate &&
                  result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
                  result.execution_summary.commands_completed ==
                      prepared.plan.summary.commands_total - 1u &&
@@ -1325,6 +1418,7 @@ void TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(Te
   const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
 
   ctx.Expect(result.status == ConfigApplyStatus::kPartialSuccess && result.executed &&
+                 !result.receiver_state_indeterminate &&
                  result.execution_summary.commands_total == prepared.plan.summary.commands_total &&
                  result.execution_summary.commands_completed ==
                      prepared.plan.summary.commands_total - 1u &&
@@ -1413,6 +1507,37 @@ void TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupWriteIsPartial(TestConte
                  written.find("SAVECONFIG\r\n") == std::string::npos,
              "a partial optional SIGNALGROUP write must not reopen, probe, persist, or dispatch a "
              "later command");
+}
+
+void TestUnicoreSignalGroupReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.signal_group_override = std::vector<std::uint8_t>{2u, 0u};
+  options.confirm = true;
+
+  const std::string initial_input = BuildUnicoreSignalGroupConfigDump("4 5");
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(initial_input.begin(), initial_input.end()));
+  transport.FailReadAfterWriteContaining("CONFIG SIGNALGROUP 2 0");
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 921600u, 100u, {}});
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "a read failure after optional SIGNALGROUP dispatch must preserve indeterminacy");
+  ctx.Expect(hooks.AllStepsConsumed() && hooks.failure().empty() &&
+                 written.find("CONFIG SIGNALGROUP 2 0\r\n") != std::string::npos &&
+                 written.find("VERSIONA\r\n") == std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos,
+             "SIGNALGROUP read failure must not enter recovery or a later profile phase");
 }
 
 void TestUnicoreRecoveryProbeRejectsGenericAck(TestContext& ctx)
@@ -1640,6 +1765,43 @@ void TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(TestCo
              "baud values distinct");
 }
 
+void TestUnicoreRuntimeBaudReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 115200u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.config_baud = 460800u;
+  options.confirm = true;
+
+  ScriptedByteDuplex transport;
+  transport.ProvideTextOkResponses();
+  transport.FailReadAfterWriteContaining("MODE ROVER SURVEY MOW");
+  ScriptedConfigApplyHooks hooks(transport);
+  hooks.AddReopenStep({"/dev/ttyUSB0", 115200u, 100u, {}});
+  const std::string target_probe = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       460800u,
+                       100u,
+                       std::vector<std::uint8_t>(target_probe.begin(), target_probe.end())});
+  hooks.AddReopenStep({"/dev/ttyUSB0", 460800u, 100u, {}});
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "runtime baud-switch wrapper must preserve indeterminacy from a failed phase");
+  ctx.Expect(written.find("CONFIG COM1 460800") != std::string::npos &&
+                 written.find("MODE ROVER SURVEY MOW\r\n") != std::string::npos &&
+                 written.find("GPGGA 1\r\n") == std::string::npos && hooks.AllStepsConsumed() &&
+                 hooks.failure().empty(),
+             "runtime baud-switch read failure must stop after the verified target-baud probe and "
+             "before later profile commands");
+}
+
 void TestUnicoreRuntimeApplyStopsWhenConfigCom1DoesNotSwitchLive(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -1786,6 +1948,50 @@ void TestUnicoreFactoryResetRecoveryApplyWorks(TestContext& ctx)
              "replaying configuration, without saving a runtime-only replay");
   ctx.Expect(ContainsProgressLine(result, "up to 60 s"),
              "factory_reset recovery should expose its conservative 60-second post-reset window");
+}
+
+void TestUnicoreRecoveryReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kFactoryReset;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  ScriptedByteDuplex transport;
+  transport.FailReadAfterWriteContaining("MODE ROVER SURVEY MOW");
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreFactoryResetScanSteps(hooks, "/dev/ttyUSB0", 115200u);
+  const std::string first_probe = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       115200u,
+                       100u,
+                       std::vector<std::uint8_t>(first_probe.begin(), first_probe.end())});
+  const std::string baud_response = BuildRepeatedUnicoreOkResponses(1u);
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       115200u,
+                       100u,
+                       std::vector<std::uint8_t>(baud_response.begin(), baud_response.end())});
+  const std::string second_probe = BuildUnicoreVersionResponse();
+  hooks.AddReopenStep({"/dev/ttyUSB0",
+                       921600u,
+                       100u,
+                       std::vector<std::uint8_t>(second_probe.begin(), second_probe.end())});
+  AddUm982SignalGroupProfileSteps(hooks, "/dev/ttyUSB0", 921600u, "4 5", "3 6", 5u, 8u);
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "factory-reset recovery wrapper must preserve indeterminacy from a profile read "
+             "failure after reset");
+  ctx.Expect(written.find("FRESET\r\n") != std::string::npos &&
+                 written.find("MODE ROVER SURVEY MOW\r\n") != std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos && hooks.failure().empty(),
+             "recovery read failure must not persist or dispatch later profile commands");
 }
 
 void TestUnicoreFactoryResetPersistentApplySavesAfterReplay(TestContext& ctx)
@@ -2030,6 +2236,34 @@ void TestUnicorePersistentApplySavesWithoutFactoryReset(TestContext& ctx)
              "persistent Unicore apply should configure and verify before saving, without FRESET");
 }
 
+void TestUnicorePersistentReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/ttyUSB0", 921600u, ReceiverDetectedFamily::kUnicore);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kPersistent;
+  options.receiver_model = "UM982";
+  options.confirm = true;
+
+  const std::string current_config = BuildUnicoreConfigResponse("4 5", 921600u);
+  ScriptedByteDuplex transport(
+      std::vector<std::uint8_t>(current_config.begin(), current_config.end()));
+  transport.FailReadAfterWriteContaining("MODE ROVER SURVEY MOW");
+  ScriptedConfigApplyHooks hooks(transport);
+  AddUnicoreSignalGroupRecoverySteps(hooks, "/dev/ttyUSB0", 921600u, "3 6", 5u, 9u);
+
+  const auto result = ExecuteConfigApply(transport, options, &hooks);
+  const std::string written(transport.written_bytes().begin(), transport.written_bytes().end());
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "persistent apply must report an indeterminate profile command after read failure");
+  ctx.Expect(written.find("MODE ROVER SURVEY MOW\r\n") != std::string::npos &&
+                 written.find("SAVECONFIG\r\n") == std::string::npos && hooks.failure().empty(),
+             "persistent read-failure test must stop before SAVECONFIG");
+}
+
 void TestUnicorePersistentApplyUsesOverriddenTargetBaud(TestContext& ctx)
 {
   ConfigApplyOptions options;
@@ -2205,6 +2439,30 @@ void TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(TestContext& ctx)
              "successful u-blox apply without MON-VER must not claim active baud verification");
 }
 
+void TestUbloxReadFailureCarriesIndeterminateState(TestContext& ctx)
+{
+  ConfigApplyOptions options;
+  options.discovery_result =
+      MakeDiscoveryResult("/dev/serial/by-id/f9p", 921600u, ReceiverDetectedFamily::kUblox);
+  options.profile = ReceiverAutoConfigProfile::kRoverHighPrecision;
+  options.apply_mode = ReceiverAutoConfigApplyMode::kRuntimeOnly;
+  options.confirm = true;
+
+  const auto prepared = PrepareConfigApply(options);
+  ScriptedByteDuplex transport;
+  transport.FailReadAfterAnyWrite();
+  const auto result = ExecuteConfigApply(transport, options);
+
+  ctx.Expect(result.status == ConfigApplyStatus::kReadFailed &&
+                 result.receiver_state_indeterminate &&
+                 result.error_message.find("command may have been applied") != std::string::npos,
+             "u-blox post-dispatch read failure must preserve indeterminacy");
+  ctx.Expect(!prepared.plan.commands.empty() &&
+                 transport.written_bytes().size() ==
+                     prepared.plan.commands.front().command.payload.binary.size(),
+             "u-blox read failure must stop after the first dispatched command");
+}
+
 }  // namespace
 
 int main()
@@ -2229,30 +2487,37 @@ int main()
   TestKnownNonBaselineUnicoreModelPreparation(ctx);
   TestFactoryResetRecoveryWorkflowPreparesSuccessfully(ctx);
   TestUnicoreRuntimeApplyStillWorks(ctx);
+  TestUnicoreDispatchedTimeoutCarriesIndeterminateState(ctx);
+  TestUnicoreGenericReadFailureCarriesIndeterminateState(ctx);
   TestUnicorePreDispatchQueuedResponseCannotAcknowledgeNextCommand(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalOutputFails(ctx);
   TestUnicoreRuntimeApplyStillAbortsWhenCriticalCommandFails(ctx);
   TestUnicoreRuntimeApplyReturnsPartialSuccessWhenOptionalSignalGroupFails(ctx);
   TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupTimesOut(ctx);
   TestUnicoreRuntimeApplyStopsWhenOptionalSignalGroupWriteIsPartial(ctx);
+  TestUnicoreSignalGroupReadFailureCarriesIndeterminateState(ctx);
   TestUnicoreRecoveryProbeRejectsGenericAck(ctx);
   TestUnicoreRuntimeSignalGroupOverrideUsesRecoveryBoundary(ctx);
   TestUnicoreRuntimeSignalGroupVerificationFailureStopsProfilePhase(ctx);
   TestUnicoreRuntimeApplySwitchesToTargetBaudWhenConfigCom1BecomesLive(ctx);
+  TestUnicoreRuntimeBaudReadFailureCarriesIndeterminateState(ctx);
   TestUnicoreRuntimeApplyStopsWhenConfigCom1DoesNotSwitchLive(ctx);
   TestUnicoreRuntimeApplyFailsFastWhenNeitherBaudRespondsAfterConfigCom1(ctx);
   TestUnicoreFactoryResetRecoveryApplyWorks(ctx);
+  TestUnicoreRecoveryReadFailureCarriesIndeterminateState(ctx);
   TestUnicoreFactoryResetPersistentApplySavesAfterReplay(ctx);
   TestUnicoreFactoryResetPreflightScanFinds38400BeforeSendingFreset(ctx);
   TestUnicoreFactoryResetPreflightScanFinds921600BeforeSendingFreset(ctx);
   TestUnicoreFactoryResetPreflightAbortWhenNoBaudResponds(ctx);
   TestUnicoreFactoryResetStopsWhenPostResetVersionaIsAbsent(ctx);
   TestUnicorePersistentApplySavesWithoutFactoryReset(ctx);
+  TestUnicorePersistentReadFailureCarriesIndeterminateState(ctx);
   TestUnicorePersistentApplyUsesOverriddenTargetBaud(ctx);
   TestUnicorePersistentApplyRefusesSaveWhenTargetBaudIsNotVerified(ctx);
   TestUbloxRuntimeApplyStillWorks(ctx);
   TestUbloxPreDispatchQueuedAckCannotAcknowledgeNextCommand(ctx);
   TestUbloxRuntimeApplyDoesNotAcceptAckAsActiveVerification(ctx);
+  TestUbloxReadFailureCarriesIndeterminateState(ctx);
 
   if (ctx.failures != 0)
   {

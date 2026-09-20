@@ -790,6 +790,10 @@ Current behavior:
 - never retries a command after bytes were dispatched: that session is
   indeterminate until an external, qualified receiver/session recovery boundary
   is established
+- reports `receiver_state_indeterminate=true` after a read failure while
+  awaiting an already-dispatched command, independently of the `read_failed`
+  status; enclosing SIGNALGROUP, baud, recovery, and persistent workflows
+  preserve that fact and stop later configuration
 
 Current scope:
 

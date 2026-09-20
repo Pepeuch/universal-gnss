@@ -18,8 +18,8 @@ Execution identity: `ubuntu`, UID 1000; no forced-identity exception.
 Preserve the final release-blocker audit for direct continuation. The audit was
 read-only, with no production/test edits, reformatting, commit, or push. The
 original checkpoint request authorized only this record and its index entry.
-The 2026-09-20 remediation requests authorized the scoped F03/F04/F07 and
-subsequent F05 work recorded below; neither authorizes commit or push.
+The 2026-09-20 remediation requests authorized scoped F03/F04/F07, F05, and
+subsequent F06 work recorded below; none authorizes commit or push.
 
 ## F03/F04/F07 remediation at current HEAD (2026-09-20)
 
@@ -72,14 +72,15 @@ UGA classification or progress count changed.
   `unexpected memory mapping`. The NTRIP suite also needs unrestricted socket
   fixtures in this sandbox.
 
-F05 is independently IMPLEMENTED in the current uncommitted worktree as
-recorded below. F06/F08 remain MEDIUM, and independent release qualification
-gates remain open.
+F05 is independently IMPLEMENTED at `46acb9a`. F06 is IMPLEMENTED in the
+current uncommitted worktree as recorded below. F08 and independent release
+qualification gates remain open.
 
 Finding references `F01` through `F08` are stable within this audit only, not
 new UGA IDs or replacements for canonical backlog items. F01/F02 are
 implemented at HEAD; F03/F04/F07 are implemented at `b17f0cd`; F05 is
-implemented in the current uncommitted worktree.
+implemented at `46acb9a`; F06 is implemented in the current uncommitted
+worktree.
 `TODO.md` and `docs/status/uga_backlog.json` remain authoritative; this checkpoint
 does not change their classifications, conservation accounting, or progress.
 
@@ -346,7 +347,7 @@ No TLS SIGPIPE defect was established by this finding.
 
 ## High-confidence non-blocking findings
 
-### F06 — MEDIUM — Indeterminate state is lost in some apply results
+### F06 — MEDIUM / IMPLEMENTED IN CURRENT WORKTREE — Indeterminate state is lost in some apply results
 
 Scope: TOOLS. Related backlog: `UGA-127`. Evidence: source trace and PTY reproduction.
 `gnss_tools/src/config_apply.cpp`: `CommandPhaseOutcome` (line 1669) omits the
@@ -362,12 +363,46 @@ probes, then no response to `MODE ROVER SURVEY MOW`.
 Observed: exit 1, `status=timed_out`, `receiver_state_indeterminate=false`, while
 error text says the dispatched command left the session indeterminate.
 
-Coverage: the existing flag assertion covers the direct optional SIGNALGROUP
-timeout only. Direction: propagate indeterminacy as a fact through every phase
-and failure exit, including partial writes and read failure after dispatch;
-test each wrapper rather than infer the flag from one terminal status.
+Current root cause and propagation: F01 had already added the independent
+flag to `ReceiverConfigApplicationResult` and `CommandPhaseOutcome`, so the
+historical UM982 115200→460800 timeout and optional SIGNALGROUP partial write
+already returned true and stopped later work. Remaining holes were both
+post-dispatch read-error exits in `ExecuteConfigApply` and
+`ExecuteUnicoreCommandPhase`: they returned `kReadFailed` without setting the
+flag, because the engine had not timed out or quarantined on a transport read
+failure. The phase helper then overwrote the fact with its false engine flag.
+Several wrappers copied a child flag with assignment rather than preserving
+an already-true enclosing flag. The relevant path is engine/application result
+→ generic finalizer or Unicore command phase → SIGNALGROUP/runtime-baud/
+recovery wrapper → `ConfigApplyResult` → text/JSON.
 
-### F07 — MEDIUM / IMPLEMENTED IN CURRENT WORKTREE — Idle read is mistaken for receiver disconnection
+Regression-first evidence: seven new config-apply cases were added before the
+production fix. The historical UM982 timeout passed at the old F06 baseline;
+six post-dispatch read-error cases failed only the top-level indeterminacy
+assertion: generic Unicore, optional SIGNALGROUP, verified runtime baud-switch,
+factory-reset recovery profile, persistent profile, and u-blox. Existing
+optional SIGNALGROUP partial-write and timeout tests stayed green. The
+recovery test uses a response-bearing command after reset; FRESET itself is a
+no-response command and is not a suitable read-failure trigger.
+
+Implemented rule: a read error while `ReceiverConfigApplication` waits for a
+dispatched command marks the attempt indeterminate while retaining
+`kReadFailed`. Application, phase, SIGNALGROUP, recovery, runtime-baud, and
+top-level merges now use logical OR; no wrapper resets true to false. This is
+not inferred from `kTimedOut`, an error string, or another terminal status.
+F01's terminal return still prevents later phase, reopen/probe, or persistence
+after an indeterminate command. Successful and optional-rejection
+`kPartialSuccess` fixtures explicitly assert false.
+
+Focused validation: driver transaction-engine, driver config-application, and
+tools config-apply binaries PASS after the fix. Full build PASS; CTest 68/68
+PASS with loopback access. Repository-wide and touched-file clang-format-21
+checks, `git diff --check`, shared checkpoint audit (zero problems/warnings),
+and backlog-status check PASS. Canonical
+`UGA-126` stays `PARTIAL / HARDWARE_REQUIRED`; `UGA-127` remains `PARTIAL`.
+No hardware causal cutoff or automatic quarantine recovery is claimed.
+
+### F07 — MEDIUM / IMPLEMENTED AT `b17f0cd` — Idle read is mistaken for receiver disconnection
 
 Scope: DEPLOYMENT / DRIVER. Related plan: `UG-PLAN-001`.
 Evidence: deterministic static trace, not an executed regression.
@@ -450,13 +485,14 @@ Persistence/power-cycle, USB and per-model reset qualifications remain separate.
 
 ## Exact next step / do not touch
 
-F03/F04/F07 are implemented at `b17f0cd`; F05 is implemented in the current
-uncommitted worktree. F06/F08 remain separate MEDIUM work. Do not begin a
+F03/F04/F07 are implemented at `b17f0cd`; F05 is implemented at `46acb9a`;
+F06 is implemented in the current uncommitted worktree. F08 remains separate
+MEDIUM work. Do not begin a
 fresh repository-wide audit. Reuse the audited baseline and current test
 evidence when resuming another finding.
 
 Invalidate only evidence whose source/tests/contracts/build environment changed.
 Preserve hardware boundaries and exact provenance assertions; no speculative
 recovery fence, unrelated feature work, automatic staging, commit, or push.
-The local F03 and F05 working notes remain `LOCAL_ONLY`. This shared record
+The local F03, F05, and F06 working notes remain `LOCAL_ONLY`. This shared record
 remains `ACTIVE` because the wider pre-release audit has open findings.

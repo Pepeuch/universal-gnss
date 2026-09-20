@@ -485,6 +485,17 @@ qualified recovery boundary. Apply text/JSON makes this explicit with
 `receiver_state_indeterminate=true` and the warning that the timed-out command
 may have been applied.
 
+A transport read failure while apply is waiting for a response to an already
+dispatched command also makes that apply attempt indeterminate: the command
+may have reached the receiver even though its response was lost. The
+top-level `receiver_state_indeterminate` flag is propagated independently of
+the terminal status (`read_failed`, `timed_out`, or `dispatch_failed`) through
+Unicore SIGNALGROUP, baud-switch, recovery, persistent, and generic u-blox/
+Unicore paths. It does not become false in a later wrapper or permit another
+phase, reopen/probe, or persistence command without a qualified recovery
+boundary. An optional command explicitly rejected by the receiver can still
+produce a determinate `partial_success`; status alone never defines this flag.
+
 An active MODEL query is deliberately not used to lift this quarantine. Neither
 `UBX-MON-VER` nor `VERSIONA` carries a host transaction nonce, and the current
 POSIX serial interface cannot prove that a response already queued at the
