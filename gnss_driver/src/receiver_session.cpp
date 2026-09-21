@@ -406,6 +406,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     metrics_.rejected_records = child.frames_rejected;
     metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_frames;
+    metrics_.position_payload_freshness = child.position_payload_freshness;
     return;
   }
 
@@ -419,6 +420,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     metrics_.rejected_records = child.records_rejected;
     metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_records;
+    metrics_.position_payload_freshness = child.position_payload_freshness;
     return;
   }
 
@@ -432,6 +434,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
     metrics_.rejected_records = child.records_rejected;
     metrics_.parser_anomalies = metrics_.malformed_records + metrics_.rejected_records;
     metrics_.unknown_records = child.unknown_sentences;
+    metrics_.position_payload_freshness = child.position_payload_freshness;
     return;
   }
 
@@ -442,6 +445,7 @@ void ReceiverSession::RefreshMetricsFromSelectedSession()
   metrics_.rejected_records = 0u;
   metrics_.parser_anomalies = 0u;
   metrics_.unknown_records = 0u;
+  metrics_.position_payload_freshness = PositionPayloadFreshnessMetrics{};
 }
 
 const char* ToString(const ReceiverSessionKind kind)

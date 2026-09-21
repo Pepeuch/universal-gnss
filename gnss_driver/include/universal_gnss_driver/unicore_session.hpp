@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_driver/position_payload_freshness.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
 #include "universal_gnss_protocols/unicore_framer.hpp"
@@ -41,6 +42,7 @@ struct UnicoreSessionMetrics
   std::optional<std::uint32_t> receiver_last_rtcm_message_type{};
   std::optional<std::uint32_t> receiver_last_rtcm_base_station_id{};
   std::optional<std::uint32_t> receiver_last_rtcm_satellites_in_message{};
+  PositionPayloadFreshnessMetrics position_payload_freshness{};
 };
 
 struct UnicoreNmeaGsvTalkerState
@@ -110,6 +112,7 @@ private:
 
   UnicoreSessionConfig config_{};
   universal_gnss::GnssRuntimeAggregator aggregator_{};
+  PositionPayloadFreshnessTracker position_payload_freshness_tracker_{};
   UnicoreSessionMetrics metrics_{};
   std::vector<UnicoreBufferedByte> buffer_{};
   bool ascii_seen_valid_record_{false};

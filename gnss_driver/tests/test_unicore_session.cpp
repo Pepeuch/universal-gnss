@@ -292,6 +292,12 @@ void TestBestNavUpdatesRuntimeState(TestContext& ctx)
   ctx.Expect(metrics.lines_seen == 1u && metrics.ascii_records_seen == 1u &&
                  metrics.records_parsed == 1u && metrics.runtime_updates == 1u,
              "BESTNAVA feed should count one parsed runtime update");
+  ctx.Expect(metrics.position_payload_freshness.valid_position_payload_observations == 1u &&
+                 metrics.position_payload_freshness.position_payload_changes == 1u &&
+                 metrics.position_payload_freshness.last_receiver_epoch.has_value() &&
+                 metrics.position_payload_freshness.last_receiver_epoch->domain ==
+                     universal_gnss_driver::ReceiverEpochDomain::kReceiverWeekTowMilliseconds,
+             "BESTNAVA should expose position-value and receiver-native epoch freshness metrics");
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(2222) && state.fix_valid &&
                  state.fix_type == GnssFixType::kRtkFloat &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
@@ -752,7 +758,9 @@ void TestFinalizeAndReset(TestContext& ctx)
   const auto& metrics = session.metrics();
   const auto& state = session.current_state();
   ctx.Expect(metrics.bytes_seen == 0u && metrics.lines_seen == 0u && metrics.records_parsed == 0u &&
-                 metrics.runtime_updates == 0u && metrics.malformed_lines == 0u,
+                 metrics.runtime_updates == 0u && metrics.malformed_lines == 0u &&
+                 metrics.position_payload_freshness.valid_position_payload_observations == 0u &&
+                 !metrics.position_payload_freshness.last_receiver_epoch.has_value(),
              "reset should clear session metrics");
   ctx.Expect(state.fix_type == GnssFixType::kUnknown && !state.fix_valid &&
                  !state.latitude_deg.has_value(),

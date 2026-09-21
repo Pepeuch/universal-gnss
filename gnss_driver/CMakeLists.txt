@@ -42,6 +42,20 @@ install(TARGETS universal_gnss_driver ARCHIVE DESTINATION lib LIBRARY DESTINATIO
 
 if(BUILD_TESTING)
   add_executable(
+    gnss_driver_test_position_payload_freshness
+    tests/test_position_payload_freshness.cpp
+  )
+  target_link_libraries(
+    gnss_driver_test_position_payload_freshness
+    PRIVATE
+      universal_gnss_driver
+  )
+  add_test(
+    NAME gnss_driver_test_position_payload_freshness
+    COMMAND gnss_driver_test_position_payload_freshness
+  )
+
+  add_executable(
     gnss_driver_test_foundation
     tests/test_driver_foundation.cpp
   )

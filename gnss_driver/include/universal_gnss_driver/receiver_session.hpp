@@ -44,6 +44,7 @@ struct ReceiverSessionMetrics
   std::size_t rejected_records{0u};
   std::size_t parser_anomalies{0u};
   std::size_t unknown_records{0u};
+  PositionPayloadFreshnessMetrics position_payload_freshness{};
 };
 
 class ReceiverSession

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_driver/position_payload_freshness.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 
 namespace universal_gnss_driver
@@ -40,6 +41,7 @@ struct UbloxSessionMetrics
   std::size_t receiver_rtcm_crc_failed{0u};
   std::optional<std::uint16_t> last_receiver_rtcm_message_type{};
   std::map<std::uint16_t, std::size_t> rtcm_message_type_counts{};
+  PositionPayloadFreshnessMetrics position_payload_freshness{};
 };
 
 class UbloxSession
@@ -94,6 +96,7 @@ private:
   UbloxSessionConfig config_{};
   std::vector<BufferedByte> buffer_{};
   universal_gnss::GnssRuntimeAggregator aggregator_{};
+  PositionPayloadFreshnessTracker position_payload_freshness_tracker_{};
   UbloxSessionMetrics metrics_{};
 };
 

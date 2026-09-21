@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
   <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
   <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
-  <img src="https://img.shields.io/badge/Lyrical-CI%20Configured-blue">
+  <img src="https://img.shields.io/badge/Lyrical%20Validated-brightgreen">
     <a href="https://mowgli.garden/">
     <img src="https://img.shields.io/badge/MowgliNext-Downstream%20Field%20Validation-orange">
   </a>
@@ -92,6 +92,9 @@ Current project state includes:
   families
 - `ReceiverNode`, `NtripNode`, and `ReplayNode`
 - parser counters plus malformed/rejected diagnostic visibility in ROS2
+- position-payload freshness diagnostics that separate transport activity,
+  accepted observation identity, receiver-native epoch progression, and exact
+  coordinate changes without treating stationary identical fixes as a fault
 - live RTCM forwarding from `NtripNode` into `ReceiverNode`
 - portable RTCM MSM correction-stream summary observability through the shared
   semantic monitor/tools surface

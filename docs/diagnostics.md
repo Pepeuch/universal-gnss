@@ -186,6 +186,45 @@ operational:
 diagnostics such as `base_station_arp`, `antenna_descriptor`,
 `glonass_code_phase_bias`, and `msm_summary`
 
+### Position payload freshness
+
+`ReceiverNode` publishes an additive
+`universal_gnss/position_payload_freshness` status. It separates concerns that
+must not be inferred from `/fix` callback activity alone:
+
+- `transport_rx_alive` / `transport_rx_age_s` describe local byte reception;
+- `position_observation_sequence` and `position_observation_age_s` describe
+  newly accepted position observations;
+- `receiver_epoch_domain`, `receiver_epoch_value`, and
+  `receiver_epoch_relation` describe receiver-native epoch progression when the
+  input protocol exposes it;
+- `position_payload_change_sequence`,
+  `consecutive_identical_position_observations`, and
+  `unchanged_observation_span_s` describe exact latitude/longitude value
+  changes among valid fixes;
+- `position_payload_prolonged_unchanged` becomes true once accepted valid
+  observations span at least 40 seconds without a latitude/longitude change.
+
+The prolonged-unchanged state is deliberately an `OK` diagnostic with
+`position_payload_stale=not_assessed_without_motion_context`. A stationary
+receiver may legitimately produce identical coordinates, so consumers must
+correlate this signal with independent platform motion before declaring a
+stuck-navigation fault. A regressing receiver-native epoch is independently
+reported as `WARN`.
+
+Invalid/no-fix observations break the comparable-position run. A later valid
+fix establishes a new baseline. Session reset/source restart clears all
+freshness history. Periodic publication of cached state changes ages but does
+not increment observation, value-change, or receiver-epoch counters.
+
+Receiver-native epoch coverage is protocol-dependent:
+
+- u-blox `NAV-PVT` uses receiver iTOW;
+- Unicore position messages use their native week/TOW header fields;
+- NMEA `GGA` / `RMC` use UTC time-of-day when present;
+- unavailable epochs remain explicitly unavailable rather than being replaced
+  with local receipt time.
+
 `universal_gnss_ros2::NtripNode` is the second runtime consumer of the same
 mapping. Its node-level diagnostics stay similarly thin:
 

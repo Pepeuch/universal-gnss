@@ -16,6 +16,32 @@ using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
 using universal_gnss_protocols::ParserStatus;
 
+template <typename RecordT>
+std::optional<ReceiverEpoch> ReceiverEpochFor(const RecordT&)
+{
+  return std::nullopt;
+}
+
+std::optional<ReceiverEpoch> ReceiverEpochFor(const universal_gnss_protocols::NmeaGgaRecord& record)
+{
+  if (!record.utc_time.has_value())
+  {
+    return std::nullopt;
+  }
+  return MakeUtcTimeOfDayEpoch(
+      record.utc_time->hour, record.utc_time->minute, record.utc_time->second);
+}
+
+std::optional<ReceiverEpoch> ReceiverEpochFor(const universal_gnss_protocols::NmeaRmcRecord& record)
+{
+  if (!record.utc_time.has_value())
+  {
+    return std::nullopt;
+  }
+  return MakeUtcTimeOfDayEpoch(
+      record.utc_time->hour, record.utc_time->minute, record.utc_time->second);
+}
+
 template <typename ParseFn, typename MapFn>
 void ParseAndMergeSentence(const NmeaSentence& sentence,
                            ParseFn&& parse_fn,
@@ -23,6 +49,7 @@ void ParseAndMergeSentence(const NmeaSentence& sentence,
                            const bool is_position_observation,
                            const bool enable_runtime_updates,
                            universal_gnss::GnssRuntimeAggregator& aggregator,
+                           PositionPayloadFreshnessTracker& position_payload_freshness_tracker,
                            NmeaSessionMetrics& metrics)
 {
   const auto parsed = std::forward<ParseFn>(parse_fn)(sentence);
@@ -38,7 +65,18 @@ void ParseAndMergeSentence(const NmeaSentence& sentence,
   {
     ++metrics.position_observations;
   }
-  if (enable_runtime_updates && aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
+  if (!enable_runtime_updates)
+  {
+    return;
+  }
+
+  const universal_gnss::GnssRuntimeState update = std::forward<MapFn>(map_fn)(*parsed.record);
+  if (is_position_observation)
+  {
+    position_payload_freshness_tracker.Observe(update, ReceiverEpochFor(*parsed.record));
+    metrics.position_payload_freshness = position_payload_freshness_tracker.metrics();
+  }
+  if (aggregator.Merge(update))
   {
     ++metrics.runtime_updates;
   }
@@ -115,6 +153,7 @@ void NmeaSession::Reset()
 {
   framer_.Reset();
   aggregator_.Reset();
+  position_payload_freshness_tracker_.Reset();
   metrics_ = NmeaSessionMetrics{};
 }
 
@@ -178,6 +217,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                           true,
                           config_.enable_runtime_updates,
                           aggregator_,
+                          position_payload_freshness_tracker_,
                           metrics_);
     return;
   }
@@ -190,6 +230,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                           true,
                           config_.enable_runtime_updates,
                           aggregator_,
+                          position_payload_freshness_tracker_,
                           metrics_);
     return;
   }
@@ -202,6 +243,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                           false,
                           config_.enable_runtime_updates,
                           aggregator_,
+                          position_payload_freshness_tracker_,
                           metrics_);
     return;
   }
@@ -237,6 +279,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                           false,
                           config_.enable_runtime_updates,
                           aggregator_,
+                          position_payload_freshness_tracker_,
                           metrics_);
     return;
   }
@@ -249,6 +292,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                           false,
                           config_.enable_runtime_updates,
                           aggregator_,
+                          position_payload_freshness_tracker_,
                           metrics_);
     return;
   }
@@ -259,6 +303,7 @@ void NmeaSession::HandleSentence(const NmeaSentence& sentence)
                         false,
                         config_.enable_runtime_updates,
                         aggregator_,
+                        position_payload_freshness_tracker_,
                         metrics_);
 }
 

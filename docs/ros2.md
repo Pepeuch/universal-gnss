@@ -259,6 +259,9 @@ Observation identity semantics:
   after restart is valid
 - ReceiverNode republishes the same tuple for cached state and advances only
   the sequence for a newly accepted position/fix observation
+- numerically identical position/fix observations still advance the sequence;
+  value identity is exposed separately through the
+  `universal_gnss/position_payload_freshness` diagnostic
 - NtripNode accepts one source/incarnation for its lifetime, rejects competing,
   incomplete, or delayed retired-incarnation messages, and reports
   `gga_source_conflict`; the combined launch supplies one fresh incarnation to
@@ -269,6 +272,15 @@ Observation identity semantics:
   consumers retain the documented receipt-stamp fallback
 - these fields do not establish UGA-126 command-response fencing or a physical
   prior-byte cutoff
+
+Position freshness diagnostics do not redefine this identity contract. They
+add separate transport-receipt age, position-observation age, exact coordinate
+change counts, an unchanged-observation span, and receiver-native epoch
+progression where the protocol provides it. A 40-second unchanged coordinate
+span is labelled `position_payload_prolonged_unchanged`, but it remains an
+observability signal rather than a fault verdict because a stationary receiver
+can legitimately report identical coordinates. Motion-aware consumers may
+correlate it with wheel/IMU/odometry evidence.
 
 Heading semantics:
 

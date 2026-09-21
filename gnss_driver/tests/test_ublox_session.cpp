@@ -304,6 +304,13 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
   ctx.Expect(metrics.ubx_frames_seen == 1u && metrics.frames_parsed == 1u &&
                  metrics.runtime_updates == 1u,
              "NAV-PVT should count as one parsed runtime-updating UBX frame");
+  ctx.Expect(metrics.position_payload_freshness.valid_position_payload_observations == 1u &&
+                 metrics.position_payload_freshness.position_payload_changes == 1u &&
+                 metrics.position_payload_freshness.last_receiver_epoch.has_value() &&
+                 metrics.position_payload_freshness.last_receiver_epoch->domain ==
+                     universal_gnss_driver::ReceiverEpochDomain::kGpsTowMilliseconds &&
+                 metrics.position_payload_freshness.last_receiver_epoch->value == 345000u,
+             "NAV-PVT should expose position-value and iTOW freshness metrics");
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1111) && state.fix_valid &&
                  state.fix_type == GnssFixType::kFix,
              "NAV-PVT should update fix state");
@@ -549,7 +556,9 @@ void TestFinalizeAndReset(TestContext& ctx)
   const auto& state = session.current_state();
   ctx.Expect(metrics.bytes_seen == 0u && metrics.ubx_frames_seen == 0u &&
                  metrics.frames_parsed == 0u && metrics.runtime_updates == 0u &&
-                 metrics.malformed_frames == 0u,
+                 metrics.malformed_frames == 0u &&
+                 metrics.position_payload_freshness.valid_position_payload_observations == 0u &&
+                 !metrics.position_payload_freshness.last_receiver_epoch.has_value(),
              "reset should clear UbloxSession metrics");
   ctx.Expect(state.fix_type == GnssFixType::kUnknown && !state.fix_valid &&
                  !state.latitude_deg.has_value(),

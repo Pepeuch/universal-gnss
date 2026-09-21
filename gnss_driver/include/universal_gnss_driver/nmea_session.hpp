@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_driver/position_payload_freshness.hpp"
 #include "universal_gnss_protocols/nmea_framer.hpp"
 
 namespace universal_gnss_driver
@@ -30,6 +31,7 @@ struct NmeaSessionMetrics
   std::size_t semantic_only_records{0u};
   std::size_t unknown_sentences{0u};
   std::size_t malformed_sentences{0u};
+  PositionPayloadFreshnessMetrics position_payload_freshness{};
 };
 
 class NmeaSession
@@ -64,6 +66,7 @@ private:
   NmeaSessionConfig config_{};
   universal_gnss_protocols::NmeaSentenceFramer framer_;
   universal_gnss::GnssRuntimeAggregator aggregator_{};
+  PositionPayloadFreshnessTracker position_payload_freshness_tracker_{};
   NmeaSessionMetrics metrics_{};
 };
 

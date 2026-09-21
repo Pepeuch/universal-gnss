@@ -174,6 +174,7 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
                                MapFn&& map_fn,
                                const bool is_position_observation,
                                universal_gnss::GnssRuntimeAggregator& aggregator,
+                               PositionPayloadFreshnessTracker& position_payload_freshness_tracker,
                                UnicoreSessionMetrics& metrics)
 {
   const auto parsed = std::forward<ParseFn>(parse_fn)(frame);
@@ -185,11 +186,17 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
 
   ++metrics.records_parsed;
   ++metrics.runtime_observations;
+  const GnssRuntimeState update = std::forward<MapFn>(map_fn)(*parsed.record);
   if (is_position_observation)
   {
     ++metrics.position_observations;
+    position_payload_freshness_tracker.Observe(
+        update,
+        MakeReceiverWeekTowEpoch(parsed.record->header.gps_week,
+                                 parsed.record->header.gps_millis_of_week));
+    metrics.position_payload_freshness = position_payload_freshness_tracker.metrics();
   }
-  if (aggregator.Merge(std::forward<MapFn>(map_fn)(*parsed.record)))
+  if (aggregator.Merge(update))
   {
     ++metrics.runtime_updates;
     return true;
@@ -284,6 +291,7 @@ void UnicoreSession::Reset()
 {
   buffer_.clear();
   aggregator_.Reset();
+  position_payload_freshness_tracker_.Reset();
   metrics_ = UnicoreSessionMetrics{};
   ascii_seen_valid_record_ = false;
   binary_seen_valid_frame_ = false;
@@ -583,6 +591,11 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
     ++metrics_.position_observations;
 
     GnssRuntimeState update = universal_gnss_protocols::UnicorePvtslnToRuntimeState(*parsed.record);
+    position_payload_freshness_tracker_.Observe(
+        update,
+        MakeReceiverWeekTowEpoch(parsed.record->header.gps_week,
+                                 parsed.record->header.gps_millis_of_week));
+    metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
     if (HasFreshMixedNmeaSample(
             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
@@ -616,6 +629,11 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
 
     GnssRuntimeState update =
         universal_gnss_protocols::UnicoreBestNavToRuntimeState(*parsed.record);
+    position_payload_freshness_tracker_.Observe(
+        update,
+        MakeReceiverWeekTowEpoch(parsed.record->header.gps_week,
+                                 parsed.record->header.gps_millis_of_week));
+    metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
     if (HasFreshMixedNmeaSample(
             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
@@ -729,6 +747,13 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
     last_nmea_gga_timestamp_ns_ = sentence.timestamp_ns;
 
     GnssRuntimeState update = universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record);
+    const auto receiver_epoch = parsed.record->utc_time.has_value()
+                                    ? MakeUtcTimeOfDayEpoch(parsed.record->utc_time->hour,
+                                                            parsed.record->utc_time->minute,
+                                                            parsed.record->utc_time->second)
+                                    : std::nullopt;
+    position_payload_freshness_tracker_.Observe(update, receiver_epoch);
+    metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
     PruneNmeaGgaFallback(aggregator_.state(),
                          HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
                                                  last_nmea_gga_timestamp_ns_,
@@ -924,6 +949,7 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
                               universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
                               true,
                               aggregator_,
+                              position_payload_freshness_tracker_,
                               metrics_);
     return;
   }
@@ -933,6 +959,7 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
                             universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
                             true,
                             aggregator_,
+                            position_payload_freshness_tracker_,
                             metrics_);
 }
 

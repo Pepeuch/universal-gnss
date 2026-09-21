@@ -1707,6 +1707,102 @@ TEST_F(ReceiverNodeTest, UbloxNavSatAdvancesRuntimeStampWithoutInventingPosition
       << "publication alone must not renew runtime freshness";
 }
 
+TEST_F(ReceiverNodeTest, PositionPayloadDiagnosticsSeparateObservationsValuesAndCachedPublication)
+{
+  const auto first =
+      BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto changed =
+      BuildNmeaSentence("GPGGA,123520,4807.039,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  const auto no_fix = BuildNmeaSentence("GPGGA,123521,,,,,0,00,99.9,,,,,,");
+  auto source = std::make_unique<ScriptedByteSource>(std::vector<ScriptedByteSource::Action>{
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       first,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       first,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       changed,
+       true},
+      {universal_gnss_transport::TransportStatus::kOk,
+       universal_gnss_transport::TransportError::kNone,
+       no_fix,
+       true},
+  });
+
+  rclcpp::NodeOptions options;
+  options.parameter_overrides(
+      std::vector<rclcpp::Parameter>{rclcpp::Parameter("receiver_family", "nmea")});
+  universal_gnss_ros2::ReceiverNode node(std::move(source), options);
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  ASSERT_TRUE(node.last_diagnostics_message().has_value());
+  const auto* initial = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                   "universal_gnss/position_payload_freshness");
+  ASSERT_NE(initial, nullptr);
+  EXPECT_EQ(initial->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(FindDiagnosticValue(*initial, "position_observation_sequence"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*initial, "position_payload_change_sequence"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*initial, "receiver_epoch_relation"),
+            std::optional<std::string>{"first"});
+
+  node.PublishNow();
+  const auto* cached = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                  "universal_gnss/position_payload_freshness");
+  ASSERT_NE(cached, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*cached, "position_observation_sequence"),
+            std::optional<std::string>{"1"})
+      << "timer-driven cached publication must not invent an observation";
+  EXPECT_EQ(FindDiagnosticValue(*cached, "consecutive_identical_position_observations"),
+            std::optional<std::string>{"1"});
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  const auto* identical = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                     "universal_gnss/position_payload_freshness");
+  ASSERT_NE(identical, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*identical, "position_observation_sequence"),
+            std::optional<std::string>{"2"});
+  EXPECT_EQ(FindDiagnosticValue(*identical, "position_payload_change_sequence"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*identical, "position_payload_unchanged"),
+            std::optional<std::string>{"true"});
+  EXPECT_EQ(FindDiagnosticValue(*identical, "receiver_epoch_relation"),
+            std::optional<std::string>{"identical"});
+  EXPECT_EQ(FindDiagnosticValue(*identical, "position_payload_stale"),
+            std::optional<std::string>{"not_assessed_without_motion_context"});
+  EXPECT_EQ(identical->level, diagnostic_msgs::msg::DiagnosticStatus::OK)
+      << "identical stationary coordinates alone must not be diagnosed as a receiver fault";
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  const auto* recovered = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                     "universal_gnss/position_payload_freshness");
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "position_payload_change_sequence"),
+            std::optional<std::string>{"2"});
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "consecutive_identical_position_observations"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "receiver_epoch_relation"),
+            std::optional<std::string>{"advanced"});
+
+  ASSERT_TRUE(node.StepOnce());
+  node.PublishNow();
+  const auto* invalid = FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                                   "universal_gnss/position_payload_freshness");
+  ASSERT_NE(invalid, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*invalid, "invalid_position_observations"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*invalid, "consecutive_identical_position_observations"),
+            std::optional<std::string>{"0"});
+}
+
 TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)
 {
   rclcpp::NodeOptions options;

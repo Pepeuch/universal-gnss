@@ -827,6 +827,7 @@ CreateTransportSource(const ReceiverNodeConfig& config,
 struct ReceiverNode::Impl
 {
   static constexpr std::chrono::seconds kParserHealthWindow{3};
+  static constexpr std::chrono::seconds kProlongedUnchangedPayloadThreshold{40};
   static constexpr double kParserUnhealthyRateHz{1.0};
   enum class InputStepResult : std::uint8_t
   {
@@ -1177,6 +1178,9 @@ struct ReceiverNode::Impl
 
     const std::size_t bytes_before = runner_->metrics().bytes_read;
     const std::size_t runtime_observations_before = session_->metrics().runtime_observations;
+    const std::size_t position_observations_before = session_->metrics().position_observations;
+    const std::size_t position_payload_changes_before =
+        session_->metrics().position_payload_freshness.position_payload_changes;
     const bool advanced = runner_->StepOnce();
     const auto now = SteadyClock::now();
     const auto receipt_time = last_transport_read_receipt_time_.value_or(now);
@@ -1190,6 +1194,15 @@ struct ReceiverNode::Impl
     if (session_->metrics().runtime_observations > runtime_observations_before)
     {
       last_runtime_observation_time_ = receipt_time;
+    }
+    if (session_->metrics().position_observations > position_observations_before)
+    {
+      last_position_observation_time_ = receipt_time;
+    }
+    if (session_->metrics().position_payload_freshness.position_payload_changes >
+        position_payload_changes_before)
+    {
+      last_position_payload_change_time_ = receipt_time;
     }
 
     UpdateReceiverReportedRtcmActivity(now);
@@ -1576,6 +1589,129 @@ struct ReceiverNode::Impl
     diagnostics.status.push_back(std::move(status));
   }
 
+  void
+  AppendPositionPayloadFreshnessStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
+  {
+    const auto& session_metrics = session_->metrics();
+    const auto& freshness = session_metrics.position_payload_freshness;
+    const auto now = SteadyClock::now();
+    const auto freshness_timeout = RuntimeObservationFreshnessTimeout();
+    const bool transport_rx_alive = last_transport_activity_time_.has_value() &&
+                                    now - *last_transport_activity_time_ < freshness_timeout;
+    const bool position_observation_alive =
+        last_position_observation_time_.has_value() &&
+        now - *last_position_observation_time_ < freshness_timeout;
+    const bool payload_unchanged = freshness.consecutive_identical_position_observations > 1u;
+    const bool prolonged_unchanged = freshness.unchanged_observation_span_ns.has_value() &&
+                                     *freshness.unchanged_observation_span_ns >=
+                                         std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                             kProlongedUnchangedPayloadThreshold)
+                                             .count();
+
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "universal_gnss/position_payload_freshness";
+    status.hardware_id = hardware_id_;
+    status.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
+    if (freshness.last_receiver_epoch_relation ==
+        universal_gnss_driver::ReceiverEpochRelation::kRegressed)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "Receiver-native epoch regressed";
+    }
+    else if (freshness.valid_position_payload_observations == 0u)
+    {
+      status.message = "No comparable valid position payload observed";
+    }
+    else if (prolonged_unchanged)
+    {
+      status.message = "Position payload prolonged unchanged; correlate with platform motion";
+    }
+    else if (payload_unchanged)
+    {
+      status.message = "Position payload unchanged; stationary operation may be valid";
+    }
+    else
+    {
+      status.message = "Position payload changed on the latest comparable observation";
+    }
+
+    status.values.push_back(
+        MakeKeyValue("transport_rx_alive", transport_rx_alive ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("position_observation_alive", position_observation_alive ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("position_observation_sequence",
+                                         std::to_string(session_metrics.position_observations)));
+    status.values.push_back(
+        MakeKeyValue("valid_position_payload_observations",
+                     std::to_string(freshness.valid_position_payload_observations)));
+    status.values.push_back(MakeKeyValue("invalid_position_observations",
+                                         std::to_string(freshness.invalid_position_observations)));
+    status.values.push_back(MakeKeyValue("position_payload_change_sequence",
+                                         std::to_string(freshness.position_payload_changes)));
+    status.values.push_back(
+        MakeKeyValue("consecutive_identical_position_observations",
+                     std::to_string(freshness.consecutive_identical_position_observations)));
+    status.values.push_back(
+        MakeKeyValue("position_payload_unchanged", payload_unchanged ? "true" : "false"));
+    status.values.push_back(MakeKeyValue("position_payload_prolonged_unchanged",
+                                         prolonged_unchanged ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("position_payload_stale", "not_assessed_without_motion_context"));
+    status.values.push_back(MakeKeyValue("motion_correlation_required", "true"));
+
+    if (freshness.unchanged_observation_span_ns.has_value())
+    {
+      std::ostringstream stream;
+      stream << static_cast<double>(*freshness.unchanged_observation_span_ns) / 1000000000.0;
+      status.values.push_back(MakeKeyValue("unchanged_observation_span_s", stream.str()));
+    }
+    if (last_transport_activity_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now - *last_transport_activity_time_);
+      std::ostringstream stream;
+      stream << static_cast<double>(age_ms.count()) / 1000.0;
+      status.values.push_back(MakeKeyValue("transport_rx_age_s", stream.str()));
+    }
+    if (last_position_observation_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now - *last_position_observation_time_);
+      std::ostringstream stream;
+      stream << static_cast<double>(age_ms.count()) / 1000.0;
+      status.values.push_back(MakeKeyValue("position_observation_age_s", stream.str()));
+    }
+    if (last_position_payload_change_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now - *last_position_payload_change_time_);
+      std::ostringstream stream;
+      stream << static_cast<double>(age_ms.count()) / 1000.0;
+      status.values.push_back(MakeKeyValue("position_payload_change_age_s", stream.str()));
+    }
+
+    status.values.push_back(MakeKeyValue(
+        "receiver_epoch_available", freshness.last_receiver_epoch.has_value() ? "true" : "false"));
+    status.values.push_back(
+        MakeKeyValue("receiver_epoch_relation", ToString(freshness.last_receiver_epoch_relation)));
+    status.values.push_back(
+        MakeKeyValue("receiver_epoch_advances", std::to_string(freshness.receiver_epoch_advances)));
+    status.values.push_back(
+        MakeKeyValue("consecutive_identical_receiver_epochs",
+                     std::to_string(freshness.consecutive_identical_receiver_epochs)));
+    status.values.push_back(MakeKeyValue("receiver_epoch_regressions",
+                                         std::to_string(freshness.receiver_epoch_regressions)));
+    if (freshness.last_receiver_epoch.has_value())
+    {
+      status.values.push_back(
+          MakeKeyValue("receiver_epoch_domain", ToString(freshness.last_receiver_epoch->domain)));
+      status.values.push_back(MakeKeyValue("receiver_epoch_value",
+                                           std::to_string(freshness.last_receiver_epoch->value)));
+    }
+
+    diagnostics.status.push_back(std::move(status));
+  }
+
   void AppendDiscoveryStatus(diagnostic_msgs::msg::DiagnosticArray& diagnostics) const
   {
     diagnostic_msgs::msg::DiagnosticStatus status;
@@ -1867,6 +2003,7 @@ struct ReceiverNode::Impl
     }
     snapshot.diagnostics.header.frame_id = config_.frame_id;
     AppendRuntimeIdentityStatus(snapshot.diagnostics);
+    AppendPositionPayloadFreshnessStatus(snapshot.diagnostics);
     AppendDiscoveryStatus(snapshot.diagnostics);
     AppendAutoConfigDryRunStatus(snapshot.diagnostics);
     AppendRtcmForwardingStatus(snapshot.diagnostics, snapshot.runtime_state);
@@ -2173,6 +2310,8 @@ struct ReceiverNode::Impl
   std::optional<SteadyClock::time_point> last_transport_activity_time_{};
   std::optional<SteadyClock::time_point> last_transport_read_receipt_time_{};
   std::optional<SteadyClock::time_point> last_runtime_observation_time_{};
+  std::optional<SteadyClock::time_point> last_position_observation_time_{};
+  std::optional<SteadyClock::time_point> last_position_payload_change_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<SteadyClock::time_point> last_ublox_receiver_rtcm_used_time_{};
   std::optional<SteadyClock::time_point> last_unicore_receiver_rtcm_status_time_{};

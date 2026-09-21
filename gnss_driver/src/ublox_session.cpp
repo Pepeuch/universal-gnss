@@ -89,12 +89,45 @@ bool IsSupportedNmeaSentenceType(const NmeaSentence& sentence)
          universal_gnss_protocols::IsNmeaGst(sentence);
 }
 
+template <typename RecordT>
+std::optional<ReceiverEpoch> ReceiverEpochFor(const RecordT&)
+{
+  return std::nullopt;
+}
+
+std::optional<ReceiverEpoch>
+ReceiverEpochFor(const universal_gnss_protocols::UbxNavPvtRecord& record)
+{
+  return MakeGpsTowEpoch(record.i_tow_ms);
+}
+
+std::optional<ReceiverEpoch> ReceiverEpochFor(const universal_gnss_protocols::NmeaGgaRecord& record)
+{
+  if (!record.utc_time.has_value())
+  {
+    return std::nullopt;
+  }
+  return MakeUtcTimeOfDayEpoch(
+      record.utc_time->hour, record.utc_time->minute, record.utc_time->second);
+}
+
+std::optional<ReceiverEpoch> ReceiverEpochFor(const universal_gnss_protocols::NmeaRmcRecord& record)
+{
+  if (!record.utc_time.has_value())
+  {
+    return std::nullopt;
+  }
+  return MakeUtcTimeOfDayEpoch(
+      record.utc_time->hour, record.utc_time->minute, record.utc_time->second);
+}
+
 template <typename FrameT, typename ParseFn, typename MapFn>
 void ParseAndMergeFrame(const ParseFn& parse_fn,
                         const MapFn& map_fn,
                         const FrameT& frame,
                         const bool is_position_observation,
                         universal_gnss::GnssRuntimeAggregator& aggregator,
+                        PositionPayloadFreshnessTracker& position_payload_freshness_tracker,
                         UbloxSessionMetrics& metrics)
 {
   const auto parsed = parse_fn(frame);
@@ -110,7 +143,13 @@ void ParseAndMergeFrame(const ParseFn& parse_fn,
   {
     ++metrics.position_observations;
   }
-  if (aggregator.Merge(map_fn(*parsed.record)))
+  const universal_gnss::GnssRuntimeState update = map_fn(*parsed.record);
+  if (is_position_observation)
+  {
+    position_payload_freshness_tracker.Observe(update, ReceiverEpochFor(*parsed.record));
+    metrics.position_payload_freshness = position_payload_freshness_tracker.metrics();
+  }
+  if (aggregator.Merge(update))
   {
     ++metrics.runtime_updates;
   }
@@ -162,6 +201,7 @@ void UbloxSession::Reset()
 {
   buffer_.clear();
   aggregator_.Reset();
+  position_payload_freshness_tracker_.Reset();
   metrics_ = UbloxSessionMetrics{};
 }
 
@@ -388,8 +428,14 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     {
       ++metrics_.position_observations;
     }
-    if (config_.enable_nmea_runtime_updates &&
-        aggregator_.Merge(universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record)))
+    const universal_gnss::GnssRuntimeState update =
+        universal_gnss_protocols::NmeaGgaToRuntimeState(*parsed.record);
+    if (config_.enable_nmea_runtime_updates)
+    {
+      position_payload_freshness_tracker_.Observe(update, ReceiverEpochFor(*parsed.record));
+      metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
+    }
+    if (config_.enable_nmea_runtime_updates && aggregator_.Merge(update))
     {
       ++metrics_.runtime_updates;
     }
@@ -411,8 +457,14 @@ void UbloxSession::RouteNmeaSentence(const NmeaSentence& sentence)
     {
       ++metrics_.position_observations;
     }
-    if (config_.enable_nmea_runtime_updates &&
-        aggregator_.Merge(universal_gnss_protocols::NmeaRmcToRuntimeState(*parsed.record)))
+    const universal_gnss::GnssRuntimeState update =
+        universal_gnss_protocols::NmeaRmcToRuntimeState(*parsed.record);
+    if (config_.enable_nmea_runtime_updates)
+    {
+      position_payload_freshness_tracker_.Observe(update, ReceiverEpochFor(*parsed.record));
+      metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
+    }
+    if (config_.enable_nmea_runtime_updates && aggregator_.Merge(update))
     {
       ++metrics_.runtime_updates;
     }
@@ -492,6 +544,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        true,
                        aggregator_,
+                       position_payload_freshness_tracker_,
                        metrics_);
     return;
   }
@@ -503,6 +556,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        false,
                        aggregator_,
+                       position_payload_freshness_tracker_,
                        metrics_);
     return;
   }
@@ -514,6 +568,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        false,
                        aggregator_,
+                       position_payload_freshness_tracker_,
                        metrics_);
     return;
   }
@@ -525,6 +580,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        false,
                        aggregator_,
+                       position_payload_freshness_tracker_,
                        metrics_);
     return;
   }
@@ -536,6 +592,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                        frame,
                        false,
                        aggregator_,
+                       position_payload_freshness_tracker_,
                        metrics_);
     return;
   }
@@ -593,6 +650,7 @@ void UbloxSession::RouteUbxFrame(const UbxFrame& frame)
                      frame,
                      false,
                      aggregator_,
+                     position_payload_freshness_tracker_,
                      metrics_);
 }
 
