@@ -194,6 +194,10 @@ bool ParseAndMergeRecord(const UnicoreFrame& frame,
   return false;
 }
 
+// Returns true when the frame was PARSED AND ACCEPTED as a record — not when
+// merging it happened to change the aggregate state. Callers use the result as
+// "a native observation arrived"; a receiver that is standing still repeats the
+// same values, and that must still count as the native stream being alive.
 template <typename ParseFn, typename MapFn>
 bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
                                ParseFn&& parse_fn,
@@ -225,9 +229,8 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
   if (aggregator.Merge(update))
   {
     ++metrics.runtime_updates;
-    return true;
   }
-  return false;
+  return true;
 }
 
 template <typename ParseFn>

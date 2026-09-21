@@ -536,6 +536,35 @@ void TestNmeaFallbackTakesOverOnceNativePositionIsStale(TestContext& ctx)
              "a stale native position must yield to the NMEA fallback");
 }
 
+// A stationary receiver repeats the same native values. Native freshness must
+// follow the ARRIVAL of accepted binary position records, not whether merging
+// them changed the aggregate state — otherwise a live, unchanged BESTNAVB
+// stream would age out after the freshness window and hand precedence to NMEA.
+void TestRepeatedIdenticalBinaryNativeRecordsKeepNmeaFallbackSuppressed(TestContext& ctx)
+{
+  UnicoreSession session;
+  constexpr std::int64_t kStart = 20'000'000'000ll;
+  constexpr std::int64_t kPeriodNs = 1'000'000'000ll;
+  for (std::int64_t epoch = 0; epoch < 6; ++epoch)
+  {
+    session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload()),
+                      kStart + epoch * kPeriodNs);
+  }
+  const auto native_latitude = session.current_state().latitude_deg;
+  const auto native_altitude = session.current_state().altitude_m;
+  ctx.Expect(native_latitude.has_value(), "BESTNAVB should provide the native position");
+
+  // 5.5 s after the FIRST native record, 0.5 s after the LAST one.
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123525,4807.111,N,01131.999,E,1,08,1.5,100.1,M,46.9,M,,"),
+      kStart + 5 * kPeriodNs + 500'000'000ll);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.latitude_deg == native_latitude && state.altitude_m == native_altitude,
+             "an unchanged but still-arriving binary native stream must keep the NMEA "
+             "fallback suppressed");
+}
+
 void TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(TestContext& ctx)
 {
   UnicoreSession session;
@@ -840,6 +869,7 @@ int main()
   TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(ctx);
   TestNmeaOnlyStreamKeepsFollowingTheReceiverPosition(ctx);
   TestNmeaFallbackTakesOverOnceNativePositionIsStale(ctx);
+  TestRepeatedIdenticalBinaryNativeRecordsKeepNmeaFallbackSuppressed(ctx);
   TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
   TestRtcmStatusParsesWithoutRuntimeUpdate(ctx);
