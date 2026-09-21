@@ -480,6 +480,91 @@ void TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(TestCo
       "NMEA fallback should populate fix and accuracy only when Unicore state is still missing");
 }
 
+// A receiver that emits NMEA only must report a MOVING position. The fallback
+// used to be discarded whenever the state already held a position, so the very
+// first GGA pinned lat/lon for the lifetime of the session while
+// position_observations kept advancing (field: 76 s / 4.7 m of travel at one
+// bit-identical lat/lon/alt under a live-looking stream).
+void TestNmeaOnlyStreamKeepsFollowingTheReceiverPosition(TestContext& ctx)
+{
+  UnicoreSession session;
+  session.FeedBytes(
+      BuildNmeaSentence(
+          "GNGGA,123519.00,5305.35040,N,00610.15789,E,4,20,0.6,10.8,M,46.9,M,1.0,0000"),
+      1'000'000'000);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.00,1.2,0.8,0.7,45.0,0.010,0.012,0.020"),
+                    1'000'000'001);
+  session.FeedBytes(
+      BuildNmeaSentence(
+          "GNGGA,123519.20,5305.35140,N,00610.15889,E,4,21,0.6,10.9,M,46.9,M,1.0,0000"),
+      1'200'000'000);
+  session.FeedBytes(BuildNmeaSentence("GPGST,123519.20,1.2,0.8,0.7,45.0,0.030,0.040,0.050"),
+                    1'200'000'001);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.latitude_deg.has_value() &&
+                 std::fabs(*state.latitude_deg - (53.0 + 5.35140 / 60.0)) < 1e-9 &&
+                 state.longitude_deg.has_value() &&
+                 std::fabs(*state.longitude_deg - (6.0 + 10.15889 / 60.0)) < 1e-9 &&
+                 state.altitude_m == std::optional<double>(10.9) &&
+                 state.horizontal_accuracy_m.has_value() &&
+                 std::fabs(*state.horizontal_accuracy_m - 0.04f) < 1e-6f,
+             "an NMEA-only stream must keep updating position, altitude and accuracy");
+}
+
+// The native record keeps priority only while it is recent. Once PVTSLN/BESTNAV
+// stop arriving, the NMEA fallback must take over instead of leaving the last
+// native position published forever.
+void TestNmeaFallbackTakesOverOnceNativePositionIsStale(TestContext& ctx)
+{
+  UnicoreSession session;
+  constexpr std::int64_t kStart = 10'000'000'000ll;
+  session.FeedString(kBestNavLine, kStart);
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123519,4807.111,N,01131.999,E,4,08,1.5,100.1,M,46.9,M,,"),
+      kStart + 1'000'000'000ll);
+  ctx.Expect(session.current_state().latitude_deg == std::optional<double>(40.0789588272),
+             "a recent native position must still win over the NMEA fallback");
+
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123525,4807.111,N,01131.999,E,4,08,1.5,100.1,M,46.9,M,,"),
+      kStart + 6'000'000'000ll);
+  const auto& state = session.current_state();
+  ctx.Expect(state.latitude_deg.has_value() &&
+                 std::fabs(*state.latitude_deg - (48.0 + 7.111 / 60.0)) < 1e-9 &&
+                 state.altitude_m == std::optional<double>(100.1),
+             "a stale native position must yield to the NMEA fallback");
+}
+
+// A stationary receiver repeats the same native values. Native freshness must
+// follow the ARRIVAL of accepted binary position records, not whether merging
+// them changed the aggregate state — otherwise a live, unchanged BESTNAVB
+// stream would age out after the freshness window and hand precedence to NMEA.
+void TestRepeatedIdenticalBinaryNativeRecordsKeepNmeaFallbackSuppressed(TestContext& ctx)
+{
+  UnicoreSession session;
+  constexpr std::int64_t kStart = 20'000'000'000ll;
+  constexpr std::int64_t kPeriodNs = 1'000'000'000ll;
+  for (std::int64_t epoch = 0; epoch < 6; ++epoch)
+  {
+    session.FeedBytes(BuildUnicoreBinaryFrame(2118u, MakeBestNavBPayload()),
+                      kStart + epoch * kPeriodNs);
+  }
+  const auto native_latitude = session.current_state().latitude_deg;
+  const auto native_altitude = session.current_state().altitude_m;
+  ctx.Expect(native_latitude.has_value(), "BESTNAVB should provide the native position");
+
+  // 5.5 s after the FIRST native record, 0.5 s after the LAST one.
+  session.FeedBytes(
+      BuildNmeaSentence("GNGGA,123525,4807.111,N,01131.999,E,1,08,1.5,100.1,M,46.9,M,,"),
+      kStart + 5 * kPeriodNs + 500'000'000ll);
+
+  const auto& state = session.current_state();
+  ctx.Expect(state.latitude_deg == native_latitude && state.altitude_m == native_altitude,
+             "an unchanged but still-arriving binary native stream must keep the NMEA "
+             "fallback suppressed");
+}
+
 void TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(TestContext& ctx)
 {
   UnicoreSession session;
@@ -782,6 +867,9 @@ int main()
   TestBestSatUpdatesTrackedAndUsedOnly(ctx);
   TestNmeaFallbackDoesNotOverrideRichUnicoreState(ctx);
   TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(ctx);
+  TestNmeaOnlyStreamKeepsFollowingTheReceiverPosition(ctx);
+  TestNmeaFallbackTakesOverOnceNativePositionIsStale(ctx);
+  TestRepeatedIdenticalBinaryNativeRecordsKeepNmeaFallbackSuppressed(ctx);
   TestMixedNmeaSatelliteCountsStayAuthoritativeOverPositionTail(ctx);
   TestJammingStatusUpdatesRuntimeState(ctx);
   TestRtcmStatusParsesWithoutRuntimeUpdate(ctx);

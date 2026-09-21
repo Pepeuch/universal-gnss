@@ -38,6 +38,32 @@ using universal_gnss_protocols::UnicoreFrameFramer;
 
 constexpr std::int64_t kGsvTalkerFreshnessWindowNs = 5'000'000'000ll;
 
+// NMEA GGA / GST only stand in for the native PVTSLN / BESTNAV records. They
+// used to be discarded whenever the runtime state already HELD a position or an
+// accuracy — with no regard for how old that value was. A receiver that emits
+// NMEA only (never configured for periodic native logs, or whose native output
+// stopped) therefore published its FIRST position forever, while every GGA kept
+// advancing position_observations and the message stamps: a frozen lat/lon
+// under a perfectly live-looking stream (field: 76 s and 4.7 m of wheel travel
+// at one bit-identical lat/lon/alt, satellites_used still changing).
+// The fallback is now discarded only while a native position record is recent.
+constexpr std::int64_t kNativePositionFreshnessWindowNs = 2'500'000'000ll;
+
+bool NativePositionIsFresh(const std::optional<std::int64_t>& last_native_timestamp_ns,
+                           const std::optional<std::int64_t>& now_ns)
+{
+  if (!last_native_timestamp_ns.has_value())
+  {
+    return false;
+  }
+  if (!now_ns.has_value())
+  {
+    return true;  // no clock to judge by: keep the historical preference
+  }
+  return *now_ns >= *last_native_timestamp_ns &&
+         (*now_ns - *last_native_timestamp_ns) <= kNativePositionFreshnessWindowNs;
+}
+
 bool IsSupportedNmeaSentenceType(const NmeaSentence& sentence)
 {
   return universal_gnss_protocols::IsNmeaSentenceType(sentence, "GSV") ||
@@ -168,6 +194,10 @@ bool ParseAndMergeRecord(const UnicoreFrame& frame,
   return false;
 }
 
+// Returns true when the frame was PARSED AND ACCEPTED as a record — not when
+// merging it happened to change the aggregate state. Callers use the result as
+// "a native observation arrived"; a receiver that is standing still repeats the
+// same values, and that must still count as the native stream being alive.
 template <typename ParseFn, typename MapFn>
 bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
                                ParseFn&& parse_fn,
@@ -199,9 +229,8 @@ bool ParseAndMergeBinaryRecord(const UnicoreBinaryFrame& frame,
   if (aggregator.Merge(update))
   {
     ++metrics.runtime_updates;
-    return true;
   }
-  return false;
+  return true;
 }
 
 template <typename ParseFn>
@@ -300,6 +329,7 @@ void UnicoreSession::Reset()
   seen_valid_nmea_gga_ = false;
   seen_valid_nmea_gsv_ = false;
   last_nmea_gga_timestamp_ns_.reset();
+  last_native_position_timestamp_ns_.reset();
   last_nmea_gsv_timestamp_ns_.reset();
   gsv_talker_states_.clear();
 }
@@ -596,6 +626,7 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
         MakeReceiverWeekTowEpoch(parsed.record->header.gps_week,
                                  parsed.record->header.gps_millis_of_week));
     metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
+    last_native_position_timestamp_ns_ = update.timestamp_ns;
     if (HasFreshMixedNmeaSample(
             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
@@ -634,6 +665,7 @@ void UnicoreSession::HandleFrame(const UnicoreFrame& frame)
         MakeReceiverWeekTowEpoch(parsed.record->header.gps_week,
                                  parsed.record->header.gps_millis_of_week));
     metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
+    last_native_position_timestamp_ns_ = update.timestamp_ns;
     if (HasFreshMixedNmeaSample(
             seen_valid_nmea_gga_, last_nmea_gga_timestamp_ns_, update.timestamp_ns))
     {
@@ -754,11 +786,14 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
                                     : std::nullopt;
     position_payload_freshness_tracker_.Observe(update, receiver_epoch);
     metrics_.position_payload_freshness = position_payload_freshness_tracker_.metrics();
-    PruneNmeaGgaFallback(aggregator_.state(),
-                         HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
-                                                 last_nmea_gga_timestamp_ns_,
-                                                 sentence.timestamp_ns),
-                         update);
+    if (NativePositionIsFresh(last_native_position_timestamp_ns_, sentence.timestamp_ns))
+    {
+      PruneNmeaGgaFallback(aggregator_.state(),
+                           HasFreshMixedNmeaSample(seen_valid_nmea_gga_,
+                                                   last_nmea_gga_timestamp_ns_,
+                                                   sentence.timestamp_ns),
+                           update);
+    }
     if (aggregator_.Merge(update))
     {
       ++metrics_.runtime_updates;
@@ -779,7 +814,10 @@ void UnicoreSession::HandleNmeaSentence(const NmeaSentence& sentence)
     ++metrics_.runtime_observations;
 
     GnssRuntimeState update = universal_gnss_protocols::NmeaGstToRuntimeState(*parsed.record);
-    PruneNmeaGstFallback(aggregator_.state(), update);
+    if (NativePositionIsFresh(last_native_position_timestamp_ns_, sentence.timestamp_ns))
+    {
+      PruneNmeaGstFallback(aggregator_.state(), update);
+    }
     if (aggregator_.Merge(update))
     {
       ++metrics_.runtime_updates;
@@ -944,23 +982,29 @@ void UnicoreSession::HandleBinaryFrame(const UnicoreBinaryFrame& frame)
 
   if (frame.message_id == 2118u)
   {
-    ParseAndMergeBinaryRecord(frame,
-                              universal_gnss_protocols::ParseUnicoreBestNavB,
-                              universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
-                              true,
-                              aggregator_,
-                              position_payload_freshness_tracker_,
-                              metrics_);
+    if (ParseAndMergeBinaryRecord(frame,
+                                  universal_gnss_protocols::ParseUnicoreBestNavB,
+                                  universal_gnss_protocols::UnicoreBestNavBToRuntimeState,
+                                  true,
+                                  aggregator_,
+                                  position_payload_freshness_tracker_,
+                                  metrics_))
+    {
+      last_native_position_timestamp_ns_ = frame.timestamp_ns;
+    }
     return;
   }
 
-  ParseAndMergeBinaryRecord(frame,
-                            universal_gnss_protocols::ParseUnicorePvtslnB,
-                            universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
-                            true,
-                            aggregator_,
-                            position_payload_freshness_tracker_,
-                            metrics_);
+  if (ParseAndMergeBinaryRecord(frame,
+                                universal_gnss_protocols::ParseUnicorePvtslnB,
+                                universal_gnss_protocols::UnicorePvtslnBToRuntimeState,
+                                true,
+                                aggregator_,
+                                position_payload_freshness_tracker_,
+                                metrics_))
+  {
+    last_native_position_timestamp_ns_ = frame.timestamp_ns;
+  }
 }
 
 }  // namespace universal_gnss_driver
