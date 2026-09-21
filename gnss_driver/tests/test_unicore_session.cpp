@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iomanip>
@@ -100,6 +101,20 @@ std::string MakeBestNavLineWithLatitude(const std::string_view latitude)
       ",116.2365102982,65.8312,-8.4925,WGS84,1.2221,1.1053,"
       "2.1970,\"0\",0.400,0.200,50,28,28,0,1,12,12,41,SOL_COMPUTED,DOPPLER_VELOCITY,"
       "0.000,0.000,0.0046,335.592288,0.0045,0.0194,0.0123");
+}
+
+std::string MakeBestNavLine(const std::uint16_t gps_week,
+                            const std::uint32_t gps_millis_of_week,
+                            const std::string_view latitude,
+                            const std::string_view longitude)
+{
+  return WithUnicoreAsciiCrc(
+      "#BESTNAVA,97,GPS,FINE," + std::to_string(gps_week) + "," +
+      std::to_string(gps_millis_of_week) + ",0,0,18,16;SOL_COMPUTED,NARROW_INT," +
+      std::string(latitude) + "," + std::string(longitude) +
+      ",65.8312,-8.4925,WGS84,0.0200,0.0200,0.0300,\"0\",0.400,0.200,50,28,28,0,1,12,12,"
+      "41,SOL_COMPUTED,DOPPLER_VELOCITY,0.000,0.000,0.0046,335.592288,0.0045,0.0194,"
+      "0.0123");
 }
 
 const std::string kPvtslnLine = WithUnicoreAsciiCrc(
@@ -306,6 +321,64 @@ void TestBestNavUpdatesRuntimeState(TestContext& ctx)
                  state.longitude_deg == std::optional<double>(116.2365102982) &&
                  state.altitude_m == std::optional<double>(65.8312),
              "BESTNAVA should update coordinates and altitude");
+}
+
+void TestPositionFreshnessSeparatesNativeEpochAndPayloadChanges(TestContext& ctx)
+{
+  constexpr std::string_view kInitialLatitude = "53.08917273583333";
+  constexpr std::string_view kChangedLatitude = "53.08918273583333";
+  constexpr std::string_view kLongitude = "6.169298125666667";
+
+  UnicoreSession session;
+  session.FeedString(MakeBestNavLine(2400u, 1000u, kInitialLatitude, kLongitude), 100);
+  session.FeedString(MakeBestNavLine(2400u, 1200u, kInitialLatitude, kLongitude), 200);
+
+  const auto& advancing_epoch = session.metrics().position_payload_freshness;
+  ctx.Expect(session.metrics().runtime_observations == 2u &&
+                 session.metrics().position_observations == 2u &&
+                 session.metrics().runtime_updates == 2u,
+             "identical coordinates from distinct BESTNAVA observations should remain accepted "
+             "runtime and position observations");
+  ctx.Expect(advancing_epoch.valid_position_payload_observations == 2u &&
+                 advancing_epoch.position_payload_changes == 1u &&
+                 advancing_epoch.consecutive_identical_position_observations == 2u &&
+                 advancing_epoch.receiver_epoch_observations == 2u &&
+                 advancing_epoch.receiver_epoch_advances == 1u &&
+                 advancing_epoch.consecutive_identical_receiver_epochs == 1u &&
+                 advancing_epoch.last_receiver_epoch_relation ==
+                     universal_gnss_driver::ReceiverEpochRelation::kAdvanced,
+             "advancing native epochs and unchanged coordinates should advance only the "
+             "observation and epoch counters");
+  ctx.Expect(session.current_state().timestamp_ns == std::optional<std::int64_t>(200) &&
+                 session.current_state().latitude_deg == std::optional<double>(53.08917273583333) &&
+                 session.current_state().longitude_deg == std::optional<double>(6.169298125666667),
+             "the aggregate should accept an identical position observation and advance its "
+             "receipt provenance");
+
+  session.FeedString(MakeBestNavLine(2400u, 1200u, kInitialLatitude, kLongitude), 300);
+  const auto& frozen_epoch = session.metrics().position_payload_freshness;
+  ctx.Expect(frozen_epoch.position_payload_changes == 1u &&
+                 frozen_epoch.consecutive_identical_position_observations == 3u &&
+                 frozen_epoch.receiver_epoch_advances == 1u &&
+                 frozen_epoch.consecutive_identical_receiver_epochs == 2u &&
+                 frozen_epoch.last_receiver_epoch_relation ==
+                     universal_gnss_driver::ReceiverEpochRelation::kIdentical,
+             "a repeated native epoch should be reported independently of the repeated payload");
+
+  session.FeedString(MakeBestNavLine(2400u, 1400u, kChangedLatitude, kLongitude), 400);
+  const auto& changed = session.metrics().position_payload_freshness;
+  ctx.Expect(session.metrics().runtime_observations == 4u &&
+                 session.metrics().position_observations == 4u &&
+                 session.metrics().runtime_updates == 4u &&
+                 changed.position_payload_changes == 2u &&
+                 changed.consecutive_identical_position_observations == 1u &&
+                 changed.receiver_epoch_advances == 2u &&
+                 changed.last_receiver_epoch_relation ==
+                     universal_gnss_driver::ReceiverEpochRelation::kAdvanced,
+             "a later changed coordinate should advance both payload and native-epoch counters");
+  ctx.Expect(session.current_state().timestamp_ns == std::optional<std::int64_t>(400) &&
+                 session.current_state().latitude_deg == std::optional<double>(53.08918273583333),
+             "the changed coordinate should propagate through parsing, mapping, and aggregation");
 }
 
 void TestNonFiniteBestNavValuesAreRejectedBeforeRuntimeMerge(TestContext& ctx)
@@ -859,6 +932,7 @@ int main()
   TestContext ctx;
 
   TestBestNavUpdatesRuntimeState(ctx);
+  TestPositionFreshnessSeparatesNativeEpochAndPayloadChanges(ctx);
   TestNonFiniteBestNavValuesAreRejectedBeforeRuntimeMerge(ctx);
   TestPvtslnUpdatesHeading(ctx);
   TestRtkStatusUpdatesDualAntenna(ctx);

@@ -17,6 +17,10 @@
 - `blocked/UG-DRIVER-TRANSPORT-INCARNATION-001_CHECKPOINT.md` — POSIX serial
   cannot prove an end-to-end prior-byte cutoff; implemented quarantine remains
   blocked from automatic recovery pending a qualified provider.
+- `active/UG-MOWGLI-694-RC2-POSITION-FREEZE.md` — RC2 field trace proves no
+  differing valid coordinate reached the post-mapping freshness boundary;
+  the supplied JSONL lacks freshness diagnostics, so a narrow real-Unicore
+  diagnostic capture is next before deciding whether raw bytes are required.
 - `active/UG-PLAN-DEPLOYMENT-001_CHECKPOINT.md` — portable runtime/API/GUI/Docker
   and BlueOS dependency planning; `TODO.md` remains the source of truth.
 - `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and
