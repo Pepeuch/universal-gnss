@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-LGPL%203.0-blue">
-  <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver">
+  <img src="https://img.shields.io/github/v/tag/Pepeuch/universal-gnss?label=Version&sort=semver&include_prereleases">
   <img src="https://img.shields.io/badge/ROS2-Kilted%20Validated-brightgreen">
   <img src="https://img.shields.io/badge/Lyrical%20Validated-brightgreen">
     <a href="https://mowgli.garden/">
@@ -37,9 +37,9 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 
 ## Current Project Status
 
-`v0.6.0` is released.
+`v0.7.1-rc3` is released.
 
-Current phase: post-`v0.6.x` stabilization.
+Current phase: post-`v0.7.1-rc3` stabilization.
 
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
