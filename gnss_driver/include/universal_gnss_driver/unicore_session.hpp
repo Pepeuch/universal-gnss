@@ -122,6 +122,9 @@ private:
   bool seen_valid_nmea_gga_{false};
   bool seen_valid_nmea_gsv_{false};
   std::optional<std::int64_t> last_nmea_gga_timestamp_ns_{};
+  // Receipt time of the last NATIVE position record (PVTSLN / BESTNAV, ASCII or
+  // binary). NMEA GGA/GST are a fallback only while this is fresh.
+  std::optional<std::int64_t> last_native_position_timestamp_ns_{};
   std::optional<std::int64_t> last_nmea_gsv_timestamp_ns_{};
   std::vector<UnicoreNmeaGsvTalkerState> gsv_talker_states_{};
 };
