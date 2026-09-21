@@ -14,7 +14,10 @@ add_subdirectory(gnss_transport)
 add_subdirectory(gnss_ntrip)
 add_subdirectory(gnss_runtime)
 add_subdirectory(gnss_tools)
-add_subdirectory(gnss_mavros)
+
+if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)
+  add_subdirectory(gnss_mavros)
+endif()
 
 if(UNIVERSAL_GNSS_BUILD_ROS2)
   add_subdirectory(gnss_ros2)
