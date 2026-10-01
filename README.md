@@ -327,7 +327,7 @@ Current implemented layers:
   - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state
   - serial / TCP / replay / combined launch examples
 - `gnss_mavros`
-  - optional external MAVROS plugin pinned to MAVROS `2.15.1`
+  - optional external MAVROS plugin pinned to MAVROS `2.16.0`
   - direct `GPS_RAW_INT`, `GPS2_RAW`, `GPS_RTK`, `GPS2_RTK`, and `SYSTEM_TIME`
     handlers
   - independent GPS1/GPS2 Universal GNSS source state and lifecycle fencing

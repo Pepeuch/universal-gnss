@@ -45,7 +45,7 @@ Recently completed:
 - decimal-degree latitude/longitude outputs preserve at least 9 decimal places
 - additive public dual-antenna baseline capability/runtime/ROS2 surface with
   `v0.6.x` compatibility for `heading_deg` / `dual_antenna_heading`
-- optional external MAVROS 2.15.1 source adapter with independent GPS1/GPS2
+- optional external MAVROS 2.16.0 source adapter with independent GPS1/GPS2
   state, receipt-time provenance, and FCU incarnation invalidation
 
 ## Native runtime, API, web, and deployment planning

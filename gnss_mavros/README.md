@@ -4,8 +4,8 @@
 FCU MAVLink GNSS messages another input transport for Universal GNSS without
 putting MAVROS headers or lifecycle policy into `gnss_core`.
 
-The supported baseline is exactly MAVROS `2.15.1`, commit
-`22ae5b7cc7cdb4cb9c2070a8213c72dae445a23e`. CMake rejects a different MAVROS
+The supported baseline is exactly MAVROS `2.16.0`, commit
+`5c68b905ab30de6ce630822dc46c33467e8f23ea`. CMake rejects a different MAVROS
 package version.
 
 ## Architecture
