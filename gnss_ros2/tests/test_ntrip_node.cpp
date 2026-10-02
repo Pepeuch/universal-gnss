@@ -525,7 +525,7 @@ void DeliverStatus(universal_gnss_ros2::NtripNode& node,
                    const universal_gnss_ros2::msg::GnssStatus& status)
 {
   auto publisher =
-      publisher_node->create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
+      publisher_node->create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", rclcpp::SensorDataQoS());
   executor.add_node(publisher_node->get_node_base_interface());
   executor.add_node(node.get_node_base_interface());
   executor.spin_some();
@@ -947,7 +947,7 @@ TEST_F(NtripNodeTest, RepeatedCachedStatusCannotKeepGgaSourceFresh)
 
   auto publisher_node = std::make_shared<rclcpp::Node>("ntrip_republished_status_source");
   auto publisher =
-      publisher_node->create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
+      publisher_node->create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", rclcpp::SensorDataQoS());
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node.get_node_base_interface());
   executor.add_node(publisher_node->get_node_base_interface());
