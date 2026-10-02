@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <iomanip>
 #include <memory>
@@ -11,8 +12,10 @@
 #include "mavros/plugin_filter.hpp"
 #include "sensor_msgs/msg/nav_sat_fix.hpp"
 #include "universal_gnss_mavros/mavlink_gnss_adapter.hpp"
+#include "universal_gnss_mavros/mavlink_rtcm_encoder.hpp"
 #include "universal_gnss_ros2/gnss_status_adapter.hpp"
 #include "universal_gnss_ros2/msg/gnss_status.hpp"
+#include "universal_gnss_ros2/msg/rtcm_frame.hpp"
 #include "universal_gnss_ros2/navsat_fix_adapter.hpp"
 
 namespace universal_gnss_mavros {
@@ -94,6 +97,13 @@ public:
     gps1_fix_publisher_ = node->create_publisher<sensor_msgs::msg::NavSatFix>("~/gps1/fix", qos);
     gps2_fix_publisher_ = node->create_publisher<sensor_msgs::msg::NavSatFix>("~/gps2/fix", qos);
 
+    const auto rtcm_input_topic =
+        node->declare_parameter<std::string>("rtcm_input_topic", "/rtcm");
+    rtcm_subscription_ = node->create_subscription<universal_gnss_ros2::msg::RtcmFrame>(
+        rtcm_input_topic,
+        rclcpp::QoS(rclcpp::KeepLast(50)).reliable(),
+        [this](const universal_gnss_ros2::msg::RtcmFrame& message) { HandleRtcm(message); });
+
     enable_connection_cb();
   }
 
@@ -173,6 +183,35 @@ private:
     }
   }
 
+  void HandleRtcm(const universal_gnss_ros2::msg::RtcmFrame& frame)
+  {
+    const auto encoded = rtcm_encoder_.Encode(frame.data);
+    if (encoded.status == MavlinkRtcmEncodeStatus::kEmptyFrame)
+    {
+      RCLCPP_WARN(get_logger(), "Ignoring empty Universal GNSS RTCM frame");
+      return;
+    }
+    if (encoded.status == MavlinkRtcmEncodeStatus::kFrameTooLarge)
+    {
+      RCLCPP_ERROR(
+          get_logger(),
+          "RTCM type %u is too large for MAVLink GPS_RTCM_DATA: %zu bytes (maximum %zu)",
+          static_cast<unsigned int>(frame.message_type),
+          frame.data.size(),
+          MavlinkRtcmEncoder::kMaxFrameSize);
+      return;
+    }
+
+    for (const auto& fragment : encoded.fragments)
+    {
+      mavlink::common::msg::GPS_RTCM_DATA message{};
+      message.flags = fragment.flags;
+      message.len = fragment.len;
+      std::copy(fragment.data.begin(), fragment.data.end(), message.data.begin());
+      uas->send_message(message);
+    }
+  }
+
   void PublishReceiver(const Receiver receiver, const bool publish_fix)
   {
     const auto snapshot = adapter_->Snapshot(receiver);
@@ -196,12 +235,14 @@ private:
 
   std::mutex callback_mutex_{};
   std::unique_ptr<MavlinkGnssAdapter> adapter_{};
+  MavlinkRtcmEncoder rtcm_encoder_{};
   std::string gps1_frame_id_{};
   std::string gps2_frame_id_{};
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr gps1_status_publisher_{};
   rclcpp::Publisher<universal_gnss_ros2::msg::GnssStatus>::SharedPtr gps2_status_publisher_{};
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gps1_fix_publisher_{};
   rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr gps2_fix_publisher_{};
+  rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
 };
 
 } // namespace universal_gnss_mavros

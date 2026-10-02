@@ -12,12 +12,15 @@ package version.
 
 ```text
 Universal GNSS core state and ROS adapters
-                    ^
-MAVROS-free MavlinkGnssAdapter state model
-                    ^
-external UniversalGnssPlugin / MAVROS plugin API
-                    ^
-                 MAVLink
+              ^                 |
+              |                 v
+MAVROS-free GNSS adapter   MAVROS-free RTCM encoder
+              ^                 |
+              \                 /
+               UniversalGnssPlugin
+                       ^ |
+                       | v
+                     MAVLink
 ```
 
 The plugin registers as `universal_gnss` with MAVROS. It uses decoded
@@ -45,12 +48,21 @@ Within the MAVROS node namespace the plugin publishes:
   `universal_gnss_ros2/msg/GnssStatus`
 - `~/gps1/fix` and `~/gps2/fix` as `sensor_msgs/msg/NavSatFix`
 
+It also subscribes to the canonical Universal GNSS RTCM stream and injects each
+`RtcmFrame` into the FCU as MAVLink `GPS_RTCM_DATA`. The conversion follows the
+MAVLink fragmentation contract used by MAVROS: 180 bytes per fragment, up to
+four fragments (720 bytes) per RTCM frame, with the 5-bit sequence and 2-bit
+fragment identifiers encoded in `flags`. Oversized frames are rejected rather
+than silently split across independent MAVLink sequences.
+
 Parameters on the plugin subnode:
 
 - `source_id_prefix` (default `mavlink:fcu`), producing stable logical IDs
   `<prefix>:gps1` and `<prefix>:gps2`
 - `gps1_frame_id` (default `gps1`)
 - `gps2_frame_id` (default `gps2`)
+- `rtcm_input_topic` (default `/rtcm`), the Universal GNSS `RtcmFrame` input
+  topic; deployments may override this to match their UG namespace
 
 Each decoded raw GPS message is a genuine observation and advances that
 receiver's sequence even when all numeric values equal the preceding message.
@@ -97,6 +109,7 @@ For the repository-root CMake build, opt in with
 `-DUNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN=ON` and make the installed
 `universal_gnss_ros2` and pinned MAVROS prefixes discoverable.
 
-RTCM injection is intentionally not implemented here. A future sink belongs in
-this plugin package and can translate Universal GNSS RTCM frames into MAVLink
-and call `uas->send_message()` without changing `gnss_core`.
+RTCM injection is implemented directly in this plugin package. The generic
+NTRIP client remains in Universal GNSS; the MAVROS plugin only translates the
+canonical `RtcmFrame` transport into MAVLink and calls `uas->send_message()`.
+`gnss_core` remains independent of MAVROS.
