@@ -328,7 +328,9 @@ struct NtripNode::Impl
     rtcm_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::RtcmFrame>(
         "rtcm", rclcpp::QoS(rclcpp::KeepLast(50)).reliable());
     status_subscription_ = owner_.create_subscription<universal_gnss_ros2::msg::GnssStatus>(
-        "status", rclcpp::QoS(rclcpp::KeepLast(10)).best_effort(), [this](const universal_gnss_ros2::msg::GnssStatus& message) {
+        "status",
+        rclcpp::QoS(rclcpp::KeepLast(10)).best_effort(),
+        [this](const universal_gnss_ros2::msg::GnssStatus& message) {
           this->OnStatusMessage(message);
         });
 
