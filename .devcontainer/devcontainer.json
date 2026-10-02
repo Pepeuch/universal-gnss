@@ -4,7 +4,7 @@
     "dockerfile": "Dockerfile",
     "context": "..",
     "args": {
-      "ROS_DISTRO": "kilted"
+      "ROS_DISTRO": "lyrical"
     }
   },
 
@@ -28,7 +28,7 @@
     "COLCON_HOME": "/tmp/.colcon"
   },
 
-  "postCreateCommand": "bash -lc 'source /opt/ros/${ROS_DISTRO}/setup.bash && colcon --help >/dev/null && cmake --version >/dev/null'",
+  "postCreateCommand": "bash -lc 'source /opt/ros/${ROS_DISTRO}/setup.bash && source /opt/mavros/setup.bash && colcon --help >/dev/null && cmake --version >/dev/null && ros2 pkg prefix mavros >/dev/null'",
 
   "customizations": {
     "vscode": {

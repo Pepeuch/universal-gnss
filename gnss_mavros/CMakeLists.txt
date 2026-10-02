@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 project(universal_gnss_mavros LANGUAGES CXX)
 
@@ -26,6 +26,16 @@ else()
     PUBLIC ${universal_gnss_ros2_INCLUDE_DIRS}
   )
 endif()
+
+add_library(universal_gnss_mavros_rtcm_encoder src/mavlink_rtcm_encoder.cpp)
+target_compile_features(universal_gnss_mavros_rtcm_encoder PUBLIC cxx_std_17)
+set_target_properties(universal_gnss_mavros_rtcm_encoder PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(
+  universal_gnss_mavros_rtcm_encoder
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
 
 if(_universal_gnss_mavros_standalone)
   option(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN "Build the external MAVROS plugin" ON)
@@ -68,6 +78,7 @@ if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)
   target_link_libraries(
     universal_gnss_mavros_plugin
     universal_gnss_mavros_adapter
+    universal_gnss_mavros_rtcm_encoder
     ${GeographicLib_LIBRARIES}
     ${libmavconn_LIBRARIES}
     ${mavros_LIBRARIES}
@@ -97,7 +108,9 @@ if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)
 endif()
 
 install(
-  TARGETS universal_gnss_mavros_adapter
+  TARGETS
+    universal_gnss_mavros_adapter
+    universal_gnss_mavros_rtcm_encoder
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -109,6 +122,10 @@ if(BUILD_TESTING)
   add_executable(gnss_mavros_test_adapter tests/test_mavlink_gnss_adapter.cpp)
   target_link_libraries(gnss_mavros_test_adapter PRIVATE universal_gnss_mavros_adapter)
   add_test(NAME gnss_mavros_test_adapter COMMAND gnss_mavros_test_adapter)
+
+  add_executable(gnss_mavros_test_rtcm_encoder tests/test_mavlink_rtcm_encoder.cpp)
+  target_link_libraries(gnss_mavros_test_rtcm_encoder PRIVATE universal_gnss_mavros_rtcm_encoder)
+  add_test(NAME gnss_mavros_test_rtcm_encoder COMMAND gnss_mavros_test_rtcm_encoder)
 endif()
 
 if(_universal_gnss_mavros_standalone)

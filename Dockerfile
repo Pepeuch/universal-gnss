@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG ROS_DISTRO=kilted
+ARG ROS_DISTRO=lyrical
 FROM ros:${ROS_DISTRO}-ros-base AS builder
 
 ARG ROS_DISTRO
