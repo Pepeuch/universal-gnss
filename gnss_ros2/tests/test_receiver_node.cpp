@@ -1593,7 +1593,7 @@ TEST_F(ReceiverNodeTest, ProjectsRuntimeUpdatesThroughRosAdapters)
   EXPECT_TRUE(fix.header.stamp.sec != 0 || fix.header.stamp.nanosec != 0u);
   EXPECT_TRUE(status.stamp.sec != 0 || status.stamp.nanosec != 0u);
   EXPECT_TRUE(status.fix_valid);
-  EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_FIX);
+  EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_3D_FIX);
   EXPECT_NEAR(fix.latitude, 48.1173, 1e-4);
   EXPECT_NEAR(fix.longitude, 11.5166667, 1e-4);
   EXPECT_DOUBLE_EQ(fix.altitude, 545.4);
@@ -1824,7 +1824,7 @@ TEST_F(ReceiverNodeTest, ProjectsGenericNmeaRtkModeFromGgaFixQuality)
   ASSERT_TRUE(node.last_status_message().has_value());
   const auto& status = *node.last_status_message();
   EXPECT_TRUE(status.fix_valid);
-  EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_FIX);
+  EXPECT_EQ(status.fix_type, universal_gnss_ros2::msg::GnssStatus::FIX_TYPE_RTK_FIXED);
   EXPECT_EQ(status.rtk_mode, universal_gnss_ros2::msg::GnssStatus::RTK_MODE_FIXED);
   EXPECT_NE(status.capability_flags & universal_gnss_ros2::msg::GnssStatus::CAP_RTK_MODE, 0u);
   EXPECT_NE(status.value_flags & universal_gnss_ros2::msg::GnssStatus::CAP_RTK_MODE, 0u);
