@@ -314,7 +314,7 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
 
     const auto state = universal_gnss_protocols::NmeaGgaToRuntimeState(*result.record);
     ctx.Expect(state.fix_valid == expected_fix_valid, label + " should preserve fix validity");
-    ctx.Expect(state.fix_type == expected_fix_type, label + " should preserve generic fix type");
+    ctx.Expect(state.fix_type == expected_fix_type, label + " should map the explicit fix type");
     ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kRtkMode),
                label + " should advertise RTK capability");
     ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kRtkMode),
@@ -326,17 +326,17 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
   expect_gga_rtk_mode("GPGGA,123520,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,",
                       GnssRtkMode::kNone,
                       true,
-                      GnssFixType::kFix,
+                      GnssFixType::kDgps,
                       "GGA fix quality 2");
   expect_gga_rtk_mode("GPGGA,123521,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,",
                       GnssRtkMode::kFixed,
                       true,
-                      GnssFixType::kFix,
+                      GnssFixType::kRtkFixed,
                       "GGA fix quality 4");
   expect_gga_rtk_mode("GPGGA,123522,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,",
                       GnssRtkMode::kFloat,
                       true,
-                      GnssFixType::kFix,
+                      GnssFixType::kRtkFloat,
                       "GGA fix quality 5");
   expect_gga_rtk_mode("GPGGA,123523,,,,,0,00,,,,,,",
                       GnssRtkMode::kNone,
@@ -779,8 +779,22 @@ void TestGsaAndGsvRuntimeMapping(TestContext& ctx)
   const auto gsa_state = universal_gnss_protocols::NmeaGsaToRuntimeState(*gsa_result.record);
   ctx.Expect(gsa_state.timestamp_ns == std::optional<std::int64_t>(555),
              "GSA runtime mapping should preserve the sample timestamp");
-  ctx.Expect(gsa_state.fix_valid && gsa_state.fix_type == GnssFixType::kFix,
-             "GSA runtime mapping should turn 3D fix dimension into a generic fix");
+  ctx.Expect(gsa_state.fix_valid && gsa_state.fix_type == GnssFixType::k3dFix,
+             "GSA runtime mapping should preserve the explicit 3D fix dimension");
+
+  const NmeaSentence two_dimensional_sentence =
+      FrameSentence(MakeSentence("GPGSA,A,2,04,05,09,,,,,,,,,,2.5,1.5,2.0"), 556);
+  const auto two_dimensional_result =
+      universal_gnss_protocols::ParseNmeaGsa(two_dimensional_sentence);
+  ctx.Expect(two_dimensional_result.record.has_value(), "2D GSA runtime mapping should parse");
+  if (two_dimensional_result.record.has_value())
+  {
+    const auto two_dimensional_state =
+        universal_gnss_protocols::NmeaGsaToRuntimeState(*two_dimensional_result.record);
+    ctx.Expect(two_dimensional_state.fix_valid &&
+                   two_dimensional_state.fix_type == GnssFixType::k2dFix,
+               "GSA runtime mapping should preserve the explicit 2D fix dimension");
+  }
   ctx.Expect(universal_gnss::HasCapability(gsa_state, GnssCapability::kHdop) &&
                  universal_gnss::HasCapability(gsa_state, GnssCapability::kVdop) &&
                  universal_gnss::HasCapability(gsa_state, GnssCapability::kSatellitesUsed),
@@ -896,8 +910,8 @@ void TestNmeaPartialStatesCanBeAggregated(TestContext& ctx)
   aggregator.Merge(gsv_state);
 
   const universal_gnss::GnssRuntimeState& state = aggregator.state();
-  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
-             "aggregated NMEA state should retain a generic valid fix");
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFloat,
+             "a later dimension-only GSA update must not downgrade an explicit GGA RTK fix");
   ctx.Expect(universal_gnss::HasCapability(state, GnssCapability::kRtkMode) &&
                  universal_gnss::HasValueAvailable(state, GnssCapability::kRtkMode) &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),

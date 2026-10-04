@@ -449,7 +449,7 @@ void TestRuntimeStateAccess(TestContext& ctx)
   nmea_driver.FeedBytes(BuildNmeaSentence("GPGST,024603.00,1.2,0.8,0.7,45.0,0.4,0.5,1.1"), 3001);
 
   ctx.Expect(ublox_driver.current_state().fix_valid &&
-                 ublox_driver.current_state().fix_type == GnssFixType::kFix &&
+                 ublox_driver.current_state().fix_type == GnssFixType::k3dFix &&
                  ublox_driver.current_state().timestamp_ns == std::optional<std::int64_t>(1000),
              "u-blox driver should surface runtime state from the underlying session");
   ctx.Expect(unicore_driver.current_state().fix_valid &&
@@ -459,7 +459,7 @@ void TestRuntimeStateAccess(TestContext& ctx)
                  unicore_driver.current_state().timestamp_ns == std::optional<std::int64_t>(2000),
              "Unicore driver should surface runtime state from the underlying session");
   ctx.Expect(nmea_driver.current_state().fix_valid &&
-                 nmea_driver.current_state().fix_type == GnssFixType::kFix &&
+                 nmea_driver.current_state().fix_type == GnssFixType::kRtkFloat &&
                  nmea_driver.current_state().rtk_mode ==
                      std::optional<universal_gnss::GnssRtkMode>(GnssRtkMode::kFloat) &&
                  nmea_driver.current_state().timestamp_ns == std::optional<std::int64_t>(3001) &&

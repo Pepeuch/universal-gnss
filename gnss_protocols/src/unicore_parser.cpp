@@ -839,14 +839,15 @@ universal_gnss::GnssFixType MapFixType(const UnicorePositionType type)
       return universal_gnss::GnssFixType::kRtkFixed;
     case UnicorePositionType::kIns:
       return universal_gnss::GnssFixType::kDeadReckoning;
+    case UnicorePositionType::kPsrDiff:
+    case UnicorePositionType::kInsPsrDiff:
+      return universal_gnss::GnssFixType::kDgps;
     case UnicorePositionType::kFixedPos:
     case UnicorePositionType::kFixedHeight:
     case UnicorePositionType::kDopplerVelocity:
     case UnicorePositionType::kSingle:
-    case UnicorePositionType::kPsrDiff:
     case UnicorePositionType::kSbas:
     case UnicorePositionType::kInsPsrsp:
-    case UnicorePositionType::kInsPsrDiff:
     case UnicorePositionType::kPppConverging:
     case UnicorePositionType::kPpp:
       return universal_gnss::GnssFixType::kFix;

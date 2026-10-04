@@ -271,7 +271,7 @@ void TestExplicitUbloxMode(TestContext& ctx)
                  metrics.selection_locked,
              "explicit u-blox mode should start selected and locked");
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1000) && state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix,
+                 state.fix_type == GnssFixType::k3dFix,
              "explicit u-blox mode should route NAV-PVT into runtime state");
   ctx.Expect(metrics.runtime_updates == 1u && session.ublox_metrics().ubx_frames_seen == 1u &&
                  session.unicore_metrics().records_parsed == 0u,
@@ -315,7 +315,7 @@ void TestExplicitNmeaMode(TestContext& ctx)
                      std::optional<ReceiverSessionKind>(ReceiverSessionKind::kNmea) &&
                  metrics.selection_locked,
              "explicit NMEA mode should start selected and locked");
-  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kRtkFixed &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
                  state.hdop == std::optional<float>(1.0f) &&
                  state.vdop == std::optional<float>(1.5f) &&
@@ -349,7 +349,7 @@ void TestAutoModeSelectsUblox(TestContext& ctx)
                  metrics.selection_locked,
              "auto mode should select u-blox once UBX evidence appears");
   ctx.Expect(session.current_state().fix_valid &&
-                 session.current_state().fix_type == GnssFixType::kFix,
+                 session.current_state().fix_type == GnssFixType::k3dFix,
              "auto-selected u-blox session should expose UBX runtime state");
 }
 

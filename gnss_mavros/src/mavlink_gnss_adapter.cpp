@@ -33,8 +33,11 @@ GnssFixType MapFixType(const std::uint8_t fix_type)
   case 6u:
     return GnssFixType::kRtkFixed;
   case 2u:
+    return GnssFixType::k2dFix;
   case 3u:
+    return GnssFixType::k3dFix;
   case 4u:
+    return GnssFixType::kDgps;
   case 7u:
   case 8u:
     return GnssFixType::kFix;

@@ -480,6 +480,51 @@ void TestUtcFieldsOrderClearAndReset(TestContext& ctx)
              "reset must invalidate receiver UTC observations");
 }
 
+void TestDimensionOnlyFixDoesNotDowngradeExplicitCorrectionClass(TestContext& ctx)
+{
+  GnssRuntimeAggregator aggregator;
+
+  GnssRuntimeState dgps;
+  dgps.timestamp_ns = 100;
+  dgps.fix_valid = true;
+  dgps.fix_type = GnssFixType::kDgps;
+  SetCapability(dgps, GnssCapability::kRtkMode);
+  SetOptionalValue(
+      dgps, GnssCapability::kRtkMode, dgps.rtk_mode, universal_gnss::GnssRtkMode::kNone);
+  aggregator.Merge(dgps);
+
+  GnssRuntimeState dimension_only;
+  dimension_only.timestamp_ns = 110;
+  dimension_only.fix_valid = true;
+  dimension_only.fix_type = GnssFixType::k3dFix;
+  aggregator.Merge(dimension_only);
+  ctx.Expect(aggregator.state().fix_type == GnssFixType::kDgps,
+             "a dimension-only update must not downgrade an explicit DGPS solution class");
+
+  GnssRuntimeState rtk_fixed = dgps;
+  rtk_fixed.timestamp_ns = 120;
+  rtk_fixed.fix_type = GnssFixType::kRtkFixed;
+  SetOptionalValue(
+      rtk_fixed, GnssCapability::kRtkMode, rtk_fixed.rtk_mode, universal_gnss::GnssRtkMode::kFixed);
+  aggregator.Merge(rtk_fixed);
+
+  dimension_only.timestamp_ns = 130;
+  dimension_only.fix_type = GnssFixType::k2dFix;
+  aggregator.Merge(dimension_only);
+  ctx.Expect(aggregator.state().fix_type == GnssFixType::kRtkFixed,
+             "a dimension-only update must not downgrade an explicit RTK solution class");
+
+  GnssRuntimeState authoritative_plain = dimension_only;
+  SetCapability(authoritative_plain, GnssCapability::kRtkMode);
+  SetOptionalValue(authoritative_plain,
+                   GnssCapability::kRtkMode,
+                   authoritative_plain.rtk_mode,
+                   universal_gnss::GnssRtkMode::kNone);
+  aggregator.Merge(authoritative_plain);
+  ctx.Expect(aggregator.state().fix_type == GnssFixType::k2dFix,
+             "an explicit non-RTK producer may replace a stale RTK solution class");
+}
+
 }  // namespace
 
 int main()
@@ -499,6 +544,7 @@ int main()
   TestExplicitClearIsDistinctFromOmission(ctx);
   TestDirectPositionClearUsesFieldProvenance(ctx);
   TestUtcFieldsOrderClearAndReset(ctx);
+  TestDimensionOnlyFixDoesNotDowngradeExplicitCorrectionClass(ctx);
 
   if (ctx.failures != 0)
   {

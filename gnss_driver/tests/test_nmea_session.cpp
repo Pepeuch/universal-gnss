@@ -91,26 +91,35 @@ void TestStandardGgaFixQualityDrivesPortableRtkMode(TestContext& ctx)
   session.FeedBytes(
       BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,"), 1100);
 
-  ctx.Expect(
-      session.current_state().fix_valid && session.current_state().fix_type == GnssFixType::kFix &&
-          session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
-      "GGA fix quality 4 should map to RTK fixed");
-
-  session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"), 1101);
-  ctx.Expect(
-      session.current_state().fix_valid && session.current_state().fix_type == GnssFixType::kFix &&
-          session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
-      "GGA fix quality 5 should map to RTK float");
-
-  session.FeedBytes(
-      BuildNmeaSentence("GPGGA,123521,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"), 1102);
   ctx.Expect(session.current_state().fix_valid &&
-                 session.current_state().fix_type == GnssFixType::kFix &&
+                 session.current_state().fix_type == GnssFixType::kRtkFixed &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
+             "GGA fix quality 4 should map to RTK fixed");
+
+  session.FeedBytes(BuildNmeaSentence("GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5"), 1101);
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kRtkFixed &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
+             "a later dimension-only GSA update must not downgrade an explicit GGA RTK fix");
+
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123520,4807.038,N,01131.000,E,5,08,0.9,545.4,M,46.9,M,,"), 1102);
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kRtkFloat &&
+                 session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kFloat),
+             "GGA fix quality 5 should map to RTK float");
+
+  session.FeedBytes(
+      BuildNmeaSentence("GPGGA,123521,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,"), 1103);
+  ctx.Expect(session.current_state().fix_valid &&
+                 session.current_state().fix_type == GnssFixType::kDgps &&
                  session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
              "GGA fix quality 2 should clear RTK float/fixed back to a known non-RTK mode");
 
-  session.FeedBytes(BuildNmeaSentence("GPGGA,123522,,,,,0,00,,,,,,"), 1103);
+  session.FeedBytes(BuildNmeaSentence("GPGGA,123522,,,,,0,00,,,,,,"), 1104);
   ctx.Expect(!session.current_state().fix_valid &&
                  session.current_state().fix_type == GnssFixType::kNoFix &&
                  session.current_state().rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kNone),
@@ -241,6 +250,49 @@ void TestExplicitInvalidityClearsRuntimeValues(TestContext& ctx)
              "the clearing GSA observation must own aggregate provenance");
 }
 
+void TestGgaAuthorityOverDimensionOnlyGsa(TestContext& ctx)
+{
+  const std::string gsa_3d = "GPGSA,A,3,04,05,09,12,24,25,29,31,,,,,1.8,1.0,1.5";
+  const std::string rtk_fixed = "GPGGA,123519,4807.038,N,01131.000,E,4,08,0.9,545.4,M,46.9,M,,";
+  const std::string dgps = "GPGGA,123520,4807.038,N,01131.000,E,2,08,0.9,545.4,M,46.9,M,,";
+  const std::string gps_fix = "GPGGA,123521,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,";
+  const std::string no_fix = "GPGGA,123522,,,,,0,00,,,,,,";
+
+  NmeaSession rtk_session;
+  rtk_session.FeedBytes(BuildNmeaSentence(rtk_fixed), 7000);
+  rtk_session.FeedBytes(BuildNmeaSentence(gsa_3d), 7001);
+  ctx.Expect(rtk_session.current_state().fix_type == GnssFixType::kRtkFixed,
+             "GSA 3D must not downgrade an explicit GGA RTK fixed solution");
+  rtk_session.FeedBytes(BuildNmeaSentence(gps_fix), 7002);
+  ctx.Expect(rtk_session.current_state().fix_valid &&
+                 rtk_session.current_state().fix_type == GnssFixType::kFix &&
+                 rtk_session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "a newer explicit GGA GPS fix must replace RTK fixed");
+  rtk_session.FeedBytes(BuildNmeaSentence(rtk_fixed), 7003);
+  rtk_session.FeedBytes(BuildNmeaSentence(no_fix), 7004);
+  ctx.Expect(!rtk_session.current_state().fix_valid &&
+                 rtk_session.current_state().fix_type == GnssFixType::kNoFix,
+             "a newer explicit GGA no-fix must clear RTK fixed");
+
+  NmeaSession dgps_session;
+  dgps_session.FeedBytes(BuildNmeaSentence(dgps), 8000);
+  dgps_session.FeedBytes(BuildNmeaSentence(gsa_3d), 8001);
+  ctx.Expect(dgps_session.current_state().fix_type == GnssFixType::kDgps,
+             "GSA 3D must not downgrade an explicit GGA DGPS solution");
+  dgps_session.FeedBytes(BuildNmeaSentence(gps_fix), 8002);
+  ctx.Expect(dgps_session.current_state().fix_valid &&
+                 dgps_session.current_state().fix_type == GnssFixType::kFix &&
+                 dgps_session.current_state().rtk_mode ==
+                     std::optional<GnssRtkMode>(GnssRtkMode::kNone),
+             "a newer explicit GGA GPS fix must replace DGPS");
+  dgps_session.FeedBytes(BuildNmeaSentence(dgps), 8003);
+  dgps_session.FeedBytes(BuildNmeaSentence(no_fix), 8004);
+  ctx.Expect(!dgps_session.current_state().fix_valid &&
+                 dgps_session.current_state().fix_type == GnssFixType::kNoFix,
+             "a newer explicit GGA no-fix must clear DGPS");
+}
+
 }  // namespace
 
 int main()
@@ -254,6 +306,7 @@ int main()
   TestMalformedAndResetBehavior(ctx);
   TestNonFiniteGgaValuesAreRejectedBeforeRuntimeMerge(ctx);
   TestExplicitInvalidityClearsRuntimeValues(ctx);
+  TestGgaAuthorityOverDimensionOnlyGsa(ctx);
 
   if (ctx.failures != 0)
   {

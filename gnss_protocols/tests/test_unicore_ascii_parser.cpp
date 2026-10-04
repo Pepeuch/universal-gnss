@@ -232,14 +232,36 @@ void TestBestNavCorrectionStateSemantics(TestContext& ctx)
   {
     const auto state =
         universal_gnss_protocols::UnicoreBestNavToRuntimeState(*psrdiff_result.record);
-    ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
+    ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kDgps &&
                    state.rtk_mode == GnssRtkMode::kNone,
-               "PSRDIFF BESTNAVA should keep RTK mode NONE while still reporting a valid fix");
+               "PSRDIFF BESTNAVA should preserve DGPS while keeping RTK mode NONE");
     ctx.Expect(universal_gnss::HasValueAvailable(state, GnssCapability::kDifferentialCorrections) &&
                    universal_gnss::HasValueAvailable(state, GnssCapability::kCorrectionsActive) &&
                    state.differential_corrections == std::optional<bool>(true) &&
                    state.corrections_active == std::optional<bool>(true),
                "PSRDIFF should expose known true correction state without pretending RTK");
+  }
+
+  std::string ins_psrdiff_line = psrdiff_line;
+  const std::size_t position_type = ins_psrdiff_line.find("PSRDIFF");
+  ctx.Expect(position_type != std::string::npos,
+             "INS_PSRDIFF test fixture should contain a position type");
+  if (position_type != std::string::npos)
+  {
+    ins_psrdiff_line.replace(position_type, 7u, "INS_PSRDIFF");
+    ins_psrdiff_line = WithUnicoreAsciiCrc(ins_psrdiff_line.substr(0, ins_psrdiff_line.find('*')));
+    const auto ins_psrdiff_result = ParseUnicoreBestNav(BuildAsciiFrame(ins_psrdiff_line, 2225));
+    ctx.Expect(ins_psrdiff_result.status == ParserStatus::kRecordReady &&
+                   ins_psrdiff_result.record.has_value(),
+               "INS_PSRDIFF BESTNAVA line should parse successfully");
+    if (ins_psrdiff_result.record.has_value())
+    {
+      const auto state =
+          universal_gnss_protocols::UnicoreBestNavToRuntimeState(*ins_psrdiff_result.record);
+      ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kDgps &&
+                     state.rtk_mode == GnssRtkMode::kNone,
+                 "INS_PSRDIFF BESTNAVA should preserve DGPS without pretending RTK");
+    }
   }
 }
 

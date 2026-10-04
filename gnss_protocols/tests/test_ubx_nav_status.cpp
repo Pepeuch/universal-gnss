@@ -191,8 +191,8 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
       universal_gnss_protocols::UbxNavStatusToRuntimeState(*no_carrier_record.record);
   ctx.Expect(no_carrier_state.timestamp_ns == std::optional<std::int64_t>(888),
              "runtime mapping should preserve the framing timestamp");
-  ctx.Expect(no_carrier_state.fix_valid && no_carrier_state.fix_type == GnssFixType::kFix,
-             "gpsFix=2D with gpsFixOk should map to a generic valid fix");
+  ctx.Expect(no_carrier_state.fix_valid && no_carrier_state.fix_type == GnssFixType::k2dFix,
+             "gpsFix=2D with gpsFixOk should preserve the explicit 2D solution type");
   ctx.Expect(HasCapability(no_carrier_state, GnssCapability::kRtkMode) &&
                  !HasValueAvailable(no_carrier_state, GnssCapability::kRtkMode) &&
                  !no_carrier_state.rtk_mode.has_value(),
@@ -223,6 +223,8 @@ void TestRuntimeMappingBehavior(TestContext& ctx)
 
   const GnssRuntimeState fixed_state =
       universal_gnss_protocols::UbxNavStatusToRuntimeState(*fixed_record.record);
+  ctx.Expect(fixed_state.fix_valid && fixed_state.fix_type == GnssFixType::k3dFix,
+             "gpsFix=3D should remain explicit even when RTK mode is authoritative");
   ctx.Expect(fixed_state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed) &&
                  HasValueAvailable(fixed_state, GnssCapability::kRtkMode),
              "valid carrier solution 2 should map to RTK fixed");

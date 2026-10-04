@@ -212,8 +212,8 @@ void TestRtkFloatAndFixedMapping(TestContext& ctx)
   ctx.Expect(fixed_state.rtk_mode ==
                  std::optional<universal_gnss::GnssRtkMode>(universal_gnss::GnssRtkMode::kFixed),
              "carrier solution 2 should map to RTK fixed");
-  ctx.Expect(fixed_state.fix_type == GnssFixType::kFix,
-             "carrier solution should not replace the generic fix type mapping");
+  ctx.Expect(fixed_state.fix_type == GnssFixType::k3dFix,
+             "carrier solution should not replace the explicit 3D fix type mapping");
   ctx.Expect(fixed_state.differential_corrections == std::optional<bool>(false) &&
                  fixed_state.corrections_active == std::optional<bool>(false),
              "carrier-solution-only RTK mode should keep corrected-solution state false");
@@ -282,8 +282,8 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
   const GnssRuntimeState state = universal_gnss_protocols::UbxNavPvtToRuntimeState(*result.record);
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(2222),
              "runtime mapping should preserve the framing timestamp");
-  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix,
-             "3D NAV-PVT should map to a generic valid fix");
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::k3dFix,
+             "3D NAV-PVT should preserve the explicit 3D solution type");
   ctx.Expect(state.latitude_deg.has_value() && NearlyEqual(*state.latitude_deg, 48.5678901) &&
                  state.longitude_deg.has_value() && NearlyEqual(*state.longitude_deg, 23.1234567),
              "runtime mapping should expose coordinates");
@@ -305,6 +305,21 @@ void TestHeadingAndAccuracyRuntimeMapping(TestContext& ctx)
                  state.vertical_accuracy_m == std::optional<float>(0.5f) &&
                  state.satellites_used == std::optional<std::uint16_t>(18u),
              "runtime mapping should convert accuracy and numSV");
+
+  auto two_dimensional_payload = MakeNavPvtPayload();
+  two_dimensional_payload[20u] = static_cast<std::uint8_t>(UbxNavPvtFixType::k2D);
+  const auto two_dimensional_result = universal_gnss_protocols::ParseUbxNavPvt(
+      BuildUbxFrame(0x01u, 0x07u, two_dimensional_payload));
+  ctx.Expect(two_dimensional_result.record.has_value(),
+             "2D runtime mapping test requires a parsed NAV-PVT record");
+  if (two_dimensional_result.record.has_value())
+  {
+    const auto two_dimensional_state =
+        universal_gnss_protocols::UbxNavPvtToRuntimeState(*two_dimensional_result.record);
+    ctx.Expect(two_dimensional_state.fix_valid &&
+                   two_dimensional_state.fix_type == GnssFixType::k2dFix,
+               "2D NAV-PVT should preserve the explicit 2D solution type");
+  }
   ctx.Expect(
       HasCapability(state, GnssCapability::kHeading) &&
           HasValueAvailable(state, GnssCapability::kHeading) && state.heading_deg.has_value() &&

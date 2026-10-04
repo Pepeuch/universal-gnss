@@ -312,7 +312,7 @@ void TestNavPvtRuntimeUpdates(TestContext& ctx)
                  metrics.position_payload_freshness.last_receiver_epoch->value == 345000u,
              "NAV-PVT should expose position-value and iTOW freshness metrics");
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(1111) && state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix,
+                 state.fix_type == GnssFixType::k3dFix,
              "NAV-PVT should update fix state");
   ctx.Expect(state.latitude_deg == std::optional<double>(48.5678901) &&
                  state.longitude_deg == std::optional<double>(23.1234567) &&
@@ -380,7 +380,7 @@ void TestNavStatusRtkUpdates(TestContext& ctx)
 
   const auto& state = session.current_state();
   ctx.Expect(state.timestamp_ns == std::optional<std::int64_t>(3333) && state.fix_valid &&
-                 state.fix_type == GnssFixType::kFix &&
+                 state.fix_type == GnssFixType::k3dFix &&
                  state.rtk_mode == std::optional<GnssRtkMode>(GnssRtkMode::kFixed),
              "NAV-STATUS should update fix state and RTK mode");
 }
@@ -506,7 +506,7 @@ void TestMixedStreamRouting(TestContext& ctx)
   ctx.Expect(metrics.frames_parsed == 5u && metrics.runtime_updates == 4u &&
                  metrics.rtcm_message_type_counts.at(1005u) == 1u,
              "mixed stream should parse supported messages and retain RTCM counts");
-  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::kFix &&
+  ctx.Expect(state.fix_valid && state.fix_type == GnssFixType::k3dFix &&
                  state.latitude_deg == std::optional<double>(48.5678901) &&
                  state.satellites_visible == std::optional<std::uint16_t>(8u),
              "mixed stream should merge NMEA and UBX runtime fields");

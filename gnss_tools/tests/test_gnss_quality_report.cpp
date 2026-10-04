@@ -464,7 +464,7 @@ void TestReportFromNmeaLog(TestContext& ctx)
                  report.summary.counts_by_protocol.at("nmea") == 5u,
              "quality report should summarize the NMEA file through replay");
   ctx.Expect(report.final_state.fix_valid &&
-                 report.final_state.fix_type == universal_gnss::GnssFixType::kFix,
+                 report.final_state.fix_type == universal_gnss::GnssFixType::k3dFix,
              "quality report should retain the final basic fix state");
   ctx.Expect(report.summary.quality_level == GnssQualityLevel::kGood,
              "GST-backed accuracy should classify the basic NMEA fix as good");

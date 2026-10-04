@@ -1,10 +1,12 @@
 #include "universal_gnss_mavros/mavlink_gnss_adapter.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -91,6 +93,24 @@ void TestGps2ObservationAndAvailability()
   EXPECT_TRUE(snapshot.state.correction_age_s.has_value());
   EXPECT_TRUE(std::abs(*snapshot.state.correction_age_s - 2.75f) < 1.0e-6f);
   EXPECT_TRUE(universal_gnss::HasValueAvailable(snapshot.state, GnssCapability::kCorrectionAge));
+}
+
+void TestExplicitMavlinkSolutionTypesArePreserved()
+{
+  const std::array<std::pair<std::uint8_t, universal_gnss::GnssFixType>, 3> cases{{
+      {2u, universal_gnss::GnssFixType::k2dFix},
+      {3u, universal_gnss::GnssFixType::k3dFix},
+      {4u, universal_gnss::GnssFixType::kDgps},
+  }};
+
+  for (const auto& [mavlink_type, expected_type] : cases)
+  {
+    auto adapter = NewAdapter();
+    auto observation = FixedObservation();
+    observation.fix_type = mavlink_type;
+    adapter.HandleRawGps(Receiver::kGps1, observation, 90'000u + mavlink_type);
+    EXPECT_EQ(adapter.Snapshot(Receiver::kGps1).state.fix_type, expected_type);
+  }
 }
 
 void TestIdenticalObservationsAdvanceSequence()
@@ -240,6 +260,7 @@ int main()
 {
   TestGps1Observation();
   TestGps2ObservationAndAvailability();
+  TestExplicitMavlinkSolutionTypesArePreserved();
   TestIdenticalObservationsAdvanceSequence();
   TestCurrentUnavailableValuesClearPriorRawCache();
   TestReconnectStartsNewIncarnationsAndInvalidatesCaches();

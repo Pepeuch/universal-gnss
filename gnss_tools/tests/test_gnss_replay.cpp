@@ -498,7 +498,7 @@ void TestReplayUbxNavDopEnrichesDopOnly(TestContext& ctx)
                  result.summary.counts_by_protocol.at("ubx") == 2u &&
                  result.summary.counts_by_ubx_message.at("01:04") == 1u,
              "replay should recognize NAV-DOP as a UBX runtime update");
-  ctx.Expect(final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::kFix &&
+  ctx.Expect(final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::k3dFix &&
                  final_state.latitude_deg.has_value() &&
                  std::fabs(*final_state.latitude_deg - 48.5678901) < 1e-6 &&
                  final_state.longitude_deg.has_value() &&
@@ -814,7 +814,7 @@ void TestFileBackedBasicNmeaReplayIncludesGstAccuracy(TestContext& ctx)
   ctx.Expect(result.summary.counts_by_protocol.at("nmea") == 5u &&
                  result.summary.counts_by_nmea_sentence_type.at("GST") == 1u,
              "file-backed basic NMEA replay should include the synthetic GST sentence");
-  ctx.Expect(final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::kFix &&
+  ctx.Expect(final_state.fix_valid && final_state.fix_type == universal_gnss::GnssFixType::k3dFix &&
                  final_state.horizontal_accuracy_m == std::optional<float>(0.6f) &&
                  final_state.vertical_accuracy_m == std::optional<float>(1.1f),
              "file-backed basic NMEA replay should carry GST accuracy into the final state");

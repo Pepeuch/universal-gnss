@@ -807,9 +807,13 @@ universal_gnss::GnssRuntimeState UbxNavStatusToRuntimeState(const UbxNavStatusRe
       state.fix_type = universal_gnss::GnssFixType::kDeadReckoning;
       break;
     case UbxNavStatusFixType::k2D:
+      state.fix_valid = record.gnss_fix_ok;
+      state.fix_type = record.gnss_fix_ok ? universal_gnss::GnssFixType::k2dFix
+                                          : universal_gnss::GnssFixType::kNoFix;
+      break;
     case UbxNavStatusFixType::k3D:
       state.fix_valid = record.gnss_fix_ok;
-      state.fix_type = record.gnss_fix_ok ? universal_gnss::GnssFixType::kFix
+      state.fix_type = record.gnss_fix_ok ? universal_gnss::GnssFixType::k3dFix
                                           : universal_gnss::GnssFixType::kNoFix;
       break;
     case UbxNavStatusFixType::kGnssDeadReckoningCombined:
@@ -886,10 +890,14 @@ universal_gnss::GnssRuntimeState UbxNavPvtToRuntimeState(const UbxNavPvtRecord& 
       state.fix_type = universal_gnss::GnssFixType::kDeadReckoning;
       break;
     case UbxNavPvtFixType::k2D:
+      state.fix_valid = position_valid;
+      state.fix_type = position_valid ? universal_gnss::GnssFixType::k2dFix
+                                      : universal_gnss::GnssFixType::kNoFix;
+      break;
     case UbxNavPvtFixType::k3D:
       state.fix_valid = position_valid;
-      state.fix_type =
-          position_valid ? universal_gnss::GnssFixType::kFix : universal_gnss::GnssFixType::kNoFix;
+      state.fix_type = position_valid ? universal_gnss::GnssFixType::k3dFix
+                                      : universal_gnss::GnssFixType::kNoFix;
       break;
     case UbxNavPvtFixType::kGnssDeadReckoningCombined:
       state.fix_valid = position_valid;

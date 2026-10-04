@@ -41,6 +41,12 @@ std::uint8_t ToMsgFixType(universal_gnss::GnssFixType fix_type)
       return Msg::FIX_TYPE_RTK_FIXED;
     case universal_gnss::GnssFixType::kDeadReckoning:
       return Msg::FIX_TYPE_DEAD_RECKONING;
+    case universal_gnss::GnssFixType::k2dFix:
+      return Msg::FIX_TYPE_2D_FIX;
+    case universal_gnss::GnssFixType::k3dFix:
+      return Msg::FIX_TYPE_3D_FIX;
+    case universal_gnss::GnssFixType::kDgps:
+      return Msg::FIX_TYPE_DGPS;
     case universal_gnss::GnssFixType::kUnknown:
     default:
       return Msg::FIX_TYPE_UNKNOWN;
@@ -61,6 +67,12 @@ universal_gnss::GnssFixType FromMsgFixType(const std::uint8_t fix_type)
       return universal_gnss::GnssFixType::kRtkFixed;
     case Msg::FIX_TYPE_DEAD_RECKONING:
       return universal_gnss::GnssFixType::kDeadReckoning;
+    case Msg::FIX_TYPE_2D_FIX:
+      return universal_gnss::GnssFixType::k2dFix;
+    case Msg::FIX_TYPE_3D_FIX:
+      return universal_gnss::GnssFixType::k3dFix;
+    case Msg::FIX_TYPE_DGPS:
+      return universal_gnss::GnssFixType::kDgps;
     case Msg::FIX_TYPE_UNKNOWN:
     default:
       return universal_gnss::GnssFixType::kUnknown;

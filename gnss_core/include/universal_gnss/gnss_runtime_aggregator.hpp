@@ -353,6 +353,18 @@ private:
       return false;
     }
 
+    const bool dimension_only_update =
+        update.fix_type == GnssFixType::k2dFix || update.fix_type == GnssFixType::k3dFix;
+    const bool current_fix_has_explicit_correction_class =
+        state_.fix_type == GnssFixType::kDgps || state_.fix_type == GnssFixType::kRtkFloat ||
+        state_.fix_type == GnssFixType::kRtkFixed;
+    const bool update_has_rtk_authority = HasValueAvailable(update, GnssCapability::kRtkMode);
+    if (dimension_only_update && current_fix_has_explicit_correction_class &&
+        !update_has_rtk_authority)
+    {
+      return false;
+    }
+
     state_.fix_valid = update.fix_valid;
     state_.fix_type = update.fix_type;
     MarkApplied(FieldSlot::kFix, update.timestamp_ns);

@@ -323,6 +323,29 @@ MapGgaFixQualityToRtkMode(const NmeaGgaFixQuality fix_quality)
   return std::nullopt;
 }
 
+universal_gnss::GnssFixType MapGgaFixQualityToFixType(const NmeaGgaFixQuality fix_quality)
+{
+  switch (fix_quality)
+  {
+    case NmeaGgaFixQuality::kInvalid:
+      return universal_gnss::GnssFixType::kNoFix;
+    case NmeaGgaFixQuality::kDifferentialFix:
+      return universal_gnss::GnssFixType::kDgps;
+    case NmeaGgaFixQuality::kRtkFixed:
+      return universal_gnss::GnssFixType::kRtkFixed;
+    case NmeaGgaFixQuality::kRtkFloat:
+      return universal_gnss::GnssFixType::kRtkFloat;
+    case NmeaGgaFixQuality::kGpsFix:
+    case NmeaGgaFixQuality::kPpsFix:
+    case NmeaGgaFixQuality::kEstimated:
+    case NmeaGgaFixQuality::kManual:
+    case NmeaGgaFixQuality::kSimulation:
+      return universal_gnss::GnssFixType::kFix;
+  }
+
+  return universal_gnss::GnssFixType::kUnknown;
+}
+
 ParserResult<NmeaGgaRecord> InvalidGga()
 {
   return ParserResult<NmeaGgaRecord>::InvalidData();
@@ -488,13 +511,12 @@ void UpdateFixDimensionInState(NmeaFixDimension fix_dimension,
       universal_gnss::ClearPositionValues(state);
       break;
     case NmeaFixDimension::k2D:
+      state.fix_valid = true;
+      state.fix_type = universal_gnss::GnssFixType::k2dFix;
+      break;
     case NmeaFixDimension::k3D:
       state.fix_valid = true;
-      if (state.fix_type == universal_gnss::GnssFixType::kUnknown ||
-          state.fix_type == universal_gnss::GnssFixType::kNoFix)
-      {
-        state.fix_type = universal_gnss::GnssFixType::kFix;
-      }
+      state.fix_type = universal_gnss::GnssFixType::k3dFix;
       break;
     case NmeaFixDimension::kUnknown:
       break;
@@ -1138,8 +1160,7 @@ universal_gnss::GnssRuntimeState NmeaGgaToRuntimeState(const NmeaGgaRecord& reco
   universal_gnss::GnssRuntimeState state;
   state.timestamp_ns = record.timestamp_ns;
   state.fix_valid = record.fix_valid;
-  state.fix_type =
-      record.fix_valid ? universal_gnss::GnssFixType::kFix : universal_gnss::GnssFixType::kNoFix;
+  state.fix_type = MapGgaFixQualityToFixType(record.fix_quality);
   if (record.fix_valid)
   {
     state.latitude_deg = record.latitude_deg;

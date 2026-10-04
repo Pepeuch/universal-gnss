@@ -1,5 +1,7 @@
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -158,6 +160,25 @@ TEST(GnssStatusAdapterTest, MapsNormalizedGenericFixForTwoDThreeDAndDgpsLikeSour
   EXPECT_NE(msg.value_flags & Msg::CAP_CORRECTION_AGE, 0u);
   EXPECT_FLOAT_EQ(msg.correction_age_s, 0.8f);
   EXPECT_EQ(msg.satellites_used, 17u);
+}
+
+TEST(GnssStatusAdapterTest, RoundTripsExplicitNonRtkSolutionTypes)
+{
+  const std::array<std::pair<universal_gnss::GnssFixType, std::uint8_t>, 3> cases{{
+      {universal_gnss::GnssFixType::k2dFix, Msg::FIX_TYPE_2D_FIX},
+      {universal_gnss::GnssFixType::k3dFix, Msg::FIX_TYPE_3D_FIX},
+      {universal_gnss::GnssFixType::kDgps, Msg::FIX_TYPE_DGPS},
+  }};
+
+  for (const auto& [runtime_type, message_type] : cases)
+  {
+    universal_gnss::GnssRuntimeState state;
+    state.fix_valid = true;
+    state.fix_type = runtime_type;
+    const auto message = universal_gnss_ros2::ToGnssStatusMessage(state);
+    EXPECT_EQ(message.fix_type, message_type);
+    EXPECT_EQ(universal_gnss_ros2::FromGnssStatusMessage(message).fix_type, runtime_type);
+  }
 }
 
 TEST(GnssStatusAdapterTest, MapsRicherRtkStateWithExpectedFields)

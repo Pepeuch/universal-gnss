@@ -544,7 +544,7 @@ void TestNmeaFallbackProvidesPositionAndAccuracyWhenUnicoreStateIsMissing(TestCo
 
   const auto& state = session.current_state();
   ctx.Expect(
-      state.fix_valid && state.fix_type == GnssFixType::kFix && state.latitude_deg.has_value() &&
+      state.fix_valid && state.fix_type == GnssFixType::kDgps && state.latitude_deg.has_value() &&
           state.longitude_deg.has_value() && state.altitude_m == std::optional<double>(545.4) &&
           state.hdop == std::optional<float>(0.9f) &&
           state.satellites_used == std::optional<std::uint16_t>(8u) &&

@@ -31,6 +31,9 @@ enum class GnssFixType : std::uint8_t
   kRtkFloat = 3,
   kRtkFixed = 4,
   kDeadReckoning = 5,
+  k2dFix = 6,
+  k3dFix = 7,
+  kDgps = 8,
 };
 
 enum class GnssRtkMode : std::uint8_t

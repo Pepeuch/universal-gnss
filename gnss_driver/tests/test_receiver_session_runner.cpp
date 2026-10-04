@@ -198,7 +198,7 @@ void TestRunUntilEofWithMixedUbloxStream(TestContext& ctx)
              "runner should drain the full mixed u-blox stream in multiple chunks");
   ctx.Expect(session_metrics.selected_session_kind ==
                      std::optional<ReceiverSessionKind>(ReceiverSessionKind::kUblox) &&
-                 state.fix_valid && state.fix_type == GnssFixType::kFix,
+                 state.fix_valid && state.fix_type == GnssFixType::k3dFix,
              "mixed u-blox stream should update the routed receiver session");
   ctx.Expect(runner_metrics.runtime_updates_observed == session_metrics.runtime_updates &&
                  session.ublox_metrics().rtcm_frames_seen == 1u,
