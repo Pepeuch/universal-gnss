@@ -30,3 +30,5 @@
 - `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — completed external-LAN DDS
   matrix: unmodified bridge multicast failed; explicit bridge/unicast locators
   passed both directions and different-domain non-delivery.
+
+- `retained/UG-DOCS-OWNERSHIP-20261011.md` — documentation ownership inventory and lossless conservation; no acceptance or code change.
