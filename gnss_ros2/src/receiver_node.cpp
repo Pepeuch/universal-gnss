@@ -62,6 +62,7 @@ constexpr std::chrono::milliseconds kReceiverAcquisitionPeriod{10};
 constexpr std::chrono::milliseconds kReceiverAcquisitionWorkBudget{5};
 constexpr std::size_t kReceiverAcquisitionMinimumByteBudget = 4u * kDefaultReadChunkSizeBytes;
 constexpr double kDefaultRtcmForwardingActivityTimeoutSeconds = 5.0;
+constexpr double kDefaultRtcmForwardingWriteErrorHoldSeconds = 60.0;
 constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
 constexpr double kRuntimeObservationJitterPeriods = 3.0;
 
@@ -119,6 +120,10 @@ struct ReceiverNodeConfig
   // It is measured from local successful writes so public ROS timestamps never
   // cross clock domains here.
   double rtcm_forwarding_activity_timeout_s{kDefaultRtcmForwardingActivityTimeoutSeconds};
+  // How long an RTCM forwarding write error stays current after a later frame
+  // has been written successfully. write_error_count is cumulative for the life
+  // of the node, so the status must not be derived from the count alone.
+  double rtcm_forwarding_write_error_hold_s{kDefaultRtcmForwardingWriteErrorHoldSeconds};
   std::string frame_id{"gnss"};
   std::string source_incarnation{};
 };
@@ -561,6 +566,8 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   const auto read_chunk_size = node.declare_parameter<std::int64_t>("read_chunk_size", 65536);
   config.rtcm_forwarding_activity_timeout_s = node.declare_parameter<double>(
       "rtcm_forwarding_activity_timeout_s", kDefaultRtcmForwardingActivityTimeoutSeconds);
+  config.rtcm_forwarding_write_error_hold_s = node.declare_parameter<double>(
+      "rtcm_forwarding_write_error_hold_s", kDefaultRtcmForwardingWriteErrorHoldSeconds);
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.source_incarnation = node.declare_parameter<std::string>("source_incarnation", "");
   config.discovery_include_platform_uarts =
@@ -686,6 +693,13 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
   {
     ThrowInvalidParameter(
         node, "rtcm_forwarding_activity_timeout_s", "must be finite and strictly positive");
+  }
+
+  if (!std::isfinite(config.rtcm_forwarding_write_error_hold_s) ||
+      !(config.rtcm_forwarding_write_error_hold_s > 0.0))
+  {
+    ThrowInvalidParameter(
+        node, "rtcm_forwarding_write_error_hold_s", "must be finite and strictly positive");
   }
 
   if (read_chunk_size <= 0 || read_chunk_size > kMaximumReadChunkSizeBytes)
@@ -961,7 +975,7 @@ struct ReceiverNode::Impl
   {
     if (!rtcm_frame_writer_.empty())
     {
-      ++rtcm_forward_write_errors_;
+      NoteRtcmForwardWriteError();
       last_rtcm_forward_failure_message_ = reason;
       rtcm_frame_writer_.Abandon();
     }
@@ -997,7 +1011,7 @@ struct ReceiverNode::Impl
     }
     if (outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
     {
-      ++rtcm_forward_write_errors_;
+      NoteRtcmForwardWriteError();
       if (outcome.status == universal_gnss_transport::TransportStatus::kOk &&
           outcome.error == universal_gnss_transport::TransportError::kWriteFailure)
       {
@@ -1077,7 +1091,7 @@ struct ReceiverNode::Impl
 
     if (transport_sink_ == nullptr)
     {
-      ++rtcm_forward_write_errors_;
+      NoteRtcmForwardWriteError();
       last_rtcm_forward_failure_message_ = "Receiver transport does not support correction writes";
       return;
     }
@@ -1085,7 +1099,7 @@ struct ReceiverNode::Impl
     {
       if (rtcm_frame_writer_.empty())
       {
-        ++rtcm_forward_write_errors_;
+        NoteRtcmForwardWriteError();
         last_rtcm_forward_failure_message_ = "Receiver transport is closed";
         transport_ready_ = false;
       }
@@ -1109,7 +1123,7 @@ struct ReceiverNode::Impl
 
     if (!rtcm_frame_writer_.Enqueue({message.data, message.message_type}))
     {
-      ++rtcm_forward_write_errors_;
+      NoteRtcmForwardWriteError();
       last_rtcm_forward_failure_message_ =
           "RTCM forwarding queue full; dropped complete incoming frame";
       return;
@@ -1409,7 +1423,7 @@ struct ReceiverNode::Impl
                                  "RTCM forwarding has not written a frame recently"));
     }
 
-    if (rtcm_forward_write_errors_ > 0u)
+    if (HasCurrentRtcmForwardWriteError(now))
     {
       summary.AddEvent(MakeEvent(
           universal_gnss::GnssDiagnosticSeverity::kWarning,
@@ -1487,7 +1501,7 @@ struct ReceiverNode::Impl
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
       status.message = "RTCM forwarding unavailable";
     }
-    else if (rtcm_forward_write_errors_ > 0u)
+    else if (HasCurrentRtcmForwardWriteError(SteadyClock::now()))
     {
       status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
       status.message = "RTCM forwarding write errors observed";
@@ -1580,6 +1594,14 @@ struct ReceiverNode::Impl
       std::ostringstream stream;
       stream << (static_cast<double>(age_ms.count()) / 1000.0);
       status.values.push_back(MakeKeyValue("last_frame_age_s", stream.str()));
+    }
+    if (last_rtcm_forward_write_error_time_.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          SteadyClock::now() - *last_rtcm_forward_write_error_time_);
+      std::ostringstream stream;
+      stream << (static_cast<double>(age_ms.count()) / 1000.0);
+      status.values.push_back(MakeKeyValue("last_write_error_age_s", stream.str()));
     }
     if (last_rtcm_forward_failure_message_.has_value())
     {
@@ -2106,6 +2128,38 @@ struct ReceiverNode::Impl
            now - *last_rtcm_forward_time_ < RtcmForwardingActivityTimeout();
   }
 
+  void NoteRtcmForwardWriteError()
+  {
+    ++rtcm_forward_write_errors_;
+    last_rtcm_forward_write_error_time_ = SteadyClock::now();
+  }
+
+  SteadyClock::duration RtcmForwardingWriteErrorHold() const
+  {
+    return std::chrono::duration_cast<SteadyClock::duration>(
+        std::chrono::duration<double>(config_.rtcm_forwarding_write_error_hold_s));
+  }
+
+  // write_error_count never decreases, so "the count is above zero" only says
+  // that forwarding failed at some point. A write error is current until a
+  // frame has been written completely after it, and for the configured hold
+  // afterwards so a link that keeps failing and recovering stays visible. It is
+  // measured on the local steady clock only; fail-closed, so an error with no
+  // successful write since stays current however old it is.
+  bool HasCurrentRtcmForwardWriteError(const SteadyClock::time_point now) const
+  {
+    if (!last_rtcm_forward_write_error_time_.has_value())
+    {
+      return false;
+    }
+    if (!last_rtcm_forward_time_.has_value() ||
+        *last_rtcm_forward_time_ <= *last_rtcm_forward_write_error_time_)
+    {
+      return true;
+    }
+    return now - *last_rtcm_forward_write_error_time_ < RtcmForwardingWriteErrorHold();
+  }
+
   void UpdateReceiverReportedRtcmActivity(const SteadyClock::time_point now)
   {
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
@@ -2313,6 +2367,7 @@ struct ReceiverNode::Impl
   std::optional<SteadyClock::time_point> last_position_observation_time_{};
   std::optional<SteadyClock::time_point> last_position_payload_change_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
+  std::optional<SteadyClock::time_point> last_rtcm_forward_write_error_time_{};
   std::optional<SteadyClock::time_point> last_ublox_receiver_rtcm_used_time_{};
   std::optional<SteadyClock::time_point> last_unicore_receiver_rtcm_status_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};

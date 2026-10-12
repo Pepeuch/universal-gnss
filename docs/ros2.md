@@ -792,6 +792,17 @@ Operator interpretation intentionally keeps each correction boundary distinct:
   transport write. Neither asserts receiver use. Receiver-backed acceptance,
   where supplied by the protocol, is reported separately through
   `receiver_rtcm_active` / `receiver_rtcm_stale` and the receiver RTCM counters.
+- `universal_gnss/rtcm_forwarding` reports `RTCM forwarding write errors observed`
+  (WARN) only while a receiver-side write error is current. `write_error_count` is
+  cumulative for the life of the node and is never reset, so it is not used as the
+  state: an error is current until a frame has been written completely after it, and
+  for `rtcm_forwarding_write_error_hold_s` (default 60 s, finite and strictly
+  positive) afterwards. A failure with no successful write since stays current
+  however old it is. Once recovered and the hold has elapsed the status follows the
+  normal active / stale / idle rule again, and the `rtcm_forwarding_error` event is
+  reported as cleared. `last_write_error_age_s` (seconds since the most recent write
+  error, local steady clock) is published next to `write_error_count` once an error
+  has occurred.
 - `rtcm_semantic/*` carries decoded station identity such as `station_id` only
   when the RTCM payload provides it. It does not invent a caster/source
   incarnation identifier.
