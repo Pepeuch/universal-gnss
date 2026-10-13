@@ -23,6 +23,13 @@ namespace universal_gnss_transport
 // Forwarding demand is driven by RTCM frames submitted for forwarding. Demand
 // lapses when no frame has been submitted for `demand_timeout`.
 //
+// Optionally the gateway's own inbound status lines can be observed: an
+// acknowledgement pattern confirms the gateway accepted host corrections (RTCM
+// is withheld until then) and a drop-out pattern reports it fell back, which
+// triggers the reset commands and a fresh enable sequence. A pattern matches
+// when it occurs as a substring of one inbound LF-terminated line (a trailing
+// CR is ignored; lines longer than kMaxInboundLineLength never match).
+//
 // Commands are opaque operator-supplied text written verbatim; checksums or any
 // other framing inside a command are the operator's responsibility.
 
@@ -71,8 +78,20 @@ struct RtcmGatewayConfig
   // Forwarding demand lapses after this long without a submitted RTCM frame.
   Duration demand_timeout{std::chrono::seconds(5)};
 
+  // Acknowledgement option. When ack_pattern is set, RTCM frames are withheld
+  // (discarded and counted) until an inbound line contains it; the enable
+  // sequence is re-sent every ack_timeout until it does.
+  std::string ack_pattern{};
+  Duration ack_timeout{std::chrono::seconds(5)};
+  // Inbound report that the gateway dropped out. Only meaningful with
+  // ack_pattern: an active gateway reporting it emits reset_commands, then the
+  // enable sequence again.
+  std::string nack_pattern{};
+  std::vector<std::string> reset_commands{};
+
   // True when at least one command is configured.
   bool enabled() const;
+  bool acknowledgement_required() const;
 };
 
 // A command is valid when it is non-empty and contains no CR or LF byte; the
@@ -84,7 +103,13 @@ struct RtcmGatewayMetrics
   std::size_t enable_sequences_sent{0u};
   std::size_t keepalives_sent{0u};
   std::size_t disable_sequences_sent{0u};
+  std::size_t reset_sequences_sent{0u};
   std::size_t command_lines_emitted{0u};
+  std::size_t acks_seen{0u};
+  std::size_t nacks_seen{0u};
+  std::size_t ack_timeouts{0u};
+  std::size_t frames_withheld{0u};
+  std::optional<std::chrono::steady_clock::time_point> last_ack_time{};
 };
 
 class RtcmGatewayHandshake
@@ -93,6 +118,7 @@ public:
   using Clock = std::chrono::steady_clock;
   using TimePoint = Clock::time_point;
   using Commands = std::vector<std::string>;
+  static constexpr std::size_t kMaxInboundLineLength{256u};
 
   enum class FrameDecision : std::uint8_t
   {
@@ -111,8 +137,16 @@ public:
   // Appends any command lines that must precede the frame.
   FrameDecision OnRtcmFrame(TimePoint now, Commands& commands);
 
-  // Periodic tick: keep-alive cadence and demand lapse.
+  // Periodic tick: keep-alive cadence, demand lapse and acknowledgement timeout.
   void Poll(TimePoint now, Commands& commands);
+
+  // Bytes read from the receiver link. Scans for acknowledgement / drop-out
+  // lines when either pattern is configured; never alters the input.
+  void ObserveInboundBytes(const std::uint8_t* data,
+                           std::size_t size,
+                           TimePoint now,
+                           Commands& commands);
+  bool observes_inbound() const;
 
   // Orderly shutdown: emits the disable commands when the gateway is engaged.
   void Stop(Commands& commands);
@@ -127,12 +161,16 @@ private:
   void Emit(const std::string& command, Commands& commands);
   void EmitEnableSequence(TimePoint now, Commands& commands);
   void EmitDisableSequence(Commands& commands);
+  void ProcessInboundLine(TimePoint now, Commands& commands);
 
   RtcmGatewayConfig config_;
   RtcmGatewayState state_{RtcmGatewayState::kOff};
   RtcmGatewayMetrics metrics_{};
   std::optional<TimePoint> last_demand_time_{};
   std::optional<TimePoint> last_keepalive_time_{};
+  std::optional<TimePoint> last_enable_time_{};
+  std::string inbound_line_{};
+  bool inbound_line_overflow_{false};
 };
 
 }  // namespace universal_gnss_transport

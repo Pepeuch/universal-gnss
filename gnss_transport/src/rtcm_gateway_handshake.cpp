@@ -81,6 +81,11 @@ bool RtcmGatewayConfig::enabled() const
   return !enable_commands.empty() || !keepalive_command.empty() || !disable_commands.empty();
 }
 
+bool RtcmGatewayConfig::acknowledgement_required() const
+{
+  return !ack_pattern.empty();
+}
+
 bool IsValidRtcmGatewayCommand(const std::string_view command)
 {
   return !command.empty() && command.find_first_of("\r\n") == std::string_view::npos;
@@ -127,7 +132,13 @@ RtcmGatewayHandshake::FrameDecision RtcmGatewayHandshake::OnRtcmFrame(const Time
   if (state_ == RtcmGatewayState::kIdle)
   {
     EmitEnableSequence(now, commands);
-    state_ = RtcmGatewayState::kActive;
+    state_ = config_.acknowledgement_required() ? RtcmGatewayState::kEnabling
+                                                : RtcmGatewayState::kActive;
+  }
+  if (config_.acknowledgement_required() && state_ != RtcmGatewayState::kActive)
+  {
+    ++metrics_.frames_withheld;
+    return FrameDecision::kWithhold;
   }
   return FrameDecision::kForward;
 }
@@ -146,6 +157,16 @@ void RtcmGatewayHandshake::Poll(const TimePoint now, Commands& commands)
     return;
   }
 
+  if (config_.acknowledgement_required() &&
+      (state_ == RtcmGatewayState::kEnabling || state_ == RtcmGatewayState::kLost) &&
+      last_enable_time_.has_value() && now - *last_enable_time_ >= config_.ack_timeout)
+  {
+    ++metrics_.ack_timeouts;
+    EmitEnableSequence(now, commands);
+    state_ = RtcmGatewayState::kLost;
+    return;
+  }
+
   if (!config_.keepalive_command.empty() &&
       config_.keepalive_interval > RtcmGatewayConfig::Duration::zero() &&
       (!last_keepalive_time_.has_value() ||
@@ -154,6 +175,85 @@ void RtcmGatewayHandshake::Poll(const TimePoint now, Commands& commands)
     Emit(config_.keepalive_command, commands);
     ++metrics_.keepalives_sent;
     last_keepalive_time_ = now;
+  }
+}
+
+bool RtcmGatewayHandshake::observes_inbound() const
+{
+  return enabled() && (config_.acknowledgement_required() || !config_.nack_pattern.empty());
+}
+
+void RtcmGatewayHandshake::ObserveInboundBytes(const std::uint8_t* data,
+                                               const std::size_t size,
+                                               const TimePoint now,
+                                               Commands& commands)
+{
+  if (!observes_inbound() || data == nullptr)
+  {
+    return;
+  }
+  for (std::size_t index = 0u; index < size; ++index)
+  {
+    const char byte = static_cast<char>(data[index]);
+    if (byte == '\n')
+    {
+      if (!inbound_line_overflow_)
+      {
+        ProcessInboundLine(now, commands);
+      }
+      inbound_line_.clear();
+      inbound_line_overflow_ = false;
+      continue;
+    }
+    if (inbound_line_.size() < kMaxInboundLineLength)
+    {
+      inbound_line_.push_back(byte);
+    }
+    else
+    {
+      inbound_line_overflow_ = true;
+    }
+  }
+}
+
+void RtcmGatewayHandshake::ProcessInboundLine(const TimePoint now, Commands& commands)
+{
+  if (!inbound_line_.empty() && inbound_line_.back() == '\r')
+  {
+    inbound_line_.pop_back();
+  }
+
+  if (config_.acknowledgement_required() &&
+      inbound_line_.find(config_.ack_pattern) != std::string::npos)
+  {
+    ++metrics_.acks_seen;
+    metrics_.last_ack_time = now;
+    if (state_ == RtcmGatewayState::kEnabling || state_ == RtcmGatewayState::kLost)
+    {
+      state_ = RtcmGatewayState::kActive;
+    }
+    return;
+  }
+
+  if (!config_.nack_pattern.empty() &&
+      inbound_line_.find(config_.nack_pattern) != std::string::npos)
+  {
+    ++metrics_.nacks_seen;
+    // Only an ON->OFF edge of a confirmed gateway is a drop-out. While enabling
+    // or recovering, OFF reports are expected and the ack timeout re-sends.
+    if (config_.acknowledgement_required() && state_ == RtcmGatewayState::kActive)
+    {
+      for (const auto& command : config_.reset_commands)
+      {
+        Emit(command, commands);
+      }
+      if (!config_.reset_commands.empty())
+      {
+        ++metrics_.reset_sequences_sent;
+      }
+      EmitEnableSequence(now, commands);
+      state_ = RtcmGatewayState::kLost;
+    }
   }
 }
 
@@ -173,6 +273,9 @@ void RtcmGatewayHandshake::OnTransportLost()
   {
     state_ = RtcmGatewayState::kIdle;
   }
+  // A partial line must not join bytes from the next transport incarnation.
+  inbound_line_.clear();
+  inbound_line_overflow_ = false;
 }
 
 bool RtcmGatewayHandshake::Engaged() const
@@ -200,8 +303,9 @@ void RtcmGatewayHandshake::EmitEnableSequence(const TimePoint now, Commands& com
     Emit(config_.keepalive_command, commands);
   }
   ++metrics_.enable_sequences_sent;
-  // The enable sequence starts the keep-alive interval.
+  // The enable sequence starts the keep-alive interval and the ack timeout.
   last_keepalive_time_ = now;
+  last_enable_time_ = now;
 }
 
 void RtcmGatewayHandshake::EmitDisableSequence(Commands& commands)

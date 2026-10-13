@@ -67,6 +67,7 @@ constexpr double kDefaultRtcmForwardingWriteErrorHoldSeconds = 60.0;
 // Tick for the optional RTCM gateway handshake. Only created when the gateway
 // is configured; it bounds keep-alive jitter, not RTCM latency.
 constexpr std::chrono::milliseconds kRtcmGatewayPollPeriod{100};
+constexpr double kDefaultRtcmGatewayAckTimeoutSeconds = 5.0;
 constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
 constexpr double kRuntimeObservationJitterPeriods = 3.0;
 
@@ -615,6 +616,59 @@ void ValidateRtcmGatewayConfig(rclcpp::Node& node,
   gateway.line_ending = *parsed_line_ending;
 }
 
+void ValidateRtcmGatewayAcknowledgement(rclcpp::Node& node,
+                                        ReceiverNodeConfig& config,
+                                        const double ack_timeout_s)
+{
+  auto& gateway = config.rtcm_gateway;
+  if (!IsPositiveSteadyDurationSeconds(ack_timeout_s))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_ack_timeout_s",
+                          "must be a positive finite duration representable by steady_clock");
+  }
+  gateway.ack_timeout = std::chrono::duration_cast<SteadyClock::duration>(
+      std::chrono::duration<double>(ack_timeout_s));
+
+  for (const auto& [name, pattern] : {std::pair<const char*, const std::string*>{
+                                          "rtcm_gateway_ack_pattern", &gateway.ack_pattern},
+                                      std::pair<const char*, const std::string*>{
+                                          "rtcm_gateway_nack_pattern", &gateway.nack_pattern}})
+  {
+    if (!pattern->empty() && !universal_gnss_transport::IsValidRtcmGatewayCommand(*pattern))
+    {
+      ThrowInvalidParameter(node, name, "must not contain CR or LF");
+    }
+  }
+  ValidateRtcmGatewayCommands(node, "rtcm_gateway_reset_commands", gateway.reset_commands);
+
+  if (gateway.ack_pattern.empty())
+  {
+    if (!gateway.nack_pattern.empty())
+    {
+      ThrowInvalidParameter(node, "rtcm_gateway_nack_pattern", "requires rtcm_gateway_ack_pattern");
+    }
+    if (!gateway.reset_commands.empty())
+    {
+      ThrowInvalidParameter(
+          node, "rtcm_gateway_reset_commands", "requires rtcm_gateway_ack_pattern");
+    }
+    return;
+  }
+  if (gateway.enable_commands.empty() && gateway.keepalive_command.empty())
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_ack_pattern",
+                          "requires rtcm_gateway_enable_commands or "
+                          "rtcm_gateway_keepalive_command");
+  }
+  if (gateway.ack_pattern == gateway.nack_pattern)
+  {
+    ThrowInvalidParameter(
+        node, "rtcm_gateway_nack_pattern", "must differ from rtcm_gateway_ack_pattern");
+  }
+}
+
 ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_injected_source)
 {
   ReceiverNodeConfig config;
@@ -650,6 +704,14 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
       "rtcm_gateway_disable_commands", std::vector<std::string>{});
   const auto rtcm_gateway_line_ending =
       node.declare_parameter<std::string>("rtcm_gateway_line_ending", "crlf");
+  config.rtcm_gateway.ack_pattern =
+      node.declare_parameter<std::string>("rtcm_gateway_ack_pattern", "");
+  const auto rtcm_gateway_ack_timeout_s = node.declare_parameter<double>(
+      "rtcm_gateway_ack_timeout_s", kDefaultRtcmGatewayAckTimeoutSeconds);
+  config.rtcm_gateway.nack_pattern =
+      node.declare_parameter<std::string>("rtcm_gateway_nack_pattern", "");
+  config.rtcm_gateway.reset_commands = node.declare_parameter<std::vector<std::string>>(
+      "rtcm_gateway_reset_commands", std::vector<std::string>{});
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.source_incarnation = node.declare_parameter<std::string>("source_incarnation", "");
   config.discovery_include_platform_uarts =
@@ -786,6 +848,7 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
 
   ValidateRtcmGatewayConfig(
       node, config, rtcm_gateway_keepalive_interval_s, rtcm_gateway_line_ending);
+  ValidateRtcmGatewayAcknowledgement(node, config, rtcm_gateway_ack_timeout_s);
 
   if (read_chunk_size <= 0 || read_chunk_size > kMaximumReadChunkSizeBytes)
   {
@@ -1048,6 +1111,13 @@ struct ReceiverNode::Impl
         // freshness retains the paired steady time separately.
         return owner_.now().nanoseconds();
       };
+      if (rtcm_gateway_.observes_inbound())
+      {
+        runner_config.received_bytes_observer = [this](const std::uint8_t* data,
+                                                       const std::size_t size) {
+          this->ObserveRtcmGatewayInbound(data, size);
+        };
+      }
       runner_.emplace(*transport_source_, *session_, runner_config);
     }
 
@@ -1120,6 +1190,18 @@ struct ReceiverNode::Impl
       }
     }
     return true;
+  }
+
+  void ObserveRtcmGatewayInbound(const std::uint8_t* data, const std::size_t size)
+  {
+    universal_gnss_transport::RtcmGatewayHandshake::Commands commands;
+    rtcm_gateway_.ObserveInboundBytes(data, size, SteadyClock::now(), commands);
+    // Queued only: the acquisition drain flushes the FIFO once afterwards.
+    if (!commands.empty() && transport_sink_ != nullptr && transport_sink_->IsOpen())
+    {
+      QueueRtcmGatewayCommands(commands);
+    }
+    LogRtcmGatewayTransition();
   }
 
   void NoteRtcmGatewayTransportLost()
@@ -1337,9 +1419,21 @@ struct ReceiverNode::Impl
     }
 
     universal_gnss_transport::RtcmGatewayHandshake::Commands gateway_commands;
-    rtcm_gateway_.OnRtcmFrame(SteadyClock::now(), gateway_commands);
+    const auto gateway_decision = rtcm_gateway_.OnRtcmFrame(SteadyClock::now(), gateway_commands);
     QueueRtcmGatewayCommands(gateway_commands);
     LogRtcmGatewayTransition();
+    if (gateway_decision ==
+        universal_gnss_transport::RtcmGatewayHandshake::FrameDecision::kWithhold)
+    {
+      // The gateway has not confirmed it passes host corrections; the frame is
+      // discarded (counted by the handshake) rather than queued stale.
+      if (!gateway_commands.empty() &&
+          prior_flush != universal_gnss_transport::RtcmFrameWriter::FlushResult::kBlocked)
+      {
+        FlushPendingRtcmWrites();
+      }
+      return;
+    }
 
     if (!rtcm_frame_writer_.Enqueue({message.data, message.message_type}))
     {
@@ -1832,6 +1926,12 @@ struct ReceiverNode::Impl
     {
       status.values.push_back(MakeKeyValue("last_failure", *last_rtcm_forward_failure_message_));
     }
+    if (rtcm_gateway_.state() == universal_gnss_transport::RtcmGatewayState::kLost &&
+        status.level == diagnostic_msgs::msg::DiagnosticStatus::OK)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM gateway not confirmed; corrections withheld";
+    }
     AppendRtcmGatewayValues(status);
 
     diagnostics.status.push_back(std::move(status));
@@ -1854,6 +1954,26 @@ struct ReceiverNode::Impl
         MakeKeyValue("gateway_keepalives_sent", std::to_string(metrics.keepalives_sent)));
     status.values.push_back(
         MakeKeyValue("gateway_disable_sequences", std::to_string(metrics.disable_sequences_sent)));
+    if (!rtcm_gateway_.observes_inbound())
+    {
+      return;
+    }
+    status.values.push_back(
+        MakeKeyValue("gateway_reset_sequences", std::to_string(metrics.reset_sequences_sent)));
+    status.values.push_back(MakeKeyValue("gateway_acks_seen", std::to_string(metrics.acks_seen)));
+    status.values.push_back(MakeKeyValue("gateway_nacks_seen", std::to_string(metrics.nacks_seen)));
+    status.values.push_back(
+        MakeKeyValue("gateway_ack_timeouts", std::to_string(metrics.ack_timeouts)));
+    status.values.push_back(
+        MakeKeyValue("gateway_frames_withheld", std::to_string(metrics.frames_withheld)));
+    if (metrics.last_ack_time.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          SteadyClock::now() - *metrics.last_ack_time);
+      std::ostringstream stream;
+      stream << (static_cast<double>(age_ms.count()) / 1000.0);
+      status.values.push_back(MakeKeyValue("gateway_last_ack_age_s", stream.str()));
+    }
   }
 
   void

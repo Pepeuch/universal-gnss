@@ -1,7 +1,9 @@
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "universal_gnss_transport/rtcm_gateway_handshake.hpp"
@@ -260,6 +262,163 @@ void TestLineEndings(TestContext& ctx)
              "commands must be non-empty and free of CR/LF");
 }
 
+void Feed(RtcmGatewayHandshake& gateway,
+          const std::string& text,
+          const TimePoint now,
+          Commands& commands)
+{
+  gateway.ObserveInboundBytes(
+      reinterpret_cast<const std::uint8_t*>(text.data()), text.size(), now, commands);
+}
+
+RtcmGatewayConfig AckConfig()
+{
+  // Mirrors the documented example: the keep-alive line is the enable command.
+  RtcmGatewayConfig config;
+  config.enable_commands = {"$GNRTK,ON*69"};
+  config.keepalive_command = "$GNRTK,ON*69";
+  config.keepalive_interval = seconds(4);
+  config.ack_pattern = "$GNRTK,ON";
+  config.ack_timeout = seconds(2);
+  config.nack_pattern = "$GNRTK,OFF";
+  config.reset_commands = {"RTKRESET"};
+  config.demand_timeout = seconds(5);
+  return config;
+}
+
+void TestAckGatingHoldsThenReleases(TestContext& ctx)
+{
+  RtcmGatewayHandshake gateway(AckConfig());
+  Commands commands;
+  ctx.Expect(gateway.observes_inbound(), "an acknowledgement pattern enables inbound observation");
+
+  ctx.Expect(gateway.OnRtcmFrame(kT0, commands) == Decision::kWithhold,
+             "the first frame is withheld until the gateway acknowledges");
+  ctx.Expect(commands == Commands{"$GNRTK,ON*69\r\n"} &&
+                 gateway.state() == RtcmGatewayState::kEnabling,
+             "enable is sent and the gateway waits for acknowledgement");
+  commands.clear();
+  ctx.Expect(gateway.OnRtcmFrame(kT0 + milliseconds(500), commands) == Decision::kWithhold &&
+                 commands.empty() && gateway.metrics().frames_withheld == 2u,
+             "frames keep being withheld and counted while enabling");
+
+  // The receiver's own NMEA and an OFF report while enabling change nothing.
+  Feed(gateway, "$GNGGA,1,2,3*00\r\n$GNRTK,OFF*27\r\n", kT0 + milliseconds(600), commands);
+  ctx.Expect(commands.empty() && gateway.state() == RtcmGatewayState::kEnabling &&
+                 gateway.metrics().nacks_seen == 1u,
+             "an OFF report while enabling is not a drop-out edge");
+
+  // Acknowledgement split across reads, preceded by binary noise on the line.
+  Feed(gateway, std::string("\xD3\x00\x13$GNRT", 8), kT0 + milliseconds(700), commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kEnabling, "a partial line does not match");
+  Feed(gateway, "K,ON*69\r\n", kT0 + milliseconds(800), commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kActive && gateway.metrics().acks_seen == 1u &&
+                 gateway.metrics().last_ack_time == kT0 + milliseconds(800),
+             "a line containing the acknowledgement releases the gateway");
+  ctx.Expect(gateway.OnRtcmFrame(kT0 + milliseconds(900), commands) == Decision::kForward &&
+                 commands.empty(),
+             "frames are forwarded once acknowledged");
+}
+
+void TestAckTimeoutResendsEnable(TestContext& ctx)
+{
+  RtcmGatewayHandshake gateway(AckConfig());
+  Commands commands;
+  gateway.OnRtcmFrame(kT0, commands);
+  commands.clear();
+
+  gateway.OnRtcmFrame(kT0 + milliseconds(1900), commands);
+  gateway.Poll(kT0 + milliseconds(1900), commands);
+  ctx.Expect(commands.empty() && gateway.metrics().ack_timeouts == 0u,
+             "no re-send before the acknowledgement timeout");
+
+  gateway.Poll(kT0 + seconds(2), commands);
+  ctx.Expect(
+      commands == Commands{"$GNRTK,ON*69\r\n"} && gateway.state() == RtcmGatewayState::kLost &&
+          gateway.metrics().ack_timeouts == 1u && gateway.metrics().enable_sequences_sent == 2u,
+      "acknowledgement timeout re-sends the enable commands and reports lost");
+  commands.clear();
+
+  gateway.OnRtcmFrame(kT0 + seconds(3), commands);
+  ctx.Expect(gateway.OnRtcmFrame(kT0 + seconds(3), commands) == Decision::kWithhold,
+             "frames stay withheld while the gateway is lost");
+  Feed(gateway, "$GNRTK,ON*69\r\n", kT0 + seconds(3), commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kActive && commands.empty(),
+             "a late acknowledgement recovers the gateway");
+}
+
+void TestNackEdgeResetsAndReenables(TestContext& ctx)
+{
+  RtcmGatewayHandshake gateway(AckConfig());
+  Commands commands;
+  gateway.OnRtcmFrame(kT0, commands);
+  Feed(gateway, "$GNRTK,ON*69\r\n", kT0 + milliseconds(100), commands);
+  commands.clear();
+
+  Feed(gateway, "$GNRTK,ON*69\r\n", kT0 + seconds(1), commands);
+  ctx.Expect(commands.empty() && gateway.state() == RtcmGatewayState::kActive,
+             "repeated acknowledgements while active emit nothing");
+
+  Feed(gateway, "$GNRTK,OFF*27\r\n", kT0 + seconds(2), commands);
+  ctx.Expect(commands == Commands{"RTKRESET\r\n", "$GNRTK,ON*69\r\n"} &&
+                 gateway.state() == RtcmGatewayState::kLost &&
+                 gateway.metrics().reset_sequences_sent == 1u,
+             "an ON->OFF edge emits the reset commands before re-enabling");
+  commands.clear();
+
+  ctx.Expect(gateway.OnRtcmFrame(kT0 + seconds(2), commands) == Decision::kWithhold,
+             "frames are withheld after a drop-out until re-acknowledged");
+  Feed(gateway, "$GNRTK,OFF*27\r\n", kT0 + milliseconds(2500), commands);
+  ctx.Expect(commands.empty() && gateway.metrics().reset_sequences_sent == 1u,
+             "further OFF reports while recovering do not repeat the reset");
+  Feed(gateway, "$GNRTK,ON*69\r\n", kT0 + seconds(3), commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kActive, "re-acknowledgement recovers");
+
+  RtcmGatewayConfig no_reset = AckConfig();
+  no_reset.reset_commands.clear();
+  RtcmGatewayHandshake plain(no_reset);
+  commands.clear();
+  plain.OnRtcmFrame(kT0, commands);
+  Feed(plain, "$GNRTK,ON*69\n", kT0, commands);
+  commands.clear();
+  Feed(plain, "$GNRTK,OFF*27\n", kT0 + seconds(1), commands);
+  ctx.Expect(commands == Commands{"$GNRTK,ON*69\r\n"} && plain.metrics().reset_sequences_sent == 0u,
+             "without reset commands a drop-out only re-sends the enable sequence");
+}
+
+void TestInboundLineBounds(TestContext& ctx)
+{
+  RtcmGatewayHandshake gateway(AckConfig());
+  Commands commands;
+  gateway.OnRtcmFrame(kT0, commands);
+  commands.clear();
+
+  const std::string oversized(RtcmGatewayHandshake::kMaxInboundLineLength + 10u, 'x');
+  Feed(gateway, oversized + "$GNRTK,ON*69\r\n", kT0, commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kEnabling && gateway.metrics().acks_seen == 0u,
+             "an over-long line never matches");
+  Feed(gateway, "$GNRTK,ON*69\r\n", kT0, commands);
+  ctx.Expect(gateway.state() == RtcmGatewayState::kActive,
+             "matching resumes on the next line after an over-long one");
+
+  RtcmGatewayHandshake reconnecting(AckConfig());
+  reconnecting.OnRtcmFrame(kT0, commands);
+  Feed(reconnecting, "$GNRTK,O", kT0, commands);
+  reconnecting.OnTransportLost();
+  Feed(reconnecting, "N*69\r\n", kT0, commands);
+  ctx.Expect(reconnecting.metrics().acks_seen == 0u,
+             "a partial line does not survive a transport incarnation change");
+
+  RtcmGatewayHandshake no_patterns(GatewayConfig());
+  commands.clear();
+  no_patterns.OnRtcmFrame(kT0, commands);
+  commands.clear();
+  Feed(no_patterns, "$GNRTK,ON*69\r\n$GNRTK,OFF*27\r\n", kT0, commands);
+  ctx.Expect(!no_patterns.observes_inbound() && commands.empty() &&
+                 no_patterns.metrics().acks_seen == 0u && no_patterns.metrics().nacks_seen == 0u,
+             "without patterns inbound traffic is ignored");
+}
+
 }  // namespace
 
 int main()
@@ -274,6 +433,10 @@ int main()
   TestLateFrameClosesPreviousDemandFirst(ctx);
   TestStopAndTransportLoss(ctx);
   TestLineEndings(ctx);
+  TestAckGatingHoldsThenReleases(ctx);
+  TestAckTimeoutResendsEnable(ctx);
+  TestNackEdgeResetsAndReenables(ctx);
+  TestInboundLineBounds(ctx);
 
   if (ctx.failures != 0)
   {

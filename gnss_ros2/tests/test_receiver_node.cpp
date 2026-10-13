@@ -3930,4 +3930,108 @@ TEST_F(ReceiverNodeTest, RejectsInvalidRtcmGatewayParameters)
   }
 }
 
+TEST_F(ReceiverNodeTest, RtcmGatewayAcknowledgementGatesForwardingAndResetsOnDropOut)
+{
+  auto state = std::make_shared<SharedRecordingByteDuplex::State>();
+  RtcmGatewayHarness harness(
+      state,
+      {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GNRTK,ON*69"),
+       rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", 4.0),
+       rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GNRTK,ON"),
+       rclcpp::Parameter("rtcm_gateway_nack_pattern", "$GNRTK,OFF"),
+       rclcpp::Parameter("rtcm_gateway_reset_commands", std::vector<std::string>{"RTKRESET"}),
+       rclcpp::Parameter("rtcm_gateway_ack_timeout_s", 0.25)});
+  const std::string enable = "$GNRTK,ON*69\r\n";
+  const auto frame = AsString(BuildRtcmFrame(1077u));
+
+  harness.Publish(BuildRtcmFrame(1077u));
+  ASSERT_TRUE(
+      harness.SpinUntil([&]() { return !state->written.empty(); }, std::chrono::milliseconds(500)));
+  EXPECT_EQ(state->written, enable) << "the frame is withheld until the gateway acknowledges";
+  const auto* enabling = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(enabling, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*enabling, "gateway"), std::optional<std::string>{"enabling"});
+  EXPECT_EQ(FindDiagnosticValue(*enabling, "gateway_frames_withheld"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*enabling, "forwarded_frame_count"),
+            std::optional<std::string>{"0"});
+  EXPECT_FALSE(FindDiagnosticValue(*enabling, "gateway_last_ack_age_s").has_value());
+
+  ASSERT_TRUE(harness.SpinUntil([&]() { return CountOccurrences(state->written, enable) >= 2u; },
+                                std::chrono::milliseconds(1000)))
+      << "the enable sequence is re-sent after the acknowledgement timeout";
+  const auto* lost = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(lost, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*lost, "gateway"), std::optional<std::string>{"lost"});
+  EXPECT_EQ(lost->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(lost->message, "RTCM gateway not confirmed; corrections withheld");
+  EXPECT_NE(FindDiagnosticValue(*lost, "gateway_ack_timeouts"), std::optional<std::string>{"0"});
+
+  // The gateway's status line arrives interleaved with receiver NMEA.
+  state->pending_input =
+      "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n$GNRTK,ON*69\r\n";
+  ASSERT_TRUE(harness.SpinUntil(
+      [&]() {
+        const auto* status = PublishAndFindRtcmForwardingStatus(harness.receiver());
+        return status != nullptr &&
+               FindDiagnosticValue(*status, "gateway") == std::optional<std::string>{"active"};
+      },
+      std::chrono::milliseconds(500)));
+  const auto* active = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(active, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*active, "gateway_acks_seen"), std::optional<std::string>{"1"});
+  EXPECT_TRUE(FindDiagnosticValue(*active, "gateway_last_ack_age_s").has_value());
+
+  const std::size_t before_frame = state->written.size();
+  harness.Publish(BuildRtcmFrame(1077u));
+  ASSERT_TRUE(harness.SpinUntil([&]() { return state->written.size() > before_frame; },
+                                std::chrono::milliseconds(500)));
+  EXPECT_EQ(state->written.substr(before_frame), frame) << "frames are forwarded once acknowledged";
+
+  state->pending_input = "$GNRTK,OFF*27\r\n";
+  ASSERT_TRUE(harness.SpinUntil(
+      [&]() { return state->written.find("RTKRESET\r\n" + enable) != std::string::npos; },
+      std::chrono::milliseconds(500)))
+      << "an ON->OFF edge writes the reset commands before re-enabling";
+  const auto* dropped = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(dropped, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*dropped, "gateway"), std::optional<std::string>{"lost"});
+  EXPECT_EQ(FindDiagnosticValue(*dropped, "gateway_reset_sequences"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*dropped, "gateway_nacks_seen"), std::optional<std::string>{"1"});
+}
+
+TEST_F(ReceiverNodeTest, RejectsInvalidRtcmGatewayAcknowledgementParameters)
+{
+  const rclcpp::Parameter enable("rtcm_gateway_enable_commands",
+                                 std::vector<std::string>{"$GW,ON*00"});
+  const std::vector<std::vector<rclcpp::Parameter>> invalid{
+      {rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON")},
+      {enable, rclcpp::Parameter("rtcm_gateway_nack_pattern", "$GW,OFF")},
+      {enable, rclcpp::Parameter("rtcm_gateway_reset_commands", std::vector<std::string>{"R"})},
+      {enable,
+       rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON"),
+       rclcpp::Parameter("rtcm_gateway_nack_pattern", "$GW,ON")},
+      {enable,
+       rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON"),
+       rclcpp::Parameter("rtcm_gateway_ack_timeout_s", 0.0)},
+      {enable,
+       rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON"),
+       rclcpp::Parameter("rtcm_gateway_ack_timeout_s", std::numeric_limits<double>::quiet_NaN())},
+      {enable, rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON\r")},
+      {enable,
+       rclcpp::Parameter("rtcm_gateway_ack_pattern", "$GW,ON"),
+       rclcpp::Parameter("rtcm_gateway_reset_commands", std::vector<std::string>{""})},
+  };
+  for (const auto& parameters : invalid)
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(parameters);
+    auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+    EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
+                 std::invalid_argument)
+        << parameters.back().get_name() << " combination should be rejected";
+  }
+}
+
 }  // namespace
