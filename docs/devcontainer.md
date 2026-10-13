@@ -132,6 +132,13 @@ This workflow is now more robust because `gnss_ros2/CMakeLists.txt` resolves
 its sibling package paths from the real repository location instead of assuming
 the `colcon` workspace contains every low-level package as a peer checkout.
 
+ROS 2 CTest tests prepend the current build directories for adapters and the
+low-level driver, protocols, transport, NTRIP, and tools libraries to
+`LD_LIBRARY_PATH`. This also covers indirect dependencies, since
+`LD_LIBRARY_PATH` takes precedence over ELF RUNPATH and could otherwise select
+a sourced older installation. On Linux shared-library builds, `test_build_library_provenance`
+checks the loader's resolved paths for the complete low-level stack.
+
 ## Serial hardware access
 
 The default devcontainer does not claim host serial devices automatically.

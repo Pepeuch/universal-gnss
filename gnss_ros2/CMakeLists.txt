@@ -267,7 +267,21 @@ if(BUILD_TESTING)
     target_link_libraries(test_interface_aliases ${universal_gnss_msgs_TARGETS})
   endif()
 
-  set(_ros2_test_library_path "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
+  # LD_LIBRARY_PATH takes precedence over build RUNPATHs, including for indirect
+  # dependencies. Prefer every library built here over a sourced older install.
+  set(_ros2_test_library_dirs "${CMAKE_CURRENT_BINARY_DIR}")
+  set(_ros2_test_shared_libraries)
+  foreach(_library IN ITEMS
+      universal_gnss_driver universal_gnss_protocols universal_gnss_transport
+      universal_gnss_ntrip universal_gnss_tools)
+    string(APPEND _ros2_test_library_dirs ":$<TARGET_FILE_DIR:${_library}>")
+    get_target_property(_library_type ${_library} TYPE)
+    if(_library_type STREQUAL "SHARED_LIBRARY")
+      list(APPEND _ros2_test_shared_libraries "$<TARGET_FILE:${_library}>")
+    endif()
+  endforeach()
+  set(_ros2_test_library_path
+    "LD_LIBRARY_PATH=${_ros2_test_library_dirs}:$ENV{LD_LIBRARY_PATH}")
 
   ament_add_gtest(test_gnss_status_adapter tests/test_gnss_status_adapter.cpp)
   if(TARGET test_gnss_status_adapter)
@@ -383,6 +397,26 @@ if(BUILD_TESTING)
     tests/test_combined_launch.py
     TIMEOUT 30
   )
+
+  # The replay test links the complete low-level stack. Check what the loader
+  # actually resolves, even when an older install is present in the environment.
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _ros2_test_shared_libraries
+      AND TARGET test_replay_node)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME test_build_library_provenance
+      COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_build_library_provenance.py"
+        "$<TARGET_FILE:test_replay_node>" ${_ros2_test_shared_libraries})
+    set_tests_properties(test_build_library_provenance PROPERTIES
+      ENVIRONMENT "${_ros2_test_library_path}" TIMEOUT 30)
+  endif()
+
+  foreach(_test IN ITEMS test_interface_aliases test_gnss_status_adapter
+      test_navsat_fix_adapter test_diagnostic_adapter)
+    if(TARGET ${_test})
+      set_tests_properties(${_test} PROPERTIES ENVIRONMENT "${_ros2_test_library_path}")
+    endif()
+  endforeach()
   ament_add_pytest_test(
     test_docker_healthcheck
     ${UNIVERSAL_GNSS_SOURCE_ROOT}/scripts/tests/test_docker_healthcheck.py
