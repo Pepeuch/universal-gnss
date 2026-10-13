@@ -3345,6 +3345,64 @@ TEST_F(ReceiverNodeTest, RtcmWriteErrorIsHistoryOnceForwardingRecoveredAndTheHol
             nullptr);
 }
 
+TEST_F(ReceiverNodeTest, RtcmWriteErrorHoldStartsAfterDelayedRecovery)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+
+  const auto failed_frame = BuildRtcmFrame(1077u);
+  const auto recovered_frame = BuildRtcmFrame(1087u);
+
+  RtcmForwardingHarness harness({Action{0u,
+                                        universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure},
+                                 Action{}},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.2)});
+
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  const auto forwarding_status = [&harness]() {
+    harness.receiver().PublishNow();
+    return FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                      "universal_gnss/rtcm_forwarding");
+  };
+
+  // An unrecovered error remains current even after the hold duration.
+  harness.Publish(1077u, failed_frame);
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  const auto* failed = forwarding_status();
+  ASSERT_NE(failed, nullptr);
+  EXPECT_EQ(failed->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(failed->message, "RTCM forwarding write errors observed");
+
+  // The first successful frame starts the hold period, not the failure.
+  harness.duplex().OpenNewSession();
+  harness.receiver().StepOnce();
+  harness.Publish(1087u, recovered_frame);
+
+  ASSERT_EQ(harness.duplex().session_bytes(1u), recovered_frame);
+
+  const auto* recovered = forwarding_status();
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(recovered->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(recovered->message, "RTCM forwarding write errors observed");
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  const auto* held = forwarding_status();
+  ASSERT_NE(held, nullptr);
+  EXPECT_EQ(held->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+
+  // The warning clears only after the hold measured from recovery expires.
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+  const auto* history = forwarding_status();
+  ASSERT_NE(history, nullptr);
+  EXPECT_EQ(history->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(history->message, "RTCM forwarding active");
+  EXPECT_EQ(FindDiagnosticValue(*history, "write_error_count"), std::optional<std::string>{"1"});
+}
+
 TEST_F(ReceiverNodeTest, RtcmWriteErrorStaysCurrentWithoutASuccessfulWriteAfterIt)
 {
   using Action = ScriptedWriteByteDuplex::WriteAction;

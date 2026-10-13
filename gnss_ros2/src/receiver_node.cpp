@@ -1005,9 +1005,19 @@ struct ReceiverNode::Impl
     rtcm_forwarded_frames_ += outcome.frames_written;
     if (outcome.frames_written > 0u)
     {
-      last_rtcm_forward_time_ = SteadyClock::now();
+      const auto now = SteadyClock::now();
+      last_rtcm_forward_time_ = now;
       last_rtcm_forward_message_type_ = outcome.last_message_type;
-      last_rtcm_forward_failure_message_.reset();
+
+      if (outcome.result != universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
+      {
+        if (last_rtcm_forward_write_error_time_.has_value() &&
+            !last_rtcm_forward_recovery_time_.has_value())
+        {
+          last_rtcm_forward_recovery_time_ = now;
+        }
+        last_rtcm_forward_failure_message_.reset();
+      }
     }
     if (outcome.result == universal_gnss_transport::RtcmFrameWriter::FlushResult::kFailed)
     {
@@ -2132,6 +2142,7 @@ struct ReceiverNode::Impl
   {
     ++rtcm_forward_write_errors_;
     last_rtcm_forward_write_error_time_ = SteadyClock::now();
+    last_rtcm_forward_recovery_time_.reset();
   }
 
   SteadyClock::duration RtcmForwardingWriteErrorHold() const
@@ -2152,12 +2163,13 @@ struct ReceiverNode::Impl
     {
       return false;
     }
-    if (!last_rtcm_forward_time_.has_value() ||
-        *last_rtcm_forward_time_ <= *last_rtcm_forward_write_error_time_)
+
+    if (!last_rtcm_forward_recovery_time_.has_value())
     {
       return true;
     }
-    return now - *last_rtcm_forward_write_error_time_ < RtcmForwardingWriteErrorHold();
+
+    return now - *last_rtcm_forward_recovery_time_ < RtcmForwardingWriteErrorHold();
   }
 
   void UpdateReceiverReportedRtcmActivity(const SteadyClock::time_point now)
@@ -2368,6 +2380,7 @@ struct ReceiverNode::Impl
   std::optional<SteadyClock::time_point> last_position_payload_change_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_time_{};
   std::optional<SteadyClock::time_point> last_rtcm_forward_write_error_time_{};
+  std::optional<SteadyClock::time_point> last_rtcm_forward_recovery_time_{};
   std::optional<SteadyClock::time_point> last_ublox_receiver_rtcm_used_time_{};
   std::optional<SteadyClock::time_point> last_unicore_receiver_rtcm_status_time_{};
   std::optional<std::uint16_t> last_rtcm_forward_message_type_{};
