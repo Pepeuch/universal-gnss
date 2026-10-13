@@ -459,6 +459,8 @@ Correction subscription:
 - `tcp_port`
 - `publish_rate_hz`
 - `frame_id`
+- `rtcm_gateway_*` (optional correction-input gateway handshake, off by
+  default; see [RTCM gateway handshake](#rtcm-gateway-handshake-optional))
 
 Validation policy:
 
@@ -492,6 +494,61 @@ Transport-open policy:
 - configuration mistakes fail fast at startup
 - runtime transport open/connect failures keep the node alive when possible and
   surface through `diagnostics`
+
+### RTCM gateway handshake (optional)
+
+Some receivers sit behind a correction-input gateway on the same link: a radio
+modem, MCU board, or multiplexer that only passes host RTCM to the receiver
+while it has been told to, and that may fall back to its own correction source
+unless kept alive. The receiver node can drive such a gateway with
+operator-supplied command lines. The feature is off by default: with no
+`rtcm_gateway_*` command configured nothing is written, no timer is created,
+and the diagnostics are unchanged.
+
+The state machine lives in `gnss_transport`
+(`universal_gnss_transport::RtcmGatewayHandshake`, ROS-free and unit-tested);
+the node only wires parameters, a 100 ms gateway tick, and the diagnostic
+projection. Forwarding demand starts when a valid RTCM frame is submitted for
+forwarding and lapses after `rtcm_forwarding_activity_timeout_s` without one.
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `rtcm_gateway_enable_commands` | string array | `[]` | Lines written, in order, when forwarding demand starts (before the first frame). |
+| `rtcm_gateway_keepalive_command` | string | `""` | Line re-written every `rtcm_gateway_keepalive_interval_s` while demand lasts. With no enable command it is also written immediately on demand start. |
+| `rtcm_gateway_keepalive_interval_s` | double | `0.0` | Keep-alive period; `0` disables the keep-alive. Must be `> 0` exactly when a keep-alive command is set. |
+| `rtcm_gateway_disable_commands` | string array | `[]` | Lines written when demand lapses and on orderly node shutdown. Leave empty for a gateway that falls back on its own after a silence timeout. |
+| `rtcm_gateway_ack_pattern` | string | `""` | Optional. Substring of an inbound line confirming the gateway accepts host RTCM. While unconfirmed, RTCM frames are withheld (discarded and counted, never queued stale). |
+| `rtcm_gateway_ack_timeout_s` | double | `5.0` | Without an acknowledgement for this long, the enable sequence is re-sent and the gateway is reported `lost`. |
+| `rtcm_gateway_nack_pattern` | string | `""` | Optional, requires `rtcm_gateway_ack_pattern`. Substring of an inbound line reporting the gateway dropped out. |
+| `rtcm_gateway_reset_commands` | string array | `[]` | Requires `rtcm_gateway_ack_pattern`. Written when a confirmed gateway reports a drop-out (the ON->OFF edge), before the enable sequence is re-sent. |
+| `rtcm_gateway_line_ending` | string | `crlf` | Appended to every command: `crlf`, `lf`, `cr`, or `none`. |
+
+Command contract:
+
+- commands are written verbatim, followed only by the configured line ending;
+  entries must be non-empty and must not contain CR or LF. Checksums and any
+  other framing inside a command are the operator's responsibility.
+- commands share the RTCM write FIFO (`RtcmFrameWriter` control frames), so a
+  command is never interleaved inside a partially written RTCM frame and is
+  never counted as forwarded RTCM.
+- inbound matching uses LF-terminated lines (a trailing CR is ignored, lines
+  longer than 256 bytes never match) read from the receiver link through a
+  read-only tap in front of the protocol parsers; parsing is unaffected. The
+  tap is installed only when a pattern is configured.
+- a transport loss returns the gateway to `idle` without writing; the next
+  frame on the new transport incarnation re-sends the enable sequence.
+
+Gateway states, reported as `gateway` in `universal_gnss/rtcm_forwarding`:
+
+- `idle`: configured, no forwarding demand
+- `enabling`: enable sequence sent, acknowledgement awaited (frames withheld)
+- `active`: enabled (and acknowledged when an acknowledgement is configured)
+- `lost`: acknowledgement timed out or the gateway reported a drop-out while
+  demand continues; the enable sequence is being re-sent and frames are
+  withheld
+
+See [vendors/airseekers/rtk_rover_gateway.md](vendors/airseekers/rtk_rover_gateway.md)
+for a worked example configuration.
 
 ### Outputs
 
@@ -803,6 +860,18 @@ Operator interpretation intentionally keeps each correction boundary distinct:
   reported as cleared. `last_write_error_age_s` (seconds since the most recent write
   error, local steady clock) is published next to `write_error_count` once an error
   has occurred.
+- when the optional RTCM gateway handshake is configured,
+  `universal_gnss/rtcm_forwarding` also carries `gateway`
+  (`idle` / `enabling` / `active` / `lost`), `gateway_enable_sequences`,
+  `gateway_keepalives_sent`, and `gateway_disable_sequences`; with an
+  acknowledgement or drop-out pattern it adds `gateway_acks_seen`,
+  `gateway_nacks_seen`, `gateway_ack_timeouts`, `gateway_reset_sequences`,
+  `gateway_frames_withheld`, and `gateway_last_ack_age_s` (local steady clock).
+  `gateway=lost` raises the status to WARN (`RTCM gateway not confirmed;
+  corrections withheld`) unless another warning already applies. Matching
+  `rtcm_gateway_enabling` / `rtcm_gateway_active` / `rtcm_gateway_lost` events
+  are logged on transitions and reported in the health summary. None of these
+  keys or events exist when the feature is off.
 - `rtcm_semantic/*` carries decoded station identity such as `station_id` only
   when the RTCM payload provides it. It does not invent a caster/source
   incarnation identifier.

@@ -42,6 +42,7 @@
 #include "universal_gnss_transport/byte_stream.hpp"
 #include "universal_gnss_transport/posix_serial_transport.hpp"
 #include "universal_gnss_transport/rtcm_frame_writer.hpp"
+#include "universal_gnss_transport/rtcm_gateway_handshake.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 
 namespace universal_gnss_ros2
@@ -63,6 +64,10 @@ constexpr std::chrono::milliseconds kReceiverAcquisitionWorkBudget{5};
 constexpr std::size_t kReceiverAcquisitionMinimumByteBudget = 4u * kDefaultReadChunkSizeBytes;
 constexpr double kDefaultRtcmForwardingActivityTimeoutSeconds = 5.0;
 constexpr double kDefaultRtcmForwardingWriteErrorHoldSeconds = 60.0;
+// Tick for the optional RTCM gateway handshake. Only created when the gateway
+// is configured; it bounds keep-alive jitter, not RTCM latency.
+constexpr std::chrono::milliseconds kRtcmGatewayPollPeriod{100};
+constexpr double kDefaultRtcmGatewayAckTimeoutSeconds = 5.0;
 constexpr double kDefaultRuntimeObservationFallbackTimeoutSeconds = 10.0;
 constexpr double kRuntimeObservationJitterPeriods = 3.0;
 
@@ -124,6 +129,9 @@ struct ReceiverNodeConfig
   // has been written successfully. write_error_count is cumulative for the life
   // of the node, so the status must not be derived from the count alone.
   double rtcm_forwarding_write_error_hold_s{kDefaultRtcmForwardingWriteErrorHoldSeconds};
+  // Optional correction-input gateway handshake. Off (no command configured)
+  // by default; its demand timeout is rtcm_forwarding_activity_timeout_s.
+  universal_gnss_transport::RtcmGatewayConfig rtcm_gateway{};
   std::string frame_id{"gnss"};
   std::string source_incarnation{};
 };
@@ -543,6 +551,124 @@ bool MaybeRunSerialDiscovery(rclcpp::Node& node,
   return true;
 }
 
+void ValidateRtcmGatewayCommands(rclcpp::Node& node,
+                                 const char* name,
+                                 const std::vector<std::string>& commands)
+{
+  for (const auto& command : commands)
+  {
+    if (!universal_gnss_transport::IsValidRtcmGatewayCommand(command))
+    {
+      ThrowInvalidParameter(node,
+                            name,
+                            "entries must be non-empty and must not contain CR or LF; "
+                            "rtcm_gateway_line_ending is appended");
+    }
+  }
+}
+
+void ValidateRtcmGatewayConfig(rclcpp::Node& node,
+                               ReceiverNodeConfig& config,
+                               const double keepalive_interval_s,
+                               const std::string& line_ending)
+{
+  auto& gateway = config.rtcm_gateway;
+  ValidateRtcmGatewayCommands(node, "rtcm_gateway_enable_commands", gateway.enable_commands);
+  ValidateRtcmGatewayCommands(node, "rtcm_gateway_disable_commands", gateway.disable_commands);
+  if (!gateway.keepalive_command.empty() &&
+      !universal_gnss_transport::IsValidRtcmGatewayCommand(gateway.keepalive_command))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_keepalive_command",
+                          "must not contain CR or LF; rtcm_gateway_line_ending is appended");
+  }
+
+  if (!std::isfinite(keepalive_interval_s) || keepalive_interval_s < 0.0 ||
+      (keepalive_interval_s > 0.0 && !IsPositiveSteadyDurationSeconds(keepalive_interval_s)))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_keepalive_interval_s",
+                          "must be finite and non-negative; zero disables the keep-alive");
+  }
+  if (keepalive_interval_s > 0.0 && gateway.keepalive_command.empty())
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_keepalive_interval_s",
+                          "requires rtcm_gateway_keepalive_command to be set");
+  }
+  if (keepalive_interval_s == 0.0 && !gateway.keepalive_command.empty())
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_keepalive_command",
+                          "requires a strictly positive rtcm_gateway_keepalive_interval_s");
+  }
+  gateway.keepalive_interval = keepalive_interval_s > 0.0
+                                   ? std::chrono::duration_cast<SteadyClock::duration>(
+                                         std::chrono::duration<double>(keepalive_interval_s))
+                                   : SteadyClock::duration::zero();
+
+  const auto parsed_line_ending =
+      universal_gnss_transport::ParseRtcmGatewayLineEnding(ToLowerCopy(line_ending));
+  if (!parsed_line_ending.has_value())
+  {
+    ThrowInvalidParameter(node, "rtcm_gateway_line_ending", "expected one of: crlf, lf, cr, none");
+  }
+  gateway.line_ending = *parsed_line_ending;
+}
+
+void ValidateRtcmGatewayAcknowledgement(rclcpp::Node& node,
+                                        ReceiverNodeConfig& config,
+                                        const double ack_timeout_s)
+{
+  auto& gateway = config.rtcm_gateway;
+  if (!IsPositiveSteadyDurationSeconds(ack_timeout_s))
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_ack_timeout_s",
+                          "must be a positive finite duration representable by steady_clock");
+  }
+  gateway.ack_timeout = std::chrono::duration_cast<SteadyClock::duration>(
+      std::chrono::duration<double>(ack_timeout_s));
+
+  for (const auto& [name, pattern] : {std::pair<const char*, const std::string*>{
+                                          "rtcm_gateway_ack_pattern", &gateway.ack_pattern},
+                                      std::pair<const char*, const std::string*>{
+                                          "rtcm_gateway_nack_pattern", &gateway.nack_pattern}})
+  {
+    if (!pattern->empty() && !universal_gnss_transport::IsValidRtcmGatewayCommand(*pattern))
+    {
+      ThrowInvalidParameter(node, name, "must not contain CR or LF");
+    }
+  }
+  ValidateRtcmGatewayCommands(node, "rtcm_gateway_reset_commands", gateway.reset_commands);
+
+  if (gateway.ack_pattern.empty())
+  {
+    if (!gateway.nack_pattern.empty())
+    {
+      ThrowInvalidParameter(node, "rtcm_gateway_nack_pattern", "requires rtcm_gateway_ack_pattern");
+    }
+    if (!gateway.reset_commands.empty())
+    {
+      ThrowInvalidParameter(
+          node, "rtcm_gateway_reset_commands", "requires rtcm_gateway_ack_pattern");
+    }
+    return;
+  }
+  if (gateway.enable_commands.empty() && gateway.keepalive_command.empty())
+  {
+    ThrowInvalidParameter(node,
+                          "rtcm_gateway_ack_pattern",
+                          "requires rtcm_gateway_enable_commands or "
+                          "rtcm_gateway_keepalive_command");
+  }
+  if (gateway.ack_pattern == gateway.nack_pattern)
+  {
+    ThrowInvalidParameter(
+        node, "rtcm_gateway_nack_pattern", "must differ from rtcm_gateway_ack_pattern");
+  }
+}
+
 ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_injected_source)
 {
   ReceiverNodeConfig config;
@@ -568,6 +694,24 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
       "rtcm_forwarding_activity_timeout_s", kDefaultRtcmForwardingActivityTimeoutSeconds);
   config.rtcm_forwarding_write_error_hold_s = node.declare_parameter<double>(
       "rtcm_forwarding_write_error_hold_s", kDefaultRtcmForwardingWriteErrorHoldSeconds);
+  config.rtcm_gateway.enable_commands = node.declare_parameter<std::vector<std::string>>(
+      "rtcm_gateway_enable_commands", std::vector<std::string>{});
+  config.rtcm_gateway.keepalive_command =
+      node.declare_parameter<std::string>("rtcm_gateway_keepalive_command", "");
+  const auto rtcm_gateway_keepalive_interval_s =
+      node.declare_parameter<double>("rtcm_gateway_keepalive_interval_s", 0.0);
+  config.rtcm_gateway.disable_commands = node.declare_parameter<std::vector<std::string>>(
+      "rtcm_gateway_disable_commands", std::vector<std::string>{});
+  const auto rtcm_gateway_line_ending =
+      node.declare_parameter<std::string>("rtcm_gateway_line_ending", "crlf");
+  config.rtcm_gateway.ack_pattern =
+      node.declare_parameter<std::string>("rtcm_gateway_ack_pattern", "");
+  const auto rtcm_gateway_ack_timeout_s = node.declare_parameter<double>(
+      "rtcm_gateway_ack_timeout_s", kDefaultRtcmGatewayAckTimeoutSeconds);
+  config.rtcm_gateway.nack_pattern =
+      node.declare_parameter<std::string>("rtcm_gateway_nack_pattern", "");
+  config.rtcm_gateway.reset_commands = node.declare_parameter<std::vector<std::string>>(
+      "rtcm_gateway_reset_commands", std::vector<std::string>{});
   config.frame_id = node.declare_parameter<std::string>("frame_id", "gnss");
   config.source_incarnation = node.declare_parameter<std::string>("source_incarnation", "");
   config.discovery_include_platform_uarts =
@@ -701,6 +845,10 @@ ReceiverNodeConfig LoadReceiverNodeConfig(rclcpp::Node& node, const bool using_i
     ThrowInvalidParameter(
         node, "rtcm_forwarding_write_error_hold_s", "must be finite and strictly positive");
   }
+
+  ValidateRtcmGatewayConfig(
+      node, config, rtcm_gateway_keepalive_interval_s, rtcm_gateway_line_ending);
+  ValidateRtcmGatewayAcknowledgement(node, config, rtcm_gateway_ack_timeout_s);
 
   if (read_chunk_size <= 0 || read_chunk_size > kMaximumReadChunkSizeBytes)
   {
@@ -895,6 +1043,10 @@ struct ReceiverNode::Impl
 
     session_ = std::make_unique<universal_gnss_driver::ReceiverSession>(config_.session);
 
+    config_.rtcm_gateway.demand_timeout = RtcmForwardingActivityTimeout();
+    rtcm_gateway_ = universal_gnss_transport::RtcmGatewayHandshake(config_.rtcm_gateway);
+    last_logged_rtcm_gateway_state_ = rtcm_gateway_.state();
+
     fix_publisher_ = owner_.create_publisher<sensor_msgs::msg::NavSatFix>("fix", 10);
     status_publisher_ = owner_.create_publisher<universal_gnss_ros2::msg::GnssStatus>("status", 10);
     diagnostics_publisher_ =
@@ -959,6 +1111,13 @@ struct ReceiverNode::Impl
         // freshness retains the paired steady time separately.
         return owner_.now().nanoseconds();
       };
+      if (rtcm_gateway_.observes_inbound())
+      {
+        runner_config.received_bytes_observer = [this](const std::uint8_t* data,
+                                                       const std::size_t size) {
+          this->ObserveRtcmGatewayInbound(data, size);
+        };
+      }
       runner_.emplace(*transport_source_, *session_, runner_config);
     }
 
@@ -969,10 +1128,136 @@ struct ReceiverNode::Impl
     }
     publication_timer_ = owner_.create_wall_timer(ComputePublishPeriod(config_.publish_rate_hz),
                                                   [this]() { this->PublishNow(); });
+    if (rtcm_gateway_.enabled())
+    {
+      rtcm_gateway_timer_ = owner_.create_wall_timer(kRtcmGatewayPollPeriod,
+                                                     [this]() { this->OnRtcmGatewayTimer(); });
+    }
+  }
+
+  ~Impl()
+  {
+    // Orderly shutdown hands the correction input back to the gateway. This is
+    // best effort: one nonblocking flush, no retry.
+    if (!rtcm_gateway_.enabled())
+    {
+      return;
+    }
+    universal_gnss_transport::RtcmGatewayHandshake::Commands commands;
+    rtcm_gateway_.Stop(commands);
+    if (!commands.empty() && transport_sink_ != nullptr && transport_sink_->IsOpen() &&
+        QueueRtcmGatewayCommands(commands))
+    {
+      FlushPendingRtcmWrites();
+    }
+  }
+
+  void OnRtcmGatewayTimer()
+  {
+    universal_gnss_transport::RtcmGatewayHandshake::Commands commands;
+    rtcm_gateway_.Poll(SteadyClock::now(), commands);
+    if (!commands.empty())
+    {
+      if (transport_sink_ != nullptr && transport_sink_->IsOpen())
+      {
+        QueueRtcmGatewayCommands(commands);
+        FlushPendingRtcmWritesIfReady();
+      }
+      else
+      {
+        NoteRtcmGatewayTransportLost();
+      }
+    }
+    LogRtcmGatewayTransition();
+  }
+
+  // Gateway command lines share the RTCM FIFO as control frames so they are
+  // never interleaved inside a partially written RTCM frame.
+  bool
+  QueueRtcmGatewayCommands(const universal_gnss_transport::RtcmGatewayHandshake::Commands& commands)
+  {
+    for (const auto& command : commands)
+    {
+      universal_gnss_transport::RtcmFrameWriter::Frame frame;
+      frame.data.assign(command.begin(), command.end());
+      frame.control = true;
+      if (!rtcm_frame_writer_.Enqueue(std::move(frame)))
+      {
+        NoteRtcmForwardWriteError();
+        last_rtcm_forward_failure_message_ =
+            "RTCM forwarding queue full; dropped RTCM gateway command";
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void ObserveRtcmGatewayInbound(const std::uint8_t* data, const std::size_t size)
+  {
+    universal_gnss_transport::RtcmGatewayHandshake::Commands commands;
+    rtcm_gateway_.ObserveInboundBytes(data, size, SteadyClock::now(), commands);
+    // Queued only: the acquisition drain flushes the FIFO once afterwards.
+    if (!commands.empty() && transport_sink_ != nullptr && transport_sink_->IsOpen())
+    {
+      QueueRtcmGatewayCommands(commands);
+    }
+    LogRtcmGatewayTransition();
+  }
+
+  void NoteRtcmGatewayTransportLost()
+  {
+    rtcm_gateway_.OnTransportLost();
+    LogRtcmGatewayTransition();
+  }
+
+  void LogRtcmGatewayTransition()
+  {
+    const auto state = rtcm_gateway_.state();
+    if (state == last_logged_rtcm_gateway_state_)
+    {
+      return;
+    }
+    last_logged_rtcm_gateway_state_ = state;
+    if (const auto event = MakeRtcmGatewayEvent(); event.has_value())
+    {
+      LogDiagnosticEvent(owner_, *event);
+    }
+    else
+    {
+      RCLCPP_INFO(owner_.get_logger(),
+                  "rtcm_gateway_idle: RTCM gateway handshake idle; no forwarding demand");
+    }
+  }
+
+  std::optional<universal_gnss::GnssDiagnosticEvent> MakeRtcmGatewayEvent() const
+  {
+    switch (rtcm_gateway_.state())
+    {
+      case universal_gnss_transport::RtcmGatewayState::kEnabling:
+        return MakeEvent(universal_gnss::GnssDiagnosticSeverity::kInfo,
+                         universal_gnss::GnssDiagnosticCategory::kCorrection,
+                         "rtcm_gateway_enabling",
+                         "RTCM gateway enable commands sent; awaiting acknowledgement");
+      case universal_gnss_transport::RtcmGatewayState::kActive:
+        return MakeEvent(universal_gnss::GnssDiagnosticSeverity::kOk,
+                         universal_gnss::GnssDiagnosticCategory::kCorrection,
+                         "rtcm_gateway_active",
+                         "RTCM gateway enabled for host corrections");
+      case universal_gnss_transport::RtcmGatewayState::kLost:
+        return MakeEvent(universal_gnss::GnssDiagnosticSeverity::kWarning,
+                         universal_gnss::GnssDiagnosticCategory::kCorrection,
+                         "rtcm_gateway_lost",
+                         "RTCM gateway is not confirmed enabled; re-sending enable commands");
+      case universal_gnss_transport::RtcmGatewayState::kOff:
+      case universal_gnss_transport::RtcmGatewayState::kIdle:
+      default:
+        return std::nullopt;
+    }
   }
 
   void AbandonPendingRtcmWrites(const std::string& reason, const bool close_transport)
   {
+    NoteRtcmGatewayTransportLost();
     if (!rtcm_frame_writer_.empty())
     {
       NoteRtcmForwardWriteError();
@@ -1035,6 +1320,7 @@ struct ReceiverNode::Impl
       }
       transport_sink_->Close();
       transport_ready_ = false;
+      NoteRtcmGatewayTransportLost();
     }
     return outcome.result;
   }
@@ -1112,6 +1398,7 @@ struct ReceiverNode::Impl
         NoteRtcmForwardWriteError();
         last_rtcm_forward_failure_message_ = "Receiver transport is closed";
         transport_ready_ = false;
+        NoteRtcmGatewayTransportLost();
       }
       else
       {
@@ -1129,6 +1416,23 @@ struct ReceiverNode::Impl
       {
         return;
       }
+    }
+
+    universal_gnss_transport::RtcmGatewayHandshake::Commands gateway_commands;
+    const auto gateway_decision = rtcm_gateway_.OnRtcmFrame(SteadyClock::now(), gateway_commands);
+    QueueRtcmGatewayCommands(gateway_commands);
+    LogRtcmGatewayTransition();
+    if (gateway_decision ==
+        universal_gnss_transport::RtcmGatewayHandshake::FrameDecision::kWithhold)
+    {
+      // The gateway has not confirmed it passes host corrections; the frame is
+      // discarded (counted by the handshake) rather than queued stale.
+      if (!gateway_commands.empty() &&
+          prior_flush != universal_gnss_transport::RtcmFrameWriter::FlushResult::kBlocked)
+      {
+        FlushPendingRtcmWrites();
+      }
+      return;
     }
 
     if (!rtcm_frame_writer_.Enqueue({message.data, message.message_type}))
@@ -1442,6 +1746,11 @@ struct ReceiverNode::Impl
           last_rtcm_forward_failure_message_.value_or("RTCM forwarding reported write errors")));
     }
 
+    if (auto gateway_event = MakeRtcmGatewayEvent(); gateway_event.has_value())
+    {
+      summary.AddEvent(std::move(*gateway_event));
+    }
+
     if (const auto* ublox_metrics = ActiveUbloxMetrics(); ublox_metrics != nullptr)
     {
       if (HasRecentReceiverReportedRtcmCorrections(now))
@@ -1617,8 +1926,54 @@ struct ReceiverNode::Impl
     {
       status.values.push_back(MakeKeyValue("last_failure", *last_rtcm_forward_failure_message_));
     }
+    if (rtcm_gateway_.state() == universal_gnss_transport::RtcmGatewayState::kLost &&
+        status.level == diagnostic_msgs::msg::DiagnosticStatus::OK)
+    {
+      status.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
+      status.message = "RTCM gateway not confirmed; corrections withheld";
+    }
+    AppendRtcmGatewayValues(status);
 
     diagnostics.status.push_back(std::move(status));
+  }
+
+  // Gateway keys are published only when the handshake is configured so the
+  // existing forwarding diagnostic is unchanged for every other deployment.
+  void AppendRtcmGatewayValues(diagnostic_msgs::msg::DiagnosticStatus& status) const
+  {
+    if (!rtcm_gateway_.enabled())
+    {
+      return;
+    }
+    const auto& metrics = rtcm_gateway_.metrics();
+    status.values.push_back(
+        MakeKeyValue("gateway", universal_gnss_transport::ToString(rtcm_gateway_.state())));
+    status.values.push_back(
+        MakeKeyValue("gateway_enable_sequences", std::to_string(metrics.enable_sequences_sent)));
+    status.values.push_back(
+        MakeKeyValue("gateway_keepalives_sent", std::to_string(metrics.keepalives_sent)));
+    status.values.push_back(
+        MakeKeyValue("gateway_disable_sequences", std::to_string(metrics.disable_sequences_sent)));
+    if (!rtcm_gateway_.observes_inbound())
+    {
+      return;
+    }
+    status.values.push_back(
+        MakeKeyValue("gateway_reset_sequences", std::to_string(metrics.reset_sequences_sent)));
+    status.values.push_back(MakeKeyValue("gateway_acks_seen", std::to_string(metrics.acks_seen)));
+    status.values.push_back(MakeKeyValue("gateway_nacks_seen", std::to_string(metrics.nacks_seen)));
+    status.values.push_back(
+        MakeKeyValue("gateway_ack_timeouts", std::to_string(metrics.ack_timeouts)));
+    status.values.push_back(
+        MakeKeyValue("gateway_frames_withheld", std::to_string(metrics.frames_withheld)));
+    if (metrics.last_ack_time.has_value())
+    {
+      const auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          SteadyClock::now() - *metrics.last_ack_time);
+      std::ostringstream stream;
+      stream << (static_cast<double>(age_ms.count()) / 1000.0);
+      status.values.push_back(MakeKeyValue("gateway_last_ack_age_s", stream.str()));
+    }
   }
 
   void
@@ -2368,6 +2723,7 @@ struct ReceiverNode::Impl
   rclcpp::Subscription<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr rtcm_subscription_{};
   rclcpp::TimerBase::SharedPtr acquisition_timer_{};
   rclcpp::TimerBase::SharedPtr publication_timer_{};
+  rclcpp::TimerBase::SharedPtr rtcm_gateway_timer_{};
   std::vector<universal_gnss::GnssDiagnosticEvent> startup_events_{};
   std::optional<sensor_msgs::msg::NavSatFix> last_fix_message_{};
   std::optional<universal_gnss_ros2::msg::GnssStatus> last_status_message_{};
@@ -2391,6 +2747,9 @@ struct ReceiverNode::Impl
   universal_gnss_protocols::RtcmFrameFramer rtcm_forward_framer_{};
   universal_gnss_protocols::RtcmCorrectionMonitor rtcm_forward_correction_monitor_{};
   universal_gnss_transport::RtcmFrameWriter rtcm_frame_writer_{};
+  universal_gnss_transport::RtcmGatewayHandshake rtcm_gateway_{};
+  universal_gnss_transport::RtcmGatewayState last_logged_rtcm_gateway_state_{
+      universal_gnss_transport::RtcmGatewayState::kOff};
   universal_gnss::GnssDiagnosticEvents last_active_events_{};
   std::size_t rtcm_forwarded_frames_{0u};
   std::size_t rtcm_forwarded_bytes_{0u};
