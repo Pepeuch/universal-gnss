@@ -13,6 +13,11 @@ namespace universal_gnss_transport
 
 // Bounded FIFO for complete RTCM frames. A partially written head remains at
 // the front until it completes or the owning receiver incarnation abandons it.
+//
+// Control frames (for example correction-gateway command lines) share the same
+// FIFO so they are serialised with RTCM and never interleaved inside a frame.
+// They are reported separately in FlushOutcome and never count as forwarded
+// RTCM frames or bytes.
 class RtcmFrameWriter
 {
 public:
@@ -29,13 +34,17 @@ public:
   {
     std::vector<std::uint8_t> data{};
     std::uint16_t message_type{0u};
+    bool control{false};
   };
 
   struct FlushOutcome
   {
     FlushResult result{FlushResult::kDrained};
+    // RTCM frames and bytes only; control frames are counted separately.
     std::size_t bytes_written{0u};
     std::size_t frames_written{0u};
+    std::size_t control_bytes_written{0u};
+    std::size_t control_frames_written{0u};
     std::optional<std::uint16_t> last_message_type{};
     TransportStatus status{TransportStatus::kOk};
     TransportError error{TransportError::kNone};

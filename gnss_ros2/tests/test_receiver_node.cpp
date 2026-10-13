@@ -3643,4 +3643,291 @@ TEST_F(ReceiverNodeTest, ProjectsForwardedRtcmSemanticObservationsIntoDiagnostic
       << "a ROS-stamp jump must not prevent monotonic RTCM freshness recovery";
 }
 
+// Shares written bytes and scripted input with the test so the transport can be
+// observed after the owning node has been destroyed (shutdown behaviour).
+class SharedRecordingByteDuplex : public universal_gnss_transport::ByteDuplex
+{
+public:
+  struct State
+  {
+    std::string written{};
+    std::string pending_input{};
+    bool open{true};
+  };
+
+  explicit SharedRecordingByteDuplex(std::shared_ptr<State> state) : state_(std::move(state))
+  {
+  }
+
+  universal_gnss_transport::ReadResult Read(std::uint8_t* destination,
+                                            const std::size_t capacity) override
+  {
+    if (!state_->open)
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kClosed,
+              universal_gnss_transport::TransportError::kClosed};
+    }
+    const std::size_t count = std::min(capacity, state_->pending_input.size());
+    std::copy(state_->pending_input.begin(),
+              state_->pending_input.begin() + static_cast<std::ptrdiff_t>(count),
+              destination);
+    state_->pending_input.erase(0u, count);
+    return {count,
+            universal_gnss_transport::TransportStatus::kOk,
+            universal_gnss_transport::TransportError::kNone};
+  }
+
+  universal_gnss_transport::WriteResult Write(const std::uint8_t* data,
+                                              const std::size_t size) override
+  {
+    if (!state_->open)
+    {
+      return {0u,
+              universal_gnss_transport::TransportStatus::kClosed,
+              universal_gnss_transport::TransportError::kClosed};
+    }
+    state_->written.append(reinterpret_cast<const char*>(data), size);
+    return {size,
+            universal_gnss_transport::TransportStatus::kOk,
+            universal_gnss_transport::TransportError::kNone};
+  }
+
+  bool IsOpen() const override
+  {
+    return state_->open;
+  }
+
+  void Close() override
+  {
+    state_->open = false;
+  }
+
+private:
+  std::shared_ptr<State> state_;
+};
+
+class RtcmGatewayHarness
+{
+public:
+  RtcmGatewayHarness(std::shared_ptr<SharedRecordingByteDuplex::State> state,
+                     std::vector<rclcpp::Parameter> extra_parameters)
+  {
+    rclcpp::NodeOptions options;
+    std::vector<rclcpp::Parameter> parameters{rclcpp::Parameter("receiver_family", "nmea"),
+                                              rclcpp::Parameter("publish_rate_hz", 0.01)};
+    parameters.insert(parameters.end(), extra_parameters.begin(), extra_parameters.end());
+    options.parameter_overrides(parameters);
+    receiver_ = std::make_shared<universal_gnss_ros2::ReceiverNode>(
+        std::make_unique<SharedRecordingByteDuplex>(std::move(state)), options);
+    publisher_node_ = std::make_shared<rclcpp::Node>("receiver_rtcm_gateway_publisher");
+    publisher_ = publisher_node_->create_publisher<universal_gnss_ros2::msg::RtcmFrame>("rtcm", 10);
+    executor_.add_node(receiver_->get_node_base_interface());
+    executor_.add_node(publisher_node_->get_node_base_interface());
+    for (std::size_t attempt = 0u; attempt < 100u && publisher_->get_subscription_count() == 0u;
+         ++attempt)
+    {
+      executor_.spin_some();
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+  }
+
+  void Publish(const std::vector<std::uint8_t>& data)
+  {
+    universal_gnss_ros2::msg::RtcmFrame message;
+    message.message_type = 1077u;
+    message.data = data;
+    publisher_->publish(message);
+  }
+
+  template <typename Predicate>
+  bool SpinUntil(Predicate predicate, const std::chrono::milliseconds timeout)
+  {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+      executor_.spin_once(std::chrono::milliseconds(5));
+      if (predicate())
+      {
+        return true;
+      }
+    }
+    return predicate();
+  }
+
+  void SpinFor(const std::chrono::milliseconds duration)
+  {
+    SpinUntil([]() { return false; }, duration);
+  }
+
+  universal_gnss_ros2::ReceiverNode& receiver()
+  {
+    return *receiver_;
+  }
+
+  void DestroyReceiver()
+  {
+    executor_.remove_node(receiver_->get_node_base_interface());
+    receiver_.reset();
+  }
+
+private:
+  std::shared_ptr<universal_gnss_ros2::ReceiverNode> receiver_{};
+  std::shared_ptr<rclcpp::Node> publisher_node_{};
+  rclcpp::Publisher<universal_gnss_ros2::msg::RtcmFrame>::SharedPtr publisher_{};
+  rclcpp::executors::SingleThreadedExecutor executor_{};
+};
+
+std::size_t CountOccurrences(const std::string& haystack, const std::string& needle)
+{
+  std::size_t count = 0u;
+  for (std::size_t position = haystack.find(needle); position != std::string::npos;
+       position = haystack.find(needle, position + needle.size()))
+  {
+    ++count;
+  }
+  return count;
+}
+
+std::string AsString(const std::vector<std::uint8_t>& bytes)
+{
+  return std::string(bytes.begin(), bytes.end());
+}
+
+const diagnostic_msgs::msg::DiagnosticStatus*
+PublishAndFindRtcmForwardingStatus(universal_gnss_ros2::ReceiverNode& node)
+{
+  node.PublishNow();
+  if (!node.last_diagnostics_message().has_value())
+  {
+    return nullptr;
+  }
+  return FindDiagnosticStatusByName(*node.last_diagnostics_message(),
+                                    "universal_gnss/rtcm_forwarding");
+}
+
+TEST_F(ReceiverNodeTest, RtcmGatewayIsOffByDefaultAndAddsNoDiagnosticKeys)
+{
+  auto state = std::make_shared<SharedRecordingByteDuplex::State>();
+  const auto frame = AsString(BuildRtcmFrame(1077u));
+  {
+    RtcmGatewayHarness harness(state, {});
+    harness.Publish(BuildRtcmFrame(1077u));
+    ASSERT_TRUE(harness.SpinUntil([&]() { return state->written == frame; },
+                                  std::chrono::milliseconds(500)));
+    harness.SpinFor(std::chrono::milliseconds(150));
+    EXPECT_EQ(state->written, frame) << "no gateway command may be written when the feature is off";
+
+    const auto* forwarding = PublishAndFindRtcmForwardingStatus(harness.receiver());
+    ASSERT_NE(forwarding, nullptr);
+    EXPECT_FALSE(FindDiagnosticValue(*forwarding, "gateway").has_value());
+    EXPECT_FALSE(FindDiagnosticValue(*forwarding, "gateway_keepalives_sent").has_value());
+  }
+  EXPECT_EQ(state->written, frame) << "shutdown writes nothing when the feature is off";
+}
+
+TEST_F(ReceiverNodeTest, RtcmGatewayEnablesKeepsAliveAndDisablesAroundForwarding)
+{
+  auto state = std::make_shared<SharedRecordingByteDuplex::State>();
+  RtcmGatewayHarness harness(
+      state,
+      {rclcpp::Parameter("rtcm_forwarding_activity_timeout_s", 1.0),
+       rclcpp::Parameter("rtcm_gateway_enable_commands", std::vector<std::string>{"$GW,ON*00"}),
+       rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,KEEP*00"),
+       rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", 0.1),
+       rclcpp::Parameter("rtcm_gateway_disable_commands", std::vector<std::string>{"$GW,OFF*00"}),
+       rclcpp::Parameter("rtcm_gateway_line_ending", "lf")});
+
+  const auto frame = AsString(BuildRtcmFrame(1077u));
+  harness.Publish(BuildRtcmFrame(1077u));
+  ASSERT_TRUE(harness.SpinUntil([&]() { return state->written.size() >= frame.size(); },
+                                std::chrono::milliseconds(500)));
+  EXPECT_EQ(state->written.rfind("$GW,ON*00\n" + frame, 0u), 0u)
+      << "the enable command must precede the first RTCM frame";
+
+  const auto* active = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(active, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*active, "gateway"), std::optional<std::string>{"active"});
+  EXPECT_EQ(FindDiagnosticValue(*active, "gateway_enable_sequences"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(FindDiagnosticValue(*active, "forwarded_frame_count"), std::optional<std::string>{"1"});
+
+  ASSERT_TRUE(
+      harness.SpinUntil([&]() { return CountOccurrences(state->written, "$GW,KEEP*00\n") >= 2u; },
+                        std::chrono::milliseconds(900)))
+      << "keep-alive must repeat while forwarding is active";
+
+  ASSERT_TRUE(
+      harness.SpinUntil([&]() { return state->written.find("$GW,OFF*00\n") != std::string::npos; },
+                        std::chrono::milliseconds(2000)))
+      << "the disable command must follow the forwarding activity timeout";
+  const std::string after_disable = state->written;
+  EXPECT_EQ(after_disable.substr(after_disable.size() - std::string("$GW,OFF*00\n").size()),
+            "$GW,OFF*00\n");
+  harness.SpinFor(std::chrono::milliseconds(250));
+  EXPECT_EQ(state->written, after_disable) << "keep-alive stops once forwarding is lost";
+
+  const auto* idle = PublishAndFindRtcmForwardingStatus(harness.receiver());
+  ASSERT_NE(idle, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*idle, "gateway"), std::optional<std::string>{"idle"});
+  EXPECT_EQ(FindDiagnosticValue(*idle, "gateway_disable_sequences"),
+            std::optional<std::string>{"1"});
+
+  harness.Publish(BuildRtcmFrame(1077u));
+  ASSERT_TRUE(harness.SpinUntil(
+      [&]() { return state->written.size() >= after_disable.size() + frame.size(); },
+      std::chrono::milliseconds(500)));
+  EXPECT_EQ(state->written.substr(after_disable.size()), "$GW,ON*00\n" + frame)
+      << "forwarding resuming re-enables the gateway before the frame";
+}
+
+TEST_F(ReceiverNodeTest, RtcmGatewayWritesDisableCommandsOnShutdown)
+{
+  auto state = std::make_shared<SharedRecordingByteDuplex::State>();
+  {
+    RtcmGatewayHarness harness(
+        state,
+        {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,ON*00"),
+         rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", 4.0),
+         rclcpp::Parameter("rtcm_gateway_disable_commands",
+                           std::vector<std::string>{"$GW,OFF*00", "RESET"})});
+    harness.Publish(BuildRtcmFrame(1077u));
+    ASSERT_TRUE(harness.SpinUntil([&]() { return !state->written.empty(); },
+                                  std::chrono::milliseconds(500)));
+    EXPECT_EQ(state->written.rfind("$GW,ON*00\r\n", 0u), 0u)
+        << "a keep-alive-only gateway is enabled by the keep-alive line";
+    harness.DestroyReceiver();
+  }
+  const std::string suffix = "$GW,OFF*00\r\nRESET\r\n";
+  ASSERT_GE(state->written.size(), suffix.size());
+  EXPECT_EQ(state->written.substr(state->written.size() - suffix.size()), suffix);
+}
+
+TEST_F(ReceiverNodeTest, RejectsInvalidRtcmGatewayParameters)
+{
+  const std::vector<std::vector<rclcpp::Parameter>> invalid{
+      {rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", 4.0)},
+      {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,ON*00")},
+      {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,ON*00"),
+       rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", -1.0)},
+      {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,ON*00"),
+       rclcpp::Parameter("rtcm_gateway_keepalive_interval_s",
+                         std::numeric_limits<double>::infinity())},
+      {rclcpp::Parameter("rtcm_gateway_keepalive_command", "$GW,ON*00\r\n"),
+       rclcpp::Parameter("rtcm_gateway_keepalive_interval_s", 4.0)},
+      {rclcpp::Parameter("rtcm_gateway_enable_commands", std::vector<std::string>{""})},
+      {rclcpp::Parameter("rtcm_gateway_disable_commands", std::vector<std::string>{"A\nB"})},
+      {rclcpp::Parameter("rtcm_gateway_line_ending", "\\r\\n")},
+  };
+  for (const auto& parameters : invalid)
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(parameters);
+    auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+    EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
+                 std::invalid_argument)
+        << parameters.front().get_name() << " combination should be rejected";
+  }
+}
+
 }  // namespace
