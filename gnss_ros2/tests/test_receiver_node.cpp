@@ -1925,7 +1925,9 @@ TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
 
 TEST_F(ReceiverNodeTest, RejectsInvalidRtcmForwardingWriteErrorHold)
 {
-  for (const double value : {0.0, -1.0, std::numeric_limits<double>::infinity(),
+  for (const double value : {0.0,
+                             -1.0,
+                             std::numeric_limits<double>::infinity(),
                              std::numeric_limits<double>::quiet_NaN()})
   {
     rclcpp::NodeOptions options;
@@ -3283,12 +3285,11 @@ TEST_F(ReceiverNodeTest, RtcmWriteErrorIsHistoryOnceForwardingRecoveredAndTheHol
   using Action = ScriptedWriteByteDuplex::WriteAction;
   const auto frame_a = BuildRtcmFrame(1077u);
   const auto frame_b = BuildRtcmFrame(1087u);
-  RtcmForwardingHarness harness(
-      {Action{0u,
-              universal_gnss_transport::TransportStatus::kError,
-              universal_gnss_transport::TransportError::kWriteFailure},
-       Action{}},
-      {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.5)});
+  RtcmForwardingHarness harness({Action{0u,
+                                        universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure},
+                                 Action{}},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.5)});
   ASSERT_TRUE(harness.WaitForSubscription());
 
   const auto publish_forwarding_status = [&harness]() {
@@ -3347,11 +3348,10 @@ TEST_F(ReceiverNodeTest, RtcmWriteErrorIsHistoryOnceForwardingRecoveredAndTheHol
 TEST_F(ReceiverNodeTest, RtcmWriteErrorStaysCurrentWithoutASuccessfulWriteAfterIt)
 {
   using Action = ScriptedWriteByteDuplex::WriteAction;
-  RtcmForwardingHarness harness(
-      {Action{0u,
-              universal_gnss_transport::TransportStatus::kError,
-              universal_gnss_transport::TransportError::kWriteFailure}},
-      {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.05)});
+  RtcmForwardingHarness harness({Action{0u,
+                                        universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure}},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.05)});
   ASSERT_TRUE(harness.WaitForSubscription());
 
   harness.Publish(1077u, BuildRtcmFrame(1077u));
