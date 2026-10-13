@@ -298,6 +298,24 @@ The transport supports explicit read timeouts, nonblocking reads, explicit
 close, and transport metrics. UDP server/listener, multicast, async, retry,
 and NTRIP integration remain out of scope.
 
+## RTCM Frame Writer And Gateway Handshake
+
+`RtcmFrameWriter` is the bounded FIFO through which complete RTCM frames reach
+a writable receiver transport; a partially written frame stays at the head
+until it completes or the receiver incarnation abandons it. Frames marked
+`control` (for example correction-gateway command lines) share the same FIFO
+so they are serialised with RTCM and never interleaved inside a frame; they are
+reported separately in `FlushOutcome` (`control_frames_written`,
+`control_bytes_written`) and never count as forwarded RTCM.
+
+`RtcmGatewayHandshake` is a pure, clock-injected state machine for receivers
+behind a correction-input gateway. It never touches a transport: its
+operations return the command lines (line ending appended) that the owner
+writes through `RtcmFrameWriter`. It models enable / keep-alive / disable
+commands driven by RTCM forwarding demand, and optional acknowledgement and
+drop-out patterns matched on inbound lines. The ROS 2 contract is documented in
+[ros2.md](ros2.md#rtcm-gateway-handshake-optional).
+
 ## Ring Buffer Helper
 
 `ring_buffer.hpp` currently provides a small fixed-capacity byte FIFO.

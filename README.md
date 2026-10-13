@@ -320,6 +320,9 @@ Current implemented layers:
     `serial_device:=auto`, `serial_baud:=auto`, and `receiver_family:=auto`
   - discovery, correction, and parser-counter diagnostic reporting
   - live RTCM forwarding from ROS2 into the receiver transport when writable
+  - optional, off-by-default RTCM gateway handshake (enable / keep-alive /
+    disable command lines, optional acknowledgement gating) for receivers
+    behind a correction-input gateway
   - ROS2 diagnostic projection of portable RTCM semantic observations for
     base-station ARP, GLONASS `1230`, and MSM summary/per-message activity
   - `ReplayNode` for hardware-free `status` / `fix` / `diagnostics` replay with

@@ -105,6 +105,17 @@ cannot mix retained state with a new source.
   portable RTCM semantic observation surface through ROS diagnostics without
   adding receiver-specific correction logic to downstream apps
 
+Some receivers only accept host corrections through a correction-input
+gateway (a radio modem or MCU board on the receiver link) that must be told to
+pass host RTCM and kept alive. `ReceiverNode` can drive such a gateway with the
+optional, off-by-default `rtcm_gateway_*` parameters: enable lines when
+forwarding starts, a periodic keep-alive while it lasts, disable lines when it
+lapses after `rtcm_forwarding_activity_timeout_s` or on shutdown, and optional
+acknowledgement gating on the gateway's inbound status lines. The NTRIP side is
+unchanged: `NtripNode` still only publishes `rtcm`. See the
+[ROS 2 receiver node gateway section](ros2.md#rtcm-gateway-handshake-optional)
+for the parameter and diagnostic contract.
+
 The current ROS 2 wrapper also applies one additional runtime policy at the
 node boundary: if the subscribed GNSS status becomes stale, it suppresses GGA
 injection instead of reusing an old rover position.
