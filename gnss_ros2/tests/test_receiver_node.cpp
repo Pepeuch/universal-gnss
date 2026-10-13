@@ -676,11 +676,14 @@ private:
 class RtcmForwardingHarness
 {
 public:
-  explicit RtcmForwardingHarness(std::vector<ScriptedWriteByteDuplex::WriteAction> actions)
+  explicit RtcmForwardingHarness(std::vector<ScriptedWriteByteDuplex::WriteAction> actions,
+                                 std::vector<rclcpp::Parameter> extra_parameters = {})
   {
     rclcpp::NodeOptions options;
-    options.parameter_overrides(std::vector<rclcpp::Parameter>{
-        rclcpp::Parameter("receiver_family", "ublox"), rclcpp::Parameter("publish_rate_hz", 0.01)});
+    std::vector<rclcpp::Parameter> parameters{rclcpp::Parameter("receiver_family", "ublox"),
+                                              rclcpp::Parameter("publish_rate_hz", 0.01)};
+    parameters.insert(parameters.end(), extra_parameters.begin(), extra_parameters.end());
+    options.parameter_overrides(parameters);
 
     auto duplex = std::make_unique<ScriptedWriteByteDuplex>(std::move(actions));
     duplex_ = duplex.get();
@@ -1917,6 +1920,23 @@ TEST_F(ReceiverNodeTest, RejectsInvalidPublishRateAndFrameId)
     auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
     EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
                  std::invalid_argument);
+  }
+}
+
+TEST_F(ReceiverNodeTest, RejectsInvalidRtcmForwardingWriteErrorHold)
+{
+  for (const double value : {0.0,
+                             -1.0,
+                             std::numeric_limits<double>::infinity(),
+                             std::numeric_limits<double>::quiet_NaN()})
+  {
+    rclcpp::NodeOptions options;
+    options.parameter_overrides(std::vector<rclcpp::Parameter>{
+        rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", value)});
+    auto source = std::make_unique<universal_gnss_transport::MemoryByteSource>();
+    EXPECT_THROW(universal_gnss_ros2::ReceiverNode(std::move(source), options),
+                 std::invalid_argument)
+        << "rtcm_forwarding_write_error_hold_s=" << value << " should be rejected";
   }
 }
 
@@ -3255,6 +3275,126 @@ TEST_F(ReceiverNodeTest, BoundsPendingRtcmQueueAndDropsOnlyWholeNewFrame)
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "forwarded_frame_count"),
             std::optional<std::string>{std::to_string(kExpectedQueueCapacity)});
   EXPECT_EQ(FindDiagnosticValue(*forwarding, "write_error_count"), std::optional<std::string>{"1"});
+}
+
+// write_error_count is cumulative for the life of the node. A write error is current until a
+// frame has been written completely after it, and for rtcm_forwarding_write_error_hold_s
+// afterwards; the count alone must never hold the forwarding status at "write errors observed".
+TEST_F(ReceiverNodeTest, RtcmWriteErrorIsHistoryOnceForwardingRecoveredAndTheHoldElapsed)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto frame_a = BuildRtcmFrame(1077u);
+  const auto frame_b = BuildRtcmFrame(1087u);
+  RtcmForwardingHarness harness({Action{0u,
+                                        universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure},
+                                 Action{}},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.5)});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  const auto publish_forwarding_status = [&harness]() {
+    harness.receiver().PublishNow();
+    return FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                      "universal_gnss/rtcm_forwarding");
+  };
+
+  // The write failed and nothing has been written since: current.
+  harness.Publish(1077u, frame_a);
+  const auto* failed = publish_forwarding_status();
+  ASSERT_NE(failed, nullptr);
+  EXPECT_EQ(failed->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(failed->message, "RTCM forwarding write errors observed");
+  EXPECT_EQ(FindDiagnosticValue(*failed, "write_error_count"), std::optional<std::string>{"1"});
+  EXPECT_TRUE(FindDiagnosticValue(*failed, "last_write_error_age_s").has_value());
+  EXPECT_NE(FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                       "universal_gnss/rtcm_forwarding_error"),
+            nullptr);
+
+  // Forwarding recovered on a new transport session: still held for the configured time.
+  harness.duplex().OpenNewSession();
+  harness.receiver().StepOnce();
+  harness.Publish(1087u, frame_b);
+  ASSERT_EQ(harness.duplex().session_bytes(1u), frame_b);
+  const auto* recovered = publish_forwarding_status();
+  ASSERT_NE(recovered, nullptr);
+  EXPECT_EQ(FindDiagnosticValue(*recovered, "forwarded_frame_count"),
+            std::optional<std::string>{"1"});
+  EXPECT_EQ(recovered->message, "RTCM forwarding write errors observed");
+  const auto* held_event = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding_error");
+  ASSERT_NE(held_event, nullptr);
+  EXPECT_EQ(held_event->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+
+  // Hold elapsed with forwarding healthy: history. The cumulative count is unchanged.
+  std::this_thread::sleep_for(std::chrono::milliseconds(600));
+  const auto* history = publish_forwarding_status();
+  ASSERT_NE(history, nullptr);
+  EXPECT_EQ(history->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(history->message, "RTCM forwarding active");
+  EXPECT_EQ(FindDiagnosticValue(*history, "write_error_count"), std::optional<std::string>{"1"});
+  EXPECT_TRUE(FindDiagnosticValue(*history, "last_write_error_age_s").has_value());
+  // The event is reported once as cleared when its condition ends.
+  const auto* cleared = FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                                   "universal_gnss/rtcm_forwarding_error");
+  ASSERT_NE(cleared, nullptr);
+  EXPECT_EQ(cleared->level, diagnostic_msgs::msg::DiagnosticStatus::OK);
+  EXPECT_EQ(cleared->message, "Diagnostic condition cleared");
+  harness.receiver().PublishNow();
+  EXPECT_EQ(FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                       "universal_gnss/rtcm_forwarding_error"),
+            nullptr);
+}
+
+TEST_F(ReceiverNodeTest, RtcmWriteErrorStaysCurrentWithoutASuccessfulWriteAfterIt)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  RtcmForwardingHarness harness({Action{0u,
+                                        universal_gnss_transport::TransportStatus::kError,
+                                        universal_gnss_transport::TransportError::kWriteFailure}},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.05)});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, BuildRtcmFrame(1077u));
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+  harness.receiver().PublishNow();
+  const auto* forwarding = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(forwarding, nullptr);
+  EXPECT_EQ(forwarding->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(forwarding->message, "RTCM forwarding write errors observed");
+}
+
+TEST_F(ReceiverNodeTest, ANewRtcmWriteErrorAfterRecoveryIsCurrentAgain)
+{
+  using Action = ScriptedWriteByteDuplex::WriteAction;
+  const auto failure = Action{0u,
+                              universal_gnss_transport::TransportStatus::kError,
+                              universal_gnss_transport::TransportError::kWriteFailure};
+  RtcmForwardingHarness harness({failure, Action{}, failure},
+                                {rclcpp::Parameter("rtcm_forwarding_write_error_hold_s", 0.05)});
+  ASSERT_TRUE(harness.WaitForSubscription());
+
+  harness.Publish(1077u, BuildRtcmFrame(1077u));
+  harness.duplex().OpenNewSession();
+  harness.receiver().StepOnce();
+  harness.Publish(1087u, BuildRtcmFrame(1087u));
+  std::this_thread::sleep_for(std::chrono::milliseconds(150));
+  harness.receiver().PublishNow();
+  const auto* healthy = FindDiagnosticStatusByName(*harness.receiver().last_diagnostics_message(),
+                                                   "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(healthy, nullptr);
+  ASSERT_EQ(healthy->message, "RTCM forwarding active");
+
+  harness.Publish(1077u, BuildRtcmFrame(1077u));
+  harness.receiver().PublishNow();
+  const auto* failed_again = FindDiagnosticStatusByName(
+      *harness.receiver().last_diagnostics_message(), "universal_gnss/rtcm_forwarding");
+  ASSERT_NE(failed_again, nullptr);
+  EXPECT_EQ(failed_again->level, diagnostic_msgs::msg::DiagnosticStatus::WARN);
+  EXPECT_EQ(failed_again->message, "RTCM forwarding write errors observed");
+  EXPECT_EQ(FindDiagnosticValue(*failed_again, "write_error_count"),
+            std::optional<std::string>{"2"});
 }
 
 TEST_F(ReceiverNodeTest, ConsumesRtcmTopicAndWritesCorrectionsToDuplexTransport)
