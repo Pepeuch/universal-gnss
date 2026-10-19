@@ -258,6 +258,12 @@ install(
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  ament_add_gtest(test_launch_incarnation tests/test_launch_incarnation.cpp)
+  if(TARGET test_launch_incarnation)
+    target_include_directories(test_launch_incarnation PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(test_launch_incarnation ${rclcpp_TARGETS})
+  endif()
+
   ament_add_gtest(test_interface_aliases tests/test_interface_aliases.cpp)
   if(TARGET test_interface_aliases)
     target_include_directories(
