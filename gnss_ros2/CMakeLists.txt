@@ -395,6 +395,9 @@ if(BUILD_TESTING)
   ament_add_pytest_test(
     test_combined_launch
     tests/test_combined_launch.py
+    ENV
+      "AMENT_PREFIX_PATH=${CMAKE_INSTALL_PREFIX}:$ENV{AMENT_PREFIX_PATH}"
+      "${_ros2_test_library_path}"
     TIMEOUT 30
   )
 

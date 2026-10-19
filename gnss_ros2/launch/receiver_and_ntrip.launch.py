@@ -6,7 +6,7 @@ from launch.conditions import IfCondition
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-from launch_ros.descriptions import ParameterFile
+from launch_ros.descriptions import Parameter, ParameterFile
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -92,6 +92,14 @@ def generate_launch_description() -> LaunchDescription:
                         "source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
+                    # Session identity belongs to this launch, not the supplied file.
+                    # Target the node explicitly: file entries qualified by node
+                    # name otherwise override an unscoped -p, even if passed last.
+                    Parameter(
+                        'universal_gnss_receiver:source_incarnation',
+                        source_incarnation,
+                        value_type=str,
+                    ),
                 ],
                 remappings=[
                     ("fix", fix_topic),
@@ -119,6 +127,11 @@ def generate_launch_description() -> LaunchDescription:
                         "expected_source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
+                    Parameter(
+                        'universal_gnss_ntrip:expected_source_incarnation',
+                        source_incarnation,
+                        value_type=str,
+                    ),
                 ],
                 remappings=[
                     ("status", status_topic),

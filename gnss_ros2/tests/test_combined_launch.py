@@ -1,17 +1,24 @@
 import importlib.util
-import re
-import sys
 from pathlib import Path
+import queue
+import re
+import socket
+import sys
+import threading
 
-import pytest
 from launch import LaunchContext, LaunchDescription, LaunchService
-from launch.actions import DeclareLaunchArgument, EmitEvent, ExecuteProcess, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument, EmitEvent, ExecuteProcess, RegisterEventHandler,
+    SetLaunchConfiguration, TimerAction,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessStart
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.descriptions import ParameterFile
+import pytest
 
 
 LAUNCH_PATH = Path(__file__).resolve().parents[1] / "launch" / "receiver_and_ntrip.launch.py"
@@ -219,3 +226,147 @@ def test_external_clean_shutdown_remains_successful():
     )
 
     assert launch_service.run() == 0
+
+
+@pytest.fixture(scope='module')
+def launched_incarnations():
+    return set()
+
+
+@pytest.mark.parametrize('parameter_scope', [None, '/**', '/universal_gnss_receiver'])
+def test_live_launch_pins_incarnation_over_parameter_files(
+    tmp_path, parameter_scope, launched_incarnations
+):
+    """Observe launch's actual process command, then query the running ROS nodes."""
+    import rclpy
+    import yaml
+    from rcl_interfaces.srv import GetParameters
+    from rclpy.executors import SingleThreadedExecutor
+    from rclpy.signals import SignalHandlerOptions
+    from universal_gnss_msgs.srv import GetReceiverSnapshot
+
+    parameters = {}
+    if parameter_scope is not None:
+        parameters[parameter_scope] = {
+            'ros__parameters': {'source_incarnation': 'conflicting-file-value'}
+        }
+        ntrip_scope = (
+            '/**' if parameter_scope == '/**' else '/universal_gnss_ntrip'
+        )
+        parameters.setdefault(ntrip_scope, {'ros__parameters': {}})[
+            'ros__parameters'
+        ]['expected_source_incarnation'] = 'conflicting-file-value'
+    parameter_file = tmp_path / 'parameters.yaml'
+    parameter_file.write_text(yaml.safe_dump(parameters))
+
+    description = load_combined_launch().generate_launch_description()
+    receiver, ntrip = [a for a in description.entities if isinstance(a, Node)]
+    expected = yaml.safe_load(static_parameter(receiver, 'source_incarnation'))
+    assert expected == yaml.safe_load(static_parameter(ntrip, 'expected_source_incarnation'))
+    assert expected not in launched_incarnations
+
+    started = {}
+    both_started = threading.Event()
+    outcome = queue.Queue()
+    service = LaunchService()
+
+    def record_start(event, context):
+        started[event.action] = event.cmd
+        if receiver in started and ntrip in started:
+            both_started.set()
+
+    def check_live_nodes():
+        context = rclpy.Context()
+        client_node = None
+        executor = None
+        try:
+            assert both_started.wait(5), 'both ROS processes must actually start'
+            rclpy.init(context=context, signal_handler_options=SignalHandlerOptions.NO)
+            executor = SingleThreadedExecutor(context=context)
+            client_node = rclpy.create_node('combined_launch_contract', context=context)
+
+            def call(service_type, name, request):
+                client = client_node.create_client(service_type, name)
+                try:
+                    assert client.wait_for_service(timeout_sec=5), name
+                    future = client.call_async(request)
+                    rclpy.spin_until_future_complete(
+                        client_node, future, executor=executor, timeout_sec=5
+                    )
+                    assert future.done(), name
+                    assert future.exception() is None
+                    return future.result()
+                finally:
+                    client_node.destroy_client(client)
+
+            for node_name, parameter_name in (
+                ('universal_gnss_receiver', 'source_incarnation'),
+                ('universal_gnss_ntrip', 'expected_source_incarnation'),
+            ):
+                response = call(
+                    GetParameters, f'/{node_name}/get_parameters',
+                    GetParameters.Request(names=[parameter_name]),
+                )
+                assert response.values[0].string_value == expected
+            snapshot = call(
+                GetReceiverSnapshot, '/universal_gnss_receiver/get_snapshot',
+                GetReceiverSnapshot.Request(),
+            )
+            assert snapshot.status.source_incarnation == expected
+            for action, name in (
+                (receiver, 'universal_gnss_receiver:source_incarnation'),
+                (ntrip, 'universal_gnss_ntrip:expected_source_incarnation'),
+            ):
+                command = started[action]
+                inline = [
+                    command[i + 1]
+                    for i, arg in enumerate(command[:-1])
+                    if arg == '-p'
+                    and command[i + 1].split(':=', 1)[0] == name
+                ]
+                assert len(inline) == 1, command
+                assert yaml.safe_load(inline[0].split(':=', 1)[1]) == expected
+                assert '--params-file' in command
+            print(f'live incarnation: scope={parameter_scope}, token={expected}')
+            outcome.put(None)
+        except BaseException as error:
+            outcome.put(error)
+        finally:
+            if executor is not None:
+                executor.shutdown()
+            if client_node is not None:
+                client_node.destroy_node()
+            if context.ok():
+                context.shutdown()
+            service.shutdown()
+
+    # Only test-owned loopback listeners: no receiver, caster or hardware access.
+    with socket.socket() as receiver_socket, socket.socket() as caster_socket:
+        receiver_socket.bind(('127.0.0.1', 0))
+        receiver_socket.listen()
+        caster_socket.bind(('127.0.0.1', 0))
+        caster_socket.listen()
+        settings = {
+            'parameters_file': str(parameter_file), 'receiver_family': 'ublox',
+            'transport': 'tcp', 'tcp_host': '127.0.0.1',
+            'tcp_port': str(receiver_socket.getsockname()[1]),
+            'caster_host': '127.0.0.1',
+            'caster_port': str(caster_socket.getsockname()[1]),
+        }
+        service.include_launch_description(LaunchDescription([
+            *(SetLaunchConfiguration(key, value) for key, value in settings.items()),
+            RegisterEventHandler(OnProcessStart(on_start=record_start)),
+            *description.entities,
+        ]))
+        worker = threading.Thread(target=check_live_nodes)
+        worker.start()
+        try:
+            assert service.run() == 0
+        finally:
+            service.shutdown(force_sync=True)
+            worker.join(timeout=1)
+        assert not worker.is_alive()
+        error = outcome.get_nowait()
+        if error is not None:
+            raise error
+        launched_incarnations.add(expected)
