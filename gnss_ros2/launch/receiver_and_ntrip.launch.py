@@ -78,6 +78,7 @@ def generate_launch_description() -> LaunchDescription:
                 package="universal_gnss_ros2",
                 executable="receiver_node",
                 name="universal_gnss_receiver",
+                arguments=[f'--ug-launch-incarnation={source_incarnation}'],
                 output="screen",
                 parameters=[
                     {
@@ -89,7 +90,6 @@ def generate_launch_description() -> LaunchDescription:
                         "tcp_port": tcp_port,
                         "publish_rate_hz": publish_rate_hz,
                         "frame_id": frame_id,
-                        "source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
                 ],
@@ -104,6 +104,7 @@ def generate_launch_description() -> LaunchDescription:
                 package="universal_gnss_ros2",
                 executable="ntrip_node",
                 name="universal_gnss_ntrip",
+                arguments=[f'--ug-launch-incarnation={source_incarnation}'],
                 condition=IfCondition(ntrip_enabled),
                 output="screen",
                 parameters=[
@@ -116,7 +117,6 @@ def generate_launch_description() -> LaunchDescription:
                         "gga_enabled": gga_enabled,
                         "gga_interval_s": gga_interval_s,
                         "tls_enabled": tls_enabled,
-                        "expected_source_incarnation": source_incarnation,
                     },
                     ParameterFile(parameters_file, allow_substs=False),
                 ],
