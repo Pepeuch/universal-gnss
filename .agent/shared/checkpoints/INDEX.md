@@ -30,3 +30,7 @@
 - `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — completed external-LAN DDS
   matrix: unmodified bridge multicast failed; explicit bridge/unicast locators
   passed both directions and different-domain non-delivery.
+- `retained/UG-RTCM-GATEWAY-001_CHECKPOINT.md` — optional, off-by-default RTCM
+  correction-input gateway handshake (enable / keep-alive / disable, optional
+  ack gating) in `gnss_transport` + `ReceiverNode`; generic software complete,
+  Airseekers `rtk_rover` example configuration is hardware-pending.

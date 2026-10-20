@@ -44,7 +44,7 @@ RtcmFrameWriter::FlushOutcome RtcmFrameWriter::Flush(ByteSink& sink)
         pending.frame.data.data() + static_cast<std::ptrdiff_t>(pending.offset), remaining);
     const std::size_t accepted = std::min(write.bytes_written, remaining);
     pending.offset += accepted;
-    outcome.bytes_written += accepted;
+    (pending.frame.control ? outcome.control_bytes_written : outcome.bytes_written) += accepted;
 
     if (write.bytes_written > remaining || write.status != TransportStatus::kOk)
     {
@@ -56,8 +56,15 @@ RtcmFrameWriter::FlushOutcome RtcmFrameWriter::Flush(ByteSink& sink)
     }
     if (pending.offset == pending.frame.data.size())
     {
-      outcome.last_message_type = pending.frame.message_type;
-      ++outcome.frames_written;
+      if (pending.frame.control)
+      {
+        ++outcome.control_frames_written;
+      }
+      else
+      {
+        outcome.last_message_type = pending.frame.message_type;
+        ++outcome.frames_written;
+      }
       pending_.pop_front();
       continue;
     }

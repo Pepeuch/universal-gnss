@@ -15,12 +15,18 @@ namespace universal_gnss_driver
 struct ReceiverSessionRunnerConfig
 {
   using ReceiptTimestampProvider = std::function<std::int64_t()>;
+  // Read-only tap on every successfully read chunk, called before the chunk is
+  // fed to the session. It must not consume or alter receiver input; it lets an
+  // owner observe link traffic the protocol parsers do not model (for example
+  // status lines injected by a correction gateway on the same link).
+  using ReceivedBytesObserver = std::function<void(const std::uint8_t*, std::size_t)>;
 
   std::size_t read_chunk_size{512u};
   bool finalize_session_on_end_of_stream{true};
   bool finalize_session_on_closed{true};
   bool finalize_session_on_error{false};
   ReceiptTimestampProvider receipt_timestamp_provider{};
+  ReceivedBytesObserver received_bytes_observer{};
 };
 
 struct ReceiverSessionRunnerMetrics

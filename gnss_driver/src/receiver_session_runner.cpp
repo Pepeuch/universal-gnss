@@ -57,6 +57,10 @@ ReceiverSessionRunnerStepResult ReceiverSessionRunner::StepOnceWithResult()
     const std::int64_t receipt_timestamp_ns = config_.receipt_timestamp_provider
                                                   ? config_.receipt_timestamp_provider()
                                                   : MonotonicNowNs();
+    if (config_.received_bytes_observer)
+    {
+      config_.received_bytes_observer(buffer.data(), read_result.bytes_read);
+    }
     const std::size_t before_runtime_updates = session_.metrics().runtime_updates;
     session_.FeedBytes(buffer.data(), read_result.bytes_read, receipt_timestamp_ns);
     NoteRuntimeUpdateDelta(before_runtime_updates);

@@ -339,6 +339,30 @@ void TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(TestCont
              "two batched, numerically identical GGA fixes must count as two new observations");
 }
 
+void TestReceivedBytesObserverSeesEveryChunkWithoutConsumingIt(TestContext& ctx)
+{
+  const std::string gateway_line = "$GNRTK,ON*69\r\n";
+  auto input = BuildNmeaSentence("GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,");
+  input.insert(input.begin(), gateway_line.begin(), gateway_line.end());
+
+  MemoryByteSource source(input);
+  ReceiverSession session(ReceiverSessionConfig{ReceiverSessionKind::kNmea});
+  ReceiverSessionRunnerConfig config{7u};
+  std::vector<std::uint8_t> observed;
+  std::size_t calls = 0u;
+  config.received_bytes_observer = [&](const std::uint8_t* data, const std::size_t size) {
+    ++calls;
+    observed.insert(observed.end(), data, data + size);
+  };
+  ReceiverSessionRunner runner(source, session, config);
+  runner.RunUntilEof();
+
+  ctx.Expect(observed == input, "observer receives every read byte in order");
+  ctx.Expect(calls == runner.metrics().chunks_read, "observer is called once per read chunk");
+  ctx.Expect(session.current_state().fix_valid && session.metrics().position_observations == 1u,
+             "observing bytes does not consume or disturb receiver parsing");
+}
+
 }  // namespace
 
 int main()
@@ -353,6 +377,7 @@ int main()
   TestResetMetrics(ctx);
   TestCapturesAndPreservesLocalReceiptTimestamp(ctx);
   TestPositionObservationGenerationIgnoresFragmentationAndEnrichment(ctx);
+  TestReceivedBytesObserverSeesEveryChunkWithoutConsumingIt(ctx);
 
   if (ctx.failures != 0)
   {

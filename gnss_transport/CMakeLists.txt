@@ -2,6 +2,7 @@ add_library(
   universal_gnss_transport
   src/memory_stream.cpp
   src/rtcm_frame_writer.cpp
+  src/rtcm_gateway_handshake.cpp
 )
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -44,6 +45,20 @@ if(BUILD_TESTING)
       universal_gnss_transport
   )
   add_test(NAME gnss_transport_test_foundation COMMAND gnss_transport_test_foundation)
+
+  add_executable(
+    gnss_transport_test_rtcm_gateway_handshake
+    tests/test_rtcm_gateway_handshake.cpp
+  )
+  target_link_libraries(
+    gnss_transport_test_rtcm_gateway_handshake
+    PRIVATE
+      universal_gnss_transport
+  )
+  add_test(
+    NAME gnss_transport_test_rtcm_gateway_handshake
+    COMMAND gnss_transport_test_rtcm_gateway_handshake
+  )
 
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_executable(

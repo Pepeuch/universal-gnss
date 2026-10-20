@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <deque>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -245,6 +246,48 @@ void TestRtcmFrameWriterUga009(TestContext& ctx)
   ctx.Expect(writer.empty(), "explicit abandon prevents data crossing receiver incarnations");
 }
 
+void TestRtcmFrameWriterControlFramesStaySerialised(TestContext& ctx)
+{
+  using universal_gnss_transport::RtcmFrameWriter;
+  const std::vector<std::uint8_t> rtcm{0xD3u, 1u, 2u, 3u};
+  const std::vector<std::uint8_t> control{'O', 'N', '\r', '\n'};
+  std::vector<std::uint8_t> expected = rtcm;
+  expected.insert(expected.end(), control.begin(), control.end());
+  expected.insert(expected.end(), rtcm.begin(), rtcm.end());
+
+  // The first RTCM frame is only partially written; the control line must wait
+  // behind its suffix rather than being interleaved inside it.
+  ScriptedRtcmSink sink({{2u, TransportStatus::kOk, TransportError::kNone},
+                         {0u, TransportStatus::kOk, TransportError::kNone},
+                         {2u, TransportStatus::kOk, TransportError::kNone},
+                         {4u, TransportStatus::kOk, TransportError::kNone},
+                         {4u, TransportStatus::kOk, TransportError::kNone}});
+  RtcmFrameWriter writer;
+  ctx.Expect(writer.Enqueue({rtcm, 1077u}), "RTCM frame is accepted");
+  const auto first = writer.Flush(sink);
+  ctx.Expect(first.result == RtcmFrameWriter::FlushResult::kBlocked && first.bytes_written == 2u &&
+                 first.frames_written == 0u,
+             "partial RTCM write blocks with its suffix pending");
+  ctx.Expect(writer.Enqueue({control, 0u, true}) && writer.Enqueue({rtcm, 1087u}),
+             "control and RTCM frames queue behind the partial head");
+  const auto second = writer.Flush(sink);
+  ctx.Expect(second.result == RtcmFrameWriter::FlushResult::kDrained && sink.bytes_ == expected,
+             "control line is written between complete RTCM frames, never inside one");
+  ctx.Expect(second.frames_written == 2u && second.bytes_written == 6u &&
+                 second.control_frames_written == 1u && second.control_bytes_written == 4u &&
+                 second.last_message_type == std::optional<std::uint16_t>{1087u},
+             "control frames are counted separately from forwarded RTCM frames and bytes");
+
+  ScriptedRtcmSink control_only_sink({{4u, TransportStatus::kOk, TransportError::kNone}});
+  RtcmFrameWriter control_only;
+  ctx.Expect(control_only.Enqueue({control, 0u, true}), "control-only frame is accepted");
+  const auto control_flush = control_only.Flush(control_only_sink);
+  ctx.Expect(control_flush.frames_written == 0u && control_flush.bytes_written == 0u &&
+                 control_flush.control_frames_written == 1u &&
+                 !control_flush.last_message_type.has_value(),
+             "a control-only flush reports no forwarded RTCM");
+}
+
 }  // namespace
 
 int main()
@@ -258,6 +301,7 @@ int main()
   TestTransportMetricsHelpers(ctx);
   TestRingBuffer(ctx);
   TestRtcmFrameWriterUga009(ctx);
+  TestRtcmFrameWriterControlFramesStaySerialised(ctx);
 
   if (ctx.failures != 0)
   {
