@@ -86,6 +86,20 @@ class CampaignEvidenceTests(unittest.TestCase):
         duration = series["rtk"]["transitions"][-1][0] - series["rtk"]["transitions"][0][0]
         self.assertAlmostEqual(8.999196, duration, places=5)
 
+    def test_render_manifest_binds_source_series_and_all_four_svgs(self):
+        root = SCRIPT.parents[2]
+        directory = root / "docs/validation/figures/2026-11-08-rc6"
+        manifest = json.loads((directory / "render-manifest.json").read_text())
+        self.assertEqual(hashlib.sha256(SCRIPT.read_bytes()).hexdigest(), manifest["script_sha256"])
+        series = json.loads((root / "docs/validation/evidence/2026-11-08-rc6-mowing.series.json").read_text())
+        canonical = json.dumps(series, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        self.assertEqual(hashlib.sha256(canonical).hexdigest(), manifest["canonical_series_sha256"])
+        self.assertEqual(4, len(manifest["figures"]))
+        for entry in manifest["figures"]:
+            content = (directory / entry["path"]).read_bytes()
+            self.assertEqual(len(content), entry["bytes"])
+            self.assertEqual(hashlib.sha256(content).hexdigest(), entry["sha256"])
+
 
 if __name__ == "__main__":
     unittest.main()

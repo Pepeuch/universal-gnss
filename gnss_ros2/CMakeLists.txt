@@ -407,15 +407,21 @@ if(BUILD_TESTING)
     TIMEOUT 30
   )
 
-  # The replay test links the complete low-level stack. Check what the loader
-  # actually resolves, even when an older install is present in the environment.
+  # Replay and NTRIP together exercise the complete low-level stack. In Release,
+  # --as-needed can omit NTRIP from replay, which never calls it. Every expected
+  # DSO must load in a real consumer, and every observed copy must be from here.
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _ros2_test_shared_libraries
       AND TARGET test_replay_node)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(_provenance_consumers)
+    if(TARGET test_ntrip_node)
+      list(APPEND _provenance_consumers --executable "$<TARGET_FILE:test_ntrip_node>")
+    endif()
     add_test(NAME test_build_library_provenance
       COMMAND ${Python3_EXECUTABLE}
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_build_library_provenance.py"
-        "$<TARGET_FILE:test_replay_node>" ${_ros2_test_shared_libraries})
+        "$<TARGET_FILE:test_replay_node>" ${_ros2_test_shared_libraries}
+        ${_provenance_consumers})
     set_tests_properties(test_build_library_provenance PROPERTIES
       ENVIRONMENT "${_ros2_test_library_path}" TIMEOUT 30)
   endif()

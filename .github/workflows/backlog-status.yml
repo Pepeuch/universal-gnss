@@ -17,6 +17,9 @@ jobs:
             scripts/agent/checkpoint_audit.py \
             scripts/collect_support_snapshot.py \
             scripts/update_backlog_status.py \
+            scripts/validation/plot_hardware_campaign.py \
+            scripts/validation/check_rc6_campaign_review.py \
+            gnss_ros2/tests/check_build_library_provenance.py \
             scripts/tests/test_checkpoint_audit.py \
             scripts/tests/test_collect_support_snapshot.py \
             scripts/tests/test_docker_entrypoint_contract.py \
@@ -24,6 +27,7 @@ jobs:
             scripts/tests/fake_ntrip_caster.py \
             scripts/tests/test_repo_status.py \
             scripts/tests/test_update_backlog_status.py
+          python3 -m py_compile scripts/tests/test_plot_hardware_campaign.py scripts/tests/test_build_library_provenance.py
           python3 -m unittest \
             scripts.tests.test_checkpoint_audit \
             scripts.tests.test_collect_support_snapshot \
@@ -31,5 +35,6 @@ jobs:
             scripts.tests.test_docker_release_workflow \
             scripts.tests.test_repo_status \
             scripts.tests.test_update_backlog_status
+          python3 -m unittest scripts.tests.test_plot_hardware_campaign scripts.tests.test_build_library_provenance
           python3 scripts/agent/checkpoint_audit.py --check
           python3 scripts/update_backlog_status.py --check

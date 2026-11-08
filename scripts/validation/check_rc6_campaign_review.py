@@ -11,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[2]
+BASELINE = "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa"
 METRICS = ROOT / "docs/validation/evidence/2026-11-08-rc6-mowing.metrics.json"
 SERIES = ROOT / "docs/validation/evidence/2026-11-08-rc6-mowing.series.json"
 SECRET_PATTERNS = [
@@ -47,7 +48,10 @@ def anchors(text):
 
 def main():
     names = subprocess.check_output([
-        "git", "ls-files", "--modified", "--others", "--exclude-standard", "-z",
+        "git", "diff", "--name-only", "--diff-filter=ACMR", "-z", BASELINE,
+    ], cwd=ROOT).decode().split("\0")
+    names += subprocess.check_output([
+        "git", "ls-files", "--others", "--exclude-standard", "-z",
     ], cwd=ROOT).decode().split("\0")
     paths = sorted({ROOT / name for name in names if name})
     failures = []
