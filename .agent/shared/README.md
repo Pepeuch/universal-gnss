@@ -3,6 +3,11 @@
 This directory is for short-lived handoff material that must be shared through
 Git between Universal GNSS contributors or agents.
 
+Start with [the shared review index](INDEX.md), then the
+[checkpoint index](checkpoints/INDEX.md). The current rc6 campaign review has a
+compact handoff with cross-references to its durable validation report; neither
+index replaces TODO or the canonical backlog manifest.
+
 Use it for compact unfinished-work state such as:
 
 - cross-contributor handoffs;

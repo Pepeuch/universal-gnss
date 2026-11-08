@@ -1,5 +1,11 @@
 # Pre-release software audit checkpoint
 
+Independent rc6 release-qualification addendum (2026-11-08): see the
+[consolidated shared review](../../RC6-20261108-REVIEW.md) and its durable
+campaign report/figures. This new F9P/Lyrical observation does not reclassify
+F01–F08 or qualify retired-response cutoff, persistence or publication.
+Existing software and historical hardware evidence below retain their baselines.
+
 Lifecycle: ACTIVE
 Disposition: ACTIVE
 Audit reference: `UG-PRE-RELEASE-001`

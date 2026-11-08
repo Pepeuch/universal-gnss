@@ -1,0 +1,2 @@
+# Inspected rendering environment for the 2026-11-08 rc6 campaign.
+matplotlib==3.11.2

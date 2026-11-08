@@ -2,9 +2,10 @@
 
 ## Current phase
 
-`v0.6.0` is released.
+Current prerelease: **`v0.7.4-rc6`** at
+`d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Universal GNSS is now in post-`v0.6.x` stabilization. The project is no longer
+Universal GNSS is preparing the v0.7 stable release. The project is no longer
 in a "next phase is basic ROS2 integration" posture, so the roadmap is grouped
 by ownership:
 
@@ -12,6 +13,13 @@ by ownership:
 2. ROS2 package hardening
 3. receiver-specific backend completion
 4. downstream field validation and operator surfaces
+
+The [2026-11-08 rc6 mower report](docs/validation/2026-11-08-rc6-passive-mowing.md)
+adds bounded native Lyrical/arm64 field evidence. The canonical v0.7 checklist
+remains 61/65; this session is not an incarnation-cutoff or persistence test.
+Previously reported endurance use is accepted by the maintainer as field-use
+feedback, without an automatic new endurance run. Its documentary closeout is
+kept distinct from the measurements acquired in this session.
 
 Already delivered in `v0.6.0` and its follow-up fixes:
 

@@ -1,8 +1,14 @@
 # Validation Boundaries
 
-`v0.6.0` is released.
+Current prerelease: **`v0.7.4-rc6`**, source
+`d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: post-`v0.6.x` stabilization.
+Current phase: validation before v0.7 stable. See the
+[2026-11-08 rc6 passive mowing report](2026-11-08-rc6-passive-mowing.md)
+for the exact Lyrical/arm64 image, measurements, limits and remaining gates.
+The report includes four technical figures and a versioned, hash-verifying
+extractor/plotter. The [shared review handoff](../../.agent/shared/RC6-20261108-REVIEW.md)
+summarizes diagnostics and pending acceptance without duplicating the backlog.
 
 This directory-level note exists to keep field validation, ROS2 package work,
 receiver-specific backend work, and Universal GNSS core work from being mixed
@@ -18,17 +24,22 @@ receiver settings. Runtime observation failures are recorded and do not affect
 Universal GNSS or MowgliNext.
 
 Run it on the mower host immediately before the operator begins a functional
-session. For the prepared u-blox MowgliNext target, the exact command is:
+session. For the rc6 u-blox MowgliNext baseline measured on 2026-11-08, the
+command is below. Recheck the running image before reusing it. The installed
+collector must match this revision: older copies imported GetReceiverSnapshot
+from `universal_gnss_ros2.srv`; rc6 uses `universal_gnss_msgs.srv`. This campaign
+used isolated official scripts under `versions/d02e23f/`, preserving older tools.
 
 ```bash
 session="/home/pepeuch/universal-gnss-validation/results/robot-test-$(date +%Y%m%d-%H%M%S)"
-/home/pepeuch/universal-gnss-validation/scripts/validation/run_hardware_session.sh \
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/run_hardware_session.sh \
   --mode functional \
   --container mowgli-gps \
-  --image mowgli-gps:ug-dev-0bcfdff-healthcheck \
-  --git-revision 0bcfdff9135992978769a6573ec62ae8e3d9a30f \
+  --image ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c \
+  --git-revision d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa \
   --receiver-by-id /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 \
   --parameters /home/pepeuch/mowglinext/docker/config/mowgli/mowgli_robot.yaml \
+  --interval 20s --snapshot-interval 5m \
   --output "${session}"
 ```
 
@@ -46,15 +57,17 @@ target command intentionally omits `--log-directory` and `--export-directory`;
 the collector's `logs/` and `snapshots/` remain persistent under `--output`.
 
 Functional collection runs until `Ctrl+C`/`SIGINT`. Evidence is flushed and a
-final `summary.json` is generated. Later endurance collection requires an
-explicit duration:
+final `summary.json` is generated. Do not start another endurance campaign merely
+because a release gate remains unchecked. First reuse existing evidence and the
+maintainer's recorded acceptance decision. Only an independently approved new
+endurance campaign should use the explicit-duration template below:
 
 ```bash
-/home/pepeuch/universal-gnss-validation/scripts/validation/run_hardware_session.sh \
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/run_hardware_session.sh \
   --mode endurance --duration 24h \
   --container mowgli-gps \
-  --image mowgli-gps:ug-dev-0bcfdff-healthcheck \
-  --git-revision 0bcfdff9135992978769a6573ec62ae8e3d9a30f \
+  --image ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c \
+  --git-revision d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa \
   --receiver-by-id /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00 \
   --parameters /home/pepeuch/mowglinext/docker/config/mowgli/mowgli_robot.yaml \
   --output "/home/pepeuch/universal-gnss-validation/results/endurance-$(date +%Y%m%d-%H%M%S)"
@@ -62,7 +75,10 @@ explicit duration:
 
 Defaults are one lightweight sample every five minutes and one redacted support
 snapshot every 30 minutes. `--interval` and `--snapshot-interval` accept `s`,
-`m`, `h`, and `d` suffixes. Each session contains:
+`m`, `h`, and `d` suffixes. The functional example explicitly selects 20 seconds
+and five minutes. Measure overhead on the target. These snapshots can miss short
+RTK transitions; continuous passive subscriptions captured the approximately
+nine-second event in the rc6 campaign. Each session contains:
 
 ```text
 metadata.json       immutable host/Git/image/container/device/config baseline
@@ -83,11 +99,11 @@ While collection runs, add operator actions to the same timestamped timeline
 from another shell:
 
 ```bash
-/home/pepeuch/universal-gnss-validation/scripts/validation/mark_hardware_event.sh --session "${session}" "starting mowing run"
-/home/pepeuch/universal-gnss-validation/scripts/validation/mark_hardware_event.sh --session "${session}" "manual stop"
-/home/pepeuch/universal-gnss-validation/scripts/validation/mark_hardware_event.sh --session "${session}" "receiver process kill"
-/home/pepeuch/universal-gnss-validation/scripts/validation/mark_hardware_event.sh --session "${session}" "rate mismatch low/high"
-/home/pepeuch/universal-gnss-validation/scripts/validation/mark_hardware_event.sh --session "${session}" "RTK reached Fixed"
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/mark_hardware_event.sh --session "${session}" "starting mowing run"
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/mark_hardware_event.sh --session "${session}" "manual stop"
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/mark_hardware_event.sh --session "${session}" "receiver process kill"
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/mark_hardware_event.sh --session "${session}" "rate mismatch low/high"
+/home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/mark_hardware_event.sh --session "${session}" "RTK reached Fixed"
 ```
 
 Mark deliberate process/container/network interruptions, rate change and
@@ -98,13 +114,22 @@ evidence, not proof that the named state transition happened.
 After stopping, regenerate and print the mechanical summary with:
 
 ```bash
-python3 /home/pepeuch/universal-gnss-validation/scripts/validation/analyze_hardware_session.py "${session}"
+python3 /home/pepeuch/universal-gnss-validation/versions/d02e23f/scripts/validation/analyze_hardware_session.py "${session}"
 ```
 
 The analyzer reports observed IDs/PIDs/incarnations, sequence progression,
 restart changes, RTK transitions, collection gaps, and resource peaks. It does
 not award checklist credit. Process or incarnation changes do not prove
 rejection of bytes from a retired physical incarnation.
+
+Analysis caveats at rc6: the helper's fix-name map does not include numeric
+6/7/8; the message schema defines them as 2D_FIX/3D_FIX/DGPS. Preserve raw fields
+and decode against that schema. Its sequence max-minus-min summary must not be
+used across different source incarnations. `GnssStatus.stamp` is the receipt of
+the newest accepted runtime-field update, not necessarily a position epoch.
+Use physical-position sequence, source identity, receiver epoch and position
+freshness together. Older campaign documents and their image digests remain
+historical evidence and must not be rewritten to rc6.
 
 ## Universal GNSS core validation
 

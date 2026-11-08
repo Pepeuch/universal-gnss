@@ -1,5 +1,24 @@
 # UG-PLAN-005 robot + second-RPi validation
 
+Current independent field addendum: the 2026-11-08 rc6 passive Lyrical/arm64
+campaign is recorded in `docs/validation/2026-11-08-rc6-passive-mowing.md` and
+its compact metrics/SHA256 manifest. It adds bounded position/correction
+continuity and natural RTK recovery evidence on its own exact baseline. It
+does not rebase the historical matrices below or award release-gate credit.
+The maintainer's declared endurance usage acceptance is recorded separately;
+no automatic repeat endurance run is requested. Current numeric accounting
+comes from TODO/manifest and generated checks, not this historical checkpoint.
+The campaign is complete and its own observers have all stopped. Reuse that
+report; do not rerun acquisition solely to recreate documentation. The current
+local documentation proposal is uncommitted, with all four release gates still
+separate from the bounded functional result.
+Consolidated diagnostics, measurement limitations, four reproducible figure
+references and current review work are in `../../RC6-20261108-REVIEW.md`.
+That shared handoff includes the RTK recovery, source/correction stability,
+LiDAR/operator context, two downstream covariance signals and remaining
+UGA-126/persistence/endurance/publication decisions. TODO/manifest remain
+authoritative; no old matrix or gate has been reclassified by the new campaign.
+
 Lifecycle: ACTIVE. This contains completed evidence through Phase F, the
 2026-09-07 RTK/recovery/rate closeout, and the bounded resumption plan for later
 phases.

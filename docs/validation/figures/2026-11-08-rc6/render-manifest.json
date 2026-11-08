@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "python_version": "3.14.4",
+  "matplotlib_version": "3.11.2",
+  "script_sha256": "6d44168e4ffbdb07c823e95b9a86a8e8bceb570aceb0a63bf60e369232006341",
+  "canonical_series_sha256": "a4b031b8228101af55a34d1369de5a07f0c52f674fdd88fbe3c85b0d74431574",
+  "figures": [
+    {
+      "path": "gnss-observations.svg",
+      "sha256": "194bdfaec04881a7c8fdcc17b29d3fdee9fc1caef14267f9283d5e42e80d3f37",
+      "bytes": 143379
+    },
+    {
+      "path": "gnss-rtk-recovery.svg",
+      "sha256": "fd51abcea76f3f150b1ae7abadee1ce05176d95309775917249a3e7d79b0e1c3",
+      "bytes": 77223
+    },
+    {
+      "path": "gnss-corrections.svg",
+      "sha256": "3af138afc6cbbadbcd5a32520b1cc94740e91d15a89f64eb19f88260d726192b",
+      "bytes": 131178
+    },
+    {
+      "path": "gnss-resources.svg",
+      "sha256": "da7b1981720045a189fda39dbce01203629a229354e981246b2cee18a9605719",
+      "bytes": 97938
+    }
+  ],
+  "determinism": "fixed SVG hash salt; no creation date; trailing whitespace normalized; compare within recorded rendering environment"
+}

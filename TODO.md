@@ -2,13 +2,27 @@
 
 ## Current status
 
-`v0.6.0` is released.
+Current prerelease: **`v0.7.4-rc6`** at
+`d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: post-`v0.6.x` stabilization.
+Current phase: validation before the v0.7 stable release.
+
+The [2026-11-08 passive mowing campaign](docs/validation/2026-11-08-rc6-passive-mowing.md)
+completed 173 functional samples over 57 minutes and a separate continuous
+publication capture. Position observations and corrections remained live during
+a naturally observed RTK degradation and recovery. This bounded session awards
+no incarnation-cutoff, persistent-profile or long-duration completion credit.
+
+The maintainer considers previously reported long-term usage sufficient for
+endurance acceptance; no repeat endurance campaign is requested. That declared
+acceptance is recorded separately from instrumented evidence. Exact versions,
+durations and logs for the prior reports were not supplied. The report describes
+the documentary closeout options without converting them into a measured rc6
+endurance PASS or changing the canonical checklist totals.
 
 Next blocking milestones:
 
-- **`v0.7.0` — Production containerization / deployment architecture**
+- **v0.7 stable — Production containerization / deployment architecture**
 - **`v0.8.0` — BlueOS extension and non-ROS deployment surface**
 
 Broad feature expansion in the backlog is intentionally secondary until the

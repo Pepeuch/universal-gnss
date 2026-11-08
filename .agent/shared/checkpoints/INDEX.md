@@ -1,8 +1,12 @@
 # Shared checkpoint index
 
+For the consolidated rc6 campaign diagnostics and current documentation review,
+see [the shared handoff](../RC6-20261108-REVIEW.md). Formal backlog status remains
+in TODO/manifest; the durable report and figures are linked from that handoff.
+
 - `active/UG-PRE-RELEASE-001_CHECKPOINT.md` — release-blocker audit at
-  `5c50f6c`: F01–F07 are committed through `d70bee1`; F08 is implemented and
-  regression-tested in the current uncommitted worktree. Includes source, PTY,
+  `5c50f6c`: F01–F07 are committed through `d70bee1`; F08 was implemented and
+  regression-tested in that historical audit worktree. Includes source, PTY,
   stalled-TLS, indeterminate-apply, and Docker shell evidence. The audit stays
   active for independent release and hardware qualification.
 - `retained/REPOSITORY_BASELINE_AUDIT_CHECKPOINT.md` and
@@ -26,7 +30,8 @@
 - `active/UG-PLAN-005_ROBOT_SECOND_RPI_VALIDATION.md` — bounded robot and
   second-Raspberry-Pi campaign evidence through Phase F plus the 2026-09-07 RTK,
   receiver-child recovery, and rate-mismatch closeout; retains the remaining
-  v0.7 hardware-validation plan.
+  v0.7 hardware-validation plan, with a separate 2026-11-08 rc6 passive-campaign
+  addendum; earlier physical matrices keep their exact historical baselines.
 - `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — completed external-LAN DDS
   matrix: unmodified bridge multicast failed; explicit bridge/unicast locators
   passed both directions and different-domain non-delivery.

@@ -37,9 +37,14 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 
 ## Current Project Status
 
-`v0.7.1-rc3` is released.
+Current prerelease: **`v0.7.4-rc6`**, source
+`d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: post-`v0.7.1-rc3` stabilization.
+Current phase: validation before the v0.7 stable release. This is not a stable
+release announcement. The [2026-11-08 passive mowing report](docs/validation/2026-11-08-rc6-passive-mowing.md)
+records native Lyrical/arm64 GNSS, correction continuity and natural RTK recovery
+on its exact production baseline. It does not close incarnation rejection,
+receiver persistence or registry-attestation acceptance by inference.
 
 <!-- UGA_STATUS_BEGIN -->
 ### Current Release Progress — v0.6 → v0.7
@@ -66,11 +71,12 @@ Generated from [`docs/status/uga_backlog.json`](docs/status/uga_backlog.json). U
 
 <!-- UGA_STATUS_END -->
 
-Deployment progress is tracked separately from the UGA baseline above. `UG-PLAN-005`
-Phase A has proven Kilted/Lyrical amd64 runtime, arm64 BuildKit/QEMU packaging,
+Deployment progress is tracked separately from the UGA baseline above. Historical
+`UG-PLAN-005` Phase A evidence at its recorded September baselines proves
+Kilted/Lyrical amd64 runtime, arm64 BuildKit/QEMU packaging,
 same-host DDS, and live u-blox/Unicore GNSS, NTRIP, RTCM, and UM982 USB-loss
 recovery behavior. Native Kilted arm64 build/runtime and live UM982 serial
-ingestion are also proven on a physical Raspberry Pi. The same current image is
+ingestion are also proven on a physical Raspberry Pi. The corresponding recorded image is
 validated independently on the real robot with a sole u-blox grant, live
 fix/NTRIP/RTCM correction flow, clean stop, and exact legacy restoration.
 External-LAN DDS is validated in both physical directions with explicit
@@ -78,12 +84,14 @@ bridge/unicast locators and different-domain non-delivery; unmodified bridge
 multicast failed and is not claimed. The robot lifecycle matrix also proves
 clean start/stop, unexpected main-process policy recovery, daemon restart, host
 reboot/autostart, and deterministic external-config reuse with fresh GNSS
-health. The current local Kilted image now atomically terminates the combined
-launch when either required child exits and Docker recreates both children;
-physical receiver validation remains open. Operator `docker kill` remained
+health. The September Kilted campaign separately proved receiver-child policy
+recovery and the bounded receiver/publication rate mismatches; it is not an
+rc6 transport-incarnation cutoff proof. Operator `docker kill` remained
 stopped and is not treated as a process crash.
-Lyrical-native, MowgliNext, BlueOS, API, and WebUI remain
-pending.
+The [rc6 Lyrical/arm64 mower campaign](docs/validation/2026-11-08-rc6-passive-mowing.md)
+now supplies bounded native production evidence on a different, explicitly
+recorded baseline. It does not retroactively extend the older Kilted matrices.
+Broader downstream qualification, BlueOS, API, and WebUI remain pending.
 
 Current project state includes:
 

@@ -1,0 +1,945 @@
+{
+  "campaign": "/home/pepeuch/universal-gnss-validation/results/gnss-rc6-mow-20261108T112529Z",
+  "metadata": {
+    "architecture": "aarch64",
+    "boot_id": "ab4607ca-4bab-413b-b620-54362772d62f",
+    "configuration": {
+      "available": true,
+      "provided": true,
+      "sha256": "1eb53ef9b6c46ff326c315af54bc5b8ff17683e5b3fcff61ff65c546d3d7a5e3"
+    },
+    "container": {
+      "container_id": "785c33b4135852b4b11033435c16e34bb7d1c99d11a2d0f13e20629e0226633e",
+      "container_name": "mowgli-gps",
+      "devices": [],
+      "group_add": [
+        "20"
+      ],
+      "health": "healthy",
+      "image_architecture": "arm64",
+      "image_id": "sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_oci_labels": {
+        "org.opencontainers.image.created": "2026-10-20T01:04:07+02:00",
+        "org.opencontainers.image.description": "Universal GNSS ROS 2 production container",
+        "org.opencontainers.image.revision": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+        "org.opencontainers.image.source": "https://github.com/Pepeuch/universal-gnss",
+        "org.opencontainers.image.title": "Universal GNSS ROS 2",
+        "org.opencontainers.image.version": "v0.7.4-rc6"
+      },
+      "image_reference": "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_repo_digests": [
+        "mowgli-rollback@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+        "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c"
+      ],
+      "ok": true,
+      "privileged": false,
+      "restart_count": 0,
+      "restart_policy": "unless-stopped",
+      "running": true,
+      "runtime_public_identity": {
+        "ROS_DISTRO": "lyrical",
+        "UNIVERSAL_GNSS_REVISION": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+        "UNIVERSAL_GNSS_VERSION": "v0.7.4-rc6"
+      },
+      "runtime_user": "[REDACTED]",
+      "status": "running"
+    },
+    "container_selection": {
+      "container": "mowgli-gps",
+      "method": "explicit",
+      "ok": true
+    },
+    "docker_version": {
+      "Client": {
+        "ApiVersion": "1.56",
+        "Arch": "arm64",
+        "BuildTime": "Thu Oct  8 20:37:15 2026",
+        "Context": "default",
+        "DefaultAPIVersion": "1.56",
+        "GitCommit": "f415da8",
+        "GoVersion": "go1.26.9",
+        "Os": "linux",
+        "Platform": {
+          "Name": "Docker Engine - Community"
+        },
+        "Version": "29.9.0"
+      },
+      "Server": {
+        "ApiVersion": "1.56",
+        "Arch": "arm64",
+        "BuildTime": "2026-10-08T20:37:15.000000000+00:00",
+        "Components": [
+          {
+            "Details": {
+              "ApiVersion": "1.56",
+              "Arch": "arm64",
+              "BuildTime": "Thu Oct  8 20:37:15 2026",
+              "Experimental": "false",
+              "GitCommit": "a5b58c9",
+              "GoVersion": "go1.26.9",
+              "KernelVersion": "6.18.50+rpt-rpi-2712",
+              "MinAPIVersion": "1.40",
+              "Module": "github.com/moby/moby/v2",
+              "ModuleVersion": "v2.0.0+unknown",
+              "Os": "linux"
+            },
+            "Name": "Engine",
+            "Version": "29.9.0"
+          },
+          {
+            "Details": {
+              "GitCommit": "f2551031d7276a770f65f98c9b52e57e7dad07e8"
+            },
+            "Name": "containerd",
+            "Version": "v2.4.1"
+          },
+          {
+            "Details": {
+              "GitCommit": "v1.5.2-0-g29dd3dc2"
+            },
+            "Name": "runc",
+            "Version": "1.5.2"
+          },
+          {
+            "Details": {
+              "GitCommit": "de40ad0"
+            },
+            "Name": "docker-init",
+            "Version": "0.19.0"
+          }
+        ],
+        "GitCommit": "a5b58c9",
+        "GoVersion": "go1.26.9",
+        "KernelVersion": "6.18.50+rpt-rpi-2712",
+        "MinAPIVersion": "1.40",
+        "Os": "linux",
+        "Platform": {
+          "Name": "Docker Engine - Community"
+        },
+        "Version": "29.9.0"
+      }
+    },
+    "duration_seconds": null,
+    "git_branch": null,
+    "git_revision": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+    "hostname": "Peuchmower2",
+    "kernel": "6.18.50+rpt-rpi-2712",
+    "mode": "functional",
+    "paths": {
+      "export_directory": null,
+      "log_directory": null,
+      "parameters": "/home/pepeuch/mowglinext/docker/config/mowgli/mowgli_robot.yaml"
+    },
+    "receiver": {
+      "available": true,
+      "provided": true,
+      "resolved_device": "/dev/ttyACM1",
+      "stable_by_id": "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00"
+    },
+    "record_type": "metadata",
+    "redaction": {
+      "credentials": "[REDACTED]",
+      "docker_environment": "omitted",
+      "parameter_values": "omitted"
+    },
+    "ros_distro": "lyrical",
+    "runtime_identity": "uid=1000(ubuntu) gid=1000(ubuntu) groups=1000(ubuntu),20(dialout)",
+    "sample_interval_seconds": 20.0,
+    "schema_version": 1,
+    "snapshot_interval_seconds": 300.0,
+    "started_local": "2026-11-08T12:25:30.279+01:00",
+    "started_utc": "2026-11-08T11:25:30.279Z"
+  },
+  "inventory": {
+    "gnss": {
+      "ok": true,
+      "container_id": "785c33b4135852b4b11033435c16e34bb7d1c99d11a2d0f13e20629e0226633e",
+      "container_name": "mowgli-gps",
+      "image_id": "sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_reference": "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_architecture": "arm64",
+      "image_repo_digests": [
+        "mowgli-rollback@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+        "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c"
+      ],
+      "image_oci_labels": {
+        "org.opencontainers.image.created": "2026-10-20T01:04:07+02:00",
+        "org.opencontainers.image.description": "Universal GNSS ROS 2 production container",
+        "org.opencontainers.image.revision": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+        "org.opencontainers.image.source": "https://github.com/Pepeuch/universal-gnss",
+        "org.opencontainers.image.title": "Universal GNSS ROS 2",
+        "org.opencontainers.image.version": "v0.7.4-rc6"
+      },
+      "runtime_public_identity": {
+        "ROS_DISTRO": "lyrical",
+        "UNIVERSAL_GNSS_VERSION": "v0.7.4-rc6",
+        "UNIVERSAL_GNSS_REVISION": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa"
+      },
+      "running": true,
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0,
+      "restart_policy": "unless-stopped",
+      "runtime_user": "1000:1000",
+      "group_add": [
+        "20"
+      ],
+      "privileged": false,
+      "devices": []
+    },
+    "ros2": {
+      "ok": true,
+      "container_id": "a9c17de74183dcf97a71ba5c1ab8ab3a87ad0affdf77fec9ba4c78b812d5a8ec",
+      "container_name": "mowgli-ros2",
+      "image_id": "sha256:2d0b5ee27d146ec16a50918edf111b3ede5923c27f4ef7aec66b1bc801ac20ad",
+      "image_reference": "ghcr.io/mowglinext/mowglinext/mowgli-ros2@sha256:2d0b5ee27d146ec16a50918edf111b3ede5923c27f4ef7aec66b1bc801ac20ad",
+      "image_architecture": "arm64",
+      "image_repo_digests": [
+        "ghcr.io/mowglinext/mowglinext/mowgli-ros2@sha256:2d0b5ee27d146ec16a50918edf111b3ede5923c27f4ef7aec66b1bc801ac20ad"
+      ],
+      "image_oci_labels": {
+        "org.opencontainers.image.created": "2026-11-07T08:08:27Z",
+        "org.opencontainers.image.description": "The Ubuntu container image maintained by Canonical\n\nUbuntu is a Debian-based Linux operating system that runs from the desktop to the cloud, to all your internet connected things.\nIt is the world's most popular operating system across public clouds and OpenStack clouds.\nIt is the number one platform for containers; from Docker to Kubernetes to LXD, Ubuntu can run your containers at scale.\nFast, secure and simple, Ubuntu powers millions of PCs worldwide.\n",
+        "org.opencontainers.image.revision": "4978cb72f96dbd19c538393d9cccd6b5c5b6099d",
+        "org.opencontainers.image.source": "https://github.com/mowglinext/mowglinext",
+        "org.opencontainers.image.title": "ubuntu",
+        "org.opencontainers.image.version": "deployment-4978cb72f96d-42354179007-1"
+      },
+      "runtime_public_identity": {
+        "ROS_DISTRO": "lyrical"
+      },
+      "running": true,
+      "status": "running",
+      "health": "not_configured",
+      "restart_count": 0,
+      "restart_policy": "unless-stopped",
+      "runtime_user": "root",
+      "group_add": [],
+      "privileged": true,
+      "devices": []
+    },
+    "receiver_by_id": "/dev/ttyACM1",
+    "remote_host_git": "5d3845b14c175ff3367c11e24f8f6f0dd7f0da51",
+    "local_development_git": "78104cf8cee835fe1acc948f7611379ac1fce124",
+    "tool_revision": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+    "tool_sha256": "f5711ba65c0b5c7dbca8b742dd6a752db37ca481f2b9ed46fe0622794d638f42"
+  },
+  "post_session_inventory": {
+    "utc": "2026-11-08T12:23:22.573437+00:00",
+    "gnss_container": {
+      "ok": true,
+      "container_id": "785c33b4135852b4b11033435c16e34bb7d1c99d11a2d0f13e20629e0226633e",
+      "container_name": "mowgli-gps",
+      "image_id": "sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_reference": "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+      "image_architecture": "arm64",
+      "image_repo_digests": [
+        "mowgli-rollback@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c",
+        "ghcr.io/pepeuch/universal-gnss-ros2-lyrical@sha256:eafa78d1d28da22059be8d88f12e8c742eabb3008aede1f6f031c49b3da0ed7c"
+      ],
+      "image_oci_labels": {
+        "org.opencontainers.image.created": "2026-10-20T01:04:07+02:00",
+        "org.opencontainers.image.description": "Universal GNSS ROS 2 production container",
+        "org.opencontainers.image.revision": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa",
+        "org.opencontainers.image.source": "https://github.com/Pepeuch/universal-gnss",
+        "org.opencontainers.image.title": "Universal GNSS ROS 2",
+        "org.opencontainers.image.version": "v0.7.4-rc6"
+      },
+      "runtime_public_identity": {
+        "ROS_DISTRO": "lyrical",
+        "UNIVERSAL_GNSS_VERSION": "v0.7.4-rc6",
+        "UNIVERSAL_GNSS_REVISION": "d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa"
+      },
+      "running": true,
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0,
+      "restart_policy": "unless-stopped",
+      "runtime_user": "1000:1000",
+      "group_add": [
+        "20"
+      ],
+      "privileged": false,
+      "devices": []
+    },
+    "gnss_processes": {
+      "available": true,
+      "receiver_pid": 1764,
+      "ntrip_pid": 1765
+    }
+  },
+  "stop_actions": {
+    "utc": "2026-11-08T12:22:52.845080+00:00",
+    "own_processes_signalled": [
+      {
+        "role": "collector.pid",
+        "pid": 595117
+      },
+      {
+        "role": "watch.pid",
+        "pid": 629431
+      },
+      {
+        "role": "mow_monitor",
+        "pid": 595610
+      },
+      {
+        "role": "continuous_listener",
+        "pid": 602056
+      }
+    ]
+  },
+  "events": [
+    {
+      "event": "session_started",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "collector",
+      "timestamp_local": "2026-11-08T12:25:30.280+01:00",
+      "timestamp_utc": "2026-11-08T11:25:30.280Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000001.json",
+      "record_type": "support_snapshot",
+      "sample_index": 1,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:25:33.307Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Passive collection ready; awaiting operator mowing start; no robot commands sent.",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T12:27:23.367+01:00",
+      "timestamp_utc": "2026-11-08T11:27:23.367Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Operator reports: starting mowing now (chat announcement; confirm motion from telemetry).",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T12:29:59.918+01:00",
+      "timestamp_utc": "2026-11-08T11:29:59.918Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000016.json",
+      "record_type": "support_snapshot",
+      "sample_index": 16,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:30:33.553Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000031.json",
+      "record_type": "support_snapshot",
+      "sample_index": 31,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:35:33.887Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000046.json",
+      "record_type": "support_snapshot",
+      "sample_index": 46,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:40:33.525Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000061.json",
+      "record_type": "support_snapshot",
+      "sample_index": 61,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:45:33.533Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000076.json",
+      "record_type": "support_snapshot",
+      "sample_index": 76,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:50:33.625Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Operator reports LiDAR connection problems causing mowing pauses; operator observes UG remains stable. LiDAR cause is operator-reported, not independently diagnosed by this GNSS campaign.",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T12:52:59.338+01:00",
+      "timestamp_utc": "2026-11-08T11:52:59.338Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000091.json",
+      "record_type": "support_snapshot",
+      "sample_index": 91,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T11:55:33.666Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Operator clarification: LiDAR connection issue is physical and requires revising the 3D-printed mount. No LiDAR intervention performed by this passive GNSS campaign.",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T12:57:55.670+01:00",
+      "timestamp_utc": "2026-11-08T11:57:55.670Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000106.json",
+      "record_type": "support_snapshot",
+      "sample_index": 106,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T12:00:33.638Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000121.json",
+      "record_type": "support_snapshot",
+      "sample_index": 121,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T12:05:33.641Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Operator retrospectively reports lifting mower to clean debris from a front wheel during the RTK degradation around 13:06:40 Europe/Paris. Report gives intervention context; exact physical timing/cause not independently measured. Fixed restored around 13:06:49.",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T13:09:43.693+01:00",
+      "timestamp_utc": "2026-11-08T12:09:43.693Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000136.json",
+      "record_type": "support_snapshot",
+      "sample_index": 136,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T12:10:33.581Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000151.json",
+      "record_type": "support_snapshot",
+      "sample_index": 151,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T12:15:33.767Z"
+    },
+    {
+      "container": "mowgli-gps",
+      "created": true,
+      "error": null,
+      "path": "snapshots/support-000166.json",
+      "record_type": "support_snapshot",
+      "sample_index": 166,
+      "schema_version": 1,
+      "timestamp_utc": "2026-11-08T12:20:33.567Z"
+    },
+    {
+      "event": "operator_marker",
+      "message": "Operator reports stopping mowing; ending passive campaign and own observers only.",
+      "record_type": "event",
+      "schema_version": 1,
+      "source": "operator",
+      "timestamp_local": "2026-11-08T13:22:52.820+01:00",
+      "timestamp_utc": "2026-11-08T12:22:52.820Z"
+    },
+    {
+      "event": "session_stopped",
+      "record_type": "event",
+      "schema_version": 1,
+      "signal_requested": true,
+      "source": "collector",
+      "timestamp_local": "2026-11-08T13:22:54.559+01:00",
+      "timestamp_utc": "2026-11-08T12:22:54.559Z"
+    }
+  ],
+  "functional": {
+    "samples": 173,
+    "first_utc": "2026-11-08T11:25:30.282Z",
+    "last_utc": "2026-11-08T12:22:50.336Z",
+    "duration_s": 3440.054198797996,
+    "interval_s": {
+      "n": 172,
+      "min": 19.99952622699493,
+      "median": 20.000075282499893,
+      "p95": 20.0007047449908,
+      "max": 20.009988524994696
+    },
+    "sequence_first": 607470,
+    "sequence_last": 631531,
+    "sequence_advance": 24061,
+    "accepted_position_hz": 6.994366544692016,
+    "snapshot_unavailable": 0,
+    "container_ids": [
+      "785c33b4135852b4b11033435c16e34bb7d1c99d11a2d0f13e20629e0226633e"
+    ],
+    "restart_counts": [
+      0
+    ],
+    "receiver_pids": [
+      1764
+    ],
+    "ntrip_pids": [
+      1765
+    ],
+    "source_incarnations": [
+      "c84731b579b241d489248f339218b5b1"
+    ],
+    "support_snapshots": 12
+  },
+  "continuous": {
+    "first_utc": "2026-11-08T11:35:01.532954+00:00",
+    "last_utc": "2026-11-08T12:22:52.819132+00:00",
+    "duration_s": 2871.2861724219983,
+    "counts": {
+      "publications": 20100,
+      "invalid_fix_publications": 0,
+      "publications_with_new_position": 19561,
+      "accepted_sequence_advance": 20079,
+      "jumps_over_one": 518,
+      "same_position_sequence": 538,
+      "same_position_sequence_and_runtime_stamp": 342,
+      "same_position_sequence_new_runtime_stamp": 196
+    },
+    "publication_gap_s": {
+      "n": 20099,
+      "min": 0.12601211700530257,
+      "median": 0.14285645498603117,
+      "p95": 0.14434987600543536,
+      "max": 0.1595667340006912
+    },
+    "rtk_transitions": [
+      {
+        "utc": "2026-11-08T12:06:40.246107+00:00",
+        "from": 3,
+        "to": 2,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.04399999976158142
+      },
+      {
+        "utc": "2026-11-08T12:06:40.388567+00:00",
+        "from": 2,
+        "to": 1,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.07599999755620956
+      },
+      {
+        "utc": "2026-11-08T12:06:41.103074+00:00",
+        "from": 1,
+        "to": 2,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.06800000369548798
+      },
+      {
+        "utc": "2026-11-08T12:06:46.388588+00:00",
+        "from": 2,
+        "to": 1,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.09399999678134918
+      },
+      {
+        "utc": "2026-11-08T12:06:47.247346+00:00",
+        "from": 1,
+        "to": 2,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.07900000363588333
+      },
+      {
+        "utc": "2026-11-08T12:06:49.245303+00:00",
+        "from": 2,
+        "to": 3,
+        "fix_valid": true,
+        "fix_type": 7,
+        "hacc_m": 0.014000000432133675
+      }
+    ],
+    "rtk_observed_seconds_by_previous_sample": {
+      "3": 2862.2863883740065,
+      "2": 7.42650823398435,
+      "1": 1.573275814007502
+    },
+    "source_ids": [
+      "/dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00"
+    ],
+    "source_incarnations": [
+      "c84731b579b241d489248f339218b5b1"
+    ],
+    "diagnostic_warnings": [],
+    "rtcm_frame_age_s": {
+      "n": 14357,
+      "min": 0.0,
+      "median": 0.399,
+      "p95": 0.799,
+      "max": 1.0
+    },
+    "rtcm_frame_count_first_last": [
+      459750,
+      474294
+    ],
+    "position_observation_age_s": {
+      "n": 20100,
+      "min": 0.0,
+      "median": 0.07,
+      "p95": 0.136,
+      "max": 0.163
+    },
+    "transport_rx_age_s": {
+      "n": 20100,
+      "min": 0.0,
+      "median": 0.046,
+      "p95": 0.129,
+      "max": 0.163
+    },
+    "receiver_epoch_regression_min_max": [
+      0,
+      0
+    ],
+    "parser_totals_min_max": {
+      "malformed_records_total": [
+        0,
+        0
+      ],
+      "rejected_records_total": [
+        0,
+        0
+      ],
+      "parser_anomalies_total": [
+        0,
+        0
+      ]
+    }
+  },
+  "timeline": {
+    "samples": 3414,
+    "first_utc": "2026-11-08T11:25:59.786506+00:00",
+    "last_utc": "2026-11-08T12:22:52.787373+00:00",
+    "bt_transitions": [
+      {
+        "utc": "2026-11-08T11:25:59.786506+00:00",
+        "state": "CRITICAL_BATTERY_CHARGING"
+      },
+      {
+        "utc": "2026-11-08T11:29:11.788640+00:00",
+        "state": "RESUMING_UNDOCKING"
+      },
+      {
+        "utc": "2026-11-08T11:29:23.785227+00:00",
+        "state": "UNDOCKING"
+      },
+      {
+        "utc": "2026-11-08T11:29:24.785385+00:00",
+        "state": "CALIBRATING_HEADING"
+      },
+      {
+        "utc": "2026-11-08T11:29:27.785318+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:29:30.784988+00:00",
+        "state": "TRANSIT"
+      },
+      {
+        "utc": "2026-11-08T11:29:49.787606+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T11:33:16.785521+00:00",
+        "state": "UNDOCKING"
+      },
+      {
+        "utc": "2026-11-08T11:33:17.785611+00:00",
+        "state": "CALIBRATING_HEADING"
+      },
+      {
+        "utc": "2026-11-08T11:33:20.784823+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:33:23.786812+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T11:47:33.785753+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:47:36.785220+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T11:48:06.785403+00:00",
+        "state": "AREA_UNREACHABLE"
+      },
+      {
+        "utc": "2026-11-08T11:48:07.784852+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:48:09.786362+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T11:48:40.785523+00:00",
+        "state": "AREA_UNREACHABLE"
+      },
+      {
+        "utc": "2026-11-08T11:48:41.785106+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:48:43.784847+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T11:49:51.785041+00:00",
+        "state": "UNDOCKING"
+      },
+      {
+        "utc": "2026-11-08T11:49:52.785717+00:00",
+        "state": "CALIBRATING_HEADING"
+      },
+      {
+        "utc": "2026-11-08T11:49:55.785558+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T11:49:58.784979+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T12:06:36.785840+00:00",
+        "state": "IDLE"
+      },
+      {
+        "utc": "2026-11-08T12:06:51.789736+00:00",
+        "state": "UNDOCKING"
+      },
+      {
+        "utc": "2026-11-08T12:06:52.785694+00:00",
+        "state": "CALIBRATING_HEADING"
+      },
+      {
+        "utc": "2026-11-08T12:06:55.785492+00:00",
+        "state": "PLANNING"
+      },
+      {
+        "utc": "2026-11-08T12:06:57.785556+00:00",
+        "state": "TRANSIT"
+      },
+      {
+        "utc": "2026-11-08T12:06:58.785237+00:00",
+        "state": "MOWING"
+      },
+      {
+        "utc": "2026-11-08T12:22:28.785420+00:00",
+        "state": "IDLE"
+      },
+      {
+        "utc": "2026-11-08T12:22:40.791336+00:00",
+        "state": "RETURNING_HOME"
+      }
+    ],
+    "summary": {
+      "type": "summary",
+      "ended_at": "2026-11-08T12:22:52.847943+00:00",
+      "duration_sec": 3414.3486936092377,
+      "samples_written": 3414,
+      "session_path_m_wheel": 461.7205241212483,
+      "session_straight_line_displacement_m": 3.2500902667861182,
+      "peak_fusion_gps_error_m": 0.3997998249057322,
+      "peak_wheel_gyro_yaw_drift_deg": 1268.3504582900634,
+      "peak_cog_fusion_yaw_gap_deg": 179.96617125784715,
+      "rtk_cov_check": {
+        "rtk_fixed_arrivals": 23836,
+        "ok": 10041,
+        "violations": 2,
+        "ok_ratio": 0.9998008563178333,
+        "peak_fusion_cov_xx_post_rtk": 8.294492219037974,
+        "verdict": "healthy"
+      },
+      "final_battery_voltage": 24.29426383972168,
+      "final_bt_state_name": "RETURNING_HOME",
+      "dead_reckoning_sec": 0.0,
+      "final_gps_rejects_dead_reckoning": 1,
+      "final_gps_rejects_stuck_value": 0,
+      "final_localization_mode_id": 3
+    }
+  },
+  "live_watch": {
+    "iterations": 154,
+    "alerts": [],
+    "resource_stats": {
+      "collector": {
+        "cpu_percent_one_core": {
+          "n": 153,
+          "min": 0.0,
+          "median": 0.09983725700956417,
+          "p95": 0.19964503221081614,
+          "max": 0.24957701078001981
+        },
+        "rss_kb": {
+          "n": 27,
+          "min": 21552.0,
+          "median": 21552.0,
+          "p95": 21552.0,
+          "max": 21552.0
+        }
+      },
+      "monitor": {
+        "cpu_percent_one_core": {
+          "n": 153,
+          "min": 32.6925841449709,
+          "median": 36.77945430333556,
+          "p95": 37.63031739369881,
+          "max": 38.04078832990449
+        },
+        "rss_kb": {
+          "n": 27,
+          "min": 93424.0,
+          "median": 93456.0,
+          "p95": 93472.0,
+          "max": 93472.0
+        }
+      },
+      "receiver": {
+        "cpu_percent_one_core": {
+          "n": 26,
+          "min": 1.8966630683711165,
+          "median": 2.0450602121377828,
+          "p95": 2.0967560240473833,
+          "max": 2.0968835826829038
+        },
+        "rss_kb": {
+          "n": 27,
+          "min": 45840.0,
+          "median": 45856.0,
+          "p95": 45936.0,
+          "max": 46016.0
+        }
+      },
+      "ntrip": {
+        "cpu_percent_one_core": {
+          "n": 26,
+          "min": 0.5984721595261604,
+          "median": 0.6986270983162957,
+          "p95": 0.7977870401899415,
+          "max": 0.7981048381286646
+        },
+        "rss_kb": {
+          "n": 27,
+          "min": 44064.0,
+          "median": 44080.0,
+          "p95": 44160.0,
+          "max": 44176.0
+        }
+      },
+      "continuous_listener": {
+        "cpu_percent_one_core": {
+          "n": 26,
+          "min": 3.9937901477556887,
+          "median": 4.1892203124351735,
+          "p95": 4.290668856748185,
+          "max": 4.292031426043855
+        },
+        "rss_kb": {
+          "n": 27,
+          "min": 78160.0,
+          "median": 78160.0,
+          "p95": 78160.0,
+          "max": 78160.0
+        }
+      }
+    }
+  },
+  "manifest": [
+    {
+      "path": "inventory.json",
+      "bytes": 3733,
+      "sha256": "f91cab2e150b23b6acd2c2c617e383a513ea7db86c4a41c81f04887a484994c2"
+    },
+    {
+      "path": "post-session-inventory.json",
+      "bytes": 1765,
+      "sha256": "77ec429e4216151ff205c5314501c4c105ebafd6b608117043bedf15c22b9351"
+    },
+    {
+      "path": "functional/metadata.json",
+      "bytes": 4849,
+      "sha256": "fad9bf525e4b56d2647e7d82c1da67959426a81c9f8845c66863cb702f48a05a"
+    },
+    {
+      "path": "functional/samples.jsonl",
+      "bytes": 4537526,
+      "sha256": "cbd069c3257642b383149af6288ebc3359d9c845f3bf81bd87f9c86ed590dd49"
+    },
+    {
+      "path": "functional/events.jsonl",
+      "bytes": 5194,
+      "sha256": "b8a44fd5d15ef49572a16f09effb72f33f0834415056d2f6bba69755e8dc6605"
+    },
+    {
+      "path": "functional/summary.json",
+      "bytes": 12961,
+      "sha256": "a869eb2fa325640a5aaebc3d6cd54145f1275b17d180a0720e519bbc5297d597"
+    },
+    {
+      "path": "continuous-gnss.jsonl",
+      "bytes": 232104087,
+      "sha256": "5f0debf255e41ae77e6b611537685609124a68427aba9d284b2a37a03fa506ed"
+    },
+    {
+      "path": "mow-timeline.jsonl",
+      "bytes": 13680535,
+      "sha256": "56bef174cef0151e89ceb9e2fb61efe4ec656585581c79028c31133901e5245a"
+    },
+    {
+      "path": "live-analysis.jsonl",
+      "bytes": 255106,
+      "sha256": "953054912af0a8adb0bb72c10066c58357d06d65d42c7496d4e7fb35e1b5a997"
+    },
+    {
+      "path": "passive_listener.py",
+      "bytes": 4614,
+      "sha256": "624b3338afd9bdc1b74b6aa561d4bfec4c40a511fd4e50a80a1baea250341138"
+    },
+    {
+      "path": "watch.py",
+      "bytes": 11726,
+      "sha256": "a8c2001acebfa4b104d9b7aea16b435140c7191a6aed82696f124fa96a6c1900"
+    }
+  ]
+}
