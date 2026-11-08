@@ -5,6 +5,9 @@ Independent rc6 release-qualification addendum (2026-11-08): see the
 campaign report/figures. This new F9P/Lyrical observation does not reclassify
 F01–F08 or qualify retired-response cutoff, persistence or publication.
 Existing software and historical hardware evidence below retain their baselines.
+The maintainer now selects v0.7.4 stable with documented limits; main-only
+local integration and publication gates are in the
+[active release handoff](../../RELEASE-V0.7.4.md). No audit count changes.
 
 Lifecycle: ACTIVE
 Disposition: ACTIVE

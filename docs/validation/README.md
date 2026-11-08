@@ -3,7 +3,11 @@
 Current prerelease: **`v0.7.4-rc6`**, source
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: validation before v0.7 stable. See the
+The maintainer-selected successor is v0.7.4 stable, prepared but not published.
+See the [publication/validation gates](../releases/v0.7.4-publication.md);
+release designation does not close missing acceptance evidence. The
+[local integration validation](2026-11-08-v074-integration.md) records software
+checks, runtime equivalence and publication limits. See the
 [2026-11-08 rc6 passive mowing report](2026-11-08-rc6-passive-mowing.md)
 for the exact Lyrical/arm64 image, measurements, limits and remaining gates.
 The report includes four technical figures and a versioned, hash-verifying

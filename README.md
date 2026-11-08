@@ -40,8 +40,12 @@ The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normaliz
 Current prerelease: **`v0.7.4-rc6`**, source
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: validation before the v0.7 stable release. This is not a stable
-release announcement. The [2026-11-08 passive mowing report](docs/validation/2026-11-08-rc6-passive-mowing.md)
+Maintainer-selected stable target: **`v0.7.4`**, successor to rc6; integration
+and publication are being prepared on **main**. The stable tag and artifacts
+have not been published. See the [release notes](docs/releases/v0.7.4.md),
+[publication procedure](docs/releases/v0.7.4-publication.md) and
+[v0.7/v0.8 version policy](docs/releases/versioning.md).
+The [2026-11-08 passive mowing report](docs/validation/2026-11-08-rc6-passive-mowing.md)
 records native Lyrical/arm64 GNSS, correction continuity and natural RTK recovery
 on its exact production baseline. It does not close incarnation rejection,
 receiver persistence or registry-attestation acceptance by inference.

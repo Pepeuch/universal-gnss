@@ -5,7 +5,11 @@
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Current phase: validation before the v0.7 stable release.
+Maintainer-selected stable target: **`v0.7.4`** after rc6, prepared on **main**
+and not yet published. See the [release notes](docs/releases/v0.7.4.md) and
+[publication gates](docs/releases/v0.7.4-publication.md). This decision changes
+no checklist evidence or counters. The [version policy](docs/releases/versioning.md)
+separates stable v0.7.x maintenance from v0.8 development.
 
 The [2026-11-08 passive mowing campaign](docs/validation/2026-11-08-rc6-passive-mowing.md)
 completed 173 functional samples over 57 minutes and a separate continuous

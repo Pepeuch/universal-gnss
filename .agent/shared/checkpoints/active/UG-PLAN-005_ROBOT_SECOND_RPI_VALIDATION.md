@@ -10,8 +10,11 @@ no automatic repeat endurance run is requested. Current numeric accounting
 comes from TODO/manifest and generated checks, not this historical checkpoint.
 The campaign is complete and its own observers have all stopped. Reuse that
 report; do not rerun acquisition solely to recreate documentation. The current
-local documentation proposal is uncommitted, with all four release gates still
-separate from the bounded functional result.
+documentation candidate is committed locally on main as `24d109d`, with all
+four checklist gates still separate from the bounded functional result. The
+maintainer selects v0.7.4 stable and accepts endurance on operating feedback;
+[the active release handoff](../../RELEASE-V0.7.4.md) records the explicit limits,
+CI results and publication prerequisites. Remote integration remains pending.
 Consolidated diagnostics, measurement limitations, four reproducible figure
 references and current review work are in `../../RC6-20261108-REVIEW.md`.
 That shared handoff includes the RTK recovery, source/correction stability,

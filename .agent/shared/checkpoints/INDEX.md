@@ -1,7 +1,9 @@
 # Shared checkpoint index
 
 For the consolidated rc6 campaign diagnostics and current documentation review,
-see [the shared handoff](../RC6-20261108-REVIEW.md). Formal backlog status remains
+see [the retained campaign handoff](../RC6-20261108-REVIEW.md). Main-only stable
+preparation and publication gates are [ACTIVE here](../RELEASE-V0.7.4.md).
+Formal backlog status remains
 in TODO/manifest; the durable report and figures are linked from that handoff.
 
 - `active/UG-PRE-RELEASE-001_CHECKPOINT.md` — release-blocker audit at

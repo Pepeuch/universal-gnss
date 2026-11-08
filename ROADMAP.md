@@ -5,7 +5,13 @@
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Universal GNSS is preparing the v0.7 stable release. The project is no longer
+The maintainer has selected **v0.7.4 stable** as rc6 successor. Integration is
+prepared on **main**; stable publication is pending approval and exact-SHA CI.
+See the [release notes](docs/releases/v0.7.4.md),
+[publication procedure](docs/releases/v0.7.4-publication.md) and
+[version policy](docs/releases/versioning.md): v0.7.x maintenance remains
+isolated from optional v0.8.0-alpha.1, beta.1, rc.1 and stable development.
+The project is no longer
 in a "next phase is basic ROS2 integration" posture, so the roadmap is grouped
 by ownership:
 
