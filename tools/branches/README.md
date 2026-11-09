@@ -92,7 +92,7 @@ primary pilot build contract.
 | `driver` | `protocols`, `transport` | Sessions/configuration/discovery library at `core/gnss_driver/` |
 | `ntrip` | `protocols`, `transport` | NTRIP/GGA library at `core/gnss_ntrip/`; TLS tests use transport helpers |
 | `fixtures` | — | Existing synthetic/sanitized `testdata/` corpus |
-| `tools` | `driver`, `ntrip`, `protocols`, `fixtures` | Library linked by replay and associated CLI/tests |
+| `tools` | `driver`, `ntrip`, `protocols`, `fixtures` | Library at `tools/gnss_tools/`, linked by replay and associated CLI/tests; `tools/branches/` stays excluded |
 | `messages` | — | ament, ROSIDL generator/runtime, builtin/diagnostic interfaces, pytest |
 | `healthcheck` | — | `rclpy`, `std_srvs`; runtime probe and its existing test |
 | `ros2` | `legal`, `core`, `protocols`, `transport`, `driver`, `ntrip`, `tools`, `messages`, `fixtures`, `healthcheck` | rclcpp, standard ROS messages/services, launch, ament/gtest/pytest and Python3 |

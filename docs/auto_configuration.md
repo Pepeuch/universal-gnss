@@ -131,9 +131,9 @@ Auto Configuration:
   - `core/gnss_driver/src/receiver_command_transaction_engine.cpp`
   - `core/gnss_driver/src/receiver_config_application.cpp`
 - dry-run and review tooling in:
-  - `gnss_tools/src/profile_preview.cpp`
-  - `gnss_tools/src/config_plan.cpp`
-  - `gnss_tools/src/config_apply.cpp`
+  - `tools/gnss_tools/src/profile_preview.cpp`
+  - `tools/gnss_tools/src/config_plan.cpp`
+  - `tools/gnss_tools/src/config_apply.cpp`
 - conservative response routers for the existing live apply path in:
   - `core/gnss_driver/src/ublox_response_router.cpp`
   - `core/gnss_driver/src/unicore_response_router.cpp`

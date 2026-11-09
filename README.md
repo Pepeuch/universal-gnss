@@ -315,7 +315,7 @@ Current implemented layers:
   - GGA injection policy types
   - connection metrics models
   - synchronous live client foundation and caster-monitor support
-- `gnss_tools`
+- `gnss_tools` (sources: [tools/gnss_tools/](tools/gnss_tools/CMakeLists.txt))
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
   - `gnss_replay` CLI for semantic offline runtime replay
