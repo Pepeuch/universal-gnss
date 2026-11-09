@@ -35,10 +35,10 @@ Guidelines:
 Regeneration:
 - There is no dedicated generator script checked in yet.
 - The current files mirror the synthetic helper payloads already embedded in
-  `gnss_tools/tests/test_gnss_replay.cpp`,
-  `gnss_tools/tests/test_gnss_stream_inspector.cpp`,
-  `gnss_protocols/tests/test_ubx_nav_pvt.cpp`,
-  `gnss_protocols/tests/test_ubx_nav_sat.cpp`, and
-  `gnss_protocols/tests/test_ubx_mon_rf.cpp`.
+  `tools/gnss_tools/tests/test_gnss_replay.cpp`,
+  `tools/gnss_tools/tests/test_gnss_stream_inspector.cpp`,
+  `protocols/gnss_protocols/tests/test_ubx_nav_pvt.cpp`,
+  `protocols/gnss_protocols/tests/test_ubx_nav_sat.cpp`, and
+  `protocols/gnss_protocols/tests/test_ubx_mon_rf.cpp`.
 - If one of those canonical synthetic payloads changes, regenerate the
   corresponding file with the same bytes and keep this README in sync.

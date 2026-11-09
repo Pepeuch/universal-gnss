@@ -11,7 +11,7 @@ this operational guide when reviewing a release candidate.
 
 ## Scope and support boundary
 
-- Target build distributions: ROS 2 Kilted (default) and Lyrical, selected by
+- Target build distributions: ROS 2 Lyrical (Dockerfile default) and Kilted, selected by
   the `ROS_DISTRO` build argument from one Dockerfile. Kilted and Lyrical amd64
   builds and container lifecycle validation are established.
 - Initial image architectures are `linux/amd64` and `linux/arm64`; `arm/v7` is
@@ -47,9 +47,27 @@ docker build \
   .
 ```
 
-Use `--build-arg ROS_DISTRO=lyrical` for the Lyrical image. Multi-architecture
-build/publish automation is a later milestone; build each validated target
-platform explicitly for now.
+The example explicitly selects Kilted. Use `--build-arg ROS_DISTRO=lyrical`
+or omit the argument for the current Lyrical default. Run these relative-path
+commands from the repository root.
+
+The builder selects `universal_gnss_msgs/` and `adapters/ros2/gnss_ros2/`
+through explicit colcon base paths and preserves their package names. MAVROS
+is not selected by the production Dockerfile; its optional source-distribution
+component does not automatically add it to this image.
+
+The existing [Docker validation workflow](../.github/workflows/docker.yml)
+builds and checks Kilted/Lyrical amd64 images without publishing. The separate
+[Docker release workflow](../.github/workflows/docker-release.yml) automates
+Buildx/QEMU images for `linux/amd64` and `linux/arm64`, with SBOM/provenance
+requests and published-index platform checks. Its `v*` tag trigger publishes;
+manual dispatch defaults to a build without pushing and permits publication
+only on a `v*` tag. No release workflow is invoked by this guide update.
+
+This image automation already exists. Official publication of generated source
+branches remains disabled and requires a separate activation decision. Neither
+automation, prior target-specific results nor local source generation replaces
+the post-refactor global CI qualification campaign, which remains to be run.
 
 This release contract makes project-owned inputs traceable; it does not claim
 bit-for-bit reproducibility across time. `ros:${ROS_DISTRO}-ros-base` is a
@@ -166,6 +184,11 @@ docker compose \
   --env-file /srv/universal-gnss/compose.env \
   -f docker/compose.yaml up -d
 ```
+
+This is an operator deployment example. Docker Compose was unavailable in the
+refactor audits; its configuration command was not executed there. Reading the
+YAML or validating the Dockerfile does not qualify Compose interpolation or a
+physical deployment.
 
 It uses `restart: unless-stopped` for Docker process recovery and reuses the
 same read-only parameter mount on every recreation. The robot Phase-E matrix

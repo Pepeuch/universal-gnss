@@ -52,12 +52,12 @@ if(BUILD_TESTING)
   target_include_directories(
     gnss_ntrip_test_ntrip_client
     PRIVATE
-      ${CMAKE_SOURCE_DIR}/gnss_transport/tests
+      ${CMAKE_SOURCE_DIR}/core/gnss_transport/tests
   )
   target_compile_definitions(
     gnss_ntrip_test_ntrip_client
     PRIVATE
-      UNIVERSAL_GNSS_TLS_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/gnss_transport/tests/fixtures/tls"
+      UNIVERSAL_GNSS_TLS_FIXTURE_DIR="${CMAKE_SOURCE_DIR}/core/gnss_transport/tests/fixtures/tls"
   )
   add_test(NAME gnss_ntrip_test_ntrip_client COMMAND gnss_ntrip_test_ntrip_client)
 

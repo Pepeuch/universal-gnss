@@ -1,6 +1,7 @@
 # Transport Layer
 
 This document describes the purpose and current scope of `gnss_transport`.
+Current sources: [core/gnss_transport/](../core/gnss_transport/CMakeLists.txt).
 
 Today `gnss_transport` provides a small portable abstraction layer plus a couple
 of concrete synchronous byte-stream adapters.
@@ -329,7 +330,8 @@ Examples:
 
 ## Current Driver Bridge
 
-`gnss_driver/receiver_session_runner.*` is the first integration point that
+The driver bridge ([header](../core/gnss_driver/include/universal_gnss_driver/receiver_session_runner.hpp),
+[implementation](../core/gnss_driver/src/receiver_session_runner.cpp)) is the first integration point that
 consumes transport abstractions directly.
 
 Current role:

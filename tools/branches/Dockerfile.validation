@@ -1,0 +1,20 @@
+# Dependency-only CI image: no COPY/ADD and no UG source or installation.
+ARG ROS_DISTRO
+FROM ros:${ROS_DISTRO}-ros-base
+ARG ROS_DISTRO
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential cmake libssl-dev python3-colcon-common-extensions \
+      ros-${ROS_DISTRO}-ament-cmake-gtest \
+      ros-${ROS_DISTRO}-ament-cmake-pytest \
+      ros-${ROS_DISTRO}-builtin-interfaces \
+      ros-${ROS_DISTRO}-diagnostic-msgs \
+      ros-${ROS_DISTRO}-launch \
+      ros-${ROS_DISTRO}-launch-ros \
+      ros-${ROS_DISTRO}-rclcpp \
+      ros-${ROS_DISTRO}-rclpy \
+      ros-${ROS_DISTRO}-rosidl-default-generators \
+      ros-${ROS_DISTRO}-rosidl-default-runtime \
+      ros-${ROS_DISTRO}-sensor-msgs \
+      ros-${ROS_DISTRO}-std-srvs \
+ && rm -rf /var/lib/apt/lists/*

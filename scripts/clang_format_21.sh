@@ -14,13 +14,13 @@ repository_root="$(git rev-parse --show-toplevel)"
 cd "$repository_root"
 
 project_roots=(
-  gnss_core
-  gnss_protocols
-  gnss_driver
-  gnss_transport
-  gnss_ntrip
-  gnss_tools
-  gnss_ros2
+  core/gnss_core
+  protocols/gnss_protocols
+  core/gnss_driver
+  core/gnss_transport
+  core/gnss_ntrip
+  tools/gnss_tools
+  adapters/ros2/gnss_ros2
 )
 
 is_cpp_file() {

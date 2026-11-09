@@ -7,7 +7,7 @@ The project contains these ROS-facing layers:
 - `gnss_core`: a portable, ROS-independent runtime model
 - `universal_gnss_msgs`: public ROS messages and services, with no runtime
   targets
-- `gnss_ros2`: the ROS 2 runtime package `universal_gnss_ros2`, which depends
+- `gnss_ros2` (sources: [adapters/ros2/gnss_ros2/](../adapters/ros2/gnss_ros2/CMakeLists.txt)): the ROS 2 runtime package `universal_gnss_ros2`, which depends
   on `universal_gnss_msgs`
 - `gnss_mavros`: the optional external MAVROS plugin package
   `universal_gnss_mavros`
@@ -23,7 +23,7 @@ Those layers are intentionally separate from `gnss_ros2`.
 
 `gnss_mavros` is also separate: MAVROS APIs are isolated in its plugin source,
 while its state adapter reuses `GnssRuntimeAggregator`, `GnssStatus`, and
-`NavSatFix` projection. See [`../gnss_mavros/README.md`](../gnss_mavros/README.md)
+`NavSatFix` projection. See [`../adapters/mavros/gnss_mavros/README.md`](../adapters/mavros/gnss_mavros/README.md)
 for its pinned baseline, topics, handlers, and FCU-incarnation contract.
 
 ## Purpose

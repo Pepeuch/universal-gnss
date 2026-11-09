@@ -10,7 +10,9 @@ receiver orchestration are not.
 
 ## Purpose
 
-`gnss_protocols` is the portable protocol layer.
+`gnss_protocols` is the portable protocol layer. Its sources are in
+[`protocols/gnss_protocols/`](../protocols/gnss_protocols/CMakeLists.txt); the CMake library and
+public `universal_gnss_protocols/...` include namespace are unchanged.
 
 Current responsibilities:
 

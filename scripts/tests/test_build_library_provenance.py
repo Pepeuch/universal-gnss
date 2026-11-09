@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[2] / "gnss_ros2/tests/check_build_library_provenance.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "adapters/ros2/gnss_ros2/tests/check_build_library_provenance.py"
 SPEC = importlib.util.spec_from_file_location("build_library_provenance", SCRIPT)
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)

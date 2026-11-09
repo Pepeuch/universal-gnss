@@ -35,6 +35,49 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
+## Local source distributions
+
+The [offline source generator](tools/branches/README.md) produces autonomous
+ROS2 Kilted/Lyrical source trees, with optional MAVROS and Docker packaging. It
+keeps existing source paths and public contracts, computes transitive component
+dependencies and verifies the output against an identified Git commit. This is
+local tooling; no specialized branch or release is published by generation.
+The [distribution CI guide](tools/branches/CI.md) describes read-only validation,
+local test results and the separately gated future publication design.
+
+## Repository refactor status
+
+The nine software component relocations are technically complete: 310 files,
+with two audited internal CMake path adaptations and unchanged public contracts.
+The lot 12 documentation consolidation aligns the active guides; its review and
+integration remain pending. A dedicated global CI qualification campaign for
+the refactored repository still needs to run. Earlier component PR checks and
+local audit results do not declare that campaign complete.
+
+Promotion from `dev` to `main` is not authorized at this stage. Structural
+completion does not change the UG functional version, qualification counters
+or publication status. Independent technical debts and future backends remain
+tracked separately in the [repository plan](TODO_REPO_REFACTOR.md).
+
+The current organization is:
+
+| Location | Responsibility |
+| --- | --- |
+| `core/` | Common model, driver, transport, NTRIP and native runtime |
+| `protocols/` | GNSS protocol parsing and framing |
+| `adapters/ros2/` | ROS2 runtime package, launch and configuration |
+| `adapters/mavros/` | Optional MAVROS adapter/plugin |
+| `tools/` | GNSS library/CLI under `gnss_tools/`; development generator under `branches/` |
+| `docker/`, root `Dockerfile` | Existing production packaging and operator configuration |
+| `scripts/` | Maintenance, support and validation |
+| `testdata/` | Shared fixtures; component tests remain colocated |
+| `universal_gnss_msgs/` | Independent public ROSIDL package, deliberately kept at the root |
+
+Docker inputs, scripts and fixtures stay at these locations; another move is
+not a prerequisite for closure. ESP32 BASE/RELAY/ROVER and ESP-NOW LR, ROS2 Humble
+and BlueOS remain future integration/distribution work, not implemented backends
+of this refactor.
+
 ## Current Project Status
 
 Current prerelease: **`v0.7.4-rc6`**, source
@@ -268,14 +311,14 @@ Universal GNSS currently exposes this receiver-profile surface through:
 
 Current implemented layers:
 
-- `gnss_core`
+- `gnss_core` (sources: [core/gnss_core/](core/gnss_core/CMakeLists.txt))
   - portable C++ runtime model
   - runtime aggregation of partial normalized updates
   - fix / RTK enums
   - capability and value flag system
   - canonical dual-antenna baseline fields plus `v0.6.x` heading compatibility
   - no ROS 2 dependency
-- `gnss_protocols`
+- `gnss_protocols` (sources: [protocols/gnss_protocols/](protocols/gnss_protocols/CMakeLists.txt))
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA`
   - standard `GGA fix_quality` -> normalized `rtk_mode` mapping for generic
@@ -289,23 +332,27 @@ Current implemented layers:
   - RTCM3 framing, CRC24Q, message-type extraction/classification, and
     semantic decode for `1005` / `1006` base position, `1007` / `1008` station
     antenna metadata, `1230`, and portable MSM header/summary observability
-- `gnss_driver`
+- `gnss_driver` (sources: [core/gnss_driver/](core/gnss_driver/CMakeLists.txt))
   - receiver profile declarations
   - protocol support and feature flags
   - lightweight stream-family detection and auto-discovery
   - discovery-aware planner/report layer for portable receiver configuration
-- `gnss_transport`
+- `gnss_transport` (sources: [core/gnss_transport/](core/gnss_transport/CMakeLists.txt))
   - portable byte source / sink interfaces
   - memory-backed test / replay transport
   - Linux POSIX serial transport
   - transport metrics and buffer helpers
-- `gnss_ntrip`
+- `gnss_ntrip` (sources: [core/gnss_ntrip/](core/gnss_ntrip/CMakeLists.txt))
   - portable NTRIP config types
   - request and auth header generation
   - GGA injection policy types
   - connection metrics models
   - synchronous live client foundation and caster-monitor support
-- `gnss_tools`
+- `gnss_runtime` (sources: [core/gnss_runtime/](core/gnss_runtime/CMakeLists.txt))
+  - native receiver supervision and Linux serial integration
+  - Linux `universal_gnss_supervisor` executable
+  - intentionally excluded from the ROS2 source distributions
+- `gnss_tools` (sources: [tools/gnss_tools/](tools/gnss_tools/CMakeLists.txt))
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
   - `gnss_replay` CLI for semantic offline runtime replay
@@ -320,7 +367,7 @@ Current implemented layers:
   - `GnssStatus` and `RtcmFrame` messages
   - read-only `GetReceiverSnapshot` service
   - no receiver, transport, driver, NTRIP, tool, or node targets
-- `gnss_ros2`
+- `gnss_ros2` (sources: [adapters/ros2/gnss_ros2/](adapters/ros2/gnss_ros2/CMakeLists.txt))
   - ROS 2 runtime package `universal_gnss_ros2`, depending on
     `universal_gnss_msgs`
   - `GnssRuntimeState -> GnssStatus` adapter
@@ -338,7 +385,7 @@ Current implemented layers:
     optional `rtcm` publication from sanitized logs
   - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state
   - serial / TCP / replay / combined launch examples
-- `gnss_mavros`
+- `gnss_mavros` (sources: [adapters/mavros/gnss_mavros/](adapters/mavros/gnss_mavros/CMakeLists.txt))
   - optional external MAVROS plugin pinned to MAVROS `2.16.0`
   - direct `GPS_RAW_INT`, `GPS2_RAW`, `GPS_RTK`, `GPS2_RTK`, and `SYSTEM_TIME`
     handlers
@@ -371,8 +418,8 @@ See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
 receiver/NTRIP node surfaces, and the current status / covariance policy.
 
 See [docs/devcontainer.md](docs/devcontainer.md) for the reproducible ROS 2
-devcontainer setup, Kilted build flow, future Lyrical switch path, and optional
-serial hardware access examples.
+devcontainer setup, current Lyrical default, Kilted selection, and the declared
+privileges/device mounts. Device visibility is not hardware qualification.
 
 See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
 current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and
