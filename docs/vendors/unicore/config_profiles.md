@@ -28,12 +28,12 @@ sequence of CRLF-terminated text commands.
 
 Current implementation lives in:
 
-- `gnss_driver/include/universal_gnss_driver/unicore_model_profile.hpp`
-- `gnss_driver/src/unicore_model_profile.cpp`
-- `gnss_driver/include/universal_gnss_driver/unicore_config_profile_builder.hpp`
-- `gnss_driver/src/unicore_config_profile_builder.cpp`
-- `gnss_driver/include/universal_gnss_driver/unicore_response_router.hpp`
-- `gnss_driver/src/unicore_response_router.cpp`
+- `core/gnss_driver/include/universal_gnss_driver/unicore_model_profile.hpp`
+- `core/gnss_driver/src/unicore_model_profile.cpp`
+- `core/gnss_driver/include/universal_gnss_driver/unicore_config_profile_builder.hpp`
+- `core/gnss_driver/src/unicore_config_profile_builder.cpp`
+- `core/gnss_driver/include/universal_gnss_driver/unicore_response_router.hpp`
+- `core/gnss_driver/src/unicore_response_router.cpp`
 
 ## Model-aware profile seam
 

@@ -85,6 +85,18 @@ avec réaudit avant chaque étape. La dette de formatage runtime préexistante
 est seulement documentée ; elle n'est pas corrigée dans ce lot. Aucun compteur
 fonctionnel, version, comportement GNSS ou qualification matérielle ne change.
 
+## Avancement structurel — lot 5B, driver
+
+Le driver est déplacé seul de `gnss_driver/` vers `core/gnss_driver/`, en
+conservant ses 73 fichiers, contenus, modes et contrats publics. Le
+[bilan du déplacement du driver](tools/branches/DRIVER_MOVE.md) décrit l'audit
+depuis le merge de la PR #16, les références actives adaptées et les validations.
+Les dépendances vers protocoles et transport sont conservées. Transport, NTRIP
+et runtime restent en place ; la dette de formatage runtime et les preuves
+historiques ne sont pas modifiées. Les prochaines étapes recommandées restent
+NTRIP, transport puis runtime, avec réaudit avant chaque déplacement. Aucun
+compteur fonctionnel, version ou jalon de qualification matérielle ne change.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -249,13 +261,14 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le premier déplacement du lot 5 ; les
-protocoles et le modèle commun sont regroupés, les autres composants restent à la racine. La base du lot 0 reste celle indiquée en tête :
+La table décrit l’arbre courant après le lot 5B ; les protocoles, le modèle
+commun et le driver sont regroupés, les autres composants restent à la racine.
+La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
 | --- | --- | --- |
 | `core/gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | En place depuis le premier déplacement du lot 5 ; noms publics inchangés |
-| `gnss_driver/` | Sessions, détection, profils et configuration | `core/gnss_driver/` |
+| `core/gnss_driver/` | Sessions, détection, profils et configuration | En place depuis le lot 5B ; noms publics inchangés |
 | `protocols/gnss_protocols/` | NMEA, UBX, Unicore et RTCM | En place depuis le lot 4 ; noms publics inchangés |
 | `gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | `core/gnss_transport/` initialement |
 | `gnss_ntrip/` | Client/caster NTRIP et GGA | `core/gnss_ntrip/` |

@@ -47,7 +47,7 @@ if(NOT TARGET universal_gnss_transport)
 endif()
 if(NOT TARGET universal_gnss_driver)
   add_subdirectory(
-    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_driver"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/core/gnss_driver"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_driver"
   )
 endif()
