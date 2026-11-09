@@ -19,13 +19,13 @@ if(BUILD_TESTING)
 endif()
 
 set(UNIVERSAL_GNSS_CORE_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_core/include")
-set(UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_protocols/include")
+set(UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR "${UNIVERSAL_GNSS_SOURCE_ROOT}/protocols/gnss_protocols/include")
 
 if(NOT EXISTS "${UNIVERSAL_GNSS_CORE_INCLUDE_DIR}/universal_gnss/gnss_runtime_state.hpp")
   message(FATAL_ERROR "gnss_core headers were not found next to gnss_ros2")
 endif()
 if(NOT EXISTS "${UNIVERSAL_GNSS_PROTOCOLS_INCLUDE_DIR}/universal_gnss_protocols/rtcm_parser.hpp")
-  message(FATAL_ERROR "gnss_protocols headers were not found next to gnss_ros2")
+  message(FATAL_ERROR "gnss_protocols headers were not found under protocols/gnss_protocols")
 endif()
 
 set(_saved_build_testing "${BUILD_TESTING}")
@@ -35,7 +35,7 @@ if(NOT TARGET universal_gnss_core)
 endif()
 if(NOT TARGET universal_gnss_protocols)
   add_subdirectory(
-    "${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_protocols"
+    "${UNIVERSAL_GNSS_SOURCE_ROOT}/protocols/gnss_protocols"
     "${CMAKE_CURRENT_BINARY_DIR}/gnss_protocols"
   )
 endif()

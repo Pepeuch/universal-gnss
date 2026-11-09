@@ -47,7 +47,7 @@
     },
     "protocols": {
       "paths": [
-        "gnss_protocols/"
+        "protocols/gnss_protocols/"
       ],
       "requires": [
         "core"

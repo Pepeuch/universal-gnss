@@ -62,6 +62,17 @@ une opération ultérieure explicitement approuvée. Aucune branche spécialisé
 aucun tag et aucune Release ne sont publiés. Ce jalon structurel ne change aucun
 compteur fonctionnel ou historique de qualification.
 
+## Avancement structurel — lot 4
+
+Le seul composant déplacé est `gnss_protocols/`, désormais situé dans
+`protocols/gnss_protocols/`. Les 58 fichiers du composant gardent leurs contenus
+et leurs noms publics ; les références de build, du manifeste, du formateur et
+de la documentation courante sont adaptées. Voir le
+[bilan du déplacement](tools/branches/PROTOCOLS_MOVE.md).
+Les anciens chemins présents dans les audits et preuves figés restent liés à
+leurs bases historiques. Aucun autre composant, comportement, version ou
+workflow de publication ne change ; les compteurs fonctionnels restent inchangés.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -226,13 +237,14 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-À la base commune ci-dessus, les composants sont encore à la racine :
+La table décrit l’arbre courant après le lot 4 ; hormis les protocoles, les
+composants listés restent à la racine. La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
 | --- | --- | --- |
 | `gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | `core/gnss_core/` |
 | `gnss_driver/` | Sessions, détection, profils et configuration | `core/gnss_driver/` |
-| `gnss_protocols/` | NMEA, UBX, Unicore et RTCM | `protocols/gnss_protocols/` |
+| `protocols/gnss_protocols/` | NMEA, UBX, Unicore et RTCM | En place depuis le lot 4 ; noms publics inchangés |
 | `gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | `core/gnss_transport/` initialement |
 | `gnss_ntrip/` | Client/caster NTRIP et GGA | `core/gnss_ntrip/` |
 | `gnss_runtime/` | Superviseur commun et intégration série Linux | `core/gnss_runtime/` initialement |
