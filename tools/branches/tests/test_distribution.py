@@ -30,8 +30,8 @@ class DistributionTests(unittest.TestCase):
             'core/gnss_core/include/universal_gnss/types.hpp': '#pragma once\n',
             'protocols/gnss_protocols/src/parser.cpp': '#include "universal_gnss/types.hpp"\n',
             'tools/gnss_tools/src/tool.cpp': '#include "universal_gnss/types.hpp"\n',
-            'gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/tools/gnss_tools" out)\n',
-            'gnss_ros2/package.xml': '<package><name>universal_gnss_ros2</name><version>0.7.0</version><depend>universal_gnss_msgs</depend></package>\n',
+            'adapters/ros2/gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/tools/gnss_tools" out)\n',
+            'adapters/ros2/gnss_ros2/package.xml': '<package><name>universal_gnss_ros2</name><version>0.7.0</version><depend>universal_gnss_msgs</depend></package>\n',
             'universal_gnss_msgs/package.xml': '<package><name>universal_gnss_msgs</name><version>0.7.0</version></package>\n',
             'universal_gnss_msgs/msg/GnssStatus.msg': 'bool valid\n',
             'adapters/mavros/gnss_mavros/src/adapter.cpp': '#include "universal_gnss/types.hpp"\n',
@@ -57,7 +57,7 @@ class DistributionTests(unittest.TestCase):
                 'protocols': component(['protocols/gnss_protocols/'], ['core']),
                 'tools': component(['tools/gnss_tools/'], ['protocols']),
                 'messages': component(['universal_gnss_msgs/']),
-                'ros2': component(['gnss_ros2/'], ['tools', 'messages', 'legal']),
+                'ros2': component(['adapters/ros2/gnss_ros2/'], ['tools', 'messages', 'legal']),
                 'mavros': component(['adapters/mavros/gnss_mavros/'], ['ros2', 'core']),
             },
             'distributions': {p: {'platform': 'linux', 'framework': 'ros2',
@@ -161,7 +161,7 @@ class DistributionTests(unittest.TestCase):
         self.reject('unknown option', options=['esp-now'])
 
     def test_declared_external_dependencies(self):
-        self.snapshot.cache['gnss_ros2/CMakeLists.txt'] = b'find_package(ExternalUndeclared REQUIRED)\n'
+        self.snapshot.cache['adapters/ros2/gnss_ros2/CMakeLists.txt'] = b'find_package(ExternalUndeclared REQUIRED)\n'
         self.reject('undeclared external dependency')
 
     def test_internal_include_not_distributed(self):
@@ -169,7 +169,7 @@ class DistributionTests(unittest.TestCase):
         self.reject('include not distributed')
 
     def test_literal_cmake_file_missing(self):
-        self.snapshot.cache['gnss_ros2/CMakeLists.txt'] = b'add_executable(node src/missing.cpp)\n'
+        self.snapshot.cache['adapters/ros2/gnss_ros2/CMakeLists.txt'] = b'add_executable(node src/missing.cpp)\n'
         self.reject('internal reference not distributed')
 
     def test_missing_internal_header(self):
@@ -177,7 +177,7 @@ class DistributionTests(unittest.TestCase):
         self.reject('internal include missing')
 
     def test_audited_computed_python_reference(self):
-        self.manifest['references'] = [{'from': 'gnss_ros2/CMakeLists.txt',
+        self.manifest['references'] = [{'from': 'adapters/ros2/gnss_ros2/CMakeLists.txt',
                                        'to': 'docs/history.md', 'reason': 'Computed test path'}]
         self.reject('internal reference not distributed')
 
@@ -647,7 +647,7 @@ class RepositoryIntegrationTests(unittest.TestCase):
                     metadata = d.decode(expected[d.METADATA][0])
                     self.assertEqual('mavros' in metadata['components'], 'mavros' in options)
                     if 'mavros' in options:
-                        self.assertIn('--base-paths universal_gnss_msgs gnss_ros2 adapters/mavros/gnss_mavros',
+                        self.assertIn('--base-paths universal_gnss_msgs adapters/ros2/gnss_ros2 adapters/mavros/gnss_mavros',
                                       expected[d.README][0].decode())
                     self.assertEqual('Dockerfile' in expected, 'docker' in options)
         self.assertEqual(d.plan(snapshot, manifest, 'ros2-lyrical', ['mavros', 'docker']),
@@ -698,7 +698,7 @@ class MavrosGuardRegressionTests(unittest.TestCase):
 
     def test_selected_duplicate_without_mavros_is_rejected(self):
         path = 'tools/gnss_tools/examples/package.xml'
-        self.snapshot.tree[path] = self.snapshot.tree['gnss_ros2/package.xml']
+        self.snapshot.tree[path] = self.snapshot.tree['adapters/ros2/gnss_ros2/package.xml']
         self.snapshot.cache[path] = b'<package><name>universal_gnss_ros2</name><version>0.7.0</version></package>'
         with self.assertRaises(d.DistributionError):
             self.plan(())
@@ -851,6 +851,89 @@ class MavrosGuardRegressionTests(unittest.TestCase):
         self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
                            b'add_library(universal_gnss_mavros_plugin STATIC')
         self.assertEqual(self.plan(()), before)
+
+
+class Ros2MoveRegressionTests(unittest.TestCase):
+    root = 'adapters/ros2/gnss_ros2/'
+
+    def setUp(self):
+        self.snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        self.manifest = d.decode((TOOL / 'manifest.yaml').read_bytes())
+        self.assertIn(self.root + 'package.xml', self.plan())
+
+    def plan(self, options=(), profile='ros2-lyrical'):
+        return d.plan(self.snapshot, d.json_bytes(self.manifest), profile, options)
+
+    def test_legacy_ros2_root_is_rejected(self):
+        self.snapshot.tree['gnss_ros2/package.xml'] = self.snapshot.tree[self.root + 'package.xml']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: gnss_ros2/'):
+            self.plan()
+
+    def test_missing_new_ros2_package_is_rejected(self):
+        self.assertEqual(self.manifest['components']['ros2']['paths'],
+                         [self.root, self.root + 'package.xml'])
+        self.snapshot.tree.pop(self.root + 'package.xml')
+        for options in ([], ['mavros']):
+            with self.subTest(options=options):
+                with self.assertRaisesRegex(d.DistributionError, 'path does not exist: ros2'):
+                    self.plan(options)
+
+    def test_unclassified_ros2_neighbor_is_rejected(self):
+        self.snapshot.tree['adapters/ros2/unclassified_neighbor/new.cpp'] = self.snapshot.tree[self.root + 'src/receiver_node.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: adapters/ros2/unclassified_neighbor/'):
+            self.plan()
+
+    def test_selected_ros2_duplicate_is_rejected(self):
+        path = self.root + 'src/duplicate/package.xml'
+        self.snapshot.tree[path] = self.snapshot.tree[self.root + 'package.xml']
+        self.snapshot.cache[path] = b'<package><name>universal_gnss_ros2</name><version>0.7.0</version></package>'
+        with self.assertRaisesRegex(d.DistributionError, 'duplicate ROS package: universal_gnss_ros2'):
+            self.plan()
+        self.snapshot.cache[path] = self.snapshot.cache[path].replace(b'<name>universal_gnss_ros2</name>', b'<name>distinct_example</name>')
+        self.assertIn('distinct_example', d.decode(self.plan()[d.METADATA][0])['package_versions'])
+
+    def test_missing_audited_ros2_external_reference_is_rejected(self):
+        target = 'scripts/tests/test_docker_healthcheck.py'
+        self.assertIn({'from': self.root + 'CMakeLists.txt', 'to': target,
+                       'reason': 'Python test registered outside ROS2 component'},
+                      self.manifest['references'])
+        self.snapshot.tree.pop(target)
+        # Leave the healthcheck component valid so the explicit cross-component
+        # reference itself, rather than a missing selector, must reject it.
+        self.manifest['components']['healthcheck']['paths'].remove(target)
+        with self.assertRaisesRegex(d.DistributionError, 'reference path does not exist: ' + target):
+            self.plan()
+
+    def reject_injected_outputs(self, injected, option_sets):
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            for options in option_sets:
+                expected = self.plan(options, profile)
+                for path in injected:
+                    with self.subTest(profile=profile, options=options, path=path):
+                        self.assertNotIn(path, expected)
+                        with tempfile.TemporaryDirectory(prefix='ug-ros2-boundary-') as workspace:
+                            destination = Path(workspace) / 'distribution'
+                            d.generate(self.snapshot, expected, destination)
+                            extra = destination / path
+                            extra.parent.mkdir(parents=True, exist_ok=True)
+                            extra.write_bytes(b'Injected file outside the selected payload')
+                            with self.assertRaisesRegex(d.DistributionError, 'unexpected/forbidden'):
+                                d.verify(destination, expected)
+
+    def test_native_runtime_injection_is_rejected(self):
+        self.reject_injected_outputs(
+            ['gnss_runtime/src/posix_serial_factory.cpp',
+             'core/gnss_runtime/src/posix_serial_factory.cpp'],
+            [[], ['mavros'], ['docker'], ['mavros', 'docker']])
+
+    def test_development_script_injection_is_rejected(self):
+        self.reject_injected_outputs(
+            ['tools/branches/distribution.py', 'scripts/agent/repo_status.sh'],
+            [[], ['mavros'], ['docker'], ['mavros', 'docker']])
+
+    def test_mavros_injection_without_option_is_rejected(self):
+        self.reject_injected_outputs(
+            ['adapters/mavros/gnss_mavros/package.xml'], [[], ['docker']])
 
 
 if __name__ == '__main__':

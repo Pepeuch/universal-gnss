@@ -163,6 +163,20 @@ chemin et les contrôles rejettent les doublons de packages et les chemins
 de plugins incohérents. Aucune version, mesure fonctionnelle ou preuve
 historique n'est modifiée.
 
+## Avancement structurel — lot 10, ROS2
+
+Le lot 10 déplace uniquement `gnss_ros2/` vers `adapters/ros2/gnss_ros2/`.
+Sur ses 38 fichiers, 37 conservent strictement contenus et modes ; l’unique
+exception est le calcul CMake de la racine réelle, désormais trois parents
+au-dessus du package. Les packages, interfaces ROSIDL, cibles, ressources,
+launch, paramètres et comportements restent inchangés. Le package indépendant
+`universal_gnss_msgs/` reste à la racine (KEEP, lot 9).
+Le [bilan ROS2](tools/branches/ROS2_MOVE.md) détaille cette exception, les
+références adaptées, les validations et les limites. Le manifeste conserve
+13 composants et huit configurations, MAVROS optionnel et runtime exclu.
+Le sélecteur explicite du package.xml ROS2 impose sa présence sans changer
+le payload. Aucun compteur fonctionnel, version ou preuve historique ne change.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -327,8 +341,9 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 8 ; les protocoles, les cinq
-composants communs du lot 5, tools et MAVROS sont regroupés, les autres composants restent à la racine.
+La table décrit l’arbre courant après le lot 10 ; les protocoles, les cinq
+composants communs du lot 5, tools, MAVROS et ROS2 sont regroupés. Le package
+public `universal_gnss_msgs/` reste volontairement à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
@@ -340,8 +355,8 @@ La base du lot 0 reste celle indiquée en tête :
 | `core/gnss_ntrip/` | Client/caster NTRIP et GGA | En place depuis le lot 5C ; noms publics inchangés |
 | `core/gnss_runtime/` | Superviseur commun et intégration série Linux | En place depuis le lot 5E ; exclu des pilotes ROS2, noms publics inchangés |
 | `tools/gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | En place depuis le lot 7 ; distinct du générateur `tools/branches/`, noms publics inchangés |
-| `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |
-| `universal_gnss_msgs/` | Package public ROSIDL | Racine initialement ; déplacement séparé éventuel |
+| `adapters/ros2/gnss_ros2/` | Package runtime, launch et configuration ROS2 | En place depuis le lot 10 ; une adaptation CMake de profondeur, contrats publics inchangés |
+| `universal_gnss_msgs/` | Package public ROSIDL indépendant | KEEP à la racine, décision du lot 9 ; aucune migration nécessaire |
 | `adapters/mavros/gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | En place depuis le lot 8 ; package et identifiants publics inchangés |
 | `Dockerfile`, `docker/` | Packaging ROS2 de production | `packaging/docker/` avec points d'entrée compatibles |
 | `blueos/` | Étude et modèles Bazaar/permissions ; pas de runtime BlueOS | Documentation et `packaging/blueos/` à terme |

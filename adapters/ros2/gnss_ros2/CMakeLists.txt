@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22)
 project(universal_gnss_ros2 LANGUAGES C CXX)
 
 get_filename_component(UNIVERSAL_GNSS_ROS2_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
-get_filename_component(UNIVERSAL_GNSS_SOURCE_ROOT "${UNIVERSAL_GNSS_ROS2_SOURCE_DIR}/.." REALPATH)
+get_filename_component(UNIVERSAL_GNSS_SOURCE_ROOT "${UNIVERSAL_GNSS_ROS2_SOURCE_DIR}/../../.." REALPATH)
 
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)

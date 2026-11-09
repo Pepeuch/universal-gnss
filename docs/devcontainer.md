@@ -121,15 +121,17 @@ The minimal `colcon` workflow stays:
 
 ```bash
 mkdir -p /tmp/universal_gnss_ros2_ws/src
-ln -s /workspaces/universal-gnss/gnss_ros2 /tmp/universal_gnss_ros2_ws/src/gnss_ros2
-ln -s /workspaces/universal-gnss/gnss_core /tmp/universal_gnss_ros2_ws/src/gnss_core
+ln -s /workspaces/universal-gnss/universal_gnss_msgs /tmp/universal_gnss_ros2_ws/src/universal_gnss_msgs
+ln -s /workspaces/universal-gnss/adapters/ros2/gnss_ros2 /tmp/universal_gnss_ros2_ws/src/gnss_ros2
 cd /tmp/universal_gnss_ros2_ws
-colcon build --packages-select universal_gnss_ros2
-colcon test --packages-select universal_gnss_ros2
+colcon build --packages-select universal_gnss_msgs universal_gnss_ros2
+source install/setup.bash
+colcon test --packages-select universal_gnss_msgs universal_gnss_ros2 --return-code-on-test-failure
+colcon test-result --verbose
 ```
 
-This workflow is now more robust because `gnss_ros2/CMakeLists.txt` resolves
-its sibling package paths from the real repository location instead of assuming
+This workflow is now more robust because `adapters/ros2/gnss_ros2/CMakeLists.txt` resolves
+the common library source paths from the real repository location instead of assuming
 the `colcon` workspace contains every low-level package as a peer checkout.
 
 ROS 2 CTest tests prepend the current build directories for adapters and the

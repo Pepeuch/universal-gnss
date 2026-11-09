@@ -330,7 +330,7 @@ Current implemented layers:
   - `GnssStatus` and `RtcmFrame` messages
   - read-only `GetReceiverSnapshot` service
   - no receiver, transport, driver, NTRIP, tool, or node targets
-- `gnss_ros2`
+- `gnss_ros2` (sources: [adapters/ros2/gnss_ros2/](adapters/ros2/gnss_ros2/CMakeLists.txt))
   - ROS 2 runtime package `universal_gnss_ros2`, depending on
     `universal_gnss_msgs`
   - `GnssRuntimeState -> GnssStatus` adapter

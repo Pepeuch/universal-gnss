@@ -20,7 +20,7 @@ project_roots=(
   core/gnss_transport
   core/gnss_ntrip
   tools/gnss_tools
-  gnss_ros2
+  adapters/ros2/gnss_ros2
 )
 
 is_cpp_file() {

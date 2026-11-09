@@ -19,7 +19,7 @@ jobs:
             scripts/update_backlog_status.py \
             scripts/validation/plot_hardware_campaign.py \
             scripts/validation/check_rc6_campaign_review.py \
-            gnss_ros2/tests/check_build_library_provenance.py \
+            adapters/ros2/gnss_ros2/tests/check_build_library_provenance.py \
             scripts/tests/test_checkpoint_audit.py \
             scripts/tests/test_collect_support_snapshot.py \
             scripts/tests/test_docker_entrypoint_contract.py \

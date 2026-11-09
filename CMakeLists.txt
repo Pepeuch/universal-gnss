@@ -20,5 +20,5 @@ if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)
 endif()
 
 if(UNIVERSAL_GNSS_BUILD_ROS2)
-  add_subdirectory(gnss_ros2)
+  add_subdirectory(adapters/ros2/gnss_ros2)
 endif()

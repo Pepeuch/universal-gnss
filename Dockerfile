@@ -41,7 +41,7 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash \
  && colcon build --merge-install \
       --base-paths \
         src/universal_gnss/universal_gnss_msgs \
-        src/universal_gnss/gnss_ros2 \
+        src/universal_gnss/adapters/ros2/gnss_ros2 \
       --packages-select universal_gnss_msgs universal_gnss_ros2 \
       --cmake-args -DCMAKE_BUILD_TYPE=Release
 

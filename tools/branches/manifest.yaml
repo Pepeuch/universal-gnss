@@ -233,7 +233,8 @@
     },
     "ros2": {
       "paths": [
-        "gnss_ros2/"
+        "adapters/ros2/gnss_ros2/",
+        "adapters/ros2/gnss_ros2/package.xml"
       ],
       "requires": [
         "legal",
@@ -510,17 +511,17 @@
   ],
   "references": [
     {
-      "from": "gnss_ros2/CMakeLists.txt",
+      "from": "adapters/ros2/gnss_ros2/CMakeLists.txt",
       "to": "tools/gnss_tools/",
       "reason": "Embedded ROS2 build links tools library"
     },
     {
-      "from": "gnss_ros2/CMakeLists.txt",
+      "from": "adapters/ros2/gnss_ros2/CMakeLists.txt",
       "to": "testdata/",
       "reason": "ROS2 replay regression corpus"
     },
     {
-      "from": "gnss_ros2/CMakeLists.txt",
+      "from": "adapters/ros2/gnss_ros2/CMakeLists.txt",
       "to": "scripts/tests/test_docker_healthcheck.py",
       "reason": "Python test registered outside ROS2 component"
     },

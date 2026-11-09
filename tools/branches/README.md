@@ -80,7 +80,7 @@ generator implementation explicitly.
 ## Components and audited dependencies
 
 The graph separates source components from external dependencies. ROS2 source
-reconstruction in [gnss_ros2/CMakeLists.txt](../../gnss_ros2/CMakeLists.txt) is the
+reconstruction in [ROS2 CMakeLists.txt](../../adapters/ros2/gnss_ros2/CMakeLists.txt) is the
 primary pilot build contract.
 
 | Component | Direct internal dependencies | External requirements / reason |
