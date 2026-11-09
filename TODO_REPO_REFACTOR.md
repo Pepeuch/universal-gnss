@@ -97,6 +97,18 @@ historiques ne sont pas modifiées. Les prochaines étapes recommandées restent
 NTRIP, transport puis runtime, avec réaudit avant chaque déplacement. Aucun
 compteur fonctionnel, version ou jalon de qualification matérielle ne change.
 
+## Avancement structurel — lot 5C, NTRIP
+
+Le seul déplacement du lot 5C est `gnss_ntrip/` vers `core/gnss_ntrip/`.
+Les 32 fichiers, leurs contenus et modes sont conservés, ainsi que les contrats
+NTRIP/GGA/RTCM/TLS. Les helpers et fixtures TLS restent dans `gnss_transport`.
+Le [bilan NTRIP](tools/branches/NTRIP_MOVE.md) détaille les références adaptées,
+la conservation du graphe et les contrôles supplémentaires sur les fixtures
+TLS calculées. Le générateur et les workflows ne sont pas modifiés.
+Transport puis runtime restent les prochains déplacements à réauditer ; aucun
+autre composant, compteur fonctionnel, version ou historique de validation
+ne change. La dette de formatage runtime reste hors périmètre.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -261,8 +273,8 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 5B ; les protocoles, le modèle
-commun et le driver sont regroupés, les autres composants restent à la racine.
+La table décrit l’arbre courant après le lot 5C ; les protocoles, le modèle
+commun, le driver et NTRIP sont regroupés, les autres composants restent à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
@@ -271,7 +283,7 @@ La base du lot 0 reste celle indiquée en tête :
 | `core/gnss_driver/` | Sessions, détection, profils et configuration | En place depuis le lot 5B ; noms publics inchangés |
 | `protocols/gnss_protocols/` | NMEA, UBX, Unicore et RTCM | En place depuis le lot 4 ; noms publics inchangés |
 | `gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | `core/gnss_transport/` initialement |
-| `gnss_ntrip/` | Client/caster NTRIP et GGA | `core/gnss_ntrip/` |
+| `core/gnss_ntrip/` | Client/caster NTRIP et GGA | En place depuis le lot 5C ; noms publics inchangés |
 | `gnss_runtime/` | Superviseur commun et intégration série Linux | `core/gnss_runtime/` initialement |
 | `gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | `tools/gnss_tools/` |
 | `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |

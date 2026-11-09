@@ -90,7 +90,7 @@ primary pilot build contract.
 | `protocols` | `core` | NMEA, UBX, Unicore and RTCM library at `protocols/gnss_protocols/` |
 | `transport` | — | OpenSSL on the Linux pilot platform |
 | `driver` | `protocols`, `transport` | Sessions/configuration/discovery library at `core/gnss_driver/` |
-| `ntrip` | `protocols`, `transport` | NTRIP/GGA library; TLS tests use transport helpers |
+| `ntrip` | `protocols`, `transport` | NTRIP/GGA library at `core/gnss_ntrip/`; TLS tests use transport helpers |
 | `fixtures` | — | Existing synthetic/sanitized `testdata/` corpus |
 | `tools` | `driver`, `ntrip`, `protocols`, `fixtures` | Library linked by replay and associated CLI/tests |
 | `messages` | — | ament, ROSIDL generator/runtime, builtin/diagnostic interfaces, pytest |

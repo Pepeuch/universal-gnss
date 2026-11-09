@@ -371,6 +371,39 @@ class DistributionTests(unittest.TestCase):
 
 
 class RepositoryIntegrationTests(unittest.TestCase):
+    ntrip_tls_inputs = (
+        'gnss_transport/tests/tls_loopback_server.hpp',
+        'gnss_transport/tests/fixtures/tls/ca.crt',
+        'gnss_transport/tests/fixtures/tls/server.crt',
+        'gnss_transport/tests/fixtures/tls/server.key',
+    )
+
+    def test_missing_ntrip_component_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree = {p: v for p, v in snapshot.tree.items() if not p.startswith('core/gnss_ntrip/')}
+        with self.assertRaisesRegex(d.DistributionError, 'path does not exist'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_legacy_ntrip_root_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['gnss_ntrip/src/ntrip_client.cpp'] = snapshot.tree['core/gnss_ntrip/src/ntrip_client.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_missing_ntrip_tls_input_rejected(self):
+        for path in self.ntrip_tls_inputs:
+            with self.subTest(path=path):
+                snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+                snapshot.tree.pop(path)
+                with self.assertRaises(d.DistributionError) as failure:
+                    d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+                message = str(failure.exception)
+                self.assertIn(Path(path).name, message)
+                if path.endswith('.hpp'):
+                    self.assertIn('internal include missing', message)
+                else:
+                    self.assertIn('reference path does not exist', message)
+
     def test_real_manifest_and_both_pilot_closures(self):
         repo = TOOL.parents[1]
         before = git(repo, 'status', '--porcelain=v1', '--untracked-files=all')
@@ -386,6 +419,11 @@ class RepositoryIntegrationTests(unittest.TestCase):
                     self.assertIn('core/gnss_driver/include/universal_gnss_driver/receiver_session.hpp', expected)
                     self.assertIn('core/gnss_driver/src/receiver_discovery.cpp', expected)
                     self.assertFalse(any(p.startswith('gnss_driver/') for p in expected))
+                    self.assertIn('core/gnss_ntrip/include/universal_gnss_ntrip/ntrip_client.hpp', expected)
+                    self.assertIn('core/gnss_ntrip/src/ntrip_client.cpp', expected)
+                    self.assertFalse(any(p.startswith('gnss_ntrip/') for p in expected))
+                    for path in self.ntrip_tls_inputs:
+                        self.assertIn(path, expected)
                     self.assertIn('protocols/gnss_protocols/src/nmea_parser.cpp', expected)
                     self.assertIn('protocols/gnss_protocols/include/universal_gnss_protocols/rtcm_parser.hpp', expected)
                     self.assertFalse(any(p.startswith('gnss_protocols/') for p in expected))
