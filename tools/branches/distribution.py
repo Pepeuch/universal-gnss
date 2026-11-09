@@ -459,7 +459,7 @@ def plan(snapshot, manifest_bytes, profile_name, options=(), excluded=()):
                 'publication': 'local-source-tree-only'}
     distro = profile['ros_distro']
     package_names = ['universal_gnss_msgs', 'universal_gnss_ros2']
-    package_paths = ['universal_gnss_msgs', 'gnss_ros2']
+    package_paths = ['universal_gnss_msgs', 'adapters/ros2/gnss_ros2']
     if 'mavros' in selected:
         package_names.append('universal_gnss_mavros')
         package_paths.append('adapters/mavros/gnss_mavros')

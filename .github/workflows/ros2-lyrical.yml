@@ -42,7 +42,7 @@ jobs:
               rm -rf "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
               mkdir -p "$GITHUB_WORKSPACE/ros2_ws_lyrical/src"
               ln -s "$GITHUB_WORKSPACE/universal_gnss_msgs" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/universal_gnss_msgs"
-              ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
+              ln -s "$GITHUB_WORKSPACE/adapters/ros2/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_ros2"
               ln -s "$GITHUB_WORKSPACE/core/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_lyrical/src/gnss_core"
               cd "$GITHUB_WORKSPACE/ros2_ws_lyrical"
               colcon build --packages-select universal_gnss_msgs

@@ -1,6 +1,6 @@
 # Universal GNSS — ROS2 Policy v1.4
 
-Load when modifying `.cpp`, `.cc`, `.hpp`, or `.hh` under `gnss_ros2/`, or when ROS2-specific
+Load when modifying `.cpp`, `.cc`, `.hpp`, or `.hh` under `adapters/ros2/gnss_ros2/`, or when ROS2-specific
 validation applies.
 
 Universal GNSS ROS2 integration must preserve canonical Universal GNSS semantics rather

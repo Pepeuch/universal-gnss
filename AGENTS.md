@@ -73,7 +73,7 @@ classification, conservation accounting, duplicate graphs, or durable audit ledg
 Load `.agent/policies/MIGRATION.md` when using historical PRs, forks, old branches,
 patches, or semantic porting/adaptation.
 
-Load `.agent/policies/ROS2.md` when modifying C++ source/header files under `gnss_ros2/`
+Load `.agent/policies/ROS2.md` when modifying C++ source/header files under `adapters/ros2/gnss_ros2/`
 or when ROS2-specific validation/formatting rules apply.
 
 Load `.agent/policies/HARDWARE.md` when correctness depends on physical receiver,
