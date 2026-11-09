@@ -299,7 +299,7 @@ Current implemented layers:
   - RTCM3 framing, CRC24Q, message-type extraction/classification, and
     semantic decode for `1005` / `1006` base position, `1007` / `1008` station
     antenna metadata, `1230`, and portable MSM header/summary observability
-- `gnss_driver`
+- `gnss_driver` (sources: [core/gnss_driver/](core/gnss_driver/CMakeLists.txt))
   - receiver profile declarations
   - protocol support and feature flags
   - lightweight stream-family detection and auto-discovery

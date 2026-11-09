@@ -120,23 +120,23 @@ Universal GNSS already has most of the low-level building blocks needed for
 Auto Configuration:
 
 - generic config intent vocabulary in
-  `gnss_driver/include/universal_gnss_driver/receiver_config_profile.hpp`
+  `core/gnss_driver/include/universal_gnss_driver/receiver_config_profile.hpp`
 - receiver-family capability and profile generation hooks in
-  `gnss_driver/include/universal_gnss_driver/receiver_driver.hpp`
+  `core/gnss_driver/include/universal_gnss_driver/receiver_driver.hpp`
 - vendor-specific command builders in:
-  - `gnss_driver/src/ublox_config_profile_builder.cpp`
-  - `gnss_driver/src/unicore_config_profile_builder.cpp`
+  - `core/gnss_driver/src/ublox_config_profile_builder.cpp`
+  - `core/gnss_driver/src/unicore_config_profile_builder.cpp`
 - a guarded write path in:
-  - `gnss_driver/src/receiver_command_dispatcher.cpp`
-  - `gnss_driver/src/receiver_command_transaction_engine.cpp`
-  - `gnss_driver/src/receiver_config_application.cpp`
+  - `core/gnss_driver/src/receiver_command_dispatcher.cpp`
+  - `core/gnss_driver/src/receiver_command_transaction_engine.cpp`
+  - `core/gnss_driver/src/receiver_config_application.cpp`
 - dry-run and review tooling in:
   - `gnss_tools/src/profile_preview.cpp`
   - `gnss_tools/src/config_plan.cpp`
   - `gnss_tools/src/config_apply.cpp`
 - conservative response routers for the existing live apply path in:
-  - `gnss_driver/src/ublox_response_router.cpp`
-  - `gnss_driver/src/unicore_response_router.cpp`
+  - `core/gnss_driver/src/ublox_response_router.cpp`
+  - `core/gnss_driver/src/unicore_response_router.cpp`
 - hardware-backed evidence that runtime-only config applies are already useful
   for validation, especially on the ZED-F9P ROS2 path
 
@@ -285,8 +285,8 @@ Implemented in `v0.6-2`:
 
 Current implementation lives in:
 
-- `gnss_driver/include/universal_gnss_driver/receiver_auto_config.hpp`
-- `gnss_driver/src/receiver_auto_config.cpp`
+- `core/gnss_driver/include/universal_gnss_driver/receiver_auto_config.hpp`
+- `core/gnss_driver/src/receiver_auto_config.cpp`
 
 Auto Configuration should add a driver-level portable API, likely centered on a
 small `ReceiverAutoConfig*` family.

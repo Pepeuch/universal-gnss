@@ -16,7 +16,7 @@ cd "$repository_root"
 project_roots=(
   core/gnss_core
   protocols/gnss_protocols
-  gnss_driver
+  core/gnss_driver
   gnss_transport
   gnss_ntrip
   gnss_tools

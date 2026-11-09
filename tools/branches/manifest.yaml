@@ -91,7 +91,7 @@
     },
     "driver": {
       "paths": [
-        "gnss_driver/"
+        "core/gnss_driver/"
       ],
       "requires": [
         "protocols",
