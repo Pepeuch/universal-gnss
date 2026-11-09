@@ -1,5 +1,39 @@
 # Universal GNSS — TODO refactor architecture / repository policy
 
+## Statut, périmètre et priorités
+
+Base du lot 0 accepté et de la synchronisation `dev`/`main` :
+`ba7f220da30ee0b216f199ab24947db0678b3d7b`.
+La PR 1 formalise la politique et le plan ; elle ne déplace aucun composant et
+n'implémente ni générateur, ni workflow, ni protection GitHub.
+Les impératifs des sections suivantes décrivent des travaux à réaliser, sauf
+les règles de contribution applicables dès maintenant.
+
+Trois axes sont suivis séparément :
+
+| Axe | Objet | Condition d'avancement |
+| --- | --- | --- |
+| Refactor structurel | Politique Git, génération et rangement progressif | Lots revus et contrôles structurels applicables réussis |
+| Évolutions fonctionnelles UG | Capacités GNSS et adaptations plateforme | Contrats et tests fonctionnels propres à chaque évolution |
+| Publication | Tags, images, distributions et GitHub Releases | Décision explicite et qualification des artefacts concernés |
+
+Le mainteneur considère v0.7.4 fonctionnellement stable et validée. L'existence
+d'un tag ou d'une Release est un fait de publication distinct, documenté dans la
+[politique de versionnement](docs/releases/versioning.md). Le refactor ne
+déclenche automatiquement aucune nouvelle version UG et ne change ni les
+preuves historiques ni les compteurs de qualification.
+
+L'intégration future ESP32 **BASE / RELAY / ROVER**, avec **ESP-NOW LR**, est une
+priorité fonctionnelle à étudier et qualifier sans lui assigner ici une version.
+Elle réutilisera les sémantiques UG communes ; aucun rôle ni transport embarqué
+n'est implémenté par ce plan. Les travaux Linux standalone, BlueOS et ROS2 Humble
+restent prévus. Leurs prérequis techniques restent applicables, indépendamment
+de cette priorité et de l'ordre des lots structurels.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) définit les règles de contribution ;
+[TODO.md](TODO.md) et [ROADMAP.md](ROADMAP.md) conservent le suivi fonctionnel et
+les critères de validation. Ce document porte le chantier structurel séparé.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -25,9 +59,11 @@ Principe fondamental :
 
 ### `dev`
 
-Branche de développement complète.
+Branche de développement complète et cible de toutes les PR de contribution.
+Créer les branches de travail depuis un `dev` à jour.
 
-Elle contient absolument tout :
+Elle conserve tous les composants existants et accueillera les futurs composants
+une fois implémentés ; cette liste de périmètre ne signifie pas qu’ils existent déjà :
 
 - core UG
 - drivers/protocoles
@@ -43,7 +79,9 @@ Elle contient absolument tout :
 - packaging
 - scripts de génération des branches spécialisées
 
-Tous les développements passent d’abord par `dev`.
+Tous les développements et corrections passent d’abord par `dev`, puis par les
+tests et la revue applicables avant intégration dans `main`. Aucune PR de
+contribution ne cible `main` ni une branche spécialisée.
 
 ### `main`
 
@@ -140,7 +178,9 @@ Même principe pour toutes les plateformes.
 
 # 4. Protection GitHub
 
-Configurer les branches générées comme branches protégées.
+À mettre en œuvre dans un lot ultérieur : configurer les branches générées
+comme branches protégées avant leur publication. Cette PR ne change aucune
+protection et ne prétend pas que ces règles sont déjà imposées par GitHub.
 
 Objectifs :
 
@@ -155,6 +195,48 @@ Objectifs :
 # 5. Refactor de l’arborescence
 
 Faire progressivement évoluer le dépôt vers une séparation claire entre logique commune et adaptations plateforme.
+
+## Structure actuelle et composants existants
+
+À la base commune ci-dessus, les composants sont encore à la racine :
+
+| Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
+| --- | --- | --- |
+| `gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | `core/gnss_core/` |
+| `gnss_driver/` | Sessions, détection, profils et configuration | `core/gnss_driver/` |
+| `gnss_protocols/` | NMEA, UBX, Unicore et RTCM | `protocols/gnss_protocols/` |
+| `gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | `core/gnss_transport/` initialement |
+| `gnss_ntrip/` | Client/caster NTRIP et GGA | `core/gnss_ntrip/` |
+| `gnss_runtime/` | Superviseur commun et intégration série Linux | `core/gnss_runtime/` initialement |
+| `gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | `tools/gnss_tools/` |
+| `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |
+| `universal_gnss_msgs/` | Package public ROSIDL | Racine initialement ; déplacement séparé éventuel |
+| `gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | `adapters/mavros/gnss_mavros/` |
+| `Dockerfile`, `docker/` | Packaging ROS2 de production | `packaging/docker/` avec points d'entrée compatibles |
+| `blueos/` | Étude et modèles Bazaar/permissions ; pas de runtime BlueOS | Documentation et `packaging/blueos/` à terme |
+| Tests des composants, `testdata/` | Tests colocalisés et fixtures partagées | Conserver initialement ; centralisation sélective justifiée |
+| `scripts/` | Maintenance, support et validation | Migration sélective vers `tools/`, anciens points d'entrée préservés |
+| `docs/`, `examples/`, `assets/` | Références, exemples et ressources | Conserver tant qu'aucun déplacement n'est justifié |
+| `universal-gnss-validation/` | Résultats et copies historiques de scripts | Conserver intacts |
+
+Le core est déjà indépendant de ROS2. Transport et runtime comportent des
+parties conditionnelles Linux : les déplacer ne justifie pas de les redécouper
+fonctionnellement dans la même PR. `gnss_tools` n'est pas un simple ensemble
+facultatif de CLI : le runtime ROS2 consomme aussi sa bibliothèque.
+
+GUI/WebUI, API HTTP commune, intégration UG ESP32 et packaging Debian sont
+futurs. Le superviseur natif Linux existe, mais le service système, le package
+Debian et l'API restent à compléter. ROS2 Kilted/Lyrical et MAVROS existent ;
+la distribution Humble et les branches spécialisées restent à construire.
+Les tâches BlueOS existantes ne constituent pas un backend opérationnel.
+
+## Structure cible indicative
+
+L'arbre ci-dessous illustre des responsabilités à terme, pas des dossiers déjà
+présents ni une obligation de déplacer chaque dossier. Garder d'abord les
+composants entiers évite de mêler rangement et modification du moteur. La
+répartition détaillée des parsers entre `core/` et `protocols/` sera précisée
+avant toute extraction ; aucune seconde implémentation ne doit être créée.
 
 Architecture cible indicative :
 
@@ -206,6 +288,38 @@ universal-gnss/
 ```
 
 Cette migration doit être progressive afin d’éviter un refactor « big bang ».
+Les fichiers racine d'entrée, `.github/`, `.devcontainer/`, `.agent/`, la licence
+et les règles agent restent en place tant qu'aucune nécessité n'est démontrée.
+
+## Contrats publics et références à préserver
+
+Conserver les noms des packages `universal_gnss_ros2`, `universal_gnss_msgs` et
+`universal_gnss_mavros`, les cibles/bibliothèques `universal_gnss_*`, les noms
+d'exécutables et les préfixes d'include `universal_gnss/...`,
+`universal_gnss_driver/...`, `universal_gnss_protocols/...` et leurs équivalents.
+Conserver les interfaces ROSIDL `GnssStatus`, `RtcmFrame`, `GetReceiverSnapshot`,
+les alias C++ historiques, les exports ament et l'identité du plugin MAVROS.
+
+Les launch, paramètres, topics/services, chemins installés sous `bin`, `lib`,
+`lib/universal_gnss_ros2` et `share/universal_gnss_ros2`, ainsi que les chemins
+runtime Docker et variables opérateur, sont des contrats de consommation.
+Ne pas les renommer avec les dossiers source. Les numéros de version restent
+inchangés pendant un simple déplacement. Tout changement public intentionnel
+requiert une justification explicite, documentation et autorisation distinctes.
+
+Les chemins source internes peuvent changer dans une PR atomique qui adapte
+toutes leurs références : CMake ROS2 reconstruit des bibliothèques depuis les
+dossiers frères ; Docker et la CI utilisent ces chemins ; NTRIP/runtime
+partagent les fixtures TLS du transport et les outils utilisent `testdata/`.
+Préserver les dépendances transitives dans chaque manifest de distribution.
+Vérifier aussi les imports Python et la sélection de fichiers de formatage,
+pour qu'un déplacement ne réduise pas silencieusement les contrôles.
+
+Aucun changement de protocole, API, précision, horloge, fraîcheur, séquence,
+provenance ou invalidation ne fait partie du rangement. Conserver les preuves
+historiques, leurs SHA, chemins documentés, hashes et scripts associés : ne pas
+réécrire les campagnes pour refléter la nouvelle arborescence. Le contrôleur rc6
+vérifie notamment le hash du script de rendu historique.
 
 ---
 
@@ -430,8 +544,8 @@ Le backend ROS2 moderne reste la référence principale dans un premier temps.
 
 Objectifs :
 
-- migration Lyrical ;
-- CMake minimum 3.22 ;
+- préserver les validations Kilted/Lyrical existantes ;
+- préserver le minimum CMake 3.22 existant ;
 - conserver une architecture compatible avec le core indépendant ;
 - supprimer progressivement les dépendances ROS2 du code générique.
 
@@ -493,7 +607,8 @@ BlueOS devra consommer le même core que ROS2/Linux autant que possible.
 
 # 18. Linux standalone
 
-Préparer UG à fonctionner sans ROS2.
+Le superviseur natif existe déjà sans ROS2 ; compléter sa distribution et ses
+surfaces de déploiement sans dupliquer le moteur.
 
 Objectif :
 
@@ -562,6 +677,12 @@ Le packaging ROS ne doit pas conditionner l’architecture interne du core.
 ---
 
 # 21. ESP32
+
+Priorité fonctionnelle future : rôles **BASE / RELAY / ROVER** et transport
+**ESP-NOW LR**, sans association automatique à une version UG ni à un lot de
+rangement. Définir les contrats RTCM, capacités par rôle, dépendances plateforme
+et tests avant implémentation. Le relais ne doit pas créer une seconde logique
+GNSS. Cette priorité préserve les travaux Linux, BlueOS et Humble.
 
 Ne pas considérer l’actuel `esp32-rtk-gateway` comme architecture de référence du futur UG ESP32.
 
@@ -744,13 +865,16 @@ Fonctions envisagées :
 - récupération après échec ;
 - éventuellement configuration initiale.
 
-Rôles possibles :
+Rôles fonctionnels à préparer :
 
 ```text
 BASE
+RELAY
 ROVER
-DUAL_DEBUG
 ```
+
+`DUAL_DEBUG` reste un scénario de diagnostic à étudier, distinct des rôles
+fonctionnels. ESP-NOW LR et le web flasher nécessitent leur propre qualification.
 
 ---
 
@@ -799,7 +923,14 @@ mise à jour portail Web
 
 # 31. Versioning global
 
-Étudier un numéro de version UG commun :
+Appliquer la [politique de versionnement](docs/releases/versioning.md) : une
+version UG décrit le comportement et la compatibilité du moteur. Le rangement,
+la politique Git et la génération n'imposent pas de nouvelle version fonctionnelle.
+Qualifier séparément le moteur, chaque distribution et les artefacts publiés.
+
+Les numéros ci-dessous sont des exemples conceptuels historiques, comme ceux
+des manifests précédents, pas des versions décidées pour ce chantier. Exemple
+de numéro UG commun :
 
 ```text
 UG v1.4.0
@@ -925,18 +1056,41 @@ Les corrections backend doivent également repartir par `dev`.
 
 ---
 
-# 37. Première étape concrète
+# 37. Étapes et dépendances des lots
 
-Avant de déplacer beaucoup de code :
+Le lot 0 d'audit est accepté. `dev` a été synchronisé avec `main` en
+fast-forward à la base commune indiquée en tête ; ne pas recréer la branche.
+Les étapes suivantes sont des PR distinctes, chacune avec périmètre, risques,
+tests, critères d'acceptation et retour arrière explicites :
 
-1. documenter cette nouvelle politique ;
-2. créer `dev` si nécessaire ;
-3. maintenir `main` full repo ;
-4. créer `tools/branches/` ;
-5. définir un premier `manifest.yaml` ;
-6. tester la génération sur une branche non critique ;
-7. ajouter les protections GitHub ;
-8. seulement ensuite commencer le gros rangement `core/adapters/packaging`.
+| Étape | Périmètre | Dépendance / acceptation | Retour arrière |
+| --- | --- | --- | --- |
+| PR 1 | Politique Git, versions, contributions et architecture | Lot 0 et synchronisation ; cohérence des cinq documents, liens et diff documentaire contrôlés | Revert documentaire |
+| PR 2 | `tools/branches/`, whitelist, génération locale et métadonnées | PR 1 ; sorties déterministes, dépendances et fichiers non couverts contrôlés, sans publication | Revert ; aucune branche publiée |
+| PR 3 | Vérification CI des distributions et publication contrôlée | PR 2 ; essais sans publication, build/tests bloquants ; protections et identité autorisée configurées séparément avant activation | Désactiver publication, revert du workflow ; conserver les sorties vérifiées |
+| PR 4 | Déplacement de `gnss_protocols` entier | Socle précédent validé ; CMake/includes/tests/format/manifests et consommateurs adaptés ensemble | Revert atomique |
+| PR 5 | Composants communs sous `core/` sans extraction fonctionnelle | PR 4 ; tests natifs et consommateurs ROS2, fixtures et installations préservés | Revert atomique |
+| PR 6a / 6b | Déplacements ROS2 et MAVROS dans deux PR | PR 5 ; exports stables, builds Kilted/Lyrical, interfaces/launch et tests MAVROS ; messages à la racine initialement | Revert indépendant de chaque PR |
+| PR 7 | Packaging Docker et modèles BlueOS | Chemins source stabilisés ; builds/smoke multi-architecture, contrats opérateur et points d'entrée compatibles | Revert ; images/digests antérieurs conservés |
+| PR 8 | Outils et tests sélectionnés | PR 5 et validation des consommateurs ; imports, CLI, fixtures et périmètre de tests conservés | Revert par sous-ensemble |
+
+Le numéro de PR indique un lot structurel, pas une version UG. La publication
+réelle et les changements de protections restent des opérations explicitement
+autorisées à part. Une PR ne se déclare pas terminée tant que ses contrôles
+applicables échouent ou restent inconnus.
+
+Ne pas déplacer massivement les tests : leur colocalisation est conservée au
+début. Une extraction POSIX, un déplacement des messages, une API GUI commune
+ou l'intégration ESP32 nécessitent chacun une étude et une PR ultérieures.
+Les évolutions BlueOS, Linux et Humble suivent leurs propres dépendances et
+critères fonctionnels ; la seule génération d'un arbre ne vaut pas support.
+
+Avant chaque déplacement : figer la base et les contrats, adapter les références
+dans la même PR, comparer les contenus et les installations, exécuter les tests
+ciblés puis les consommateurs affectés, vérifier format/liens et `git diff --check`.
+Maintenir les manifests à jour sans réduire le périmètre de CI. Aucun lot
+structurel ne donne de crédit nouveau aux compteurs UGA, projet ou release en
+l'absence de leurs preuves d'acceptation propres.
 
 ---
 

@@ -5,11 +5,21 @@
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-Maintainer-selected stable target: **`v0.7.4`** after rc6, prepared on **main**
-and not yet published. See the [release notes](docs/releases/v0.7.4.md) and
-[publication gates](docs/releases/v0.7.4-publication.md). This decision changes
-no checklist evidence or counters. The [version policy](docs/releases/versioning.md)
-separates stable v0.7.x maintenance from v0.8 development.
+The maintainer considers **`v0.7.4` functionally stable and validated**.
+Tag, image and GitHub Release publication are separate facts: no exact stable
+tag or Release was observed at the audit/synchronization baseline
+`ba7f220da30ee0b216f199ab24947db0678b3d7b`. See the
+[version policy](docs/releases/versioning.md), [release notes](docs/releases/v0.7.4.md)
+and historical [publication preparation](docs/releases/v0.7.4-publication.md).
+This decision changes no historical evidence, checklist item or counter.
+
+Repository structure is tracked independently in
+[TODO_REPO_REFACTOR.md](TODO_REPO_REFACTOR.md). Contributions target `dev`;
+`main` is the complete stable repository and receives validated changes from
+`dev`. Future specialized branches are generated exclusively from `main` and
+are never contribution targets. See [CONTRIBUTING.md](CONTRIBUTING.md).
+File rearrangement and branch generation do not automatically change the UG
+functional version or publish a release.
 
 The [2026-11-08 passive mowing campaign](docs/validation/2026-11-08-rc6-passive-mowing.md)
 completed 173 functional samples over 57 minutes and a separate continuous
@@ -24,15 +34,20 @@ durations and logs for the prior reports were not supplied. The report describes
 the documentary closeout options without converting them into a measured rc6
 endurance PASS or changing the canonical checklist totals.
 
-Next blocking milestones:
+Existing deployment/release workstreams (their acceptance gates remain open):
 
 - **v0.7 stable — Production containerization / deployment architecture**
 - **`v0.8.0` — BlueOS extension and non-ROS deployment surface**
 
-Broad feature expansion in the backlog is intentionally secondary until the
-`v0.7.0` container deployment baseline is production-ready. BlueOS work starts
-immediately after that baseline is stable, and must reuse the same Universal
-GNSS core rather than fork GNSS/NTRIP/configuration logic into the extension.
+The existing `v0.7.0` container deployment acceptance gates remain applicable;
+functional stability does not mark them complete. BlueOS runtime integration
+reuses that production container baseline and the same Universal GNSS core.
+Future ESP32 **BASE / RELAY / ROVER** and **ESP-NOW LR** integration is a
+functional priority without an assigned release number. It is separate from
+the structural refactor and publication, and does not remove Linux standalone,
+BlueOS or ROS2 Humble tasks or their technical prerequisites. Detailed embedded
+scope belongs to the [repository plan](TODO_REPO_REFACTOR.md); it is not a new
+completion claim or a change to the existing checklist accounting.
 
 Recently completed:
 
