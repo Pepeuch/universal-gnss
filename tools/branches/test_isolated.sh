@@ -30,6 +30,7 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     cd /tmp/ug-work
     test ! -e source/gnss_runtime
     test ! -e source/core/gnss_runtime
+    test ! -e source/gnss_mavros
     test ! -e source/.git
     test ! -e source/.github
     test ! -e /workspaces/universal-gnss
@@ -37,12 +38,12 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     test "$ROS_DISTRO" = "$1"
     package_paths=(source/universal_gnss_msgs source/gnss_ros2)
     packages=(universal_gnss_msgs universal_gnss_ros2)
-    if test -d source/gnss_mavros; then
+    if test -d source/adapters/mavros/gnss_mavros; then
       if test -f /opt/mavros/local_setup.bash; then
         test ! -e /opt/mavros/share/universal_gnss_ros2
         source /opt/mavros/local_setup.bash
       fi
-      package_paths+=(source/gnss_mavros)
+      package_paths+=(source/adapters/mavros/gnss_mavros)
       packages+=(universal_gnss_mavros)
     fi
     colcon list --base-paths "${package_paths[@]}"

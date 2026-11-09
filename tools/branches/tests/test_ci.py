@@ -94,7 +94,7 @@ class PipelineTests(unittest.TestCase):
         def builder(distro, source, image):
             self.assertEqual(distro, 'lyrical')
             self.assertEqual(image, 'cached-image')
-            self.assertTrue((source / 'gnss_mavros/src/adapter.cpp').exists())
+            self.assertTrue((source / 'adapters/mavros/gnss_mavros/src/adapter.cpp').exists())
             self.assertFalse((source / 'docs').exists())
             calls.append(source)
         report = self.validate(options=['mavros'], build_image='cached-image', builder=builder)

@@ -96,7 +96,7 @@ primary pilot build contract.
 | `messages` | — | ament, ROSIDL generator/runtime, builtin/diagnostic interfaces, pytest |
 | `healthcheck` | — | `rclpy`, `std_srvs`; runtime probe and its existing test |
 | `ros2` | `legal`, `core`, `protocols`, `transport`, `driver`, `ntrip`, `tools`, `messages`, `fixtures`, `healthcheck` | rclcpp, standard ROS messages/services, launch, ament/gtest/pytest and Python3 |
-| `mavros` (optional) | `core`, `ros2` | MAVROS 2.16.0, libmavconn/MAVLink, Eigen, GeographicLib, pluginlib, ROS dependencies listed in manifest |
+| `mavros` (optional) | `core`, `ros2` | Sources at `adapters/mavros/gnss_mavros/`; MAVROS 2.16.0, libmavconn/MAVLink, Eigen, GeographicLib, pluginlib, ROS dependencies listed in manifest |
 | `docker` (optional) | `ros2`, `healthcheck` | BuildKit, ROS base image, colcon, CycloneDDS, tini, OpenSSL and runtime packages |
 
 `gnss_runtime` (sources: `core/gnss_runtime/`) is not a dependency of the ROS2 package. The full repository's

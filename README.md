@@ -348,7 +348,7 @@ Current implemented layers:
     optional `rtcm` publication from sanitized logs
   - `NtripNode` wrapper publishing diagnostics for ROS-side NTRIP state
   - serial / TCP / replay / combined launch examples
-- `gnss_mavros`
+- `gnss_mavros` (sources: [adapters/mavros/gnss_mavros/](adapters/mavros/gnss_mavros/CMakeLists.txt))
   - optional external MAVROS plugin pinned to MAVROS `2.16.0`
   - direct `GPS_RAW_INT`, `GPS2_RAW`, `GPS_RTK`, `GPS2_RTK`, and `SYSTEM_TIME`
     handlers

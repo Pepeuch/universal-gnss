@@ -234,6 +234,67 @@ def closure(manifest, profile_name, options, excluded):
     return sorted(selected)
 
 
+def cmake_plugin_declarations(text):
+    """Read literal declarations, not CMake execution/variables/control flow.
+
+    Tokenize quotes and bracket arguments before recognizing commands so that
+    line/bracket comments and strings cannot manufacture a declaration.
+    Backslash/dynamic arguments are retained for explicit rejection when needed.
+    """
+    tokens = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char.isspace():
+            index += 1
+            continue
+        comment = char == '#'
+        bracket = re.match(r'\[(=*)\[', text[index + int(comment):])
+        if bracket:
+            start = index + int(comment) + bracket.end()
+            end = text.find(']' + bracket[1] + ']', start)
+            require(end >= 0, 'unsupported CMake syntax: unclosed bracket')
+            if not comment:
+                # CMake discards the first newline after a bracket opener.
+                value = re.sub(r'^\r?\n', '', text[start:end], count=1)
+                tokens.append(('argument', value))
+            index = end + len(bracket[1]) + 2
+        elif comment:
+            end = text.find('\n', index)
+            index = len(text) if end < 0 else end + 1
+        elif char == '"':
+            quoted = re.match(r'"((?:\\.|[^"\\])*)"', text[index:], re.S)
+            require(quoted is not None, 'unsupported CMake syntax: unclosed quote')
+            tokens.append(('argument', quoted[1]))
+            index += quoted.end()
+        elif char in '()':
+            tokens.append((char, char))
+            index += 1
+        else:
+            word = re.match(r'[^\s()#"]+', text[index:])[0]
+            tokens.append(('word', word))
+            index += len(word)
+    declarations = {'add_library': [], 'pluginlib_export_plugin_description_file': []}
+    index = 0
+    while index + 1 < len(tokens):
+        kind, name = tokens[index]
+        if kind != 'word' or tokens[index + 1][0] != '(':
+            index += 1
+            continue
+        index += 2
+        depth, arguments = 1, []
+        while index < len(tokens) and depth:
+            kind, value = tokens[index]
+            depth += (kind == '(') - (kind == ')')
+            if depth:
+                arguments.append(value)
+            index += 1
+        require(depth == 0, 'unsupported CMake syntax: unclosed command')
+        if name.lower() in declarations:
+            declarations[name.lower()].append(arguments)
+    return declarations
+
+
 def check_references(snapshot, manifest, paths, owners, selected):
     """Check explicit audited edges plus supported literal source references.
 
@@ -253,10 +314,18 @@ def check_references(snapshot, manifest, paths, owners, selected):
     for path in snapshot.tree:
         if '/include/' in path:
             header_index[path.split('/include/', 1)[1]].append(path)
-    packages = {}
+    packages, selected_packages = {}, {}
     for path in snapshot.tree:
-        if path.endswith('/package.xml'):
-            packages[ET.fromstring(snapshot.read(path)).findtext('name')] = path
+        if path.endswith('/package.xml') and owners[path] is not None:
+            name = ET.fromstring(snapshot.read(path)).findtext('name')
+            if path in paths:
+                require(name not in selected_packages,
+                        f'duplicate ROS package: {name}: {selected_packages.get(name)} and {path}')
+                selected_packages[name] = path
+            # Keep identification of undistributed internal dependencies, without
+            # letting an unselected duplicate replace a selected package.
+            packages.setdefault(name, path)
+    packages.update(selected_packages)
     source_roots = {p.split('/')[0] for p in snapshot.tree if '/' in p}
     root_pattern = '|'.join(re.escape(p) for p in sorted(source_roots, key=len, reverse=True))
     # Only syntactic path tokens, not arbitrary prose or installed /opt/... paths.
@@ -268,6 +337,38 @@ def check_references(snapshot, manifest, paths, owners, selected):
             continue
         text = re.sub(r'^\s*#(?!\s*include)[^\n]*$', '', data.decode('utf-8'), flags=re.M)
         component = manifest['components'][owners[path]]
+        if path.endswith('/package.xml'):
+            for export in ET.fromstring(data).findall('export/*'):
+                plugin = export.get('plugin')
+                if plugin is None:
+                    continue
+                require(plugin.startswith('${prefix}/'), f'unsupported plugin path: {path}: {plugin}')
+                relative = safe_path(plugin.removeprefix('${prefix}/'))
+                descriptor = str(PurePosixPath(path).parent / relative)
+                present(descriptor, path)
+                cmake = snapshot.read(str(PurePosixPath(path).parent / 'CMakeLists.txt')).decode('utf-8')
+                declarations = cmake_plugin_declarations(cmake)
+                exports = declarations['pluginlib_export_plugin_description_file']
+                dynamic = lambda value: any(marker in value for marker in ('$', '\\', ';'))
+                require(not any(dynamic(value) for args in exports for value in args[:2]),
+                        f'cannot statically prove dynamic plugin export: {descriptor}')
+                require([export.tag, relative] in exports,
+                        f'plugin descriptor not exported by CMake: {descriptor}')
+                libraries = list(ET.fromstring(snapshot.read(descriptor)).iter('library'))
+                require(libraries, f'plugin descriptor contains no library: {descriptor}')
+                for library in libraries:
+                    definitions = declarations['add_library']
+                    targets = [args for args in definitions if args and args[0] == library.get('path')]
+                    require(targets or not any(args and dynamic(args[0]) for args in definitions),
+                            f'cannot statically prove dynamic plugin target: {descriptor}')
+                    require(targets,
+                            f'plugin library target missing: {descriptor}: {library.get("path")}')
+                    require(len(targets) == 1 and len(targets[0]) > 1,
+                            f'cannot statically prove plugin library type: {descriptor}')
+                    require(not dynamic(targets[0][1]),
+                            f'cannot statically prove dynamic plugin library type: {descriptor}')
+                    require(targets[0][1] in ('SHARED', 'MODULE') and 'IMPORTED' not in targets[0][2:],
+                            f'plugin library is not a built dynamic library: {descriptor}')
         if path.endswith('CMakeLists.txt') or path.endswith('/package.xml'):
             dependencies = re.findall(r'find_package\(\s*([\w_]+)', text)
             if path.endswith('/package.xml'):
@@ -361,7 +462,7 @@ def plan(snapshot, manifest_bytes, profile_name, options=(), excluded=()):
     package_paths = ['universal_gnss_msgs', 'gnss_ros2']
     if 'mavros' in selected:
         package_names.append('universal_gnss_mavros')
-        package_paths.append('gnss_mavros')
+        package_paths.append('adapters/mavros/gnss_mavros')
     instructions = f'''# Universal GNSS source distribution: {profile_name}
 
 Source commit: `{snapshot.commit}`. UG functional version: `{manifest['ug_version']}`.

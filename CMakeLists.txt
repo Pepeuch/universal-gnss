@@ -16,7 +16,7 @@ add_subdirectory(core/gnss_runtime)
 add_subdirectory(tools/gnss_tools)
 
 if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)
-  add_subdirectory(gnss_mavros)
+  add_subdirectory(adapters/mavros/gnss_mavros)
 endif()
 
 if(UNIVERSAL_GNSS_BUILD_ROS2)
