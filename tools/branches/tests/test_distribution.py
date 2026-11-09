@@ -28,7 +28,7 @@ class DistributionTests(unittest.TestCase):
         files = {
             'LICENSE': 'Test fixture license\n',
             'gnss_core/include/universal_gnss/types.hpp': '#pragma once\n',
-            'gnss_protocols/src/parser.cpp': '#include "universal_gnss/types.hpp"\n',
+            'protocols/gnss_protocols/src/parser.cpp': '#include "universal_gnss/types.hpp"\n',
             'gnss_tools/src/tool.cpp': '#include "universal_gnss/types.hpp"\n',
             'gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_tools" out)\n',
             'gnss_ros2/package.xml': '<package><name>universal_gnss_ros2</name><version>0.7.0</version><depend>universal_gnss_msgs</depend></package>\n',
@@ -54,7 +54,7 @@ class DistributionTests(unittest.TestCase):
             'components': {
                 'legal': component(['LICENSE']),
                 'core': component(['gnss_core/']),
-                'protocols': component(['gnss_protocols/'], ['core']),
+                'protocols': component(['protocols/gnss_protocols/'], ['core']),
                 'tools': component(['gnss_tools/'], ['protocols']),
                 'messages': component(['universal_gnss_msgs/']),
                 'ros2': component(['gnss_ros2/'], ['tools', 'messages', 'legal']),
@@ -110,7 +110,11 @@ class DistributionTests(unittest.TestCase):
                 self.reject('unsafe path|invalid path')
 
     def test_unclassified_new_file(self):
-        self.snapshot.tree['new_receiver/new.cpp'] = self.snapshot.tree['gnss_protocols/src/parser.cpp']
+        self.snapshot.tree['new_receiver/new.cpp'] = self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp']
+        self.reject('unclassified source file')
+
+    def test_unclassified_sibling_protocol_is_not_silently_distributed(self):
+        self.snapshot.tree['protocols/future_receiver/new.cpp'] = self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp']
         self.reject('unclassified source file')
 
     def test_ambiguous_owner(self):
@@ -178,8 +182,8 @@ class DistributionTests(unittest.TestCase):
         self.reject('forbidden file')
 
     def test_symlink_in_selected_source_rejected(self):
-        _, oid = self.snapshot.tree['gnss_protocols/src/parser.cpp']
-        self.snapshot.tree['gnss_protocols/src/parser.cpp'] = ('120000', oid)
+        _, oid = self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp']
+        self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp'] = ('120000', oid)
         self.reject('symlink/unsupported mode')
 
     def test_invalid_and_duplicate_manifest(self):
@@ -373,6 +377,9 @@ class RepositoryIntegrationTests(unittest.TestCase):
                 with self.subTest(profile=profile, options=options):
                     expected = d.plan(snapshot, manifest, profile, options)
                     self.assertIn('gnss_tools/src/gnss_replay.cpp', expected)
+                    self.assertIn('protocols/gnss_protocols/src/nmea_parser.cpp', expected)
+                    self.assertIn('protocols/gnss_protocols/include/universal_gnss_protocols/rtcm_parser.hpp', expected)
+                    self.assertFalse(any(p.startswith('gnss_protocols/') for p in expected))
                     self.assertIn('scripts/tests/test_docker_healthcheck.py', expected)
                     self.assertIn('docker/healthcheck.py', expected)
                     self.assertIn('testdata/mixed/nmea_ubx_rtcm_unicore.bin', expected)

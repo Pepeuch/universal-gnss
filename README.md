@@ -285,7 +285,7 @@ Current implemented layers:
   - capability and value flag system
   - canonical dual-antenna baseline fields plus `v0.6.x` heading compatibility
   - no ROS 2 dependency
-- `gnss_protocols`
+- `gnss_protocols` (sources: [protocols/gnss_protocols/](protocols/gnss_protocols/CMakeLists.txt))
   - portable framing and checksum helpers
   - NMEA semantic parsing: `GGA`, `RMC`, `GSA`, `GSV`, `GST`, `VTG`, `ZDA`
   - standard `GGA fix_quality` -> normalized `rtk_mode` mapping for generic
