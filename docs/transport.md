@@ -1,6 +1,7 @@
 # Transport Layer
 
 This document describes the purpose and current scope of `gnss_transport`.
+Current sources: [core/gnss_transport/](../core/gnss_transport/CMakeLists.txt).
 
 Today `gnss_transport` provides a small portable abstraction layer plus a couple
 of concrete synchronous byte-stream adapters.

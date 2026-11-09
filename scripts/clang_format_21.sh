@@ -17,7 +17,7 @@ project_roots=(
   core/gnss_core
   protocols/gnss_protocols
   core/gnss_driver
-  gnss_transport
+  core/gnss_transport
   core/gnss_ntrip
   gnss_tools
   gnss_ros2

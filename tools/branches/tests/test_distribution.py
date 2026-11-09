@@ -372,11 +372,29 @@ class DistributionTests(unittest.TestCase):
 
 class RepositoryIntegrationTests(unittest.TestCase):
     ntrip_tls_inputs = (
-        'gnss_transport/tests/tls_loopback_server.hpp',
-        'gnss_transport/tests/fixtures/tls/ca.crt',
-        'gnss_transport/tests/fixtures/tls/server.crt',
-        'gnss_transport/tests/fixtures/tls/server.key',
+        'core/gnss_transport/tests/tls_loopback_server.hpp',
+        'core/gnss_transport/tests/fixtures/tls/ca.crt',
+        'core/gnss_transport/tests/fixtures/tls/server.crt',
+        'core/gnss_transport/tests/fixtures/tls/server.key',
     )
+
+    def test_missing_transport_component_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree = {p: v for p, v in snapshot.tree.items() if not p.startswith('core/gnss_transport/')}
+        with self.assertRaisesRegex(d.DistributionError, 'path does not exist'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_legacy_transport_root_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['gnss_transport/src/memory_stream.cpp'] = snapshot.tree['core/gnss_transport/src/memory_stream.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_missing_silent_tls_helper_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree.pop('core/gnss_transport/tests/silent_tls_loopback_server.hpp')
+        with self.assertRaisesRegex(d.DistributionError, 'internal include missing.*silent_tls_loopback_server.hpp'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
 
     def test_missing_ntrip_component_rejected(self):
         snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
@@ -422,6 +440,10 @@ class RepositoryIntegrationTests(unittest.TestCase):
                     self.assertIn('core/gnss_ntrip/include/universal_gnss_ntrip/ntrip_client.hpp', expected)
                     self.assertIn('core/gnss_ntrip/src/ntrip_client.cpp', expected)
                     self.assertFalse(any(p.startswith('gnss_ntrip/') for p in expected))
+                    self.assertIn('core/gnss_transport/include/universal_gnss_transport/byte_stream.hpp', expected)
+                    self.assertIn('core/gnss_transport/src/tcp_client_transport.cpp', expected)
+                    self.assertIn('core/gnss_transport/tests/silent_tls_loopback_server.hpp', expected)
+                    self.assertFalse(any(p.startswith('gnss_transport/') for p in expected))
                     for path in self.ntrip_tls_inputs:
                         self.assertIn(path, expected)
                     self.assertIn('protocols/gnss_protocols/src/nmea_parser.cpp', expected)
