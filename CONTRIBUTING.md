@@ -40,6 +40,12 @@ functional version. Engine qualification, distribution qualification and
 publication are separate decisions; a successful backend build alone does not
 qualify every distribution.
 
+The [distribution validation CI](tools/branches/CI.md) checks generator tests,
+integrity/reproducibility and isolated Kilted/Lyrical builds with read-only
+permissions, including for fork PRs. Its aggregate gate must pass before a
+validated promotion; it grants no publication authority. Changes to the workflow
+must preserve failure propagation and the separation from any future writer.
+
 ## Design rules
 
 - Keep gnss_core independent from ROS 2.

@@ -8,6 +8,15 @@ The [repository policy](../../TODO_REPO_REFACTOR.md) remains
 locally; future publication must use an approved exact commit from `main`.
 A successful local generation is not a publication or a hardware qualification.
 
+## Distribution CI and publication preparation
+
+Lot 3 adds a read-only [distribution validation workflow](../../.github/workflows/distributions.yml)
+and [operating/design guide](CI.md): generator tests, all option combinations,
+reproducibility, mandatory isolated Kilted/Lyrical builds and an aggregate gate.
+The publication candidate report remains locked against writes. Official
+main-only publication, App authorization, protections and atomic replacement
+require a later activation PR; none is enabled here.
+
 ## Generate and verify
 
 Requirements: Python 3.10 or newer, Git and Bash. No Python package installation
@@ -152,6 +161,7 @@ identical file bytes and modes, independent of option ordering/destination.
 ## Tests and isolated builds
 
 ```bash
+# CI policy tests added in lot 3 require PyYAML; generator runtime stays stdlib-only.
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/branches/tests -v
 bash tools/branches/test_isolated.sh kilted /tmp/ug-kilted <cached-kilted-build-image>
 bash tools/branches/test_isolated.sh lyrical /tmp/ug-lyrical <cached-lyrical-build-image>

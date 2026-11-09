@@ -1,0 +1,99 @@
+name: Distribution validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distributions-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generator:
+    name: Distribution generator and integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out immutable validation source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install workflow test parser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-yaml
+
+      - name: Generator and CI safety tests
+        run: |
+          test "$(id -u)" != 0
+          PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -m unittest discover -s tools/branches/tests -v
+
+      - name: Validate and reproduce both pilots and every option combination
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for distro in kilted lyrical; do
+            for options in none mavros docker both; do
+              extra=()
+              case "$options" in
+                mavros) extra=(--with mavros) ;;
+                docker) extra=(--with docker) ;;
+                both) extra=(--with mavros --with docker) ;;
+              esac
+              python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
+                --distribution "ros2-$distro" "${extra[@]}"
+            done
+          done
+
+  isolated:
+    name: Isolated ROS2 ${{ matrix.ros_distro }}
+    needs: generator
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: [kilted, lyrical]
+    steps:
+      - name: Check out immutable validation source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Provision dependency-only build image
+        run: |
+          docker build --build-arg ROS_DISTRO="${{ matrix.ros_distro }}" \
+            --tag "ug-distribution-build:${{ matrix.ros_distro }}" \
+            --file tools/branches/Dockerfile.validation tools/branches
+
+      - name: Require isolated build and tests of the generated source
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          test "$(id -u)" != 0
+          python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
+            --distribution "ros2-${{ matrix.ros_distro }}" \
+            --build-image "ug-distribution-build:${{ matrix.ros_distro }}"
+
+  gate:
+    name: Distribution validation gate
+    if: always()
+    needs: [generator, isolated]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every mandatory job to pass
+        env:
+          GENERATOR_RESULT: ${{ needs.generator.result }}
+          ISOLATED_RESULT: ${{ needs.isolated.result }}
+        run: |
+          test "$GENERATOR_RESULT" = success
+          test "$ISOLATED_RESULT" = success

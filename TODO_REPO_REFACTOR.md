@@ -48,6 +48,20 @@ cibles ESP32, Humble, Linux standalone ou BlueOS.
 Les validations du lot et leurs limites sont décrites avec l'outil ; aucun
 compteur fonctionnel UGA/projet/release n'est incrémenté par ce jalon structurel.
 
+## Avancement structurel — lot 3
+
+La PR 2 est fusionnée dans `dev` au commit
+`eff7263629a5ec91e87879c7b2d8a058e80191cf`. Le lot 3 implémente localement la
+CI de validation et ses tests, avec les deux pilotes et un contrôle final
+obligatoire ; son exécution sur GitHub reste à confirmer après publication de
+la PR. Voir les [consignes et le bilan local](tools/branches/CI.md).
+La PR 3 reste partielle pour la publication : le rapport de préparation est
+sans droit d'écriture et refuse toute demande de publication. Les protections,
+l'identité autorisée et la transaction cohérente entre distributions nécessitent
+une opération ultérieure explicitement approuvée. Aucune branche spécialisée,
+aucun tag et aucune Release ne sont publiés. Ce jalon structurel ne change aucun
+compteur fonctionnel ou historique de qualification.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :

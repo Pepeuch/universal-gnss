@@ -42,6 +42,8 @@ ROS2 Kilted/Lyrical source trees, with optional MAVROS and Docker packaging. It
 keeps existing source paths and public contracts, computes transitive component
 dependencies and verifies the output against an identified Git commit. This is
 local tooling; no specialized branch or release is published by generation.
+The [distribution CI guide](tools/branches/CI.md) describes read-only validation,
+local test results and the separately gated future publication design.
 
 ## Current Project Status
 
