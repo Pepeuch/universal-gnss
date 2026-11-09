@@ -5,12 +5,23 @@
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 
-The maintainer has selected **v0.7.4 stable** as rc6 successor. Integration is
-prepared on **main**; stable publication is pending approval and exact-SHA CI.
-See the [release notes](docs/releases/v0.7.4.md),
-[publication procedure](docs/releases/v0.7.4-publication.md) and
-[version policy](docs/releases/versioning.md): v0.7.x maintenance remains
-isolated from optional v0.8.0-alpha.1, beta.1, rc.1 and stable development.
+The maintainer considers **v0.7.4 functionally stable and validated**.
+Publication of tags, images and a GitHub Release is separate: no exact stable
+tag or Release was observed at the audit/synchronization baseline
+`ba7f220da30ee0b216f199ab24947db0678b3d7b`. The
+[version policy](docs/releases/versioning.md) separates functional versions,
+engine/distribution qualification and publication. Historical
+[release notes](docs/releases/v0.7.4.md) and
+[publication preparation](docs/releases/v0.7.4-publication.md) retain their context.
+
+Repository refactoring follows its own [plan](TODO_REPO_REFACTOR.md), independent
+of these functional release milestones. [Contributions](CONTRIBUTING.md) target
+`dev`; only validated changes pass into the complete stable `main`. Future
+distribution branches are generated exclusively from `main` and receive no
+manual development or contribution PRs. Rearrangement and generation do not
+automatically trigger a functional release. No existing checklist completion
+or historical validation evidence changes with this policy.
+
 The project is no longer
 in a "next phase is basic ROS2 integration" posture, so the roadmap is grouped
 by ownership:
@@ -187,11 +198,20 @@ evidence; see [`blueos/README.md`](blueos/README.md).
 USB hotplug/re-enumeration plus Docker device grants are a hardware-required
 boundary: reopening a tty does not prove a valid new BlueOS device grant.
 
-## Later embedded / gateway layer
+## Functional priority — embedded / gateway integration (no assigned version)
 
-- define the embedded/gateway cut for ESP32 or similar targets
-- preserve a lightweight protocol/session subset for constrained builds
+Future ESP32 **BASE / RELAY / ROVER** and **ESP-NOW LR** integration is a
+functional priority, separate from repository refactoring and publication.
+It does not depend on assigning a new UG version merely to rearrange files.
+Linux standalone, BlueOS and ROS2 Humble work remains planned with its own
+technical prerequisites; their tasks and existing release-gate evidence are
+preserved. No implementation or support claim is made here.
+
+- define the roles, ESP-NOW LR transport contract and embedded/gateway cut for ESP32
+- audit the prototype/donor before reuse, as described in the [plan](TODO_REPO_REFACTOR.md)
+- preserve a lightweight shared protocol/session subset for constrained builds
 - add UART / WiFi / Ethernet adapters, MQTT export, and base-gateway policy
+- qualify role-specific RTCM forwarding and common GNSS semantics without duplication
 
 ## v0.9 — Receiver Ecosystem
 
