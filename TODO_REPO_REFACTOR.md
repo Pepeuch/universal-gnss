@@ -121,6 +121,20 @@ workflow n'est modifié. Runtime reste à la racine et fera l'objet d'un audit
 séparé ; sa dette de formatage reste intacte. Versions, compteurs fonctionnels
 et preuves historiques ne changent pas.
 
+## Avancement structurel — lot 5E, runtime
+
+Le seul déplacement du lot 5E est `gnss_runtime/` vers `core/gnss_runtime/`.
+Ses huit fichiers restent identiques, CMake compris. Le runtime natif reste
+exclu des distributions ROS2 : les 13 composants et les huit sélections ne
+changent pas. Les interdictions et le contrôle d'isolation couvrent les deux
+emplacements, ancien et nouveau, sans sélection globale de `core/`.
+Le [bilan runtime](tools/branches/RUNTIME_MOVE.md) détaille les dépendances,
+les exclusions et les validations. La dette de formatage préexistante demeure :
+ni les fichiers runtime ni le périmètre du formateur ne sont modifiés.
+Les cinq composants étudiés au lot 5 sont désormais regroupés sous `core/` ;
+ce jalon structurel ne change aucune version, qualification ou mesure de
+progression fonctionnelle. Les preuves historiques restent intactes.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -285,8 +299,8 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 5D ; les protocoles, le modèle
-commun, le driver, NTRIP et le transport sont regroupés, les autres composants restent à la racine.
+La table décrit l’arbre courant après le lot 5E ; les protocoles et les cinq
+composants communs du lot 5 sont regroupés, les autres composants restent à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
@@ -296,7 +310,7 @@ La base du lot 0 reste celle indiquée en tête :
 | `protocols/gnss_protocols/` | NMEA, UBX, Unicore et RTCM | En place depuis le lot 4 ; noms publics inchangés |
 | `core/gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | En place depuis le lot 5D ; noms publics inchangés |
 | `core/gnss_ntrip/` | Client/caster NTRIP et GGA | En place depuis le lot 5C ; noms publics inchangés |
-| `gnss_runtime/` | Superviseur commun et intégration série Linux | `core/gnss_runtime/` initialement |
+| `core/gnss_runtime/` | Superviseur commun et intégration série Linux | En place depuis le lot 5E ; exclu des pilotes ROS2, noms publics inchangés |
 | `gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | `tools/gnss_tools/` |
 | `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |
 | `universal_gnss_msgs/` | Package public ROSIDL | Racine initialement ; déplacement séparé éventuel |

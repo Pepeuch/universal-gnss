@@ -29,6 +29,7 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     tar -xf - -C /tmp/ug-work/source
     cd /tmp/ug-work
     test ! -e source/gnss_runtime
+    test ! -e source/core/gnss_runtime
     test ! -e source/.git
     test ! -e source/.github
     test ! -e /workspaces/universal-gnss

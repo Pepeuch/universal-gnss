@@ -99,7 +99,7 @@ primary pilot build contract.
 | `mavros` (optional) | `core`, `ros2` | MAVROS 2.16.0, libmavconn/MAVLink, Eigen, GeographicLib, pluginlib, ROS dependencies listed in manifest |
 | `docker` (optional) | `ros2`, `healthcheck` | BuildKit, ROS base image, colcon, CycloneDDS, tini, OpenSSL and runtime packages |
 
-`gnss_runtime` is not a dependency of the ROS2 package. The full repository's
+`gnss_runtime` (sources: `core/gnss_runtime/`) is not a dependency of the ROS2 package. The full repository's
 root CMake entry point includes it, so that entry point is deliberately excluded
 rather than rewritten or copied with an unrelated supervisor. Build the pilot
 using package-based colcon commands, as in the existing Kilted/Lyrical workflows.

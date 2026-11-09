@@ -377,6 +377,7 @@
         ".github/",
         ".devcontainer/",
         "gnss_runtime/",
+        "core/gnss_runtime/",
         "blueos/",
         "universal-gnss-validation/"
       ]
@@ -399,6 +400,7 @@
         ".github/",
         ".devcontainer/",
         "gnss_runtime/",
+        "core/gnss_runtime/",
         "blueos/",
         "universal-gnss-validation/"
       ]
@@ -490,7 +492,7 @@
       "reason": "Full-repository references; generated instructions cover the option"
     },
     {
-      "path": "gnss_runtime/",
+      "path": "core/gnss_runtime/",
       "reason": "Native standalone supervisor, not required by ROS2 adapter"
     },
     {
