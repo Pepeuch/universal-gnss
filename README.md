@@ -304,7 +304,7 @@ Current implemented layers:
   - protocol support and feature flags
   - lightweight stream-family detection and auto-discovery
   - discovery-aware planner/report layer for portable receiver configuration
-- `gnss_transport`
+- `gnss_transport` (sources: [core/gnss_transport/](core/gnss_transport/CMakeLists.txt))
   - portable byte source / sink interfaces
   - memory-backed test / replay transport
   - Linux POSIX serial transport

@@ -88,7 +88,7 @@ primary pilot build contract.
 | `legal` | — | LGPL license text retained |
 | `core` | — | CMake ≥3.22, C++17; header-only common model at `core/gnss_core/` |
 | `protocols` | `core` | NMEA, UBX, Unicore and RTCM library at `protocols/gnss_protocols/` |
-| `transport` | — | OpenSSL on the Linux pilot platform |
+| `transport` | — | Library at `core/gnss_transport/`; OpenSSL on the Linux pilot platform |
 | `driver` | `protocols`, `transport` | Sessions/configuration/discovery library at `core/gnss_driver/` |
 | `ntrip` | `protocols`, `transport` | NTRIP/GGA library at `core/gnss_ntrip/`; TLS tests use transport helpers |
 | `fixtures` | — | Existing synthetic/sanitized `testdata/` corpus |

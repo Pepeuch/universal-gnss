@@ -69,7 +69,7 @@
     },
     "transport": {
       "paths": [
-        "gnss_transport/"
+        "core/gnss_transport/"
       ],
       "requires": [],
       "external": [
@@ -529,7 +529,7 @@
     },
     {
       "from": "core/gnss_ntrip/CMakeLists.txt",
-      "to": "gnss_transport/tests/",
+      "to": "core/gnss_transport/tests/",
       "reason": "Shared TLS fixture/helper path"
     },
     {
@@ -559,17 +559,17 @@
     },
     {
       "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
-      "to": "gnss_transport/tests/fixtures/tls/ca.crt",
+      "to": "core/gnss_transport/tests/fixtures/tls/ca.crt",
       "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
     },
     {
       "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
-      "to": "gnss_transport/tests/fixtures/tls/server.crt",
+      "to": "core/gnss_transport/tests/fixtures/tls/server.crt",
       "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
     },
     {
       "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
-      "to": "gnss_transport/tests/fixtures/tls/server.key",
+      "to": "core/gnss_transport/tests/fixtures/tls/server.key",
       "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
     }
   ]
