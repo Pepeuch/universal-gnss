@@ -88,5 +88,7 @@ before tag/image publication; record the actual artifacts afterward.
 
 The future generated-branch process is: validated `dev` changes → `main` →
 manifest generation and verification → per-distribution build/tests → authorized
-publication. Generator implementation, protections, tag creation, image pushes
-and GitHub Release creation are outside this documentation PR.
+publication. A [local source generator](../../tools/branches/README.md) now
+exercises the first stage without publishing. Generated-branch publication,
+protections, tag creation, image pushes and GitHub Release creation remain
+separate authorized operations.

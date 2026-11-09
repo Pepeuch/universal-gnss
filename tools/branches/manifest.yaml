@@ -1,0 +1,561 @@
+{
+  "schema_version": 1,
+  "ug_version": "v0.7.4",
+  "components": {
+    "legal": {
+      "paths": [
+        "LICENSE"
+      ],
+      "requires": [],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "core": {
+      "paths": [
+        "gnss_core/"
+      ],
+      "requires": [],
+      "external": [
+        "CMake >=3.22",
+        "C++17"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "protocols": {
+      "paths": [
+        "gnss_protocols/"
+      ],
+      "requires": [
+        "core"
+      ],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "transport": {
+      "paths": [
+        "gnss_transport/"
+      ],
+      "requires": [],
+      "external": [
+        "OpenSSL"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "driver": {
+      "paths": [
+        "gnss_driver/"
+      ],
+      "requires": [
+        "protocols",
+        "transport"
+      ],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "ntrip": {
+      "paths": [
+        "gnss_ntrip/"
+      ],
+      "requires": [
+        "protocols",
+        "transport"
+      ],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "fixtures": {
+      "paths": [
+        "testdata/"
+      ],
+      "requires": [],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "tools": {
+      "paths": [
+        "gnss_tools/"
+      ],
+      "requires": [
+        "driver",
+        "ntrip",
+        "protocols",
+        "fixtures"
+      ],
+      "external": [],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "messages": {
+      "paths": [
+        "universal_gnss_msgs/"
+      ],
+      "requires": [],
+      "external": [
+        "ament_cmake",
+        "builtin_interfaces",
+        "diagnostic_msgs",
+        "rosidl_default_generators",
+        "rosidl_default_runtime",
+        "ament_cmake_pytest"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "healthcheck": {
+      "paths": [
+        "docker/healthcheck.py",
+        "scripts/tests/test_docker_healthcheck.py"
+      ],
+      "requires": [],
+      "external": [
+        "rclpy",
+        "std_srvs"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "ros2": {
+      "paths": [
+        "gnss_ros2/"
+      ],
+      "requires": [
+        "legal",
+        "core",
+        "protocols",
+        "transport",
+        "driver",
+        "ntrip",
+        "tools",
+        "messages",
+        "fixtures",
+        "healthcheck"
+      ],
+      "external": [
+        "ament_cmake",
+        "builtin_interfaces",
+        "diagnostic_msgs",
+        "rclcpp",
+        "sensor_msgs",
+        "std_srvs",
+        "launch",
+        "launch_ros",
+        "ament_cmake_gtest",
+        "ament_cmake_pytest",
+        "Python3"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "mavros": {
+      "paths": [
+        "gnss_mavros/CMakeLists.txt",
+        "gnss_mavros/include/",
+        "gnss_mavros/src/",
+        "gnss_mavros/tests/",
+        "gnss_mavros/package.xml",
+        "gnss_mavros/universal_gnss_mavros_plugins.xml"
+      ],
+      "requires": [
+        "core",
+        "ros2"
+      ],
+      "external": [
+        "ament_cmake",
+        "diagnostic_msgs",
+        "diagnostic_updater",
+        "eigen3_cmake_module",
+        "Eigen3",
+        "eigen",
+        "GeographicLib",
+        "geographiclib",
+        "libmavconn",
+        "mavlink",
+        "mavros_msgs",
+        "mavros ==2.16.0",
+        "pluginlib",
+        "rclcpp",
+        "rclcpp_components",
+        "rcpputils",
+        "sensor_msgs",
+        "tf2_eigen",
+        "tf2_ros"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    },
+    "docker": {
+      "paths": [
+        "Dockerfile",
+        ".dockerignore",
+        "docker/",
+        "scripts/collect_support_snapshot.py"
+      ],
+      "requires": [
+        "ros2",
+        "healthcheck"
+      ],
+      "external": [
+        "Docker BuildKit",
+        "ros:${ros_distro}-ros-base",
+        "tini",
+        "ca-certificates",
+        "procps",
+        "rmw_cyclonedds_cpp",
+        "colcon",
+        "OpenSSL"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "frameworks": [
+        "ros2"
+      ],
+      "hardware_profiles": [
+        "generic-posix"
+      ],
+      "distributions": [
+        "ros2-kilted",
+        "ros2-lyrical"
+      ]
+    }
+  },
+  "distributions": {
+    "ros2-kilted": {
+      "platform": "linux",
+      "framework": "ros2",
+      "hardware_profile": "generic-posix",
+      "ros_distro": "kilted",
+      "roots": [
+        "ros2"
+      ],
+      "options": {
+        "mavros": "mavros",
+        "docker": "docker"
+      },
+      "forbidden": [
+        ".git/",
+        ".agent/",
+        ".github/",
+        ".devcontainer/",
+        "gnss_runtime/",
+        "blueos/",
+        "universal-gnss-validation/"
+      ]
+    },
+    "ros2-lyrical": {
+      "platform": "linux",
+      "framework": "ros2",
+      "hardware_profile": "generic-posix",
+      "ros_distro": "lyrical",
+      "roots": [
+        "ros2"
+      ],
+      "options": {
+        "mavros": "mavros",
+        "docker": "docker"
+      },
+      "forbidden": [
+        ".git/",
+        ".agent/",
+        ".github/",
+        ".devcontainer/",
+        "gnss_runtime/",
+        "blueos/",
+        "universal-gnss-validation/"
+      ]
+    }
+  },
+  "exclude": [
+    {
+      "path": ".agent/",
+      "reason": "Agent policy and historical handoffs, not a source build dependency"
+    },
+    {
+      "path": ".github/",
+      "reason": "Full-repository CI/publication, never published by the local generator"
+    },
+    {
+      "path": ".devcontainer/",
+      "reason": "Development-only environment"
+    },
+    {
+      "path": ".clang-format",
+      "reason": "Full-repository developer formatting entry point"
+    },
+    {
+      "path": ".gitignore",
+      "reason": "Full-repository development ignore rules; no generated build inside source"
+    },
+    {
+      "path": "AGENTS.md",
+      "reason": "Repository contributor execution rules"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "reason": "Full native repository entry point includes runtime; pilots use package-based colcon"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "reason": "Full-repository policy"
+    },
+    {
+      "path": "CURRENT_MAIN_AUDIT_DELTA.md",
+      "reason": "Historical audit evidence"
+    },
+    {
+      "path": "MOWGLINEXT_TODO.md",
+      "reason": "Downstream planning"
+    },
+    {
+      "path": "Makefile",
+      "reason": "Full-repository formatting commands"
+    },
+    {
+      "path": "README.md",
+      "reason": "Full-repository overview replaced by distribution-specific build instructions"
+    },
+    {
+      "path": "ROADMAP.md",
+      "reason": "Full-repository planning"
+    },
+    {
+      "path": "TODO.md",
+      "reason": "Canonical full-repository backlog"
+    },
+    {
+      "path": "TODO_REPO_REFACTOR.md",
+      "reason": "Full-repository structural planning"
+    },
+    {
+      "path": "UNIVERSAL_GNSS_AUDIT.md",
+      "reason": "Historical audit evidence"
+    },
+    {
+      "path": "assets/",
+      "reason": "Unneeded UI assets"
+    },
+    {
+      "path": "blueos/",
+      "reason": "Unqualified future distribution"
+    },
+    {
+      "path": "docs/",
+      "reason": "Full-repository documentation and immutable historical evidence"
+    },
+    {
+      "path": "examples/",
+      "reason": "Optional robot_localization integration examples"
+    },
+    {
+      "path": "gnss_mavros/README.md",
+      "reason": "Full-repository references; generated instructions cover the option"
+    },
+    {
+      "path": "gnss_runtime/",
+      "reason": "Native standalone supervisor, not required by ROS2 adapter"
+    },
+    {
+      "path": "scripts/",
+      "reason": "Full-repository development/validation tools; exact runtime/test overrides above"
+    },
+    {
+      "path": "tools/branches/",
+      "reason": "Generator implementation/tests, not a runtime dependency"
+    },
+    {
+      "path": "universal-gnss-validation/",
+      "reason": "Immutable historical campaign material"
+    }
+  ],
+  "references": [
+    {
+      "from": "gnss_ros2/CMakeLists.txt",
+      "to": "gnss_tools/",
+      "reason": "Embedded ROS2 build links tools library"
+    },
+    {
+      "from": "gnss_ros2/CMakeLists.txt",
+      "to": "testdata/",
+      "reason": "ROS2 replay regression corpus"
+    },
+    {
+      "from": "gnss_ros2/CMakeLists.txt",
+      "to": "scripts/tests/test_docker_healthcheck.py",
+      "reason": "Python test registered outside ROS2 component"
+    },
+    {
+      "from": "scripts/tests/test_docker_healthcheck.py",
+      "to": "docker/healthcheck.py",
+      "reason": "Path(__file__).parents[2] runtime import"
+    },
+    {
+      "from": "gnss_ntrip/CMakeLists.txt",
+      "to": "gnss_transport/tests/",
+      "reason": "Shared TLS fixture/helper path"
+    },
+    {
+      "from": "gnss_tools/CMakeLists.txt",
+      "to": "testdata/",
+      "reason": "TESTDATA_DIR compile definition"
+    },
+    {
+      "from": "Dockerfile",
+      "to": "scripts/collect_support_snapshot.py",
+      "reason": "Runtime COPY input"
+    },
+    {
+      "from": "Dockerfile",
+      "to": "docker/entrypoint.sh",
+      "reason": "Runtime COPY input"
+    },
+    {
+      "from": "Dockerfile",
+      "to": "docker/healthcheck.sh",
+      "reason": "Runtime COPY input"
+    },
+    {
+      "from": "Dockerfile",
+      "to": "docker/healthcheck.py",
+      "reason": "Runtime COPY input"
+    }
+  ]
+}

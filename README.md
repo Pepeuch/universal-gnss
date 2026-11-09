@@ -35,6 +35,14 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
+## Local source distributions
+
+The [offline source generator](tools/branches/README.md) produces autonomous
+ROS2 Kilted/Lyrical source trees, with optional MAVROS and Docker packaging. It
+keeps existing source paths and public contracts, computes transitive component
+dependencies and verifies the output against an identified Git commit. This is
+local tooling; no specialized branch or release is published by generation.
+
 ## Current Project Status
 
 Current prerelease: **`v0.7.4-rc6`**, source

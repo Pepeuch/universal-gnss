@@ -34,6 +34,20 @@ de cette priorité et de l'ordre des lots structurels.
 [TODO.md](TODO.md) et [ROADMAP.md](ROADMAP.md) conservent le suivi fonctionnel et
 les critères de validation. Ce document porte le chantier structurel séparé.
 
+## Avancement structurel — lot 2
+
+La PR 1 est fusionnée dans `dev` au commit
+`5a6f285f9864d924fdfc032e814fdbd1d7bf5eb1`. Le lot 2 fournit le
+[générateur local](tools/branches/README.md), son manifeste de composants,
+la fermeture transitive et le vérificateur pour ROS2 Kilted/Lyrical, avec
+MAVROS et packaging Docker en options. Les chemins et contenus source restent
+inchangés ; les sorties sont identifiées par leur commit et leur manifeste.
+Le générateur n'effectue ni création de branche ni publication. Ce lot ne
+termine pas la PR 3, ne change aucune protection/CI et ne qualifie pas les
+cibles ESP32, Humble, Linux standalone ou BlueOS.
+Les validations du lot et leurs limites sont décrites avec l'outil ; aucun
+compteur fonctionnel UGA/projet/release n'est incrémenté par ce jalon structurel.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -399,7 +413,13 @@ tools/
     └── publish_backend.sh
 ```
 
-Le nom exact pourra évoluer.
+`manifest.yaml`, `make_backend.sh` et `verify_backend.sh` sont désormais
+implémentés pour une génération locale sans réseau ; voir la
+[documentation du lot 2](tools/branches/README.md). Le `publish_backend.sh`
+ci-dessus reste une proposition pour un lot ultérieur, pas un outil existant.
+Le schéma des manifests suivants reste conceptuel : le manifeste réel sépare
+composants, dépendances et profils plutôt que de copier une simple whitelist.
+Le nom exact des futurs outils de publication pourra évoluer.
 
 ---
 
@@ -1066,7 +1086,7 @@ tests, critères d'acceptation et retour arrière explicites :
 | Étape | Périmètre | Dépendance / acceptation | Retour arrière |
 | --- | --- | --- | --- |
 | PR 1 | Politique Git, versions, contributions et architecture | Lot 0 et synchronisation ; cohérence des cinq documents, liens et diff documentaire contrôlés | Revert documentaire |
-| PR 2 | `tools/branches/`, whitelist, génération locale et métadonnées | PR 1 ; sorties déterministes, dépendances et fichiers non couverts contrôlés, sans publication | Revert ; aucune branche publiée |
+| PR 2 (lot 2 implémenté localement) | `tools/branches/`, whitelist, génération locale et métadonnées | PR 1 ; sorties déterministes, dépendances et fichiers non couverts contrôlés, sans publication | Revert ; aucune branche publiée |
 | PR 3 | Vérification CI des distributions et publication contrôlée | PR 2 ; essais sans publication, build/tests bloquants ; protections et identité autorisée configurées séparément avant activation | Désactiver publication, revert du workflow ; conserver les sorties vérifiées |
 | PR 4 | Déplacement de `gnss_protocols` entier | Socle précédent validé ; CMake/includes/tests/format/manifests et consommateurs adaptés ensemble | Revert atomique |
 | PR 5 | Composants communs sous `core/` sans extraction fonctionnelle | PR 4 ; tests natifs et consommateurs ROS2, fixtures et installations préservés | Revert atomique |
