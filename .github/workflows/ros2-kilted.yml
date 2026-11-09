@@ -43,7 +43,7 @@ jobs:
               mkdir -p "$GITHUB_WORKSPACE/ros2_ws_kilted/src"
               ln -s "$GITHUB_WORKSPACE/universal_gnss_msgs" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/universal_gnss_msgs"
               ln -s "$GITHUB_WORKSPACE/gnss_ros2" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_ros2"
-              ln -s "$GITHUB_WORKSPACE/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_core"
+              ln -s "$GITHUB_WORKSPACE/core/gnss_core" "$GITHUB_WORKSPACE/ros2_ws_kilted/src/gnss_core"
               cd "$GITHUB_WORKSPACE/ros2_ws_kilted"
               colcon build --packages-select universal_gnss_msgs
               colcon test --packages-select universal_gnss_msgs

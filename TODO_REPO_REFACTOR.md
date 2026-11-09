@@ -73,6 +73,18 @@ Les anciens chemins présents dans les audits et preuves figés restent liés à
 leurs bases historiques. Aucun autre composant, comportement, version ou
 workflow de publication ne change ; les compteurs fonctionnels restent inchangés.
 
+## Avancement structurel — lot 5, premier déplacement
+
+L'audit des cinq composants et le [bilan du déplacement du modèle commun](tools/branches/CORE_MOVE.md)
+sélectionnent uniquement `gnss_core/` vers `core/gnss_core/`. Les dix fichiers
+sont conservés octet pour octet ; les références CMake, deux sources de liens
+CI, le formateur, le manifeste et ses tests sont adaptés sans changement public.
+`gnss_driver`, `gnss_transport`, `gnss_ntrip` et `gnss_runtime` restent en place.
+L'ordre proposé des PR suivantes est driver, NTRIP, transport puis runtime,
+avec réaudit avant chaque étape. La dette de formatage runtime préexistante
+est seulement documentée ; elle n'est pas corrigée dans ce lot. Aucun compteur
+fonctionnel, version, comportement GNSS ou qualification matérielle ne change.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -237,12 +249,12 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 4 ; hormis les protocoles, les
-composants listés restent à la racine. La base du lot 0 reste celle indiquée en tête :
+La table décrit l’arbre courant après le premier déplacement du lot 5 ; les
+protocoles et le modèle commun sont regroupés, les autres composants restent à la racine. La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
 | --- | --- | --- |
-| `gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | `core/gnss_core/` |
+| `core/gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | En place depuis le premier déplacement du lot 5 ; noms publics inchangés |
 | `gnss_driver/` | Sessions, détection, profils et configuration | `core/gnss_driver/` |
 | `protocols/gnss_protocols/` | NMEA, UBX, Unicore et RTCM | En place depuis le lot 4 ; noms publics inchangés |
 | `gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | `core/gnss_transport/` initialement |
