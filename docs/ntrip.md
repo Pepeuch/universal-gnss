@@ -391,7 +391,7 @@ Current non-goals:
 
 ## Monitor CLI
 
-`gnss_tools/gnss_ntrip_monitor` is the first practical live consumer of the
+`gnss_ntrip_monitor` (sources: `tools/gnss_tools/`) is the first practical live consumer of the
 current NTRIP foundation.
 
 Current scope:

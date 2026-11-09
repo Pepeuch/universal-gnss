@@ -29,8 +29,8 @@ class DistributionTests(unittest.TestCase):
             'LICENSE': 'Test fixture license\n',
             'core/gnss_core/include/universal_gnss/types.hpp': '#pragma once\n',
             'protocols/gnss_protocols/src/parser.cpp': '#include "universal_gnss/types.hpp"\n',
-            'gnss_tools/src/tool.cpp': '#include "universal_gnss/types.hpp"\n',
-            'gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_tools" out)\n',
+            'tools/gnss_tools/src/tool.cpp': '#include "universal_gnss/types.hpp"\n',
+            'gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/tools/gnss_tools" out)\n',
             'gnss_ros2/package.xml': '<package><name>universal_gnss_ros2</name><version>0.7.0</version><depend>universal_gnss_msgs</depend></package>\n',
             'universal_gnss_msgs/package.xml': '<package><name>universal_gnss_msgs</name><version>0.7.0</version></package>\n',
             'universal_gnss_msgs/msg/GnssStatus.msg': 'bool valid\n',
@@ -55,7 +55,7 @@ class DistributionTests(unittest.TestCase):
                 'legal': component(['LICENSE']),
                 'core': component(['core/gnss_core/']),
                 'protocols': component(['protocols/gnss_protocols/'], ['core']),
-                'tools': component(['gnss_tools/'], ['protocols']),
+                'tools': component(['tools/gnss_tools/'], ['protocols']),
                 'messages': component(['universal_gnss_msgs/']),
                 'ros2': component(['gnss_ros2/'], ['tools', 'messages', 'legal']),
                 'mavros': component(['gnss_mavros/'], ['ros2', 'core']),
@@ -173,7 +173,7 @@ class DistributionTests(unittest.TestCase):
         self.reject('internal reference not distributed')
 
     def test_missing_internal_header(self):
-        self.snapshot.cache['gnss_tools/src/tool.cpp'] = b'#include "universal_gnss/missing.hpp"\n'
+        self.snapshot.cache['tools/gnss_tools/src/tool.cpp'] = b'#include "universal_gnss/missing.hpp"\n'
         self.reject('internal include missing')
 
     def test_audited_computed_python_reference(self):
@@ -182,7 +182,7 @@ class DistributionTests(unittest.TestCase):
         self.reject('internal reference not distributed')
 
     def test_forbidden_component_file(self):
-        self.manifest['distributions']['ros2-lyrical']['forbidden'].append('gnss_tools/')
+        self.manifest['distributions']['ros2-lyrical']['forbidden'].append('tools/gnss_tools/')
         self.reject('forbidden file')
 
     def test_symlink_in_selected_source_rejected(self):
@@ -290,7 +290,7 @@ class DistributionTests(unittest.TestCase):
     def test_missing_required_file_detected(self):
         expected = self.plan()
         d.generate(self.snapshot, expected, self.destination)
-        (self.destination / 'gnss_tools/src/tool.cpp').unlink()
+        (self.destination / 'tools/gnss_tools/src/tool.cpp').unlink()
         with self.assertRaisesRegex(d.DistributionError, 'inventory mismatch'):
             d.verify(self.destination, expected)
 
@@ -321,9 +321,9 @@ class DistributionTests(unittest.TestCase):
     def test_output_symlink_rejected(self):
         expected = self.plan()
         d.generate(self.snapshot, expected, self.destination)
-        path = self.destination / 'gnss_tools/src/tool.cpp'
+        path = self.destination / 'tools/gnss_tools/src/tool.cpp'
         path.unlink()
-        path.symlink_to(self.repo / 'gnss_tools/src/tool.cpp')
+        path.symlink_to(self.repo / 'tools/gnss_tools/src/tool.cpp')
         with self.assertRaisesRegex(d.DistributionError, 'symlink'):
             d.verify(self.destination, expected)
 
@@ -365,12 +365,70 @@ class DistributionTests(unittest.TestCase):
     def test_executable_mode_change_detected(self):
         expected = self.plan()
         d.generate(self.snapshot, expected, self.destination)
-        (self.destination / 'gnss_tools/src/tool.cpp').chmod(0o755)
+        (self.destination / 'tools/gnss_tools/src/tool.cpp').chmod(0o755)
         with self.assertRaisesRegex(d.DistributionError, 'content/mode'):
             d.verify(self.destination, expected)
 
 
 class RepositoryIntegrationTests(unittest.TestCase):
+    tools_fixtures = (
+        'testdata/mixed/nmea_ubx_rtcm_unicore.bin',
+        'testdata/nmea/basic_fix.nmea',
+        'testdata/rtcm/basic_msm.rtcm',
+        'testdata/comparison/receiver_a.nmea',
+        'testdata/comparison/receiver_b.nmea',
+        'testdata/ubx/nav_pvt_sat_monrf.ubx',
+        'testdata/unicore/basic_ascii.log',
+    )
+
+    def test_missing_tools_component_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree = {p: v for p, v in snapshot.tree.items() if not p.startswith('tools/gnss_tools/')}
+        with self.assertRaisesRegex(d.DistributionError, 'path does not exist: tools'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_legacy_tools_root_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['gnss_tools/src/gnss_replay.cpp'] = snapshot.tree['tools/gnss_tools/src/gnss_replay.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: gnss_tools/'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_unclassified_tools_sibling_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['tools/unclassified_neighbor/new.cpp'] = snapshot.tree['tools/gnss_tools/src/gnss_replay.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: tools/unclassified_neighbor/'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_generator_scripts_excluded_and_injected_script_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest_bytes = (TOOL / 'manifest.yaml').read_bytes()
+        manifest = d.decode(manifest_bytes)
+        self.assertEqual(manifest['components']['tools']['paths'], ['tools/gnss_tools/'])
+        owners = d.validate_manifest(manifest, snapshot)
+        self.assertTrue(all(owner is None for p, owner in owners.items() if p.startswith('tools/branches/')))
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            for options in ([], ['mavros'], ['docker'], ['mavros', 'docker']):
+                with self.subTest(profile=profile, options=options):
+                    expected = d.plan(snapshot, manifest_bytes, profile, options)
+                    self.assertFalse(any(p.startswith('tools/branches/') for p in expected))
+                    with tempfile.TemporaryDirectory(prefix='ug-generator-exclusion-') as workspace:
+                        destination = Path(workspace) / 'distribution'
+                        d.generate(snapshot, expected, destination)
+                        injected = destination / 'tools/branches/distribution.py'
+                        injected.parent.mkdir(parents=True)
+                        injected.write_bytes(snapshot.read('tools/branches/distribution.py'))
+                        with self.assertRaisesRegex(d.DistributionError, 'unexpected/forbidden'):
+                            d.verify(destination, expected)
+
+    def test_missing_tools_fixture_rejected(self):
+        for path in self.tools_fixtures:
+            with self.subTest(path=path):
+                snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+                snapshot.tree.pop(path)
+                with self.assertRaisesRegex(d.DistributionError, 'reference path does not exist') as failure:
+                    d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+                self.assertIn(path, str(failure.exception))
+
     ntrip_tls_inputs = (
         'core/gnss_transport/tests/tls_loopback_server.hpp',
         'core/gnss_transport/tests/fixtures/tls/ca.crt',
@@ -471,7 +529,13 @@ class RepositoryIntegrationTests(unittest.TestCase):
             for options in [[], ['mavros'], ['docker'], ['mavros', 'docker']]:
                 with self.subTest(profile=profile, options=options):
                     expected = d.plan(snapshot, manifest, profile, options)
-                    self.assertIn('gnss_tools/src/gnss_replay.cpp', expected)
+                    self.assertIn('tools/gnss_tools/src/gnss_replay.cpp', expected)
+                    self.assertFalse(any(p.startswith('gnss_tools/') for p in expected))
+                    self.assertFalse(any(p.startswith('tools/branches/') for p in expected))
+                    allowed_scripts = {'scripts/tests/test_docker_healthcheck.py'}
+                    if 'docker' in options:
+                        allowed_scripts.add('scripts/collect_support_snapshot.py')
+                    self.assertEqual({p for p in expected if p.startswith('scripts/')}, allowed_scripts)
                     self.assertIn('core/gnss_core/include/universal_gnss/gnss_runtime_state.hpp', expected)
                     self.assertFalse(any(p.startswith('gnss_core/') for p in expected))
                     self.assertIn('core/gnss_driver/include/universal_gnss_driver/receiver_session.hpp', expected)

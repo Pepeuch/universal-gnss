@@ -157,7 +157,7 @@
     },
     "tools": {
       "paths": [
-        "gnss_tools/"
+        "tools/gnss_tools/"
       ],
       "requires": [
         "driver",
@@ -511,7 +511,7 @@
   "references": [
     {
       "from": "gnss_ros2/CMakeLists.txt",
-      "to": "gnss_tools/",
+      "to": "tools/gnss_tools/",
       "reason": "Embedded ROS2 build links tools library"
     },
     {
@@ -535,7 +535,7 @@
       "reason": "Shared TLS fixture/helper path"
     },
     {
-      "from": "gnss_tools/CMakeLists.txt",
+      "from": "tools/gnss_tools/CMakeLists.txt",
       "to": "testdata/",
       "reason": "TESTDATA_DIR compile definition"
     },
@@ -573,6 +573,41 @@
       "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
       "to": "core/gnss_transport/tests/fixtures/tls/server.key",
       "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_gnss_replay.cpp",
+      "to": "testdata/mixed/nmea_ubx_rtcm_unicore.bin",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_gnss_replay.cpp",
+      "to": "testdata/nmea/basic_fix.nmea",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_rtcm_inspector.cpp",
+      "to": "testdata/rtcm/basic_msm.rtcm",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_gnss_log_comparison.cpp",
+      "to": "testdata/comparison/receiver_a.nmea",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_gnss_log_comparison.cpp",
+      "to": "testdata/comparison/receiver_b.nmea",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_receiver_discovery_format.cpp",
+      "to": "testdata/ubx/nav_pvt_sat_monrf.ubx",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
+    },
+    {
+      "from": "tools/gnss_tools/tests/test_receiver_discovery_format.cpp",
+      "to": "testdata/unicore/basic_ascii.log",
+      "reason": "Computed tools test input via TESTDATA_DIR and ReadBinaryFile"
     }
   ]
 }

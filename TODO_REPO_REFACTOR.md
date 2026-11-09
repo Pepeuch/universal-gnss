@@ -135,6 +135,19 @@ Les cinq composants étudiés au lot 5 sont désormais regroupés sous `core/` ;
 ce jalon structurel ne change aucune version, qualification ou mesure de
 progression fonctionnelle. Les preuves historiques restent intactes.
 
+## Avancement structurel — lot 7, tools
+
+Le lot 7 déplace uniquement `gnss_tools/` vers `tools/gnss_tools/` : les
+50 fichiers, dont le CMake interne et les tests, conservent leurs contenus
+et modes Git. La bibliothèque `universal_gnss_tools`, ses CLI et son utilisation
+par ROS2 restent inchangées. Les fixtures demeurent dans `testdata/`.
+Le [bilan tools](tools/branches/TOOLS_MOVE.md) détaille l'audit et les validations.
+Le manifeste conserve ses 13 composants et son graphe ; le sélecteur tools
+reste précis, distinct de `tools/branches/`. Sept références de fixtures
+calculées et les tests négatifs protègent leur présence et cette frontière.
+Ce jalon structurel ne change aucune version ni mesure de progression
+fonctionnelle ; les dettes runtime/TLS et les preuves historiques sont conservées.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -299,8 +312,8 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 5E ; les protocoles et les cinq
-composants communs du lot 5 sont regroupés, les autres composants restent à la racine.
+La table décrit l’arbre courant après le lot 7 ; les protocoles, les cinq
+composants communs du lot 5 et tools sont regroupés, les autres composants restent à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
@@ -311,7 +324,7 @@ La base du lot 0 reste celle indiquée en tête :
 | `core/gnss_transport/` | Abstractions et implémentations mémoire/POSIX/réseau | En place depuis le lot 5D ; noms publics inchangés |
 | `core/gnss_ntrip/` | Client/caster NTRIP et GGA | En place depuis le lot 5C ; noms publics inchangés |
 | `core/gnss_runtime/` | Superviseur commun et intégration série Linux | En place depuis le lot 5E ; exclu des pilotes ROS2, noms publics inchangés |
-| `gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | `tools/gnss_tools/` |
+| `tools/gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | En place depuis le lot 7 ; distinct du générateur `tools/branches/`, noms publics inchangés |
 | `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |
 | `universal_gnss_msgs/` | Package public ROSIDL | Racine initialement ; déplacement séparé éventuel |
 | `gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | `adapters/mavros/gnss_mavros/` |

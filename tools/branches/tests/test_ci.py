@@ -116,7 +116,7 @@ class PipelineTests(unittest.TestCase):
         real = generator.generate
         def incomplete(snapshot, expected, destination):
             result = real(snapshot, expected, destination)
-            (result / 'gnss_tools/src/tool.cpp').unlink()
+            (result / 'tools/gnss_tools/src/tool.cpp').unlink()
             return result
         with mock.patch.object(generator, 'generate', side_effect=incomplete):
             with self.assertRaisesRegex(generator.DistributionError, 'inventory mismatch'):
@@ -126,7 +126,7 @@ class PipelineTests(unittest.TestCase):
         real = generator.generate
         def modified(snapshot, expected, destination):
             result = real(snapshot, expected, destination)
-            (result / 'gnss_tools/src/tool.cpp').write_text('changed after generation')
+            (result / 'tools/gnss_tools/src/tool.cpp').write_text('changed after generation')
             return result
         with mock.patch.object(generator, 'generate', side_effect=modified):
             with self.assertRaisesRegex(generator.DistributionError, 'content/mode'):
@@ -174,7 +174,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_mutation_by_build_runner_detected(self):
         def mutate(distro, source, image):
-            (source / 'gnss_tools/src/tool.cpp').write_text('unexpected mutation')
+            (source / 'tools/gnss_tools/src/tool.cpp').write_text('unexpected mutation')
         with self.assertRaisesRegex(generator.DistributionError, 'content/mode'):
             self.validate(build_image='cached', builder=mutate)
 
