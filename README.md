@@ -309,7 +309,7 @@ Current implemented layers:
   - memory-backed test / replay transport
   - Linux POSIX serial transport
   - transport metrics and buffer helpers
-- `gnss_ntrip`
+- `gnss_ntrip` (sources: [core/gnss_ntrip/](core/gnss_ntrip/CMakeLists.txt))
   - portable NTRIP config types
   - request and auth header generation
   - GGA injection policy types

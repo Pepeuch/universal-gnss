@@ -114,7 +114,7 @@
     },
     "ntrip": {
       "paths": [
-        "gnss_ntrip/"
+        "core/gnss_ntrip/"
       ],
       "requires": [
         "protocols",
@@ -528,7 +528,7 @@
       "reason": "Path(__file__).parents[2] runtime import"
     },
     {
-      "from": "gnss_ntrip/CMakeLists.txt",
+      "from": "core/gnss_ntrip/CMakeLists.txt",
       "to": "gnss_transport/tests/",
       "reason": "Shared TLS fixture/helper path"
     },
@@ -556,6 +556,21 @@
       "from": "Dockerfile",
       "to": "docker/healthcheck.py",
       "reason": "Runtime COPY input"
+    },
+    {
+      "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
+      "to": "gnss_transport/tests/fixtures/tls/ca.crt",
+      "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
+    },
+    {
+      "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
+      "to": "gnss_transport/tests/fixtures/tls/server.crt",
+      "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
+    },
+    {
+      "from": "core/gnss_ntrip/tests/test_ntrip_client.cpp",
+      "to": "gnss_transport/tests/fixtures/tls/server.key",
+      "reason": "Computed NTRIP TLS test input via UNIVERSAL_GNSS_TLS_FIXTURE_DIR and loopback helper"
     }
   ]
 }
