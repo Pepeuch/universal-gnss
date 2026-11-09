@@ -45,6 +45,39 @@ local tooling; no specialized branch or release is published by generation.
 The [distribution CI guide](tools/branches/CI.md) describes read-only validation,
 local test results and the separately gated future publication design.
 
+## Repository refactor status
+
+The nine software component relocations are technically complete: 310 files,
+with two audited internal CMake path adaptations and unchanged public contracts.
+The lot 12 documentation consolidation aligns the active guides; its review and
+integration remain pending. A dedicated global CI qualification campaign for
+the refactored repository still needs to run. Earlier component PR checks and
+local audit results do not declare that campaign complete.
+
+Promotion from `dev` to `main` is not authorized at this stage. Structural
+completion does not change the UG functional version, qualification counters
+or publication status. Independent technical debts and future backends remain
+tracked separately in the [repository plan](TODO_REPO_REFACTOR.md).
+
+The current organization is:
+
+| Location | Responsibility |
+| --- | --- |
+| `core/` | Common model, driver, transport, NTRIP and native runtime |
+| `protocols/` | GNSS protocol parsing and framing |
+| `adapters/ros2/` | ROS2 runtime package, launch and configuration |
+| `adapters/mavros/` | Optional MAVROS adapter/plugin |
+| `tools/` | GNSS library/CLI under `gnss_tools/`; development generator under `branches/` |
+| `docker/`, root `Dockerfile` | Existing production packaging and operator configuration |
+| `scripts/` | Maintenance, support and validation |
+| `testdata/` | Shared fixtures; component tests remain colocated |
+| `universal_gnss_msgs/` | Independent public ROSIDL package, deliberately kept at the root |
+
+Docker inputs, scripts and fixtures stay at these locations; another move is
+not a prerequisite for closure. ESP32 BASE/RELAY/ROVER and ESP-NOW LR, ROS2 Humble
+and BlueOS remain future integration/distribution work, not implemented backends
+of this refactor.
+
 ## Current Project Status
 
 Current prerelease: **`v0.7.4-rc6`**, source
@@ -315,6 +348,10 @@ Current implemented layers:
   - GGA injection policy types
   - connection metrics models
   - synchronous live client foundation and caster-monitor support
+- `gnss_runtime` (sources: [core/gnss_runtime/](core/gnss_runtime/CMakeLists.txt))
+  - native receiver supervision and Linux serial integration
+  - Linux `universal_gnss_supervisor` executable
+  - intentionally excluded from the ROS2 source distributions
 - `gnss_tools` (sources: [tools/gnss_tools/](tools/gnss_tools/CMakeLists.txt))
   - `rtcm_inspect` CLI for RTCM-only frame inspection
   - `gnss_inspect` CLI for structural mixed-stream frame inspection
@@ -381,8 +418,8 @@ See [docs/ros2.md](docs/ros2.md) for the ROS 2 adapter contracts, the
 receiver/NTRIP node surfaces, and the current status / covariance policy.
 
 See [docs/devcontainer.md](docs/devcontainer.md) for the reproducible ROS 2
-devcontainer setup, Kilted build flow, future Lyrical switch path, and optional
-serial hardware access examples.
+devcontainer setup, current Lyrical default, Kilted selection, and the declared
+privileges/device mounts. Device visibility is not hardware qualification.
 
 See [docs/ros2_end_to_end_audit.md](docs/ros2_end_to_end_audit.md) for the
 current receiver-to-ROS2-to-NTRIP audit status, combined launch coverage, and

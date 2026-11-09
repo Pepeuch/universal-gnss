@@ -45,8 +45,12 @@ using the existing Universal GNSS source/provenance contract.
 Within the MAVROS node namespace the plugin publishes:
 
 - `~/gps1/status` and `~/gps2/status` as
-  `universal_gnss_ros2/msg/GnssStatus`
+  `universal_gnss_msgs/msg/GnssStatus`
 - `~/gps1/fix` and `~/gps2/fix` as `sensor_msgs/msg/NavSatFix`
+
+The headers under `universal_gnss_ros2/msg/` provide C++ compatibility aliases.
+They do not define separate ROSIDL types; the canonical status and RTCM types
+belong to `universal_gnss_msgs`.
 
 It also subscribes to the canonical Universal GNSS RTCM stream and injects each
 `RtcmFrame` into the FCU as MAVLink `GPS_RTCM_DATA`. The conversion follows the
@@ -97,17 +101,70 @@ lifecycle evidence.
 
 ## Build
 
-The normal repository build compiles and tests the MAVROS-free adapter but
-leaves the external plugin disabled. Build the ament package in a ROS workspace
-with the pinned MAVROS package available:
+### Default native build
+
+The repository-root CMake option `UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN` defaults
+to OFF. The entire MAVROS subdirectory, including the free adapter/encoder and
+their tests, is omitted from that build. The default native CTest suite therefore
+does not qualify MAVROS.
+
+### Standalone ament package
+
+From the repository root, in an environment containing ROS 2 Lyrical and the
+pinned MAVROS dependencies, build the three packages in dependency order.
+The example uses the `/opt/mavros` prefix supplied by the development image;
+use the actual external prefix if your environment differs. Choose a fresh
+temporary workspace for each validation run.
 
 ```bash
-colcon build --packages-up-to universal_gnss_mavros
+source /opt/ros/lyrical/setup.bash
+source /opt/mavros/local_setup.bash
+colcon --log-base /tmp/ug-mavros/log build \
+  --build-base /tmp/ug-mavros/build \
+  --install-base /tmp/ug-mavros/install \
+  --base-paths universal_gnss_msgs adapters/ros2/gnss_ros2 adapters/mavros/gnss_mavros \
+  --packages-up-to universal_gnss_mavros \
+  --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release
+source /tmp/ug-mavros/install/setup.bash
+colcon --log-base /tmp/ug-mavros/log test \
+  --build-base /tmp/ug-mavros/build \
+  --base-paths universal_gnss_msgs adapters/ros2/gnss_ros2 adapters/mavros/gnss_mavros \
+  --packages-select universal_gnss_mavros --return-code-on-test-failure
+colcon test-result --test-result-base /tmp/ug-mavros/build/universal_gnss_mavros --verbose
 ```
 
-For the repository-root CMake build, opt in with
-`-DUNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN=ON` and make the installed
-`universal_gnss_ros2` and pinned MAVROS prefixes discoverable.
+Explicit base paths avoid relying on recursive package discovery through the
+native root CMake project. `universal_gnss_msgs` remains at the repository root.
+Standalone mode enables the external plugin by default and finalizes its ament
+exports and plugin index. The two package tests exercise the adapter and encoder.
+
+### Integrated native build
+
+After sourcing the standalone installation above and the external dependencies,
+the root CMake can build the plugin against the installed ROS2 prefix:
+
+```bash
+cmake -S . -B /tmp/ug-mavros-integrated -DCMAKE_BUILD_TYPE=Release \
+  -DUNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN=ON -DUNIVERSAL_GNSS_BUILD_ROS2=OFF
+cmake --build /tmp/ug-mavros-integrated --parallel 3 --target \
+  universal_gnss_mavros_plugin gnss_mavros_test_adapter gnss_mavros_test_rtcm_encoder
+ctest --test-dir /tmp/ug-mavros-integrated -R '^gnss_mavros_' --output-on-failure
+```
+
+This mode compiles and runs the two tests, but does not finalize the package
+with `ament_package()`. Its automatic discovery through the ament plugin index
+is **not qualified**; the index resource is absent in the validated integrated
+installation. This example does not qualify a simultaneous root ROS2 build.
+
+Compilation and passing adapter/encoder tests do not prove dynamic loading.
+Standalone factory loading requires a real pluginlib ClassLoader with base
+`mavros::plugin::PluginFactory` to discover `universal_gnss` and create its factory
+from the expected installed shared library. The [relocation validation](../../../tools/branches/ROS2_MOVE.md)
+records that separate software check. It does not create a UAS/live plugin
+instance or qualify GNSS/MAVLink hardware operation.
+
+The 111 pre-existing direct MAVROS formatting diagnostics remain a separate
+debt. Neither this guide update nor a successful build resolves them.
 
 RTCM injection is implemented directly in this plugin package. The generic
 NTRIP client remains in Universal GNSS; the MAVROS plugin only translates the

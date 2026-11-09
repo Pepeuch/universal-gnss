@@ -13,31 +13,33 @@ reconfigure it and never award release credit.
 This pack adds deterministic helper scripts so Codex can inspect and maintain repository state
 without repeatedly reconstructing it from large context.
 
-## Install
+## Repository usage
 
-Copy `scripts/agent/` into the repository, then:
+The helpers are already present under `scripts/agent/`. Run the commands below
+from the repository root with the explicit `scripts/Makefile.agent` file.
+The root Makefile currently defines formatting targets only; a bare
+`make agent-status` does not work in this checkout.
+
+The bootstrap target creates missing shared-checkpoint scaffolding. Run it only
+when that initialization is intended; it is not part of a read-only audit:
 
 ```bash
-chmod +x scripts/agent/*.sh scripts/agent/*.py
-python3 scripts/agent/bootstrap_checkpoints.py
+make -f scripts/Makefile.agent agent-bootstrap
 ```
 
-Merge `AGENTS_REPO_MAINTENANCE_SNIPPET.md` into root `AGENTS.md`.
-
-For Make integration, either append `Makefile.agent` to the existing Makefile or include it:
-
-```make
-include Makefile.agent
-```
+The root `AGENTS.md` already contains the repository execution policy.
+`AGENTS_REPO_MAINTENANCE_SNIPPET.md` is supporting integration material, not a
+command to overwrite that policy. No Makefile integration or alias is required
+for the explicit invocations here.
 
 ## Commands
 
 ```bash
-make agent-status
-make agent-checkpoints
-make agent-next
-make agent-ci
-make agent-maintenance
+make -f scripts/Makefile.agent agent-status
+make -f scripts/Makefile.agent agent-checkpoints
+make -f scripts/Makefile.agent agent-next
+make -f scripts/Makefile.agent agent-ci
+make -f scripts/Makefile.agent agent-maintenance
 ```
 
 `agent-status` reports Git state, backlog counts, and shared-checkpoint counts.
