@@ -14,7 +14,7 @@ repository_root="$(git rev-parse --show-toplevel)"
 cd "$repository_root"
 
 project_roots=(
-  gnss_core
+  core/gnss_core
   protocols/gnss_protocols
   gnss_driver
   gnss_transport

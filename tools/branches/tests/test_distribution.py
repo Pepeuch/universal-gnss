@@ -27,7 +27,7 @@ class DistributionTests(unittest.TestCase):
         git(cls.repo, 'init', '-q')
         files = {
             'LICENSE': 'Test fixture license\n',
-            'gnss_core/include/universal_gnss/types.hpp': '#pragma once\n',
+            'core/gnss_core/include/universal_gnss/types.hpp': '#pragma once\n',
             'protocols/gnss_protocols/src/parser.cpp': '#include "universal_gnss/types.hpp"\n',
             'gnss_tools/src/tool.cpp': '#include "universal_gnss/types.hpp"\n',
             'gnss_ros2/CMakeLists.txt': 'add_subdirectory("${UNIVERSAL_GNSS_SOURCE_ROOT}/gnss_tools" out)\n',
@@ -53,7 +53,7 @@ class DistributionTests(unittest.TestCase):
             'schema_version': 1, 'ug_version': 'v0.7.4',
             'components': {
                 'legal': component(['LICENSE']),
-                'core': component(['gnss_core/']),
+                'core': component(['core/gnss_core/']),
                 'protocols': component(['protocols/gnss_protocols/'], ['core']),
                 'tools': component(['gnss_tools/'], ['protocols']),
                 'messages': component(['universal_gnss_msgs/']),
@@ -117,8 +117,12 @@ class DistributionTests(unittest.TestCase):
         self.snapshot.tree['protocols/future_receiver/new.cpp'] = self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp']
         self.reject('unclassified source file')
 
+    def test_unclassified_sibling_core_is_not_silently_distributed(self):
+        self.snapshot.tree['core/future_backend/new.cpp'] = self.snapshot.tree['protocols/gnss_protocols/src/parser.cpp']
+        self.reject('unclassified source file')
+
     def test_ambiguous_owner(self):
-        self.manifest['components']['tools']['paths'].append('gnss_core/')
+        self.manifest['components']['tools']['paths'].append('core/gnss_core/')
         self.reject('ambiguous classification')
 
     def test_required_component_exclusion(self):
@@ -207,14 +211,14 @@ class DistributionTests(unittest.TestCase):
         self.assertNotIn(str(self.repo).encode(), first[d.METADATA][0])
 
     def test_source_dirty_content_is_not_copied_or_modified(self):
-        path = self.repo / 'gnss_core/include/universal_gnss/types.hpp'
+        path = self.repo / 'core/gnss_core/include/universal_gnss/types.hpp'
         original = path.read_bytes()
         try:
             path.write_bytes(b'uncommitted user work\n')
             before = git(self.repo, 'status', '--porcelain=v1', '--untracked-files=all')
             output = self.plan()
             d.generate(self.snapshot, output, self.destination)
-            self.assertEqual(output['gnss_core/include/universal_gnss/types.hpp'][0], original)
+            self.assertEqual(output['core/gnss_core/include/universal_gnss/types.hpp'][0], original)
             self.assertEqual(path.read_bytes(), b'uncommitted user work\n')
             self.assertEqual(git(self.repo, 'status', '--porcelain=v1', '--untracked-files=all'), before)
         finally:
@@ -230,13 +234,13 @@ class DistributionTests(unittest.TestCase):
         try:
             self.assertEqual(git(self.repo, 'ls-tree', '-r', self.sha), '')
             snapshot = d.Snapshot(self.repo, self.sha)
-            self.assertIn('gnss_core/include/universal_gnss/types.hpp', snapshot.tree)
-            self.assertEqual(snapshot.read('gnss_core/include/universal_gnss/types.hpp'), b'#pragma once\n')
+            self.assertIn('core/gnss_core/include/universal_gnss/types.hpp', snapshot.tree)
+            self.assertEqual(snapshot.read('core/gnss_core/include/universal_gnss/types.hpp'), b'#pragma once\n')
         finally:
             git(self.repo, 'replace', '-d', self.sha)
 
     def test_missing_blob_fails_offline(self):
-        path = 'gnss_core/include/universal_gnss/types.hpp'
+        path = 'core/gnss_core/include/universal_gnss/types.hpp'
         oid = self.snapshot.tree[path][1]
         object_file = self.repo / '.git/objects' / oid[:2] / oid[2:]
         original = object_file.read_bytes()
@@ -261,7 +265,7 @@ class DistributionTests(unittest.TestCase):
             d.generate(self.snapshot, output, self.destination)
 
     def test_destination_inside_source_rejected_including_subdirectory_repo(self):
-        snapshot = d.Snapshot(self.repo / 'gnss_core', self.sha)
+        snapshot = d.Snapshot(self.repo / 'core/gnss_core', self.sha)
         with self.assertRaisesRegex(d.DistributionError, 'inside source'):
             d.generate(snapshot, self.plan(), self.repo / 'generated')
         self.assertFalse((self.repo / 'generated').exists())
@@ -278,7 +282,7 @@ class DistributionTests(unittest.TestCase):
         d.generate(self.snapshot, first, self.destination)
         d.generate(self.snapshot, second, other)
         self.assertFalse((self.destination / 'gnss_mavros').exists())
-        (other / 'gnss_core/include/universal_gnss/types.hpp').write_text('changed')
+        (other / 'core/gnss_core/include/universal_gnss/types.hpp').write_text('changed')
         d.verify(self.destination, first)
         self.assertNotEqual(first[d.METADATA], second[d.METADATA])
         self.assertEqual(git(self.repo, 'status', '--porcelain'), '')
@@ -303,7 +307,7 @@ class DistributionTests(unittest.TestCase):
     def test_public_contract_change_and_forged_inventory_detected(self):
         expected = self.plan()
         d.generate(self.snapshot, expected, self.destination)
-        path = 'gnss_core/include/universal_gnss/types.hpp'
+        path = 'core/gnss_core/include/universal_gnss/types.hpp'
         (self.destination / path).write_text('unauthorized API change')
         records = d.decode((self.destination / d.INVENTORY).read_bytes())
         for record in records:
@@ -377,6 +381,8 @@ class RepositoryIntegrationTests(unittest.TestCase):
                 with self.subTest(profile=profile, options=options):
                     expected = d.plan(snapshot, manifest, profile, options)
                     self.assertIn('gnss_tools/src/gnss_replay.cpp', expected)
+                    self.assertIn('core/gnss_core/include/universal_gnss/gnss_runtime_state.hpp', expected)
+                    self.assertFalse(any(p.startswith('gnss_core/') for p in expected))
                     self.assertIn('protocols/gnss_protocols/src/nmea_parser.cpp', expected)
                     self.assertIn('protocols/gnss_protocols/include/universal_gnss_protocols/rtcm_parser.hpp', expected)
                     self.assertFalse(any(p.startswith('gnss_protocols/') for p in expected))

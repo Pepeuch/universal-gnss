@@ -278,7 +278,7 @@ Universal GNSS currently exposes this receiver-profile surface through:
 
 Current implemented layers:
 
-- `gnss_core`
+- `gnss_core` (sources: [core/gnss_core/](core/gnss_core/CMakeLists.txt))
   - portable C++ runtime model
   - runtime aggregation of partial normalized updates
   - fix / RTK enums
