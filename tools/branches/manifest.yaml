@@ -276,12 +276,12 @@
     },
     "mavros": {
       "paths": [
-        "gnss_mavros/CMakeLists.txt",
-        "gnss_mavros/include/",
-        "gnss_mavros/src/",
-        "gnss_mavros/tests/",
-        "gnss_mavros/package.xml",
-        "gnss_mavros/universal_gnss_mavros_plugins.xml"
+        "adapters/mavros/gnss_mavros/CMakeLists.txt",
+        "adapters/mavros/gnss_mavros/include/",
+        "adapters/mavros/gnss_mavros/src/",
+        "adapters/mavros/gnss_mavros/tests/",
+        "adapters/mavros/gnss_mavros/package.xml",
+        "adapters/mavros/gnss_mavros/universal_gnss_mavros_plugins.xml"
       ],
       "requires": [
         "core",
@@ -488,7 +488,7 @@
       "reason": "Optional robot_localization integration examples"
     },
     {
-      "path": "gnss_mavros/README.md",
+      "path": "adapters/mavros/gnss_mavros/README.md",
       "reason": "Full-repository references; generated instructions cover the option"
     },
     {

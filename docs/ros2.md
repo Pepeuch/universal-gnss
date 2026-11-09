@@ -23,7 +23,7 @@ Those layers are intentionally separate from `gnss_ros2`.
 
 `gnss_mavros` is also separate: MAVROS APIs are isolated in its plugin source,
 while its state adapter reuses `GnssRuntimeAggregator`, `GnssStatus`, and
-`NavSatFix` projection. See [`../gnss_mavros/README.md`](../gnss_mavros/README.md)
+`NavSatFix` projection. See [`../adapters/mavros/gnss_mavros/README.md`](../adapters/mavros/gnss_mavros/README.md)
 for its pinned baseline, topics, handlers, and FCU-incarnation contract.
 
 ## Purpose

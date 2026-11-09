@@ -34,7 +34,7 @@ class DistributionTests(unittest.TestCase):
             'gnss_ros2/package.xml': '<package><name>universal_gnss_ros2</name><version>0.7.0</version><depend>universal_gnss_msgs</depend></package>\n',
             'universal_gnss_msgs/package.xml': '<package><name>universal_gnss_msgs</name><version>0.7.0</version></package>\n',
             'universal_gnss_msgs/msg/GnssStatus.msg': 'bool valid\n',
-            'gnss_mavros/src/adapter.cpp': '#include "universal_gnss/types.hpp"\n',
+            'adapters/mavros/gnss_mavros/src/adapter.cpp': '#include "universal_gnss/types.hpp"\n',
             'docs/history.md': 'Immutable historical fixture\n',
         }
         for name, text in files.items():
@@ -58,7 +58,7 @@ class DistributionTests(unittest.TestCase):
                 'tools': component(['tools/gnss_tools/'], ['protocols']),
                 'messages': component(['universal_gnss_msgs/']),
                 'ros2': component(['gnss_ros2/'], ['tools', 'messages', 'legal']),
-                'mavros': component(['gnss_mavros/'], ['ros2', 'core']),
+                'mavros': component(['adapters/mavros/gnss_mavros/'], ['ros2', 'core']),
             },
             'distributions': {p: {'platform': 'linux', 'framework': 'ros2',
                                   'hardware_profile': 'generic-posix', 'ros_distro': p.split('-')[-1],
@@ -281,7 +281,7 @@ class DistributionTests(unittest.TestCase):
         other = Path(self.output_root.name) / 'other'
         d.generate(self.snapshot, first, self.destination)
         d.generate(self.snapshot, second, other)
-        self.assertFalse((self.destination / 'gnss_mavros').exists())
+        self.assertFalse((self.destination / 'adapters/mavros/gnss_mavros').exists())
         (other / 'core/gnss_core/include/universal_gnss/types.hpp').write_text('changed')
         d.verify(self.destination, first)
         self.assertNotEqual(first[d.METADATA], second[d.METADATA])
@@ -371,6 +371,89 @@ class DistributionTests(unittest.TestCase):
 
 
 class RepositoryIntegrationTests(unittest.TestCase):
+    mavros_root = 'adapters/mavros/gnss_mavros/'
+
+    def test_legacy_mavros_root_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['gnss_mavros/package.xml'] = snapshot.tree[self.mavros_root + 'package.xml']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: gnss_mavros/'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical', ['mavros'])
+
+    def test_missing_mavros_package_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree.pop(self.mavros_root + 'package.xml')
+        with self.assertRaisesRegex(d.DistributionError, 'path does not exist: mavros'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical', ['mavros'])
+
+    def test_duplicate_mavros_package_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree[self.mavros_root + 'src/duplicate/package.xml'] = snapshot.tree[self.mavros_root + 'package.xml']
+        with self.assertRaisesRegex(d.DistributionError, 'duplicate ROS package: universal_gnss_mavros'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical', ['mavros'])
+
+    def test_unclassified_adapter_sibling_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['adapters/unclassified_neighbor/new.cpp'] = snapshot.tree[self.mavros_root + 'src/mavlink_gnss_adapter.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file: adapters/unclassified_neighbor/'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_mavros_injected_without_option_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest = (TOOL / 'manifest.yaml').read_bytes()
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            for options in ([], ['docker']):
+                with self.subTest(profile=profile, options=options):
+                    expected = d.plan(snapshot, manifest, profile, options)
+                    self.assertFalse(any(p.startswith(self.mavros_root) for p in expected))
+                    with tempfile.TemporaryDirectory(prefix='ug-no-mavros-') as workspace:
+                        destination = Path(workspace) / 'distribution'
+                        d.generate(snapshot, expected, destination)
+                        injected = destination / self.mavros_root / 'package.xml'
+                        injected.parent.mkdir(parents=True)
+                        injected.write_bytes(snapshot.read(self.mavros_root + 'package.xml'))
+                        with self.assertRaisesRegex(d.DistributionError, 'unexpected/forbidden'):
+                            d.verify(destination, expected)
+
+    def test_selected_mavros_omission_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest = (TOOL / 'manifest.yaml').read_bytes()
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            for options in (['mavros'], ['mavros', 'docker']):
+                with self.subTest(profile=profile, options=options):
+                    expected = d.plan(snapshot, manifest, profile, options)
+                    with tempfile.TemporaryDirectory(prefix='ug-with-mavros-') as workspace:
+                        destination = Path(workspace) / 'distribution'
+                        d.generate(snapshot, expected, destination)
+                        (destination / self.mavros_root / 'package.xml').unlink()
+                        with self.assertRaisesRegex(d.DistributionError, 'inventory mismatch'):
+                            d.verify(destination, expected)
+
+    def test_invalid_mavros_plugin_paths_rejected(self):
+        cases = (
+            ('package.xml', b'${prefix}/universal_gnss_mavros_plugins.xml', b'${prefix}/missing.xml',
+             'internal reference not distributed'),
+            ('CMakeLists.txt', b'plugin_description_file(mavros universal_gnss_mavros_plugins.xml)',
+             b'plugin_description_file(mavros missing.xml)', 'plugin descriptor not exported'),
+            ('universal_gnss_mavros_plugins.xml', b'path="universal_gnss_mavros_plugin"',
+             b'path="missing_plugin_target"', 'plugin library target missing'),
+        )
+        for filename, original, invalid, error in cases:
+            with self.subTest(filename=filename):
+                snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+                path = self.mavros_root + filename
+                content = snapshot.read(path)
+                self.assertIn(original, content)
+                snapshot.cache[path] = content.replace(original, invalid)
+                with self.assertRaisesRegex(d.DistributionError, error):
+                    d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical', ['mavros'])
+
+    def test_missing_mavros_external_declaration_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest = d.decode((TOOL / 'manifest.yaml').read_bytes())
+        manifest['components']['mavros']['external'].remove('mavros ==2.16.0')
+        with self.assertRaisesRegex(d.DistributionError, 'undeclared external dependency: .*: mavros'):
+            d.plan(snapshot, d.json_bytes(manifest), 'ros2-lyrical', ['mavros'])
+
     tools_fixtures = (
         'testdata/mixed/nmea_ubx_rtcm_unicore.bin',
         'testdata/nmea/basic_fix.nmea',
@@ -559,11 +642,215 @@ class RepositoryIntegrationTests(unittest.TestCase):
                     self.assertFalse(any(p.startswith('gnss_runtime/') for p in expected))
                     self.assertFalse(any(p.startswith('core/gnss_runtime/') for p in expected))
                     self.assertNotIn('runtime', d.decode(expected[d.METADATA][0])['components'])
-                    self.assertEqual('gnss_mavros/package.xml' in expected, 'mavros' in options)
+                    self.assertEqual('adapters/mavros/gnss_mavros/package.xml' in expected, 'mavros' in options)
+                    self.assertFalse(any(p.startswith('gnss_mavros/') for p in expected))
+                    metadata = d.decode(expected[d.METADATA][0])
+                    self.assertEqual('mavros' in metadata['components'], 'mavros' in options)
+                    if 'mavros' in options:
+                        self.assertIn('--base-paths universal_gnss_msgs gnss_ros2 adapters/mavros/gnss_mavros',
+                                      expected[d.README][0].decode())
                     self.assertEqual('Dockerfile' in expected, 'docker' in options)
         self.assertEqual(d.plan(snapshot, manifest, 'ros2-lyrical', ['mavros', 'docker']),
                          d.plan(snapshot, manifest, 'ros2-lyrical', ['docker', 'mavros']))
         self.assertEqual(git(repo, 'status', '--porcelain=v1', '--untracked-files=all'), before)
+
+
+class MavrosGuardRegressionTests(unittest.TestCase):
+    root = 'adapters/mavros/gnss_mavros/'
+    target = 'universal_gnss_mavros_plugin'
+    descriptor = 'universal_gnss_mavros_plugins.xml'
+
+    def setUp(self):
+        self.snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        self.manifest = d.decode((TOOL / 'manifest.yaml').read_bytes())
+        self.cmake_path = self.root + 'CMakeLists.txt'
+        self.cmake = self.snapshot.read(self.cmake_path)
+        self.baseline = self.plan()
+
+    def plan(self, options=('mavros',), profile='ros2-lyrical'):
+        return d.plan(self.snapshot, d.json_bytes(self.manifest), profile, list(options))
+
+    def replace_cmake(self, before, after):
+        self.assertIn(before, self.cmake)
+        self.snapshot.cache[self.cmake_path] = self.cmake.replace(before, after)
+
+    def assert_valid_plugin(self):
+        output = self.plan()
+        self.assertIn(self.root + self.descriptor, output)
+        self.assertEqual(output[self.cmake_path][0], self.snapshot.read(self.cmake_path))
+        metadata = d.decode(output[d.METADATA][0])
+        self.assertIn('mavros', metadata['components'])
+        self.assertEqual(metadata['package_versions']['universal_gnss_mavros'], '0.7.0')
+        return output
+
+    def add_duplicate(self, path):
+        self.snapshot.tree[path] = self.snapshot.tree[self.root + 'package.xml']
+        self.snapshot.cache[path] = b'<package><name>universal_gnss_mavros</name><version>0.7.0</version></package>'
+
+    def test_selected_duplicate_is_rejected(self):
+        path = self.root + 'src/example/package.xml'
+        self.add_duplicate(path)
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+        # The same classified file with a distinct identity must be accepted.
+        self.snapshot.cache[path] = self.snapshot.cache[path].replace(b'<name>universal_gnss_mavros</name>', b'<name>distinct_example</name>')
+        self.assertIn('distinct_example', d.decode(self.plan()[d.METADATA][0])['package_versions'])
+
+    def test_selected_duplicate_without_mavros_is_rejected(self):
+        path = 'tools/gnss_tools/examples/package.xml'
+        self.snapshot.tree[path] = self.snapshot.tree['gnss_ros2/package.xml']
+        self.snapshot.cache[path] = b'<package><name>universal_gnss_ros2</name><version>0.7.0</version></package>'
+        with self.assertRaises(d.DistributionError):
+            self.plan(())
+
+    def test_excluded_duplicate_does_not_change_eight_distributions(self):
+        before = {(p, tuple(o)): self.plan(o, p) for p in ('ros2-kilted', 'ros2-lyrical')
+                  for o in ([], ['mavros'], ['docker'], ['mavros', 'docker'])}
+        self.add_duplicate('docs/example/package.xml')
+        for (profile, options), expected in before.items():
+            with self.subTest(profile=profile, options=options):
+                self.assertEqual(self.plan(options, profile), expected)
+
+    def test_classification_exclusion_is_not_specific_to_docs(self):
+        path = 'tools/gnss_tools/examples/package.xml'
+        self.manifest['exclude'].append({'path': path, 'reason': 'Excluded test example'})
+        before = self.plan()
+        self.add_duplicate(path)
+        self.assertEqual(self.plan(), before)
+
+    def test_excluded_package_xml_is_not_parsed(self):
+        self.add_duplicate('docs/example/package.xml')
+        self.snapshot.cache['docs/example/package.xml'] = b'not XML, deliberately excluded'
+        self.assertEqual(self.plan(), self.baseline)
+
+    def test_unselected_duplicate_respects_mavros_option(self):
+        before = self.plan(())
+        self.add_duplicate(self.root + 'src/example/package.xml')
+        self.assertEqual(self.plan(()), before)
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_unquoted_library_is_accepted(self):
+        self.assert_valid_plugin()
+
+    def test_quoted_library_and_export_are_accepted(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library("universal_gnss_mavros_plugin" "SHARED"')
+        self.snapshot.cache[self.cmake_path] = self.snapshot.cache[self.cmake_path].replace(
+            b'pluginlib_export_plugin_description_file(mavros universal_gnss_mavros_plugins.xml)',
+            b'pluginlib_export_plugin_description_file("mavros" "universal_gnss_mavros_plugins.xml")')
+        self.assert_valid_plugin()
+
+    def test_bracket_literal_arguments_are_accepted(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library([=[\nuniversal_gnss_mavros_plugin]=] [=[SHARED]=]')
+        self.assert_valid_plugin()
+
+    def test_line_commented_library_is_rejected(self):
+        self.replace_cmake(b'  add_library(universal_gnss_mavros_plugin SHARED',
+                           b'  # add_library(universal_gnss_mavros_plugin SHARED')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_bracket_commented_library_is_rejected(self):
+        original = b'add_library(universal_gnss_mavros_plugin SHARED src/universal_gnss_plugin.cpp)'
+        for equals in (b'', b'=', b'=='):
+            with self.subTest(equals=equals):
+                self.replace_cmake(original, b'#[' + equals + b'[\n' + original + b'\n]' + equals + b']')
+                with self.assertRaises(d.DistributionError):
+                    self.plan()
+
+    def test_strings_do_not_manufacture_library_declarations(self):
+        original = b'add_library(universal_gnss_mavros_plugin SHARED src/universal_gnss_plugin.cpp)'
+        for decoy in (b'set(DECOY "' + original + b'")', b'set(DECOY [=[' + original + b']=])'):
+            with self.subTest(decoy=decoy):
+                self.replace_cmake(original, decoy)
+                with self.assertRaises(d.DistributionError):
+                    self.plan()
+
+    def test_comments_between_literal_arguments_are_accepted(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library(\n # line comment\n "universal_gnss_mavros_plugin" #[=[block comment]=] SHARED')
+        self.assert_valid_plugin()
+
+    def test_wrong_plugin_category_is_rejected(self):
+        self.replace_cmake(b'pluginlib_export_plugin_description_file(mavros ',
+                           b'pluginlib_export_plugin_description_file(other_category ')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_commented_plugin_export_is_rejected(self):
+        original = b'pluginlib_export_plugin_description_file(mavros universal_gnss_mavros_plugins.xml)'
+        self.replace_cmake(original, b'#[[' + original + b']]')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_static_library_is_rejected(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library(universal_gnss_mavros_plugin STATIC')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_module_library_is_accepted(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library(universal_gnss_mavros_plugin MODULE')
+        self.assert_valid_plugin()
+
+    def test_imported_library_is_not_claimed_as_built(self):
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED src/universal_gnss_plugin.cpp)',
+                           b'add_library(universal_gnss_mavros_plugin SHARED IMPORTED)')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_empty_library_descriptor_is_rejected(self):
+        path = self.root + self.descriptor
+        for invalid in (b'<class_libraries/>', b'<library/>'):
+            with self.subTest(invalid=invalid):
+                self.snapshot.cache[path] = invalid
+                with self.assertRaises(d.DistributionError):
+                    self.plan()
+
+    def test_unsupported_plugin_prefix_is_rejected(self):
+        path = self.root + 'package.xml'
+        self.snapshot.cache[path] = self.snapshot.read(path).replace(b'${prefix}/', b'/opt/untrusted/')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_missing_descriptor_is_rejected(self):
+        self.snapshot.tree.pop(self.root + self.descriptor)
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_inconsistent_export_is_rejected(self):
+        self.replace_cmake(b'pluginlib_export_plugin_description_file(mavros universal_gnss_mavros_plugins.xml)',
+                           b'pluginlib_export_plugin_description_file(mavros missing.xml)')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_unknown_library_is_rejected(self):
+        path = self.root + self.descriptor
+        self.snapshot.cache[path] = self.snapshot.read(path).replace(b'path="universal_gnss_mavros_plugin"', b'path="unknown_library"')
+        with self.assertRaises(d.DistributionError):
+            self.plan()
+
+    def test_dynamic_essential_arguments_are_explicitly_unproven(self):
+        cases = (
+            (b'add_library(universal_gnss_mavros_plugin SHARED', b'add_library(${PLUGIN_TARGET} SHARED'),
+            (b'add_library(universal_gnss_mavros_plugin SHARED', b'add_library(universal_gnss_mavros_plugin ${PLUGIN_TYPE}'),
+            (b'pluginlib_export_plugin_description_file(mavros ', b'pluginlib_export_plugin_description_file(${PLUGIN_CATEGORY} '),
+        )
+        for original, dynamic in cases:
+            with self.subTest(dynamic=dynamic):
+                self.replace_cmake(original, dynamic)
+                with self.assertRaises(d.DistributionError) as failure:
+                    self.plan()
+                self.assertIn('cannot statically prove', str(failure.exception))
+
+    def test_default_distributions_do_not_validate_mavros_plugin(self):
+        before = self.plan(())
+        self.replace_cmake(b'add_library(universal_gnss_mavros_plugin SHARED',
+                           b'add_library(universal_gnss_mavros_plugin STATIC')
+        self.assertEqual(self.plan(()), before)
 
 
 if __name__ == '__main__':

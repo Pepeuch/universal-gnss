@@ -148,6 +148,21 @@ calculées et les tests négatifs protègent leur présence et cette frontière.
 Ce jalon structurel ne change aucune version ni mesure de progression
 fonctionnelle ; les dettes runtime/TLS et les preuves historiques sont conservées.
 
+## Avancement structurel — lot 8, MAVROS
+
+Le lot 8 déplace uniquement `gnss_mavros/` vers
+`adapters/mavros/gnss_mavros/`. Ses 11 fichiers, dont CMake, package XML,
+descripteur de plugin et tests, conservent leurs contenus et modes Git.
+Le package `universal_gnss_mavros`, ses bibliothèques et le plugin
+`universal_gnss` restent inchangés, avec MAVROS externe 2.16.0.
+Le [bilan MAVROS](tools/branches/MAVROS_MOVE.md) distingue les modes autonome
+et intégré, les contrats installés et les limites de validation.
+Le manifeste garde ses 13 composants et son graphe ; MAVROS reste optionnel,
+sans sélection globale de `adapters/`. Les entrées colcon suivent le nouveau
+chemin et les contrôles rejettent les doublons de packages et les chemins
+de plugins incohérents. Aucune version, mesure fonctionnelle ou preuve
+historique n'est modifiée.
+
 ## Objectif
 
 Faire évoluer Universal GNSS d’un driver principalement ROS2 vers une plateforme GNSS commune pouvant alimenter plusieurs environnements sans dupliquer la logique métier :
@@ -312,8 +327,8 @@ Faire progressivement évoluer le dépôt vers une séparation claire entre logi
 
 ## Structure actuelle et composants existants
 
-La table décrit l’arbre courant après le lot 7 ; les protocoles, les cinq
-composants communs du lot 5 et tools sont regroupés, les autres composants restent à la racine.
+La table décrit l’arbre courant après le lot 8 ; les protocoles, les cinq
+composants communs du lot 5, tools et MAVROS sont regroupés, les autres composants restent à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
 | Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
@@ -327,7 +342,7 @@ La base du lot 0 reste celle indiquée en tête :
 | `tools/gnss_tools/` | Bibliothèque réutilisée par ROS2 et CLI | En place depuis le lot 7 ; distinct du générateur `tools/branches/`, noms publics inchangés |
 | `gnss_ros2/` | Package runtime, launch et configuration ROS2 | `adapters/ros2/gnss_ros2/` |
 | `universal_gnss_msgs/` | Package public ROSIDL | Racine initialement ; déplacement séparé éventuel |
-| `gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | `adapters/mavros/gnss_mavros/` |
+| `adapters/mavros/gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | En place depuis le lot 8 ; package et identifiants publics inchangés |
 | `Dockerfile`, `docker/` | Packaging ROS2 de production | `packaging/docker/` avec points d'entrée compatibles |
 | `blueos/` | Étude et modèles Bazaar/permissions ; pas de runtime BlueOS | Documentation et `packaging/blueos/` à terme |
 | Tests des composants, `testdata/` | Tests colocalisés et fixtures partagées | Conserver initialement ; centralisation sélective justifiée |
