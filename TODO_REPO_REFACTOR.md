@@ -6,8 +6,9 @@ Base du lot 0 accepté et de la synchronisation `dev`/`main` :
 `ba7f220da30ee0b216f199ab24947db0678b3d7b`.
 La PR 1 formalise la politique et le plan ; elle ne déplace aucun composant et
 n'implémente ni générateur, ni workflow, ni protection GitHub.
-Les impératifs des sections suivantes décrivent des travaux à réaliser, sauf
-les règles de contribution applicables dès maintenant.
+Les sections d'avancement conservent le contexte de chaque lot. L'état courant
+figure ci-dessous et dans la table de structure actuelle ; les perspectives
+restantes ne sont pas toutes des prérequis de clôture des neuf déplacements.
 
 Trois axes sont suivis séparément :
 
@@ -16,6 +17,34 @@ Trois axes sont suivis séparément :
 | Refactor structurel | Politique Git, génération et rangement progressif | Lots revus et contrôles structurels applicables réussis |
 | Évolutions fonctionnelles UG | Capacités GNSS et adaptations plateforme | Contrats et tests fonctionnels propres à chaque évolution |
 | Publication | Tags, images, distributions et GitHub Releases | Décision explicite et qualification des artefacts concernés |
+
+## Consolidation documentaire — lot 12
+
+Base courante : `c70f150e421254bf57a0a49e5fb8325c38ba1690`, merge de la PR #23.
+L'audit transversal du lot 11 confirme les neuf déplacements, les 310 fichiers
+et les deux adaptations CMake internes justifiées, sans BLOCKER technique lié
+au rangement. Les résultats locaux et les anciens checks de PR restent des
+preuves sur leurs références exactes, pas une qualification globale nouvelle.
+
+| Étape | État actuel |
+| --- | --- |
+| Réorganisation technique des composants | Terminée dans `dev` ; contrats publics et versions conservés |
+| Consolidation documentaire | Objet du lot 12 ; guides alignés sur la branche de travail, revue et intégration à venir |
+| Campagne globale de qualification CI post-refactor | Encore à organiser et exécuter ; aucun succès global déclaré ici |
+| Promotion `dev` vers `main` | Non autorisée à ce stade ; décision ultérieure après qualification |
+| Publication | Décision séparée ; aucun tag, image, branche spécialisée ou Release créé par ce lot |
+| Évolutions fonctionnelles et nouveaux backends | Suivi distinct ; aucune implémentation dans ce lot documentaire |
+
+L'organisation actuelle conserve `docker/` et le Dockerfile racine, `scripts/`,
+les tests colocalisés et `testdata/`. Le package `universal_gnss_msgs/` reste à
+la racine. Aucun déplacement supplémentaire par principe n'est requis.
+
+Les dettes indépendantes restent ouvertes : 111 diagnostics de formatage
+MAVROS et 28 runtime, retour 1 du scanner historique pour trois clés TLS de
+test, configuration Compose non exécutée faute de plugin dans les audits,
+SDK natif non autonome, index ament MAVROS intégré absent et chaînes
+diagnostiques binaires contenant des chemins source/build. Ce lot ne corrige
+aucune de ces limites et ne modifie aucun compteur fonctionnel.
 
 Le mainteneur considère v0.7.4 fonctionnellement stable et validée. L'existence
 d'un tag ou d'une Release est un fait de publication distinct, documenté dans la
@@ -346,7 +375,7 @@ composants communs du lot 5, tools, MAVROS et ROS2 sont regroupés. Le package
 public `universal_gnss_msgs/` reste volontairement à la racine.
 La base du lot 0 reste celle indiquée en tête :
 
-| Chemin actuel | État / rôle | Destination indicative, à justifier par PR |
+| Chemin actuel | État / rôle | Décision structurelle et suites séparées |
 | --- | --- | --- |
 | `core/gnss_core/` | Modèle, agrégation et diagnostics communs ; headers | En place depuis le premier déplacement du lot 5 ; noms publics inchangés |
 | `core/gnss_driver/` | Sessions, détection, profils et configuration | En place depuis le lot 5B ; noms publics inchangés |
@@ -358,10 +387,10 @@ La base du lot 0 reste celle indiquée en tête :
 | `adapters/ros2/gnss_ros2/` | Package runtime, launch et configuration ROS2 | En place depuis le lot 10 ; une adaptation CMake de profondeur, contrats publics inchangés |
 | `universal_gnss_msgs/` | Package public ROSIDL indépendant | KEEP à la racine, décision du lot 9 ; aucune migration nécessaire |
 | `adapters/mavros/gnss_mavros/` | Adaptateur et plugin MAVROS optionnel | En place depuis le lot 8 ; package et identifiants publics inchangés |
-| `Dockerfile`, `docker/` | Packaging ROS2 de production | `packaging/docker/` avec points d'entrée compatibles |
+| `Dockerfile`, `docker/` | Packaging ROS2 de production | KEEP ; chemins actifs validés, aucune migration nécessaire à la clôture |
 | `blueos/` | Étude et modèles Bazaar/permissions ; pas de runtime BlueOS | Documentation et `packaging/blueos/` à terme |
-| Tests des composants, `testdata/` | Tests colocalisés et fixtures partagées | Conserver initialement ; centralisation sélective justifiée |
-| `scripts/` | Maintenance, support et validation | Migration sélective vers `tools/`, anciens points d'entrée préservés |
+| Tests des composants, `testdata/` | Tests colocalisés et fixtures partagées | KEEP ; dépendances de tests explicites, aucune centralisation nécessaire |
+| `scripts/` | Maintenance, support et validation | KEEP ; points d'entrée existants conservés, pas de migration de principe vers `tools/` |
 | `docs/`, `examples/`, `assets/` | Références, exemples et ressources | Conserver tant qu'aucun déplacement n'est justifié |
 | `universal-gnss-validation/` | Résultats et copies historiques de scripts | Conserver intacts |
 
@@ -383,6 +412,10 @@ présents ni une obligation de déplacer chaque dossier. Garder d'abord les
 composants entiers évite de mêler rangement et modification du moteur. La
 répartition détaillée des parsers entre `core/` et `protocols/` sera précisée
 avant toute extraction ; aucune seconde implémentation ne doit être créée.
+
+Cet arbre reste une perspective fonctionnelle/packaging au-delà des neuf
+déplacements terminés. Il ne remplace pas la table actuelle et n'impose pas
+de créer `packaging/`, `gui/` ou des tests centralisés pour clore ce refactor.
 
 Architecture cible indicative :
 

@@ -24,13 +24,26 @@ is needed. `manifest.yaml` uses the JSON subset of YAML 1.2, intentionally parse
 with Python's standard library; YAML-specific tags, aliases and comments are not
 accepted. Duplicate keys and unknown schema fields are rejected.
 
-From any working directory:
+From the repository root (the script paths below are relative):
 
 ```bash
 bash tools/branches/make_backend.sh --source-ref HEAD --distribution ros2-kilted
 bash tools/branches/make_backend.sh --source-ref HEAD --distribution ros2-lyrical --output /tmp/ug-lyrical
 bash tools/branches/verify_backend.sh --source-ref HEAD --distribution ros2-lyrical --output /tmp/ug-lyrical
 ```
+
+To invoke the wrapper from another directory, use its absolute path. For
+example, when this checkout is at `/workspaces/universal-gnss`:
+
+```bash
+bash /workspaces/universal-gnss/tools/branches/make_backend.sh \
+  --repo /workspaces/universal-gnss --source-ref HEAD --distribution ros2-kilted
+```
+
+The wrapper locates the Python tool relative to itself; `--repo` identifies the
+source worktree. Subsequent relative script examples also assume the repository
+root. The manifest still defines 13 components and eight Kilted/Lyrical option
+combinations; these invocation examples change no selection or publication rule.
 
 `--repo` selects the source Git worktree; the default is this repository.
 `--source-ref` is mandatory for generation and resolves to a full immutable
@@ -163,9 +176,13 @@ identical file bytes and modes, independent of option ordering/destination.
 ```bash
 # CI policy tests added in lot 3 require PyYAML; generator runtime stays stdlib-only.
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/branches/tests -v
-bash tools/branches/test_isolated.sh kilted /tmp/ug-kilted <cached-kilted-build-image>
-bash tools/branches/test_isolated.sh lyrical /tmp/ug-lyrical <cached-lyrical-build-image>
+bash tools/branches/test_isolated.sh kilted /tmp/ug-kilted "<cached-kilted-build-image>"
+bash tools/branches/test_isolated.sh lyrical /tmp/ug-lyrical "<cached-lyrical-build-image>"
 ```
+
+Replace each quoted image placeholder with an already provisioned local image
+name or digest before running the example; the angle brackets are not shell
+redirections.
 
 Use a pre-provisioned local build image containing the appropriate ROS distro,
 compiler, CMake, colcon and ament test packages. Optional MAVROS needs its declared
