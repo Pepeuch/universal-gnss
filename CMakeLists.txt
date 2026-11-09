@@ -12,7 +12,7 @@ add_subdirectory(protocols/gnss_protocols)
 add_subdirectory(core/gnss_driver)
 add_subdirectory(core/gnss_transport)
 add_subdirectory(core/gnss_ntrip)
-add_subdirectory(gnss_runtime)
+add_subdirectory(core/gnss_runtime)
 add_subdirectory(gnss_tools)
 
 if(UNIVERSAL_GNSS_BUILD_MAVROS_PLUGIN)

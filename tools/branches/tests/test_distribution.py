@@ -378,6 +378,46 @@ class RepositoryIntegrationTests(unittest.TestCase):
         'core/gnss_transport/tests/fixtures/tls/server.key',
     )
 
+    def test_runtime_forbidden_if_accidentally_selected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest = d.decode((TOOL / 'manifest.yaml').read_bytes())
+        manifest['exclude'] = [e for e in manifest['exclude'] if e['path'] != 'core/gnss_runtime/']
+        manifest['components']['core']['paths'].append('core/gnss_runtime/')
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            for options in ([], ['mavros'], ['docker'], ['mavros', 'docker']):
+                with self.subTest(profile=profile, options=options):
+                    with self.assertRaisesRegex(d.DistributionError, 'forbidden file: core/gnss_runtime/'):
+                        d.plan(snapshot, d.json_bytes(manifest), profile, options)
+
+    def test_injected_runtime_source_rejected_from_generated_output(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        manifest = (TOOL / 'manifest.yaml').read_bytes()
+        content = snapshot.read('core/gnss_runtime/src/receiver_supervisor.cpp')
+        for profile in ('ros2-kilted', 'ros2-lyrical'):
+            expected = d.plan(snapshot, manifest, profile)
+            for prefix in ('gnss_runtime', 'core/gnss_runtime'):
+                with self.subTest(profile=profile, prefix=prefix):
+                    with tempfile.TemporaryDirectory(prefix='ug-runtime-exclusion-') as workspace:
+                        destination = Path(workspace) / 'distribution'
+                        d.generate(snapshot, expected, destination)
+                        injected = destination / prefix / 'src/receiver_supervisor.cpp'
+                        injected.parent.mkdir(parents=True)
+                        injected.write_bytes(content)
+                        with self.assertRaisesRegex(d.DistributionError, 'unexpected/forbidden'):
+                            d.verify(destination, expected)
+
+    def test_real_unclassified_core_sibling_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['core/unclassified_runtime_neighbor/new.cpp'] = snapshot.tree['core/gnss_runtime/src/receiver_supervisor.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
+    def test_legacy_runtime_source_root_rejected(self):
+        snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
+        snapshot.tree['gnss_runtime/src/receiver_supervisor.cpp'] = snapshot.tree['core/gnss_runtime/src/receiver_supervisor.cpp']
+        with self.assertRaisesRegex(d.DistributionError, 'unclassified source file'):
+            d.plan(snapshot, (TOOL / 'manifest.yaml').read_bytes(), 'ros2-lyrical')
+
     def test_missing_transport_component_rejected(self):
         snapshot = d.Snapshot(TOOL.parents[1], 'HEAD')
         snapshot.tree = {p: v for p, v in snapshot.tree.items() if not p.startswith('core/gnss_transport/')}
@@ -453,6 +493,8 @@ class RepositoryIntegrationTests(unittest.TestCase):
                     self.assertIn('docker/healthcheck.py', expected)
                     self.assertIn('testdata/mixed/nmea_ubx_rtcm_unicore.bin', expected)
                     self.assertFalse(any(p.startswith('gnss_runtime/') for p in expected))
+                    self.assertFalse(any(p.startswith('core/gnss_runtime/') for p in expected))
+                    self.assertNotIn('runtime', d.decode(expected[d.METADATA][0])['components'])
                     self.assertEqual('gnss_mavros/package.xml' in expected, 'mavros' in options)
                     self.assertEqual('Dockerfile' in expected, 'docker' in options)
         self.assertEqual(d.plan(snapshot, manifest, 'ros2-lyrical', ['mavros', 'docker']),
