@@ -14,8 +14,9 @@ applicable regression evidence, integrate through `dev`, validate for `main`,
 then regenerate the affected distributions. Implement a common correction once
 in the owning shared component so every applicable backend benefits.
 
-Generated-branch tooling, its publication workflow and protection configuration
-are future work. This policy does not claim that they are already enforced. See the
+A [local source generator](tools/branches/README.md) exists for ROS2 Kilted/Lyrical.
+Generated-branch publication workflows and protection configuration remain future
+work; this policy does not claim that they are already enforced. See the
 [repository plan](TODO_REPO_REFACTOR.md) and [version policy](docs/releases/versioning.md).
 
 ## Validation and public contracts
