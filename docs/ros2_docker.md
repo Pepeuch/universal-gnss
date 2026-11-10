@@ -197,6 +197,50 @@ recorded u-blox baseline. It does not make a stale USB device grant valid,
 restore a volatile UM982 runtime profile, or make a running container evidence
 of healthy GNSS transport; follow the USB-loss contract below.
 
+### CI-03: Lyrical Compose and real Docker health
+
+The Docker validation workflow adds two Lyrical-only steps, reusing its existing
+production image. It does not add a Kilted build or invoke the release workflow.
+`tools/branches/docker_validation.py compose` runs the real Compose parser using
+a temporary env file and fictitious values. It checks the resolved image,
+device mapping, group, read-only parameters, log/export binds, ROS environment,
+configuration schema, restart and logging policies. Six required variables are
+tested missing and empty; malformed device and volume mappings must also fail.
+Both explicit environment values and the existing defaults are checked.
+
+Compose is supplied by the GitHub runner and its actual version is logged; a
+missing plugin fails the step. `compose config` checks interpolation and schema,
+not host-device/file existence, ROS value semantics or successful Compose startup.
+No real device, operator env file or credential is used by this test.
+
+The health step starts the unchanged production entrypoint with temporary
+parameters, using only unreachable loopback TCP and no external network or
+hardware. Parameters are copied through the Docker API; no source, device or
+socket mount is given to the container. Image revision and non-root identity
+are verified. The installed healthcheck command and three retries are retained;
+only test timing is shortened to a two-second interval and one-second start
+period. The product Dockerfile and probe are not modified.
+
+The test requires an executed successful Docker probe and state `healthy`, then
+checks positive responses from both real `get_health` services. It suspends only
+the NTRIP process with SIGSTOP, leaving the receiver and container running. State
+`unhealthy` must follow at least three consecutive completed probe failures
+(exit 1), all after the last healthy probe. Docker probe timeouts or execution
+errors are not accepted as this negative result. A direct service check then
+requires receiver responsiveness and NTRIP unavailability.
+
+Each state wait is bounded to 90 seconds, with Docker commands individually
+bounded to 30 seconds; the GitHub health step has a five-minute ceiling. Logs
+include health histories, failing streaks, service verdicts, container output,
+source revision and elapsed time. Cleanup always attempts to remove the test
+container, and cleanup failure makes validation fail. Existing image, persistence
+and Docker DNS/NTRIP reconnect checks remain unchanged.
+
+This is synthetic component-responsiveness evidence. It does not qualify GNSS
+reception, correction delivery, RTK FIX, physical transport, Compose deployment,
+ARM or a production MAVROS image. Historical evidence below retains its original
+scope. Local execution and subsequent GitHub execution remain separate facts.
+
 ### Runtime and restart contract
 
 The entrypoint is not a supervisor: it validates the deployment schema/log

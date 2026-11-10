@@ -91,6 +91,20 @@ jobs:
           set -e
           test "${status}" = "1"
 
+      - name: Verify Lyrical Compose configuration
+        if: matrix.ros_distro == 'lyrical'
+        timeout-minutes: 2
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tools/branches/docker_validation.py compose
+
+      - name: Verify Lyrical Docker health transitions
+        if: matrix.ros_distro == 'lyrical'
+        timeout-minutes: 5
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/branches/docker_validation.py healthcheck \
+            --image "$IMAGE" --source-sha "$SOURCE_SHA"
+
       - name: Verify external runtime persistence contract
         shell: bash
         run: |
