@@ -53,14 +53,30 @@ jobs:
           done
 
   isolated:
-    name: Isolated ROS2 ${{ matrix.ros_distro }}
+    name: Isolated ROS2 ${{ matrix.ros_distro }} (${{ matrix.options }})
     needs: generator
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [kilted, lyrical]
+        include:
+          # Preserve the existing Kilted default build; no new Kilted matrix.
+          - ros_distro: kilted
+            options: none
+            mavros: "false"
+          - ros_distro: lyrical
+            options: none
+            mavros: "false"
+          - ros_distro: lyrical
+            options: mavros
+            mavros: "true"
+          - ros_distro: lyrical
+            options: docker
+            mavros: "false"
+          - ros_distro: lyrical
+            options: both
+            mavros: "true"
     steps:
       - name: Check out immutable validation source
         uses: actions/checkout@v7
@@ -71,17 +87,30 @@ jobs:
       - name: Provision dependency-only build image
         run: |
           docker build --build-arg ROS_DISTRO="${{ matrix.ros_distro }}" \
-            --tag "ug-distribution-build:${{ matrix.ros_distro }}" \
+            --build-arg WITH_MAVROS="${{ matrix.mavros }}" \
+            --tag "ug-distribution-build:${{ matrix.ros_distro }}-${{ matrix.options }}" \
             --file tools/branches/Dockerfile.validation tools/branches
 
       - name: Require isolated build and tests of the generated source
         env:
           SOURCE_SHA: ${{ github.sha }}
+          DISTRIBUTION_OPTIONS: ${{ matrix.options }}
+        shell: bash
         run: |
+          set -euo pipefail
           test "$(id -u)" != 0
+          extra=()
+          case "$DISTRIBUTION_OPTIONS" in
+            none) ;;
+            mavros) extra=(--with mavros) ;;
+            docker) extra=(--with docker) ;;
+            both) extra=(--with mavros --with docker) ;;
+            *) echo "Unknown distribution options" >&2; exit 1 ;;
+          esac
+          # Docker selects source payload, not a production image build.
           python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
-            --distribution "ros2-${{ matrix.ros_distro }}" \
-            --build-image "ug-distribution-build:${{ matrix.ros_distro }}"
+            --distribution "ros2-${{ matrix.ros_distro }}" "${extra[@]}" \
+            --build-image "ug-distribution-build:${{ matrix.ros_distro }}-${{ matrix.options }}"
 
   gate:
     name: Distribution validation gate

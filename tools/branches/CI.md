@@ -1,3 +1,90 @@
+# CI-01 — Lyrical distribution build coverage
+
+The current workflow preserves the eight generation/integrity/reproducibility
+combinations and the existing Kilted default build. Its isolated matrix contains
+exactly these five jobs:
+
+| ROS2 | Source options | Packages built/tested | Dependency image |
+| --- | --- | --- | --- |
+| Kilted | none | messages, ROS2 | existing dependency set |
+| Lyrical | none | messages, ROS2 | no MAVROS |
+| Lyrical | MAVROS | messages, ROS2, MAVROS | pinned MAVROS dependencies |
+| Lyrical | Docker | messages, ROS2 | no MAVROS |
+| Lyrical | MAVROS + Docker | messages, ROS2, MAVROS | pinned MAVROS dependencies |
+
+Docker is a **source payload option**, not a production image build. The current
+production Dockerfile does not select the MAVROS package. No new Kilted option
+build, independent installed consumer (CI-02), Compose qualification (CI-03),
+factory-loading qualification or hardware test is added here.
+
+`Dockerfile.validation` defaults to `WITH_MAVROS=false`; `true` is accepted only
+for Lyrical. The public ROS apt repository supplies these exact Debian artifacts:
+
+- `ros-lyrical-mavros=2.16.0-1resolute.20260928.093732`
+- `ros-lyrical-libmavconn=2.16.0-1resolute.20260928.090729`
+- `ros-lyrical-mavros-msgs=2.16.0-1resolute.20260928.090809`
+- `ros-lyrical-mavlink=2026.9.9-1resolute.20260909.091024`
+
+These satisfy the adapter's unchanged `find_package(mavros 2.16.0 EXACT)`.
+The [official Lyrical package status](https://repo.ros2.org/status_page/ros_lyrical_default.html)
+identifies the MAVROS 2.16.0 release. Provisioning also installs Eigen3,
+GeographicLib development files, diagnostic_updater, eigen3_cmake_module,
+pluginlib, rclcpp_components, rcpputils and tf2_eigen/tf2_ros; the existing image
+supplies the ROS2/test/SSL/build tools. Apt resolves the remaining declared
+system/ROS dependencies. No geographic dataset is needed: these tests do not
+start a MAVROS FCU node.
+
+Missing pinned artifacts fail provisioning rather than selecting another MAVROS
+version. Their availability and the image's floating base/transitive apt
+packages remain operational dependencies: this is not a complete system
+snapshot or a promise of byte-identical future images. Refreshing these pins
+requires a reviewed dependency update and rerunning this matrix.
+
+The workflow builds its images from this public recipe; it uses no private image,
+local lot-13 digest, credentials or Universal GNSS overlay. The recipe contains
+no COPY/ADD or project source build. The runner clears its environment, rejects
+preinstalled Universal GNSS ament packages before building, and checks that
+colcon discovers exactly the two or three selected packages. It retains normal
+UID/GID, network isolation, tar/stdin transfer and no source/device/socket mounts.
+MAVROS's adapter and RTCM encoder tests are included in the same mandatory
+colcon test invocation; a failure in either cannot be filtered out.
+
+The final gate still has `if: always()` and requires both generator and the
+complete isolated matrix to report success. Tests execute its actual shell for
+all sixteen combinations of success/failure/cancelled/skipped prerequisites;
+only success/success is accepted. Additional regressions execute the actual
+matrix option-forwarding shell, reject missing Lyrical coverage or extra Kilted
+rows, and exercise the overlay rejection guard.
+
+Cost: the isolated matrix grows from two to five jobs: three additional image
+provisionings and build/test runs, all on Lyrical. Each retains its 40-minute
+limit and `fail-fast: false`; aggregate timeout capacity rises from 80 to 200
+job-minutes, not a wall-time estimate. Actual latency depends on package
+availability, GitHub scheduling and CPU. No cache or job is allowed to hide a
+failed prerequisite.
+
+Local reproduction (normal project user, from repository root):
+
+```bash
+docker build --build-arg ROS_DISTRO=lyrical --build-arg WITH_MAVROS=true \
+  --tag ug-distribution-build:lyrical-mavros \
+  --file tools/branches/Dockerfile.validation tools/branches
+python3 tools/branches/validate_ci.py --source-ref HEAD \
+  --distribution ros2-lyrical --with mavros \
+  --build-image ug-distribution-build:lyrical-mavros
+```
+
+For the no-MAVROS rows provision with `WITH_MAVROS=false`; Docker rows add
+`--with docker`. Local tests do not establish GitHub execution or runner timing;
+those must be checked on the eventual PR. No workflow or publication is triggered
+by documenting these commands.
+
+The following lot-3 design and validation record is historical and retained
+verbatim. Its original two-job build coverage is superseded by the CI-01 matrix
+above; its recorded results are not new CI-01 results.
+
+---
+
 # Lot 3 — Distribution CI and inactive publication design
 
 Base: `eff7263629a5ec91e87879c7b2d8a058e80191cf`, the verified merge of PR 13

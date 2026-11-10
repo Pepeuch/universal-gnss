@@ -2,6 +2,7 @@
 ARG ROS_DISTRO
 FROM ros:${ROS_DISTRO}-ros-base
 ARG ROS_DISTRO
+ARG WITH_MAVROS=false
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential cmake libssl-dev python3-colcon-common-extensions \
@@ -18,3 +19,30 @@ RUN apt-get update \
       ros-${ROS_DISTRO}-sensor-msgs \
       ros-${ROS_DISTRO}-std-srvs \
  && rm -rf /var/lib/apt/lists/*
+
+# Public ROS apt artifacts: fail closed rather than silently upgrading the
+# mavros 2.16.0 EXACT contract. No UG source, overlay or GeographicLib dataset
+# download is needed for compiling/testing the adapter (no FCU is started).
+RUN set -eu; \
+    case "${WITH_MAVROS}" in \
+      false) ;; \
+      true) \
+        test "${ROS_DISTRO}" = lyrical; \
+        apt-get update; \
+        apt-get install -y --no-install-recommends \
+          libeigen3-dev libgeographiclib-dev \
+          ros-lyrical-diagnostic-updater \
+          ros-lyrical-eigen3-cmake-module \
+          ros-lyrical-pluginlib \
+          ros-lyrical-rclcpp-components \
+          ros-lyrical-rcpputils \
+          ros-lyrical-tf2-eigen ros-lyrical-tf2-ros \
+          ros-lyrical-mavros=2.16.0-1resolute.20260928.093732 \
+          ros-lyrical-libmavconn=2.16.0-1resolute.20260928.090729 \
+          ros-lyrical-mavros-msgs=2.16.0-1resolute.20260928.090809 \
+          ros-lyrical-mavlink=2026.9.9-1resolute.20260909.091024; \
+        dpkg-query -W ros-lyrical-mavros ros-lyrical-libmavconn \
+          ros-lyrical-mavros-msgs ros-lyrical-mavlink; \
+        rm -rf /var/lib/apt/lists/* ;; \
+      *) echo "WITH_MAVROS must be true or false" >&2; exit 1 ;; \
+    esac
