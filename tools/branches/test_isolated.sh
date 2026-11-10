@@ -37,6 +37,10 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     test ! -e /workspaces/universal-gnss
     source "/opt/ros/$1/setup.bash"
     test "$ROS_DISTRO" = "$1"
+    # Refuse an image/overlay that could satisfy UG imports without this build.
+    python3 -c '\''from ament_index_python.packages import get_packages_with_prefixes
+names = set(get_packages_with_prefixes())
+assert not any(name.startswith("universal_gnss") for name in names), "preinstalled Universal GNSS overlay"'\''
     package_paths=(source/universal_gnss_msgs source/adapters/ros2/gnss_ros2)
     packages=(universal_gnss_msgs universal_gnss_ros2)
     if test -d source/adapters/mavros/gnss_mavros; then
@@ -44,10 +48,16 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
         test ! -e /opt/mavros/share/universal_gnss_ros2
         source /opt/mavros/local_setup.bash
       fi
+      python3 -c '\''from ament_index_python.packages import get_packages_with_prefixes
+names = set(get_packages_with_prefixes())
+assert not any(name.startswith("universal_gnss") for name in names), "preinstalled Universal GNSS overlay"'\''
       package_paths+=(source/adapters/mavros/gnss_mavros)
       packages+=(universal_gnss_mavros)
     fi
-    colcon list --base-paths "${package_paths[@]}"
+    discovered="$(colcon list --names-only --base-paths "${package_paths[@]}")"
+    expected="$(printf "%s\n" "${packages[@]}" | sort)"
+    test "$(printf "%s\n" "$discovered" | sort)" = "$expected"
+    printf "%s\n" "$discovered"
     colcon build --base-paths "${package_paths[@]}" \
       --packages-select "${packages[@]}" \
       --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release
