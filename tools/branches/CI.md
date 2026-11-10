@@ -1,3 +1,70 @@
+# CI-02 — Independent relocated installation
+
+The Lyrical + MAVROS row now passes `--installed-consumer` to `validate_ci.py`.
+It reuses that row's three-package build and tests; no extra matrix row or
+Universal GNSS rebuild is added. The four Lyrical configurations and existing
+Kilted row remain as described below. CI-01's original scope statement below
+applies to CI-01 alone; CI-02 adds the installed consumer documented here.
+
+The producer extends `test_isolated.sh` with an optional installation export.
+After its mandatory tests succeed, the prefix and distribution source metadata
+are copied out with Docker's API. The producer is removed before consumption.
+The host verifies the exported metadata against the exact generated candidate
+and resolves the dependency image to one immutable image ID for both containers.
+
+A new offline, unprivileged container receives only the installed prefix archive,
+source metadata, a synthetic NMEA fixture and the small tests under `consumer/`.
+It receives no source/build workspace, source bind mount, socket, device or
+credentials. Its environment is cleared, preinstalled UG packages are rejected,
+and the original `/tmp/ug-work/{source,build,install}` and host workspace must be
+absent. The prefix moves to `/tmp/ug-consumer/prefix`; no producer setup chain is
+sourced, only declared ROS dependencies and the relocated local setup.
+
+Mandatory checks from that installation:
+
+- exact resolution of all three package prefixes and ament/CMake resources;
+- canonical ROSIDL, Python type support and serialization of both messages and
+  service request/response;
+- external C++ compilation against public headers and exported ROS2/MAVROS targets;
+- pluginlib discovery and actual factory loading from the relocated installed
+  library, with a path identity assertion;
+- ELF dependency resolution without producer RPATH/RUNPATH dependencies;
+- all five installed launch descriptions with `--show-args`, plus resolution of
+  the installed parameter file;
+- bounded receiver/NTRIP start/stop using unreachable loopback TCP, and a synthetic
+  stepped replay with a Trigger service call and actual canonical GnssStatus receipt.
+
+Child processes are reaped with bounded SIGINT/TERM/KILL cleanup. Containers are
+removed on success, failure and host timeout. Producer failure prevents consumer
+execution. The consumer is limited to five minutes; the whole job retains its
+existing 40-minute budget. Candidate SHA, image ID, archive hash, process logs,
+commands/errors and elapsed time are printed to GitHub's job log. Temporary
+exports are not publications and are deleted after validation.
+
+Consumer failure/timeout fails the existing isolated matrix and therefore the
+unchanged `always()` gate. Tests cover propagation, prerequisite results,
+metadata mismatch and isolation/cleanup. After the positive consumer succeeds,
+three additional fresh consumers must reject a missing prefix, CMake export and
+plugin library with the expected diagnostic; arbitrary failures or timeouts do
+not count as successful negative controls. No UG build is repeated. A future PR must
+confirm actual GitHub execution; local results alone do not do so.
+
+This qualifies standalone ament installation, not the incomplete native SDK or
+integrated MAVROS index. Source/build strings in diagnostic binaries are allowed;
+the test proves functional independence by making those paths unavailable.
+No FCU, physical receiver, Compose, ARM or release qualification is added.
+
+```bash
+python3 tools/branches/validate_ci.py --source-ref HEAD \
+  --distribution ros2-lyrical --with mavros \
+  --build-image ug-distribution-build:lyrical-mavros --installed-consumer
+```
+
+The image is built with the CI-01 public dependency recipe below. The command is
+run as the normal project user from the repository root. No publication is enabled.
+
+---
+
 # CI-01 — Lyrical distribution build coverage
 
 The current workflow preserves the eight generation/integrity/reproducibility

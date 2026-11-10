@@ -10,6 +10,7 @@ import tempfile
 
 sys.dont_write_bytecode = True
 import distribution as generator
+import consumer_validation
 
 TOOL = Path(__file__).resolve().parent
 
@@ -18,7 +19,11 @@ def isolated_build(distro, source, image):
     subprocess.run(['bash', str(TOOL / 'test_isolated.sh'), distro, str(source), image], check=True)
 
 
-def validate(repo, ref, profile, options=(), build_image=None, *, manifest_bytes=None, builder=None):
+def validate(repo, ref, profile, options=(), build_image=None, *, manifest_bytes=None, builder=None,
+             installed_consumer=False, consumer_builder=None):
+    generator.require(not installed_consumer or (profile == 'ros2-lyrical' and 'mavros' in options
+                      and bool(build_image and build_image.strip())),
+                      'installed consumer requires a Lyrical MAVROS build image')
     snapshot = generator.Snapshot(repo, ref)
     # CI takes the manifest from the same immutable source SHA, not the worktree.
     manifest_bytes = manifest_bytes if manifest_bytes is not None else snapshot.read('tools/branches/manifest.yaml')
@@ -36,7 +41,10 @@ def validate(repo, ref, profile, options=(), build_image=None, *, manifest_bytes
         generator.require(metadata['source_commit'] == snapshot.commit
                           and metadata['distribution'] == profile
                           and metadata['options'] == sorted(options), 'source/profile metadata mismatch')
-        if build_image is not None:
+        consumer_report = 'not_requested'
+        if installed_consumer:
+            consumer_report = (consumer_builder or consumer_validation.validate)(metadata, first, build_image)
+        elif build_image is not None:
             generator.require(bool(build_image.strip()), 'empty build image is not a build validation')
             (builder or isolated_build)(metadata['ros_distro'], first, build_image)
         # A build runner must not mutate the streamed source tree on the host.
@@ -46,6 +54,7 @@ def validate(repo, ref, profile, options=(), build_image=None, *, manifest_bytes
                 'inventory_sha256': metadata['inventory_sha256'], 'files': len(expected),
                 'reproducibility': 'pass', 'integrity': 'pass',
                 'isolated_build_and_tests': 'pass' if build_image is not None else 'not_requested',
+                'installed_consumer': consumer_report,
                 'publication_enabled': False}
 
 
@@ -56,10 +65,13 @@ def main(argv=None):
     parser.add_argument('--distribution', choices=['ros2-kilted', 'ros2-lyrical'], required=True)
     parser.add_argument('--with', action='append', default=[], dest='options')
     parser.add_argument('--build-image', help='Require build AND tests using a pre-provisioned cached image')
+    parser.add_argument('--installed-consumer', action='store_true',
+                        help='Reuse a Lyrical MAVROS build and require a fresh installed consumer')
     args = parser.parse_args(argv)
     try:
-        report = validate(args.repo, args.source_ref, args.distribution, args.options, args.build_image)
-    except (generator.DistributionError, subprocess.CalledProcessError, OSError, ValueError, KeyError) as error:
+        report = validate(args.repo, args.source_ref, args.distribution, args.options, args.build_image,
+                          installed_consumer=args.installed_consumer)
+    except (generator.DistributionError, subprocess.SubprocessError, OSError, ValueError, KeyError) as error:
         print(f'ERROR: distribution validation failed: {error}', file=sys.stderr)
         return 1
     print(json.dumps(report, sort_keys=True))
