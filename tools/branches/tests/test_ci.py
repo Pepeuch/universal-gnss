@@ -76,6 +76,8 @@ def check_workflow(text):
     if ('"${extra[@]}"' not in isolated_command
             or isolated['steps'][-1]['env'].get('DISTRIBUTION_OPTIONS') != '${{ matrix.options }}'):
         raise ValueError('distribution options not forwarded')
+    if 'extra+=(--installed-consumer)' not in isolated_command:
+        raise ValueError('installed consumer is not mandatory')
     if any(word in text for word in ['git push', 'gh release', 'docker login', 'publication_plan.py']):
         raise ValueError('publication operation reachable')
     return workflow
@@ -379,6 +381,8 @@ class WorkflowTests(unittest.TestCase):
                     self.assertEqual(args[args.index('--distribution') + 1], 'ros2-' + row['ros_distro'])
                     self.assertEqual(args[args.index('--build-image') + 1],
                                      'ug-distribution-build:' + row['ros_distro'] + '-' + row['options'])
+                    self.assertEqual('--installed-consumer' in args,
+                                     row['ros_distro'] == 'lyrical' and row['options'] == 'mavros')
 
     def test_actual_matrix_shell_rejects_unknown_options(self):
         workflow = check_workflow(WORKFLOW.read_text())
@@ -418,6 +422,10 @@ class WorkflowTests(unittest.TestCase):
                             exec(guard, {})
                     else:
                         exec(guard, {})
+
+    def test_installed_consumer_cannot_be_removed(self):
+        with self.assertRaisesRegex(ValueError, 'consumer is not mandatory'):
+            check_workflow(WORKFLOW.read_text().replace('extra+=(--installed-consumer)', 'true'))
 
 
 if __name__ == '__main__':

@@ -107,6 +107,10 @@ jobs:
             both) extra=(--with mavros --with docker) ;;
             *) echo "Unknown distribution options" >&2; exit 1 ;;
           esac
+          # Reuse this row's build; the consumer runs in a second container.
+          if [[ "${{ matrix.ros_distro }}" == lyrical && "$DISTRIBUTION_OPTIONS" == mavros ]]; then
+            extra+=(--installed-consumer)
+          fi
           # Docker selects source payload, not a production image build.
           python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
             --distribution "ros2-${{ matrix.ros_distro }}" "${extra[@]}" \

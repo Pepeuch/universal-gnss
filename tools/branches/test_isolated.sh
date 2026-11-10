@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build/test only a generated tree, streamed into a cached image without source mounts.
 set -euo pipefail
-if [[ $# != 3 || ( "$1" != kilted && "$1" != lyrical ) ]]; then
-  echo "usage: $0 kilted|lyrical <generated-source> <cached-build-image>" >&2
+if [[ ( $# != 3 && $# != 4 ) || ( "$1" != kilted && "$1" != lyrical ) ]]; then
+  echo "usage: $0 kilted|lyrical <generated-source> <cached-build-image> [install-export-directory]" >&2
   exit 2
 fi
 ros_distro="$1"
@@ -14,9 +14,23 @@ if [[ "$(id -u)" == 0 ]]; then
 fi
 test -f "${source_tree}/.ug-distribution.json"
 docker image inspect "${image}" >/dev/null
+export_dir="${4:-}"
+container_args=(--rm)
+if [[ -n "$export_dir" ]]; then
+  mkdir -p "$export_dir"
+  cidfile="$export_dir/producer-container-id"
+  test ! -e "$cidfile"
+  container_args=(--cidfile "$cidfile")
+  cleanup() {
+    if [[ -s "$cidfile" ]]; then
+      docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup EXIT
+fi
 # No --volume, bind mounts, host network, Docker socket, device or credentials.
 # Empty environment prevents accidental reuse of an installed UG overlay.
-tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
+tar -C "${source_tree}" -cf - . | docker run "${container_args[@]}" -i --pull=never \
   --network none --user "$(id -u):$(id -g)" --workdir /tmp --tmpfs /workspaces:rw,nosuid,nodev \
   --entrypoint /usr/bin/env "${image}" -i \
   PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
@@ -67,7 +81,18 @@ assert not any(name.startswith("universal_gnss") for name in names), "preinstall
     ros2 interface show universal_gnss_msgs/msg/RtcmFrame >/dev/null
     ros2 interface show universal_gnss_msgs/srv/GetReceiverSnapshot >/dev/null
     ros2 pkg executables universal_gnss_ros2
-    colcon test --packages-select "${packages[@]}" \
-      --executor sequential --return-code-on-test-failure
+    if ! colcon test --packages-select "${packages[@]}" \
+      --executor sequential --return-code-on-test-failure; then
+      colcon test-result --verbose || true
+      exit 1
+    fi
     colcon test-result --verbose
-  ' ug-isolated "$ros_distro"
+    if test -n "$2"; then
+      tar -C install -cf /tmp/ug-installed.tar .
+      cp source/.ug-distribution.json /tmp/ug-installed-source.json
+    fi
+  ' ug-isolated "$ros_distro" "$export_dir"
+if [[ -n "$export_dir" ]]; then
+  docker cp "$(cat "$cidfile"):/tmp/ug-installed.tar" "$export_dir/install.tar"
+  docker cp "$(cat "$cidfile"):/tmp/ug-installed-source.json" "$export_dir/source.json"
+fi
