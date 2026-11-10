@@ -1,3 +1,32 @@
+# CI-04A — Validation events
+
+The seven ordinary workflows (native CMake, ROS2 Lyrical, ROS2 Kilted,
+distributions, Docker, formatting and backlog) run on `pull_request` and on
+pushes to `dev` or `main` only. Pull requests retain their default activity
+types, including opening and new commits, with no target-branch or path filter;
+fork pull requests retain the same event and job configuration.
+
+A push to a working branch does not start an additional push campaign. Open a
+pull request to obtain automatic validation. Merging into `dev` or `main` still
+starts validation of the resulting commit. A permanently open `dev` to `main`
+pull request can still produce both a push campaign and a pull-request campaign
+when `dev` changes; this policy does not promise absolute deduplication.
+
+Only event filters change. Workflow/check names, jobs, matrices, permissions,
+concurrency, build/test commands and the fail-closed `always()` distribution gate
+are preserved. Ordinary validation no longer runs on tag pushes; the separate
+tag/manual Docker release workflow, publication conditions and permissions are
+unchanged. This policy grants no publication authority.
+
+`tests/test_workflow_events.py` checks every ordinary workflow and rejects
+unrestricted/working-branch pushes, missing stable branches, path/tag filters,
+filtered pull-request activity and privileged alternative triggers. Existing
+gate tests retain all sixteen prerequisite-result combinations. These local
+checks validate configuration; actual GitHub event dispatch must be confirmed
+on a later authorized push and pull request.
+
+---
+
 # CI-02 — Independent relocated installation
 
 The Lyrical + MAVROS row now passes `--installed-consumer` to `validate_ci.py`.
