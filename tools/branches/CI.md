@@ -1,3 +1,71 @@
+# CI-04B — Minimum Lyrical provisioning
+
+The standard Lyrical job now starts from the public `ros:lyrical-ros-base`
+dependency image instead of installing ROS Desktop through `setup-ros` into
+`ubuntu:resolute`. Its explicit APT package set matches the common dependency
+set in [Dockerfile.validation](Dockerfile.validation); policy tests enforce this
+relationship. ROS setup retains the existing CI contract without `nounset`.
+An ament-index guard rejects preinstalled Universal GNSS packages before the
+project build.
+The bootstrap runs APT commands separately under `set -e`; policy tests execute
+the actual shell with failing update/install commands to ensure a later
+successful image guard cannot mask either failure.
+
+The job declares `contents: read`. Dependency bootstrap remains root-only system
+setup; the original full-repository symlink workspace, UID 1001 build user,
+two-stage messages/ROS2 compilation and test commands remain unchanged. This is
+a dependency environment, not the Universal GNSS production image.
+
+The four isolated Lyrical configurations, MAVROS/MAVLink Debian pins, independent
+source builds, installed consumer/factory/three negative controls, eight source
+generation combinations, isolation runner and `always()` gate are unchanged.
+No Kilted, production Docker, Compose/healthcheck or release workflow changes.
+
+Measurements at `b89ca586b469a9cf408c20be95efde70252a3ee4`:
+
+| Scenario | Before | Minimum dependency image |
+| --- | ---: | ---: |
+| Local dependency bootstrap inside the builder | 480.1 s | 9.3 s |
+| Original standard project build/tests | 75.81 s | 75.20 s |
+| Complete local experimental scenario | 692.94 s | 99.12 s |
+
+Both local standard builds report 166 tests with no errors, failures or skips;
+the 154 individual cases in the 11 collected XML files are identical. Complete
+experimental totals include fresh-builder startup, base pull, image export/load,
+source transfer and container cleanup. Export alone cost 130.3 s before and
+1.0 s after; Actions does not export this standard environment, so these totals
+are not a claim about future Actions latency. Local amd64 measurements used one
+24-CPU Docker host; registry/APT response times varied substantially.
+
+The exact workflow prototype was also executed against a fresh container of the
+public base (already present in the local engine): 35.37 s provisioning,
+73.71 s project build/tests, 109.84 s including setup/transfer/cleanup. It reports
+the same 166 tests and identical collected XML cases. The final bootstrap keeps
+`nounset` disabled throughout, matching the existing ROS CI regression contract;
+the project build script and installed dependency set are unchanged.
+
+For comparison, the [existing merge job](https://github.com/Pepeuch/universal-gnss/actions/runs/42846172371)
+took 408 s, including 272 s provisioning. Actual optimized GitHub timing remains
+unqualified until an authorized PR. One local baseline attempt failed with an
+HTTP 500 fetching the public ROS APT source package; the unchanged retry passed.
+
+No persistent cache is introduced. Fresh-builder local OCI-cache experiments
+for MAVROS passed all 168 tests, the factory and three negative controls in four
+cases: no cache, cold export, warm import and dependency invalidation. Warm total
+was 138.26 s versus 156.01 s without cache; the 338 MiB cache's GitHub transport
+was not measurable locally, so GHA caching and cross-job image sharing were not
+selected. These local builders shared a Docker engine; image-load costs are not
+a simulation of a fresh hosted runner. A temporary added `tree` dependency
+invalidated both APT layers; it is not included in the committed provisioning.
+
+The public base tag and transitive APT packages remain floating, as in the
+previous provisioning. This change preserves source-distribution reproducibility;
+it does not promise byte-identical future system images or future availability
+of the pinned MAVROS packages. Dependencies can still be rebuilt from public
+repositories without a private cache, registry or preinstalled UG overlay.
+
+---
+
 # CI-04A — Validation events
 
 The seven ordinary workflows (native CMake, ROS2 Lyrical, ROS2 Kilted,
