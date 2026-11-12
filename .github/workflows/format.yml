@@ -2,6 +2,9 @@ name: C/C++ Format
 
 on:
   push:
+    branches:
+      - dev
+      - main
   pull_request:
 
 jobs:

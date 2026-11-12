@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build/test only a generated tree, streamed into a cached image without source mounts.
 set -euo pipefail
-if [[ $# != 3 || ( "$1" != kilted && "$1" != lyrical ) ]]; then
-  echo "usage: $0 kilted|lyrical <generated-source> <cached-build-image>" >&2
+if [[ ( $# != 3 && $# != 4 ) || ( "$1" != kilted && "$1" != lyrical ) ]]; then
+  echo "usage: $0 kilted|lyrical <generated-source> <cached-build-image> [install-export-directory]" >&2
   exit 2
 fi
 ros_distro="$1"
@@ -14,9 +14,23 @@ if [[ "$(id -u)" == 0 ]]; then
 fi
 test -f "${source_tree}/.ug-distribution.json"
 docker image inspect "${image}" >/dev/null
+export_dir="${4:-}"
+container_args=(--rm)
+if [[ -n "$export_dir" ]]; then
+  mkdir -p "$export_dir"
+  cidfile="$export_dir/producer-container-id"
+  test ! -e "$cidfile"
+  container_args=(--cidfile "$cidfile")
+  cleanup() {
+    if [[ -s "$cidfile" ]]; then
+      docker rm -f "$(cat "$cidfile")" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup EXIT
+fi
 # No --volume, bind mounts, host network, Docker socket, device or credentials.
 # Empty environment prevents accidental reuse of an installed UG overlay.
-tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
+tar -C "${source_tree}" -cf - . | docker run "${container_args[@]}" -i --pull=never \
   --network none --user "$(id -u):$(id -g)" --workdir /tmp --tmpfs /workspaces:rw,nosuid,nodev \
   --entrypoint /usr/bin/env "${image}" -i \
   PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
@@ -37,6 +51,10 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     test ! -e /workspaces/universal-gnss
     source "/opt/ros/$1/setup.bash"
     test "$ROS_DISTRO" = "$1"
+    # Refuse an image/overlay that could satisfy UG imports without this build.
+    python3 -c '\''from ament_index_python.packages import get_packages_with_prefixes
+names = set(get_packages_with_prefixes())
+assert not any(name.startswith("universal_gnss") for name in names), "preinstalled Universal GNSS overlay"'\''
     package_paths=(source/universal_gnss_msgs source/adapters/ros2/gnss_ros2)
     packages=(universal_gnss_msgs universal_gnss_ros2)
     if test -d source/adapters/mavros/gnss_mavros; then
@@ -44,10 +62,16 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
         test ! -e /opt/mavros/share/universal_gnss_ros2
         source /opt/mavros/local_setup.bash
       fi
+      python3 -c '\''from ament_index_python.packages import get_packages_with_prefixes
+names = set(get_packages_with_prefixes())
+assert not any(name.startswith("universal_gnss") for name in names), "preinstalled Universal GNSS overlay"'\''
       package_paths+=(source/adapters/mavros/gnss_mavros)
       packages+=(universal_gnss_mavros)
     fi
-    colcon list --base-paths "${package_paths[@]}"
+    discovered="$(colcon list --names-only --base-paths "${package_paths[@]}")"
+    expected="$(printf "%s\n" "${packages[@]}" | sort)"
+    test "$(printf "%s\n" "$discovered" | sort)" = "$expected"
+    printf "%s\n" "$discovered"
     colcon build --base-paths "${package_paths[@]}" \
       --packages-select "${packages[@]}" \
       --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release
@@ -57,7 +81,18 @@ tar -C "${source_tree}" -cf - . | docker run --rm -i --pull=never \
     ros2 interface show universal_gnss_msgs/msg/RtcmFrame >/dev/null
     ros2 interface show universal_gnss_msgs/srv/GetReceiverSnapshot >/dev/null
     ros2 pkg executables universal_gnss_ros2
-    colcon test --packages-select "${packages[@]}" \
-      --executor sequential --return-code-on-test-failure
+    if ! colcon test --packages-select "${packages[@]}" \
+      --executor sequential --return-code-on-test-failure; then
+      colcon test-result --verbose || true
+      exit 1
+    fi
     colcon test-result --verbose
-  ' ug-isolated "$ros_distro"
+    if test -n "$2"; then
+      tar -C install -cf /tmp/ug-installed.tar .
+      cp source/.ug-distribution.json /tmp/ug-installed-source.json
+    fi
+  ' ug-isolated "$ros_distro" "$export_dir"
+if [[ -n "$export_dir" ]]; then
+  docker cp "$(cat "$cidfile"):/tmp/ug-installed.tar" "$export_dir/install.tar"
+  docker cp "$(cat "$cidfile"):/tmp/ug-installed-source.json" "$export_dir/source.json"
+fi

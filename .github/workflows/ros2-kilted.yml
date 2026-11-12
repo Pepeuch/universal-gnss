@@ -1,8 +1,7 @@
 name: ROS 2 Kilted validation
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   kilted-build-and-test:

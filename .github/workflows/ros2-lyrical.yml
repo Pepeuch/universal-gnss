@@ -2,13 +2,19 @@ name: ROS 2 Lyrical validation
 
 on:
   push:
+    branches:
+      - dev
+      - main
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   lyrical-build-and-test:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:resolute
+      image: ros:lyrical-ros-base
     env:
       ROS_LOCALHOST_ONLY: "1"
       ROS_LOG_DIR: /tmp/universal_gnss_ros_log_lyrical
@@ -18,9 +24,32 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up ROS 2 Lyrical
-        uses: ros-tooling/setup-ros@v0.7
-        with:
-          required-ros-distributions: lyrical
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/lyrical/setup.bash
+          test "$ROS_DISTRO" = lyrical
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake libssl-dev python3-colcon-common-extensions \
+            ros-${ROS_DISTRO}-ament-cmake-gtest \
+            ros-${ROS_DISTRO}-ament-cmake-pytest \
+            ros-${ROS_DISTRO}-builtin-interfaces \
+            ros-${ROS_DISTRO}-diagnostic-msgs \
+            ros-${ROS_DISTRO}-launch \
+            ros-${ROS_DISTRO}-launch-ros \
+            ros-${ROS_DISTRO}-rclcpp \
+            ros-${ROS_DISTRO}-rclpy \
+            ros-${ROS_DISTRO}-rosidl-default-generators \
+            ros-${ROS_DISTRO}-rosidl-default-runtime \
+            ros-${ROS_DISTRO}-sensor-msgs \
+            ros-${ROS_DISTRO}-std-srvs
+          rm -rf /var/lib/apt/lists/*
+          python3 - <<'PYTHON'
+          from ament_index_python.packages import get_packages_with_prefixes
+          names = get_packages_with_prefixes()
+          assert not any(name.startswith('universal_gnss') for name in names), 'preinstalled Universal GNSS overlay'
+          PYTHON
 
       - name: Prepare normal project build user
         run: |

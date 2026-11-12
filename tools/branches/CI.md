@@ -1,3 +1,338 @@
+# CI-05A — Required Lyrical validation
+
+Automatic PR validation and pushes to `dev`/`main` now use Lyrical only for
+ROS2 distribution builds and production Docker validation. The six automatic
+workflows retain their names, PR events and stable-branch push filters.
+The standalone `ROS 2 Kilted validation` workflow keeps its job and commands,
+but runs only through `workflow_dispatch`. Feature-branch pushes remain silent.
+This is a CI scheduling change, not removal of Kilted compatibility.
+
+The distribution workflow retains three stages and their existing check names:
+
+| Stage / check | Required coverage |
+| --- | --- |
+| Distribution generator and integrity | All generator/CI unit tests, including historical Kilted invariants; explicit generation, integrity and reproduction of four Lyrical options |
+| Isolated ROS2 lyrical (none) | Messages and ROS2 build/tests |
+| Isolated ROS2 lyrical (mavros) | Messages, ROS2 and MAVROS build/tests; independent relocated installed consumer, actual plugin factory and three negative controls |
+| Isolated ROS2 lyrical (docker) | Messages and ROS2 build/tests with Docker source payload |
+| Isolated ROS2 lyrical (both) | Messages, ROS2 and MAVROS build/tests with Docker source payload |
+| Distribution validation gate | `always()`, requiring `generator` and the entire `isolated` matrix to report `success` |
+
+The other six automatic jobs retain these exact names:
+`build-and-test (gcc, g++)`, `build-and-test (clang, clang++)`,
+`lyrical-build-and-test`, `docker-build-and-smoke (lyrical)`,
+`clang-format-21` and `backlog-status`. This leaves twelve automatic jobs
+across six workflows, compared with fifteen across seven at the base commit.
+
+The four builds remain independent, offline, non-root and source-isolated.
+The MAVROS rows retain both adapter tests (168 producer tests in the baseline);
+Docker remains a payload option, not proof of a production MAVROS image.
+The production Docker workflow keeps its existing build, contract, persistence,
+DNS/NTRIP, Compose and healthy/unhealthy checks for Lyrical. CMake GCC/Clang,
+standard Lyrical, formatting and backlog checks are unchanged.
+
+A failed, cancelled or skipped prerequisite cannot make the distribution gate
+green. Policy tests execute all sixteen aggregate result combinations, reject
+missing rows/matrix, conditional skips of mandatory jobs/steps, changed check
+names/result bindings, and any Kilted dependency reintroduced into the gate.
+They also execute the actual generation shell, requiring exactly four Lyrical
+calls and immediate failure propagation. The installed-consumer path is unchanged.
+
+Kilted profiles, generator unit tests, compatibility code, Dockerfiles and the
+manual ROS2 build remain available. The Release workflow is unchanged, including
+its Kilted/Lyrical matrix and tag/manual publication conditions. Historical
+Kilted unit invariants can still fail the generator job; no automatic Kilted
+provisioning or build is a prerequisite of PR validation. Release failures can
+still block an actual release, independently of this PR gate.
+
+This commit does not configure GitHub protections. Before requiring checks on
+`dev`/`main`, maintainers must use the surviving check names and must not require
+`kilted-build-and-test`, `Isolated ROS2 kilted (none)` or
+`docker-build-and-smoke (kilted)`: those checks no longer run automatically.
+Unavailable legacy required contexts could otherwise leave a PR waiting forever.
+The API returned 403 when reading classic branch protections during this audit;
+no repository rulesets were visible. Protection configuration requires a later
+maintainer review; the gate alone does not make every other workflow mandatory.
+
+Resource estimate from the seven successful push workflows at
+`28378f6af71c83148a75e4f5740aec29fe3d691b`: the removed standalone Kilted job
+used [382 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709755/job/129985746422),
+the isolated Kilted job [155 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709535/job/129986101852),
+and the Docker Kilted job [129 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709741/job/129985746385).
+Their sum is 666 s (11 min 06 s) of observed job time per reference campaign,
+not a guaranteed wall-time or billing saving. Explicit generation/reproduction
+falls from eight to four combinations; unit tests still cover both profiles.
+No new campaign timing or hardware qualification is claimed here.
+
+Local CI-05A validation: 200 generator/CI policy tests (190 retained plus ten
+new tests), 55 existing Python tests, all sixteen gate result combinations,
+YAML/Python/Bash syntax, local documentation links and `git diff --check` pass.
+The four isolated Lyrical source builds on the unchanged base payload passed
+166/168/166/168 tests with no skips, errors or failures. The MAVROS row also
+passed the independent consumer, actual installed factory and three negative
+controls. Existing dependency images were reused; no Kilted build was run.
+Local scenario times were 90.04/122.97/89.50/99.22 seconds, excluding image
+provisioning. Native GCC/Clang, production-image rebuild, Compose and health
+transitions were not replayed: their steps and payload are unchanged. GitHub
+event dispatch and checks for this candidate remain unqualified until a PR.
+
+The records below describe their own implementation baselines. This CI-05A
+policy supersedes their automatic Kilted and eight-generation/five-build matrix
+statements; their validation measurements are preserved as historical evidence.
+
+---
+
+# CI-04B — Minimum Lyrical provisioning
+
+The standard Lyrical job now starts from the public `ros:lyrical-ros-base`
+dependency image instead of installing ROS Desktop through `setup-ros` into
+`ubuntu:resolute`. Its explicit APT package set matches the common dependency
+set in [Dockerfile.validation](Dockerfile.validation); policy tests enforce this
+relationship. ROS setup retains the existing CI contract without `nounset`.
+An ament-index guard rejects preinstalled Universal GNSS packages before the
+project build.
+The bootstrap runs APT commands separately under `set -e`; policy tests execute
+the actual shell with failing update/install commands to ensure a later
+successful image guard cannot mask either failure.
+
+The job declares `contents: read`. Dependency bootstrap remains root-only system
+setup; the original full-repository symlink workspace, UID 1001 build user,
+two-stage messages/ROS2 compilation and test commands remain unchanged. This is
+a dependency environment, not the Universal GNSS production image.
+
+The four isolated Lyrical configurations, MAVROS/MAVLink Debian pins, independent
+source builds, installed consumer/factory/three negative controls, eight source
+generation combinations, isolation runner and `always()` gate are unchanged.
+No Kilted, production Docker, Compose/healthcheck or release workflow changes.
+
+Measurements at `b89ca586b469a9cf408c20be95efde70252a3ee4`:
+
+| Scenario | Before | Minimum dependency image |
+| --- | ---: | ---: |
+| Local dependency bootstrap inside the builder | 480.1 s | 9.3 s |
+| Original standard project build/tests | 75.81 s | 75.20 s |
+| Complete local experimental scenario | 692.94 s | 99.12 s |
+
+Both local standard builds report 166 tests with no errors, failures or skips;
+the 154 individual cases in the 11 collected XML files are identical. Complete
+experimental totals include fresh-builder startup, base pull, image export/load,
+source transfer and container cleanup. Export alone cost 130.3 s before and
+1.0 s after; Actions does not export this standard environment, so these totals
+are not a claim about future Actions latency. Local amd64 measurements used one
+24-CPU Docker host; registry/APT response times varied substantially.
+
+The exact workflow prototype was also executed against a fresh container of the
+public base (already present in the local engine): 35.37 s provisioning,
+73.71 s project build/tests, 109.84 s including setup/transfer/cleanup. It reports
+the same 166 tests and identical collected XML cases. The final bootstrap keeps
+`nounset` disabled throughout, matching the existing ROS CI regression contract;
+the project build script and installed dependency set are unchanged.
+
+For comparison, the [existing merge job](https://github.com/Pepeuch/universal-gnss/actions/runs/42846172371)
+took 408 s, including 272 s provisioning. Actual optimized GitHub timing remains
+unqualified until an authorized PR. One local baseline attempt failed with an
+HTTP 500 fetching the public ROS APT source package; the unchanged retry passed.
+
+No persistent cache is introduced. Fresh-builder local OCI-cache experiments
+for MAVROS passed all 168 tests, the factory and three negative controls in four
+cases: no cache, cold export, warm import and dependency invalidation. Warm total
+was 138.26 s versus 156.01 s without cache; the 338 MiB cache's GitHub transport
+was not measurable locally, so GHA caching and cross-job image sharing were not
+selected. These local builders shared a Docker engine; image-load costs are not
+a simulation of a fresh hosted runner. A temporary added `tree` dependency
+invalidated both APT layers; it is not included in the committed provisioning.
+
+The public base tag and transitive APT packages remain floating, as in the
+previous provisioning. This change preserves source-distribution reproducibility;
+it does not promise byte-identical future system images or future availability
+of the pinned MAVROS packages. Dependencies can still be rebuilt from public
+repositories without a private cache, registry or preinstalled UG overlay.
+
+---
+
+# CI-04A — Validation events
+
+The seven ordinary workflows (native CMake, ROS2 Lyrical, ROS2 Kilted,
+distributions, Docker, formatting and backlog) run on `pull_request` and on
+pushes to `dev` or `main` only. Pull requests retain their default activity
+types, including opening and new commits, with no target-branch or path filter;
+fork pull requests retain the same event and job configuration.
+
+A push to a working branch does not start an additional push campaign. Open a
+pull request to obtain automatic validation. Merging into `dev` or `main` still
+starts validation of the resulting commit. A permanently open `dev` to `main`
+pull request can still produce both a push campaign and a pull-request campaign
+when `dev` changes; this policy does not promise absolute deduplication.
+
+Only event filters change. Workflow/check names, jobs, matrices, permissions,
+concurrency, build/test commands and the fail-closed `always()` distribution gate
+are preserved. Ordinary validation no longer runs on tag pushes; the separate
+tag/manual Docker release workflow, publication conditions and permissions are
+unchanged. This policy grants no publication authority.
+
+`tests/test_workflow_events.py` checks every ordinary workflow and rejects
+unrestricted/working-branch pushes, missing stable branches, path/tag filters,
+filtered pull-request activity and privileged alternative triggers. Existing
+gate tests retain all sixteen prerequisite-result combinations. These local
+checks validate configuration; actual GitHub event dispatch must be confirmed
+on a later authorized push and pull request.
+
+---
+
+# CI-02 — Independent relocated installation
+
+The Lyrical + MAVROS row now passes `--installed-consumer` to `validate_ci.py`.
+It reuses that row's three-package build and tests; no extra matrix row or
+Universal GNSS rebuild is added. The four Lyrical configurations and existing
+Kilted row remain as described below. CI-01's original scope statement below
+applies to CI-01 alone; CI-02 adds the installed consumer documented here.
+
+The producer extends `test_isolated.sh` with an optional installation export.
+After its mandatory tests succeed, the prefix and distribution source metadata
+are copied out with Docker's API. The producer is removed before consumption.
+The host verifies the exported metadata against the exact generated candidate
+and resolves the dependency image to one immutable image ID for both containers.
+
+A new offline, unprivileged container receives only the installed prefix archive,
+source metadata, a synthetic NMEA fixture and the small tests under `consumer/`.
+It receives no source/build workspace, source bind mount, socket, device or
+credentials. Its environment is cleared, preinstalled UG packages are rejected,
+and the original `/tmp/ug-work/{source,build,install}` and host workspace must be
+absent. The prefix moves to `/tmp/ug-consumer/prefix`; no producer setup chain is
+sourced, only declared ROS dependencies and the relocated local setup.
+
+Mandatory checks from that installation:
+
+- exact resolution of all three package prefixes and ament/CMake resources;
+- canonical ROSIDL, Python type support and serialization of both messages and
+  service request/response;
+- external C++ compilation against public headers and exported ROS2/MAVROS targets;
+- pluginlib discovery and actual factory loading from the relocated installed
+  library, with a path identity assertion;
+- ELF dependency resolution without producer RPATH/RUNPATH dependencies;
+- all five installed launch descriptions with `--show-args`, plus resolution of
+  the installed parameter file;
+- bounded receiver/NTRIP start/stop using unreachable loopback TCP, and a synthetic
+  stepped replay with a Trigger service call and actual canonical GnssStatus receipt.
+
+Child processes are reaped with bounded SIGINT/TERM/KILL cleanup. Containers are
+removed on success, failure and host timeout. Producer failure prevents consumer
+execution. The consumer is limited to five minutes; the whole job retains its
+existing 40-minute budget. Candidate SHA, image ID, archive hash, process logs,
+commands/errors and elapsed time are printed to GitHub's job log. Temporary
+exports are not publications and are deleted after validation.
+
+Consumer failure/timeout fails the existing isolated matrix and therefore the
+unchanged `always()` gate. Tests cover propagation, prerequisite results,
+metadata mismatch and isolation/cleanup. After the positive consumer succeeds,
+three additional fresh consumers must reject a missing prefix, CMake export and
+plugin library with the expected diagnostic; arbitrary failures or timeouts do
+not count as successful negative controls. No UG build is repeated. A future PR must
+confirm actual GitHub execution; local results alone do not do so.
+
+This qualifies standalone ament installation, not the incomplete native SDK or
+integrated MAVROS index. Source/build strings in diagnostic binaries are allowed;
+the test proves functional independence by making those paths unavailable.
+No FCU, physical receiver, Compose, ARM or release qualification is added.
+
+```bash
+python3 tools/branches/validate_ci.py --source-ref HEAD \
+  --distribution ros2-lyrical --with mavros \
+  --build-image ug-distribution-build:lyrical-mavros --installed-consumer
+```
+
+The image is built with the CI-01 public dependency recipe below. The command is
+run as the normal project user from the repository root. No publication is enabled.
+
+---
+
+# CI-01 — Lyrical distribution build coverage
+
+The current workflow preserves the eight generation/integrity/reproducibility
+combinations and the existing Kilted default build. Its isolated matrix contains
+exactly these five jobs:
+
+| ROS2 | Source options | Packages built/tested | Dependency image |
+| --- | --- | --- | --- |
+| Kilted | none | messages, ROS2 | existing dependency set |
+| Lyrical | none | messages, ROS2 | no MAVROS |
+| Lyrical | MAVROS | messages, ROS2, MAVROS | pinned MAVROS dependencies |
+| Lyrical | Docker | messages, ROS2 | no MAVROS |
+| Lyrical | MAVROS + Docker | messages, ROS2, MAVROS | pinned MAVROS dependencies |
+
+Docker is a **source payload option**, not a production image build. The current
+production Dockerfile does not select the MAVROS package. No new Kilted option
+build, independent installed consumer (CI-02), Compose qualification (CI-03),
+factory-loading qualification or hardware test is added here.
+
+`Dockerfile.validation` defaults to `WITH_MAVROS=false`; `true` is accepted only
+for Lyrical. The public ROS apt repository supplies these exact Debian artifacts:
+
+- `ros-lyrical-mavros=2.16.0-1resolute.20260928.093732`
+- `ros-lyrical-libmavconn=2.16.0-1resolute.20260928.090729`
+- `ros-lyrical-mavros-msgs=2.16.0-1resolute.20260928.090809`
+- `ros-lyrical-mavlink=2026.9.9-1resolute.20260909.091024`
+
+These satisfy the adapter's unchanged `find_package(mavros 2.16.0 EXACT)`.
+The [official Lyrical package status](https://repo.ros2.org/status_page/ros_lyrical_default.html)
+identifies the MAVROS 2.16.0 release. Provisioning also installs Eigen3,
+GeographicLib development files, diagnostic_updater, eigen3_cmake_module,
+pluginlib, rclcpp_components, rcpputils and tf2_eigen/tf2_ros; the existing image
+supplies the ROS2/test/SSL/build tools. Apt resolves the remaining declared
+system/ROS dependencies. No geographic dataset is needed: these tests do not
+start a MAVROS FCU node.
+
+Missing pinned artifacts fail provisioning rather than selecting another MAVROS
+version. Their availability and the image's floating base/transitive apt
+packages remain operational dependencies: this is not a complete system
+snapshot or a promise of byte-identical future images. Refreshing these pins
+requires a reviewed dependency update and rerunning this matrix.
+
+The workflow builds its images from this public recipe; it uses no private image,
+local lot-13 digest, credentials or Universal GNSS overlay. The recipe contains
+no COPY/ADD or project source build. The runner clears its environment, rejects
+preinstalled Universal GNSS ament packages before building, and checks that
+colcon discovers exactly the two or three selected packages. It retains normal
+UID/GID, network isolation, tar/stdin transfer and no source/device/socket mounts.
+MAVROS's adapter and RTCM encoder tests are included in the same mandatory
+colcon test invocation; a failure in either cannot be filtered out.
+
+The final gate still has `if: always()` and requires both generator and the
+complete isolated matrix to report success. Tests execute its actual shell for
+all sixteen combinations of success/failure/cancelled/skipped prerequisites;
+only success/success is accepted. Additional regressions execute the actual
+matrix option-forwarding shell, reject missing Lyrical coverage or extra Kilted
+rows, and exercise the overlay rejection guard.
+
+Cost: the isolated matrix grows from two to five jobs: three additional image
+provisionings and build/test runs, all on Lyrical. Each retains its 40-minute
+limit and `fail-fast: false`; aggregate timeout capacity rises from 80 to 200
+job-minutes, not a wall-time estimate. Actual latency depends on package
+availability, GitHub scheduling and CPU. No cache or job is allowed to hide a
+failed prerequisite.
+
+Local reproduction (normal project user, from repository root):
+
+```bash
+docker build --build-arg ROS_DISTRO=lyrical --build-arg WITH_MAVROS=true \
+  --tag ug-distribution-build:lyrical-mavros \
+  --file tools/branches/Dockerfile.validation tools/branches
+python3 tools/branches/validate_ci.py --source-ref HEAD \
+  --distribution ros2-lyrical --with mavros \
+  --build-image ug-distribution-build:lyrical-mavros
+```
+
+For the no-MAVROS rows provision with `WITH_MAVROS=false`; Docker rows add
+`--with docker`. Local tests do not establish GitHub execution or runner timing;
+those must be checked on the eventual PR. No workflow or publication is triggered
+by documenting these commands.
+
+The following lot-3 design and validation record is historical and retained
+verbatim. Its original two-job build coverage is superseded by the CI-01 matrix
+above; its recorded results are not new CI-01 results.
+
+---
+
 # Lot 3 — Distribution CI and inactive publication design
 
 Base: `eff7263629a5ec91e87879c7b2d8a058e80191cf`, the verified merge of PR 13

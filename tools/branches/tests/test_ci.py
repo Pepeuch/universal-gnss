@@ -1,11 +1,14 @@
 """Pipeline failure propagation, inactive publication policy, and workflow permissions."""
 
 import copy
+import itertools
+import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import types
 import shutil
 import unittest
 from unittest import mock
@@ -45,18 +48,50 @@ def check_workflow(text):
                     raise ValueError('unexpected action')
                 if step['with'] != {'fetch-depth': '0', 'persist-credentials': 'false'}:
                     raise ValueError('checkout credentials/history unsafe')
+    for name in ('generator', 'isolated'):
+        if 'if' in jobs[name] or any('if' in step for step in jobs[name]['steps']):
+            raise ValueError('mandatory validation cannot be skipped')
+    expected_names = {
+        'generator': 'Distribution generator and integrity',
+        'isolated': 'Isolated ROS2 ${{ matrix.ros_distro }} (${{ matrix.options }})',
+        'gate': 'Distribution validation gate',
+    }
+    if any(jobs[name]['name'] != value for name, value in expected_names.items()):
+        raise ValueError('mandatory check names changed')
     if jobs['isolated']['needs'] != 'generator':
         raise ValueError('isolated build not gated')
-    if jobs['isolated']['strategy']['matrix']['ros_distro'] != ['kilted', 'lyrical']:
-        raise ValueError('pilot scope changed')
+    expected_matrix = [
+        {'ros_distro': 'lyrical', 'options': 'none', 'mavros': 'false'},
+        {'ros_distro': 'lyrical', 'options': 'mavros', 'mavros': 'true'},
+        {'ros_distro': 'lyrical', 'options': 'docker', 'mavros': 'false'},
+        {'ros_distro': 'lyrical', 'options': 'both', 'mavros': 'true'},
+    ]
+    isolated = jobs['isolated']
+    if isolated.get('strategy', {}).get('matrix') != {'include': expected_matrix}:
+        raise ValueError('pilot scope changed: exactly four Lyrical configurations required')
+    if isolated['strategy']['fail-fast'] != 'false':
+        raise ValueError('isolated matrix must retain every result')
+    provision = isolated['steps'][-2]['run']
+    if '--build-arg WITH_MAVROS="${{ matrix.mavros }}"' not in provision:
+        raise ValueError('MAVROS dependencies not selected')
     if jobs['gate']['needs'] != ['generator', 'isolated'] or jobs['gate']['if'] != 'always()':
         raise ValueError('aggregate gate can skip')
     gate_command = jobs['gate']['steps'][0]['run']
+    if (jobs['gate']['steps'][0].get('if') is not None
+            or jobs['gate']['steps'][0]['env'] != {
+                'GENERATOR_RESULT': '${{ needs.generator.result }}',
+                'ISOLATED_RESULT': '${{ needs.isolated.result }}'}):
+        raise ValueError('aggregate gate result binding or execution changed')
     if 'test "$GENERATOR_RESULT" = success' not in gate_command or 'test "$ISOLATED_RESULT" = success' not in gate_command:
         raise ValueError('aggregate gate does not fail closed')
     isolated_command = jobs['isolated']['steps'][-1]['run']
     if '--build-image' not in isolated_command or '--source-ref "$SOURCE_SHA"' not in isolated_command:
         raise ValueError('build is not mandatory or source is not pinned')
+    if ('"${extra[@]}"' not in isolated_command
+            or isolated['steps'][-1]['env'].get('DISTRIBUTION_OPTIONS') != '${{ matrix.options }}'):
+        raise ValueError('distribution options not forwarded')
+    if 'extra+=(--installed-consumer)' not in isolated_command:
+        raise ValueError('installed consumer is not mandatory')
     if any(word in text for word in ['git push', 'gh release', 'docker login', 'publication_plan.py']):
         raise ValueError('publication operation reachable')
     return workflow
@@ -294,6 +329,205 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('--return-code-on-test-failure', text)
         self.assertIn('--network none', text)
         self.assertNotIn('--volume', '\n'.join(line for line in text.splitlines() if not line.startswith('#')))
+
+    def test_gate_executes_fail_closed_for_every_prerequisite_result(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        command = workflow['jobs']['gate']['steps'][0]['run']
+        for generator_result, isolated_result in itertools.product(
+                ('success', 'failure', 'cancelled', 'skipped'), repeat=2):
+            with self.subTest(generator=generator_result, isolated=isolated_result):
+                result = subprocess.run(['bash', '-e', '-c', command], capture_output=True,
+                                        env={**os.environ, 'GENERATOR_RESULT': generator_result,
+                                             'ISOLATED_RESULT': isolated_result})
+                self.assertEqual(result.returncode == 0,
+                                 generator_result == isolated_result == 'success')
+
+    def test_gate_cannot_omit_always(self):
+        with self.assertRaisesRegex(ValueError, 'aggregate gate'):
+            check_workflow(WORKFLOW.read_text().replace('if: always()', 'if: success()'))
+
+    def test_gate_cannot_omit_isolated_result(self):
+        with self.assertRaisesRegex(ValueError, 'fail closed'):
+            check_workflow(WORKFLOW.read_text().replace('test "$ISOLATED_RESULT" = success', 'true'))
+
+    def test_gate_cannot_drop_matrix_dependency(self):
+        with self.assertRaisesRegex(ValueError, 'aggregate gate'):
+            check_workflow(WORKFLOW.read_text().replace('needs: [generator, isolated]', 'needs: [generator]'))
+
+    def test_lyrical_mavros_configuration_cannot_be_removed(self):
+        text = WORKFLOW.read_text().replace('options: mavros', 'options: none')
+        with self.assertRaisesRegex(ValueError, 'pilot scope'):
+            check_workflow(text)
+
+    def test_new_kilted_configurations_are_rejected(self):
+        text = WORKFLOW.read_text().replace('ros_distro: lyrical', 'ros_distro: kilted', 1)
+        with self.assertRaisesRegex(ValueError, 'pilot scope'):
+            check_workflow(text)
+
+    def test_original_kilted_row_cannot_return(self):
+        text = WORKFLOW.read_text().replace('        include:', '''        include:
+          - ros_distro: kilted
+            options: none
+            mavros: "false"''')
+        with self.assertRaisesRegex(ValueError, 'pilot scope'):
+            check_workflow(text)
+
+    def test_every_lyrical_row_and_the_matrix_are_mandatory(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        for index in range(4):
+            changed = copy.deepcopy(workflow)
+            changed['jobs']['isolated']['strategy']['matrix']['include'].pop(index)
+            with self.subTest(row=index), self.assertRaisesRegex(ValueError, 'pilot scope'):
+                check_workflow(yaml.safe_dump(changed))
+        del workflow['jobs']['isolated']['strategy']['matrix']
+        with self.assertRaisesRegex(ValueError, 'pilot scope'):
+            check_workflow(yaml.safe_dump(workflow))
+
+    def test_mandatory_job_or_step_cannot_be_conditionally_skipped(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        for name in ('generator', 'isolated'):
+            for target in ('job', 'step'):
+                changed = copy.deepcopy(workflow)
+                job = changed['jobs'][name]
+                (job if target == 'job' else job['steps'][-1])['if'] = 'false'
+                with self.subTest(job=name, target=target), self.assertRaisesRegex(ValueError, 'cannot be skipped'):
+                    check_workflow(yaml.safe_dump(changed))
+
+    def test_gate_cannot_depend_on_historical_kilted(self):
+        text = WORKFLOW.read_text().replace('needs: [generator, isolated]',
+                                            'needs: [generator, isolated, kilted]')
+        with self.assertRaisesRegex(ValueError, 'aggregate gate'):
+            check_workflow(text)
+
+    def test_gate_uses_real_prerequisite_results_and_cannot_skip_its_step(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        for variable in ('GENERATOR_RESULT', 'ISOLATED_RESULT', 'if'):
+            changed = copy.deepcopy(workflow)
+            step = changed['jobs']['gate']['steps'][0]
+            if variable == 'if':
+                step['if'] = 'false'
+            else:
+                step['env'][variable] = 'success'
+            with self.subTest(variable=variable), self.assertRaisesRegex(ValueError, 'aggregate gate'):
+                check_workflow(yaml.safe_dump(changed))
+
+    def test_mandatory_check_names_are_preserved(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        for name in workflow['jobs']:
+            changed = copy.deepcopy(workflow)
+            changed['jobs'][name]['name'] = 'replacement'
+            with self.subTest(job=name), self.assertRaisesRegex(ValueError, 'check names'):
+                check_workflow(yaml.safe_dump(changed))
+
+    def run_generation_shell(self, fail=False):
+        command = check_workflow(WORKFLOW.read_text())['jobs']['generator']['steps'][-1]['run']
+        with tempfile.TemporaryDirectory() as directory:
+            calls_file = Path(directory) / 'calls.jsonl'
+            executable = Path(directory) / 'python3'
+            executable.write_text(f'''#!{sys.executable}
+import json, os, sys
+with open(os.environ['CALLS_FILE'], 'a') as output:
+    output.write(json.dumps(sys.argv[1:]) + '\\n')
+sys.exit(23 if os.environ['FAIL_VALIDATION'] == '1' else 0)
+''')
+            executable.chmod(0o755)
+            result = subprocess.run(['bash', '-c', command], text=True, capture_output=True,
+                                    env={**os.environ, 'PATH': directory + ':' + os.environ['PATH'],
+                                         'SOURCE_SHA': 'a' * 40, 'CALLS_FILE': str(calls_file),
+                                         'FAIL_VALIDATION': '1' if fail else '0'})
+            calls = [json.loads(line) for line in calls_file.read_text().splitlines()]
+        return result, calls
+
+    def test_actual_generation_shell_reproduces_only_four_lyrical_options(self):
+        result, calls = self.run_generation_shell()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls, [
+            ['tools/branches/validate_ci.py', '--source-ref', 'a' * 40,
+             '--distribution', 'ros2-lyrical', *options]
+            for options in ([], ['--with', 'mavros'], ['--with', 'docker'],
+                            ['--with', 'mavros', '--with', 'docker'])])
+
+    def test_actual_generation_shell_stops_on_failed_validation(self):
+        result, calls = self.run_generation_shell(fail=True)
+        self.assertEqual(result.returncode, 23)
+        self.assertEqual(len(calls), 1)
+
+    def test_mavros_dependency_provisioning_cannot_be_removed(self):
+        with self.assertRaisesRegex(ValueError, 'dependencies'):
+            check_workflow(WORKFLOW.read_text().replace('--build-arg WITH_MAVROS=', '--build-arg UNUSED='))
+
+    def test_option_forwarding_cannot_be_removed(self):
+        with self.assertRaisesRegex(ValueError, 'options not forwarded'):
+            check_workflow(WORKFLOW.read_text().replace('"${extra[@]}"', ''))
+
+    def test_actual_matrix_shell_forwards_each_option_and_requires_build(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        command = workflow['jobs']['isolated']['steps'][-1]['run']
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'python3'
+            executable.write_text(f'#!{sys.executable}\nimport json, sys\nprint(json.dumps(sys.argv[1:]))\n')
+            executable.chmod(0o755)
+            for row in workflow['jobs']['isolated']['strategy']['matrix']['include']:
+                with self.subTest(row=row):
+                    shell = command.replace('${{ matrix.ros_distro }}', row['ros_distro'])
+                    shell = shell.replace('${{ matrix.options }}', row['options'])
+                    result = subprocess.run(['bash', '-c', shell], text=True, capture_output=True,
+                                            env={**os.environ, 'PATH': directory + ':' + os.environ['PATH'],
+                                                 'SOURCE_SHA': 'a' * 40, 'DISTRIBUTION_OPTIONS': row['options']})
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    args = json.loads(result.stdout)
+                    options = [args[i + 1] for i, arg in enumerate(args) if arg == '--with']
+                    self.assertEqual(options, {'none': [], 'mavros': ['mavros'], 'docker': ['docker'],
+                                               'both': ['mavros', 'docker']}[row['options']])
+                    self.assertEqual(args[args.index('--source-ref') + 1], 'a' * 40)
+                    self.assertEqual(args[args.index('--distribution') + 1], 'ros2-' + row['ros_distro'])
+                    self.assertEqual(args[args.index('--build-image') + 1],
+                                     'ug-distribution-build:' + row['ros_distro'] + '-' + row['options'])
+                    self.assertEqual('--installed-consumer' in args,
+                                     row['ros_distro'] == 'lyrical' and row['options'] == 'mavros')
+
+    def test_actual_matrix_shell_rejects_unknown_options(self):
+        workflow = check_workflow(WORKFLOW.read_text())
+        command = workflow['jobs']['isolated']['steps'][-1]['run']
+        command = command.replace('${{ matrix.ros_distro }}', 'lyrical').replace('${{ matrix.options }}', 'invalid')
+        result = subprocess.run(['bash', '-c', command], capture_output=True,
+                                env={**os.environ, 'SOURCE_SHA': 'a' * 40, 'DISTRIBUTION_OPTIONS': 'invalid'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'Unknown distribution options', result.stderr)
+
+    def test_mavros_apt_artifacts_are_pinned(self):
+        text = (TOOL / 'Dockerfile.validation').read_text()
+        for package in ('mavros', 'libmavconn', 'mavros-msgs'):
+            self.assertIn('ros-lyrical-' + package + '=2.16.0-1resolute.', text)
+        self.assertIn('ros-lyrical-mavlink=2026.9.9-1resolute.', text)
+        self.assertIn('test "${ROS_DISTRO}" = lyrical', text)
+        self.assertIn('ARG WITH_MAVROS=false', text)
+
+    def test_isolated_runner_rejects_preinstalled_ug_packages(self):
+        text = (TOOL / 'test_isolated.sh').read_text()
+        self.assertEqual(text.count('preinstalled Universal GNSS overlay'), 2)
+        self.assertIn('get_packages_with_prefixes', text)
+        self.assertIn('test "$(printf "%s\\n" "$discovered" | sort)" = "$expected"', text)
+
+    def test_actual_overlay_guard_accepts_dependencies_and_rejects_ug(self):
+        text = (TOOL / 'test_isolated.sh').read_text()
+        start = text.index('from ament_index_python.packages import get_packages_with_prefixes')
+        guard = text[start:text.index("'\\''", start)]
+        module = types.ModuleType('ament_index_python.packages')
+        for names, rejected in [({'mavros', 'rclcpp'}, False), (set(), False),
+                                ({'universal_gnss_msgs'}, True), ({'universal_gnss_mavros'}, True)]:
+            with self.subTest(names=names):
+                module.get_packages_with_prefixes = lambda: dict.fromkeys(names, '/opt/test')
+                with mock.patch.dict(sys.modules, {'ament_index_python.packages': module}):
+                    if rejected:
+                        with self.assertRaisesRegex(AssertionError, 'preinstalled Universal GNSS'):
+                            exec(guard, {})
+                    else:
+                        exec(guard, {})
+
+    def test_installed_consumer_cannot_be_removed(self):
+        with self.assertRaisesRegex(ValueError, 'consumer is not mandatory'):
+            check_workflow(WORKFLOW.read_text().replace('extra+=(--installed-consumer)', 'true'))
 
 
 if __name__ == '__main__':
