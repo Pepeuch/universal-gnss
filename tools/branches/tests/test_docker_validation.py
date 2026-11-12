@@ -183,7 +183,7 @@ class WorkflowTests(unittest.TestCase):
         jobs = yaml.load(text, Loader=yaml.BaseLoader)['jobs']
         self.assertEqual(set(jobs), {'docker-build-and-smoke'})
         job = jobs['docker-build-and-smoke']
-        self.assertEqual(job['strategy']['matrix']['ros_distro'], ['kilted', 'lyrical'])
+        self.assertEqual(job['strategy']['matrix']['ros_distro'], ['lyrical'])
         steps = job['steps']
         added = [step for step in steps if 'docker_validation.py' in step.get('run', '')]
         self.assertEqual(len(added), 2)

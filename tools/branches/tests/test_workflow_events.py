@@ -1,4 +1,4 @@
-"""CI-04A: ordinary validation belongs to PRs and stable branch pushes."""
+"""Ordinary Lyrical validation events and manual historical Kilted coverage."""
 
 import copy
 from pathlib import Path
@@ -14,9 +14,15 @@ VALIDATIONS = {
     'distributions.yml': 'Distribution validation',
     'docker.yml': 'Docker image validation',
     'format.yml': 'C/C++ Format',
-    'ros2-kilted.yml': 'ROS 2 Kilted validation',
     'ros2-lyrical.yml': 'ROS 2 Lyrical validation',
 }
+MANUAL_VALIDATIONS = {'ros2-kilted.yml': 'ROS 2 Kilted validation'}
+
+
+def require_manual_events(events):
+    if (not isinstance(events, dict) or set(events) != {'workflow_dispatch'}
+            or events['workflow_dispatch'] not in ('', None, {})):
+        raise ValueError('historical Kilted validation must be manual only')
 
 
 def require_validation_events(events):
@@ -46,7 +52,21 @@ class WorkflowEventTests(unittest.TestCase):
 
     def test_workflow_inventory_keeps_release_outside_ordinary_policy(self):
         actual = {path.name for path in WORKFLOWS.iterdir() if path.suffix in ('.yml', '.yaml')}
-        self.assertEqual(actual, set(VALIDATIONS) | {'docker-release.yml'})
+        self.assertEqual(actual, set(VALIDATIONS) | set(MANUAL_VALIDATIONS) | {'docker-release.yml'})
+
+    def test_historical_workflow_retains_its_name_and_is_manual_only(self):
+        for filename, name in MANUAL_VALIDATIONS.items():
+            workflow = yaml.load((WORKFLOWS / filename).read_text(), Loader=yaml.BaseLoader)
+            self.assertEqual(workflow['name'], name)
+            require_manual_events(workflow['on'])
+
+    def test_automatic_kilted_triggers_cannot_return(self):
+        for trigger in ('push', 'pull_request', 'schedule', 'workflow_run', 'pull_request_target'):
+            with self.subTest(trigger=trigger), self.assertRaisesRegex(ValueError, 'manual only'):
+                require_manual_events({'workflow_dispatch': '', trigger: ''})
+        for events in ({}, self.events, 'workflow_dispatch'):
+            with self.subTest(events=events), self.assertRaisesRegex(ValueError, 'manual only'):
+                require_manual_events(events)
 
     def test_unrestricted_push_cannot_return(self):
         for push in ('', None, {}):

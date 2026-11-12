@@ -36,23 +36,21 @@ jobs:
           test "$(id -u)" != 0
           PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -m unittest discover -s tools/branches/tests -v
 
-      - name: Validate and reproduce both pilots and every option combination
+      - name: Validate and reproduce Lyrical and every option combination
         env:
           SOURCE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          for distro in kilted lyrical; do
-            for options in none mavros docker both; do
-              extra=()
-              case "$options" in
-                mavros) extra=(--with mavros) ;;
-                docker) extra=(--with docker) ;;
-                both) extra=(--with mavros --with docker) ;;
-              esac
-              python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
-                --distribution "ros2-$distro" "${extra[@]}"
-            done
+          for options in none mavros docker both; do
+            extra=()
+            case "$options" in
+              mavros) extra=(--with mavros) ;;
+              docker) extra=(--with docker) ;;
+              both) extra=(--with mavros --with docker) ;;
+            esac
+            python3 tools/branches/validate_ci.py --source-ref "$SOURCE_SHA" \
+              --distribution ros2-lyrical "${extra[@]}"
           done
 
   isolated:
@@ -64,10 +62,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Preserve the existing Kilted default build; no new Kilted matrix.
-          - ros_distro: kilted
-            options: none
-            mavros: "false"
           - ros_distro: lyrical
             options: none
             mavros: "false"

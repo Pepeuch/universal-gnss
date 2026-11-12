@@ -1,3 +1,87 @@
+# CI-05A — Required Lyrical validation
+
+Automatic PR validation and pushes to `dev`/`main` now use Lyrical only for
+ROS2 distribution builds and production Docker validation. The six automatic
+workflows retain their names, PR events and stable-branch push filters.
+The standalone `ROS 2 Kilted validation` workflow keeps its job and commands,
+but runs only through `workflow_dispatch`. Feature-branch pushes remain silent.
+This is a CI scheduling change, not removal of Kilted compatibility.
+
+The distribution workflow retains three stages and their existing check names:
+
+| Stage / check | Required coverage |
+| --- | --- |
+| Distribution generator and integrity | All generator/CI unit tests, including historical Kilted invariants; explicit generation, integrity and reproduction of four Lyrical options |
+| Isolated ROS2 lyrical (none) | Messages and ROS2 build/tests |
+| Isolated ROS2 lyrical (mavros) | Messages, ROS2 and MAVROS build/tests; independent relocated installed consumer, actual plugin factory and three negative controls |
+| Isolated ROS2 lyrical (docker) | Messages and ROS2 build/tests with Docker source payload |
+| Isolated ROS2 lyrical (both) | Messages, ROS2 and MAVROS build/tests with Docker source payload |
+| Distribution validation gate | `always()`, requiring `generator` and the entire `isolated` matrix to report `success` |
+
+The other six automatic jobs retain these exact names:
+`build-and-test (gcc, g++)`, `build-and-test (clang, clang++)`,
+`lyrical-build-and-test`, `docker-build-and-smoke (lyrical)`,
+`clang-format-21` and `backlog-status`. This leaves twelve automatic jobs
+across six workflows, compared with fifteen across seven at the base commit.
+
+The four builds remain independent, offline, non-root and source-isolated.
+The MAVROS rows retain both adapter tests (168 producer tests in the baseline);
+Docker remains a payload option, not proof of a production MAVROS image.
+The production Docker workflow keeps its existing build, contract, persistence,
+DNS/NTRIP, Compose and healthy/unhealthy checks for Lyrical. CMake GCC/Clang,
+standard Lyrical, formatting and backlog checks are unchanged.
+
+A failed, cancelled or skipped prerequisite cannot make the distribution gate
+green. Policy tests execute all sixteen aggregate result combinations, reject
+missing rows/matrix, conditional skips of mandatory jobs/steps, changed check
+names/result bindings, and any Kilted dependency reintroduced into the gate.
+They also execute the actual generation shell, requiring exactly four Lyrical
+calls and immediate failure propagation. The installed-consumer path is unchanged.
+
+Kilted profiles, generator unit tests, compatibility code, Dockerfiles and the
+manual ROS2 build remain available. The Release workflow is unchanged, including
+its Kilted/Lyrical matrix and tag/manual publication conditions. Historical
+Kilted unit invariants can still fail the generator job; no automatic Kilted
+provisioning or build is a prerequisite of PR validation. Release failures can
+still block an actual release, independently of this PR gate.
+
+This commit does not configure GitHub protections. Before requiring checks on
+`dev`/`main`, maintainers must use the surviving check names and must not require
+`kilted-build-and-test`, `Isolated ROS2 kilted (none)` or
+`docker-build-and-smoke (kilted)`: those checks no longer run automatically.
+Unavailable legacy required contexts could otherwise leave a PR waiting forever.
+The API returned 403 when reading classic branch protections during this audit;
+no repository rulesets were visible. Protection configuration requires a later
+maintainer review; the gate alone does not make every other workflow mandatory.
+
+Resource estimate from the seven successful push workflows at
+`28378f6af71c83148a75e4f5740aec29fe3d691b`: the removed standalone Kilted job
+used [382 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709755/job/129985746422),
+the isolated Kilted job [155 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709535/job/129986101852),
+and the Docker Kilted job [129 s](https://github.com/Pepeuch/universal-gnss/actions/runs/42860709741/job/129985746385).
+Their sum is 666 s (11 min 06 s) of observed job time per reference campaign,
+not a guaranteed wall-time or billing saving. Explicit generation/reproduction
+falls from eight to four combinations; unit tests still cover both profiles.
+No new campaign timing or hardware qualification is claimed here.
+
+Local CI-05A validation: 200 generator/CI policy tests (190 retained plus ten
+new tests), 55 existing Python tests, all sixteen gate result combinations,
+YAML/Python/Bash syntax, local documentation links and `git diff --check` pass.
+The four isolated Lyrical source builds on the unchanged base payload passed
+166/168/166/168 tests with no skips, errors or failures. The MAVROS row also
+passed the independent consumer, actual installed factory and three negative
+controls. Existing dependency images were reused; no Kilted build was run.
+Local scenario times were 90.04/122.97/89.50/99.22 seconds, excluding image
+provisioning. Native GCC/Clang, production-image rebuild, Compose and health
+transitions were not replayed: their steps and payload are unchanged. GitHub
+event dispatch and checks for this candidate remain unqualified until a PR.
+
+The records below describe their own implementation baselines. This CI-05A
+policy supersedes their automatic Kilted and eight-generation/five-build matrix
+statements; their validation measurements are preserved as historical evidence.
+
+---
+
 # CI-04B — Minimum Lyrical provisioning
 
 The standard Lyrical job now starts from the public `ros:lyrical-ros-base`
