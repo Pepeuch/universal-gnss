@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [kilted, lyrical]
+        ros_distro: [lyrical]
     env:
       IMAGE: universal-gnss:ci-${{ matrix.ros_distro }}
 
