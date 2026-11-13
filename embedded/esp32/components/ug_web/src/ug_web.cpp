@@ -12,6 +12,7 @@ extern "C" {
 #include "ug_credentials.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_json.hpp"
+#include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #if UG_LOCAL_GNSS
@@ -19,6 +20,7 @@ extern "C" {
 #include "universal_gnss_driver/unicore_model_profile.hpp"
 #endif
 #include <array>
+#include <cstdio>
 #include <cstring>
 #include <string_view>
 extern "C" httpd_ssl_config_t ug_https_defaults(void);
@@ -55,6 +57,50 @@ esp_err_t Fail(httpd_req_t* req, const char* status, const char* message)
   // SDK would otherwise purge an arbitrarily large unread request body after an
   // early rejection. Returning an error closes the session before that purge.
   return status[0] == '4' || status[0] == '5' ? ESP_FAIL : result;
+}
+MemorySample CurrentMemory()
+{
+  multi_heap_info_t internal{}, external{};
+  heap_caps_get_info(&internal, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  heap_caps_get_info(&external, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  return {internal.total_free_bytes + internal.total_allocated_bytes,
+          internal.total_free_bytes,
+          internal.minimum_free_bytes,
+          internal.largest_free_block,
+          external.total_free_bytes + external.total_allocated_bytes,
+          external.total_free_bytes};
+}
+esp_err_t ResourceBusy(httpd_req_t* req)
+{
+  httpd_resp_set_hdr(req, "Retry-After", "2");
+  return Fail(req, "503 Service Unavailable", "memory pressure; retry later or use local console");
+}
+esp_err_t Resources(httpd_req_t* req)
+{
+  const auto memory = CurrentMemory();
+  const auto pressure = AssessResources(memory);
+  // Available even under pressure: no cJSON tree, variable body or heap buffer.
+  std::array<char, 512> buffer{};
+  const int length =
+      std::snprintf(buffer.data(),
+                    buffer.size(),
+                    "{\"pressure\":\"%s\",\"internal_free\":%zu,\"internal_min\":%zu,"
+                    "\"internal_largest\":%zu,\"internal_total\":%zu,\"psram_total\":%zu,"
+                    "\"psram_free\":%zu,\"web_mutations_allowed\":%s,\"satellites_allowed\":%s}",
+                    ResourcePressureName(pressure),
+                    memory.internal_free,
+                    memory.internal_min,
+                    memory.internal_largest,
+                    memory.internal_total,
+                    memory.external_total,
+                    memory.external_free,
+                    AdmitWebWork(pressure, WebWork::kMutation) ? "true" : "false",
+                    AdmitWebWork(pressure, WebWork::kSatelliteReport) ? "true" : "false");
+  if (length < 0 || static_cast<std::size_t>(length) >= buffer.size())
+    return Fail(req, "503 Service Unavailable", "resource report unavailable");
+  Headers(req);
+  httpd_resp_set_type(req, "application/json");
+  return httpd_resp_send(req, buffer.data(), length);
 }
 bool Authenticated(httpd_req_t* req)
 {
@@ -395,6 +441,11 @@ esp_err_t Get(httpd_req_t* req)
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
   const std::string_view uri(req->uri);
+  if (uri == "/api/resources")
+    return Resources(req);
+  const auto work = uri == "/api/gnss/satellites" ? WebWork::kSatelliteReport : WebWork::kSnapshot;
+  if (!AdmitWebWork(AssessResources(CurrentMemory()), work))
+    return ResourceBusy(req);
   if (uri == "/api/status" || uri == "/status")
     return Status(req);
   if (uri == "/api/capabilities")
@@ -437,6 +488,8 @@ esp_err_t Post(httpd_req_t* req)
 {
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  if (!AdmitWebWork(AssessResources(CurrentMemory()), WebWork::kMutation))
+    return ResourceBusy(req);  // Reject before body allocation, parsing or storage/receiver work.
   std::string body, error;
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");

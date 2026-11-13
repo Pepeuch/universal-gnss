@@ -1510,7 +1510,8 @@
       "git_object": "5ce11f9a889931577ca94455759766a485430cea",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native ug_resource_policy.hpp and /api/resources separate internal RAM/PSRAM and gate optional Web allocations; host thresholds/admission/browser tests pass. Allocator placement and live peak TLS/queue/CPU/socket QoS qualification remain open."
     },
     {
       "path": "main/include/network.h",
@@ -1718,7 +1719,8 @@
       "git_object": "f1f59ec60979585b59fe31d89237493267ce4f84",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native ug_resource_policy.hpp and /api/resources separate internal RAM/PSRAM and gate optional Web allocations; host thresholds/admission/browser tests pass. Allocator placement and live peak TLS/queue/CPU/socket QoS qualification remain open."
     },
     {
       "path": "main/network.c",

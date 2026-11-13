@@ -22,7 +22,7 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = () => 1, clearTimeout = () => {};
           class AbortController {constructor(){this.signal={};}abort(){}}
-          let hold_status = false, release_status;
+          let hold_status = false, release_status, pressure = 'normal';
           const confirm = () => true;
           const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
@@ -32,7 +32,7 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
-            const payload = path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+            const payload = path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -84,6 +84,19 @@ class WebAssets(unittest.TestCase):
         rollback = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config/rollback').pop().options.body"))
         self.assertEqual(rollback, {'confirm':'ROLLBACK_CONFIGURATION', 'expected_generation':'3'})
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 1)
+        vm.eval("pressure='reduced'; calls.length=0; refresh();")
+        self.drain(vm)
+        self.assertTrue(vm.eval("calls.some(c=>c.path==='/api/status')"))
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/gnss/satellites')"))
+        vm.eval("pressure='critical'; calls.length=0; refresh();")
+        self.drain(vm)
+        self.assertEqual(vm.eval('calls.length'), 1)
+        self.assertEqual(vm.eval('calls[0].path'), '/api/resources')
+        self.assertIn('Pression mémoire', vm.eval('elements.notice.textContent'))
+        self.assertTrue(vm.eval("elements['base-submit'].disabled"))
+        self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
+        vm.eval("pressure='normal'; refresh();")
+        self.drain(vm)
         vm.eval('hold_status=true; refresh();')
         self.drain(vm)
         before = vm.eval('calls.length')

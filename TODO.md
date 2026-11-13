@@ -22,7 +22,9 @@ are implemented in the native profiles.
 Offline legacy JSON conversion now prepares a disabled, schema-validated candidate
 with an explicit review report. Explicit previous-bank settings restore now validates
 both banks and preserves admin identity and GNSS quarantine; it does not undo
-receiver commands. Remaining useful legacy features, device recovery,
+receiver commands. Native Web resource admission distinguishes internal RAM from
+PSRAM and retains compact diagnostics under memory pressure. Remaining useful
+legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further

@@ -36,6 +36,17 @@ async function refresh() {
   refreshing = true;
   const generation = sessionGeneration;
   try {
+    const resources = await call('/api/resources', undefined, false);
+    if (generation !== sessionGeneration) return;
+    $('resources').textContent = print(resources);
+    if (resources.pressure === 'critical') {
+      $('status').textContent = 'Rapport détaillé suspendu : pression mémoire';
+      $('receiver').textContent = 'Rapport suspendu : pression mémoire';
+      satellites({available:false}); receiverPlans = null;
+      $('base-submit').disabled = true; $('telemetry-submit').disabled = true;
+      show('Pression mémoire : opérations Web suspendues. Diagnostic compact disponible ; console locale pour la maintenance.');
+      return;
+    }
     const status = await call('/api/status', undefined, false);
     if (generation !== sessionGeneration) return;
     $('status').textContent = print(status);
@@ -49,6 +60,10 @@ async function refresh() {
         receiverPlans = plans; $('receiver-plans').textContent = print(plans);
         $('base-submit').disabled = !(plans.fixed || plans.survey_in || plans.time_optimization);
         $('telemetry-submit').disabled = !plans.telemetry;
+      }
+      if (resources.satellites_allowed === false) {
+        satellites({available:false});
+        return;
       }
       const report = await call('/api/gnss/satellites');
       if (generation !== sessionGeneration || !token) return;

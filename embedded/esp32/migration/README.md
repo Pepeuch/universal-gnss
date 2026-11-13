@@ -662,3 +662,40 @@ verifiers pass under C17/C++17. Applications, bootloaders and partition tables
 remain byte-identical between two build directories for both affected roles.
 The unchanged rover retains its previous proof. No hardware NVS/power-loss claim
 is made.
+
+
+## Memory-aware Web admission
+
+Historical `memory_policy.c` and `ntrip_runtime.c` are ADAPT references, not
+imported allocators or a second NTRIP supervisor. Native correction queues remain
+fixed and the routing/receiver/radio owners keep their existing priorities.
+`ug_resource_policy.hpp` evaluates current **internal** RAM independently of PSRAM.
+Below 96 KiB free or a 32 KiB largest block, satellite-table polling is refused.
+Below 48 KiB free or a 16 KiB largest block, all variable API snapshots/mutations
+are refused with HTTP 503/Retry-After before body allocation or command dispatch.
+Missing/inconsistent internal samples fail closed. Historical minimum-free is
+diagnostic only; a past low-water mark cannot latch the device in degraded mode.
+
+Public `GET /api/resources` renders a fixed 512-byte-stack JSON report without
+a cJSON tree and remains available under pressure. It exposes only memory sizes,
+pressure and admission flags. The browser polls it first, reduces optional work
+and removes cached receiver/satellite claims while detailed polling is suspended.
+The static assets remain served from flash. No socket, active command, source
+epoch, TTL, security check or GNSS quarantine is changed by this policy.
+
+These thresholds are conservative initial admission policy, **not an atomic memory
+reservation**, a guarantee of future allocations, a complete socket/CPU QoS policy,
+or a proof of simultaneous TLS capacity. SDK HTTPS handshakes happen before the
+application handler; HTTP 503 cannot prevent their allocations. The local console
+remains independent of the Web gate, but memory-consuming console operations may
+still fail. No automatic reboot, erase or disconnect is introduced. Thresholds
+need native-device heap/concurrency qualification before deployment confidence.
+
+Twenty-seven host ASan/UBSan cases pass, including exact threshold boundaries,
+fragmentation despite free PSRAM, recovery after past low-water mark, invalid
+samples and the operation admission matrix. The browser mock verifies normal,
+reduced and critical polling plus resumption and existing authentication guards.
+
+Both affected SDK roles compile and pass the ELF/role/partition verifier; the
+minimal rover does not include this Web policy and is unchanged. No physical
+heap/concurrency or firmware flash test was performed.
