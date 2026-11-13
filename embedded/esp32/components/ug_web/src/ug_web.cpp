@@ -188,6 +188,84 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   return Json(req, root.get());
 }
 #if UG_LOCAL_GNSS
+esp_err_t SatellitesReply(httpd_req_t* req)
+{
+  const auto snapshot = ReceiverSatellites();
+  const auto& report = snapshot.report;
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  const auto now = esp_timer_get_time() * 1000;
+  const char* source = "unavailable";
+  switch (report.protocol)
+  {
+    case SatelliteProtocol::kUbxNavSat:
+      source = "UBX-NAV-SAT";
+      break;
+    case SatelliteProtocol::kUnicoreSatsInfo:
+      source = "UNICORE-SATSINFOA";
+      break;
+    case SatelliteProtocol::kNmeaGsv:
+      source = "NMEA-GSV";
+      break;
+    default:
+      break;
+  }
+  cJSON_AddStringToObject(root.get(), "source", source);
+  cJSON_AddStringToObject(
+      root.get(), "freshness_basis", report.epoch_known ? "epoch_first_receipt" : "report_receipt");
+  cJSON_AddBoolToObject(root.get(), "available", report.receipt_ns.has_value());
+  cJSON_AddBoolToObject(root.get(), "stale", !SatelliteReportFresh(report, now));
+  cJSON_AddBoolToObject(root.get(), "truncated", report.truncated);
+  cJSON_AddBoolToObject(root.get(), "measurement_epoch_known", report.epoch_known);
+  cJSON_AddNumberToObject(root.get(), "receiver_incarnation", snapshot.receiver_incarnation);
+  cJSON_AddNumberToObject(root.get(), "reported_total", report.reported_total);
+  if (report.receipt_ns && now >= *report.receipt_ns)
+    cJSON_AddNumberToObject(root.get(), "report_age_ms", (now - *report.receipt_ns) / 1000000);
+  if (report.protocol == SatelliteProtocol::kNmeaGsv)
+    cJSON_AddStringToObject(root.get(), "talker", report.talker.data());
+  if (report.signal_id)
+    cJSON_AddNumberToObject(root.get(), "signal_id", *report.signal_id);
+  if (report.epoch_known)
+  {
+    cJSON_AddNumberToObject(root.get(), "tow_ms", report.tow_ms);
+    if (report.protocol == SatelliteProtocol::kUnicoreSatsInfo)
+    {
+      cJSON_AddNumberToObject(root.get(), "week", report.week);
+      cJSON_AddNumberToObject(root.get(), "raw_time_reference", report.time_reference);
+    }
+  }
+  auto* array = cJSON_AddArrayToObject(root.get(), "satellites");
+  if (!array)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < report.count; ++i)
+  {
+    const auto& sat = report.entries[i];
+    auto* value = cJSON_CreateObject();
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddItemToArray(array, value);
+    cJSON_AddNumberToObject(value, "svid", sat.id);
+    if (report.protocol != SatelliteProtocol::kNmeaGsv)
+      cJSON_AddNumberToObject(value, "raw_system_id", sat.raw_system_id);
+    if (sat.flags & SatelliteEntry::kElevation)
+      cJSON_AddNumberToObject(value, "elevation", sat.elevation);
+    if (sat.flags & SatelliteEntry::kAzimuth)
+      cJSON_AddNumberToObject(value, "azimuth", sat.azimuth);
+    if (sat.flags & SatelliteEntry::kCn0)
+      cJSON_AddNumberToObject(value, "cn0", sat.cn0);
+    if (sat.flags & SatelliteEntry::kUsedKnown)
+      cJSON_AddBoolToObject(value, "used", sat.flags & SatelliteEntry::kUsed);
+    if (sat.flags & SatelliteEntry::kHealthKnown)
+      cJSON_AddBoolToObject(value, "healthy", sat.flags & SatelliteEntry::kHealthy);
+    if (report.protocol == SatelliteProtocol::kUnicoreSatsInfo)
+    {
+      cJSON_AddNumberToObject(value, "frequency_status", sat.frequency_status);
+      cJSON_AddNumberToObject(value, "frequency_count", sat.frequency_count);
+    }
+  }
+  return Json(req, root.get());
+}
 esp_err_t GnssReply(httpd_req_t* req)
 {
   const auto gnss = ReceiverSnapshot();
@@ -222,6 +300,22 @@ esp_err_t GnssReply(httpd_req_t* req)
     cJSON_AddNumberToObject(root.get(), "satellites_used", *state.satellites_used);
   if (state.satellites_visible)
     cJSON_AddNumberToObject(root.get(), "satellites_visible", *state.satellites_visible);
+  if (state.satellites_tracked)
+    cJSON_AddNumberToObject(root.get(), "satellites_tracked", *state.satellites_tracked);
+  if (state.rtk_mode)
+    cJSON_AddNumberToObject(root.get(), "rtk_mode", static_cast<unsigned>(*state.rtk_mode));
+  if (state.horizontal_accuracy_m)
+    cJSON_AddNumberToObject(root.get(), "horizontal_accuracy_m", *state.horizontal_accuracy_m);
+  if (state.vertical_accuracy_m)
+    cJSON_AddNumberToObject(root.get(), "vertical_accuracy_m", *state.vertical_accuracy_m);
+  if (state.hdop)
+    cJSON_AddNumberToObject(root.get(), "hdop", *state.hdop);
+  if (state.vdop)
+    cJSON_AddNumberToObject(root.get(), "vdop", *state.vdop);
+  if (state.correction_age_s)
+    cJSON_AddNumberToObject(root.get(), "correction_age_s", *state.correction_age_s);
+  if (state.mean_cn0_db_hz)
+    cJSON_AddNumberToObject(root.get(), "mean_cn0_db_hz", *state.mean_cn0_db_hz);
   cJSON_AddNumberToObject(root.get(), "observations", gnss.observations);
   cJSON_AddNumberToObject(root.get(), "uart_overflows", gnss.uart_overflows);
   cJSON_AddNumberToObject(root.get(), "uart_line_errors", gnss.uart_line_errors);
@@ -281,6 +375,8 @@ esp_err_t Get(httpd_req_t* req)
     return httpd_resp_send(req, json.data(), json.size());
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/satellites")
+    return SatellitesReply(req);
   if (uri == "/api/gnss/status" || uri == "/api/gnss/diagnostics" || uri == "/api/gnss/base/status")
     return GnssReply(req);
 #endif

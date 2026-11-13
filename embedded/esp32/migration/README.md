@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Twenty-three host cases now cover routing/source reset, command causality/quarantine,
+Twenty-four host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -531,3 +531,46 @@ output. It calls the compiled UG parser rather than duplicating its validator.
 Twenty-three ASan/UBSan host cases pass; the new Python case runs seven synthetic
 end-to-end/negative tests. Firmware payloads did not change in this tooling phase,
 so the preceding S3/C3/rover builds are reused rather than rerun.
+
+## Bounded satellite reports and GNSS diagnostics
+
+Authenticated `/api/gnss/satellites` and the native Web table expose the latest
+available UG-decoded UBX-NAV-SAT, Unicore SATSINFOA or NMEA GSV report. Each view
+retains its protocol/ID namespace, raw system IDs, optional signal scope and
+software receiver incarnation. Unknown used/health values are omitted rather
+than fabricated. GNSS status also exposes available UG RTK/accuracy/DOP/C/N0
+and correction-age values, alongside its existing position-staleness indicator.
+These are receiver reports; no position, RTK FIX or physical observation is
+created by reading/publishing the satellite cache.
+
+Vendor reports have separate caches. Repeating the same iTOW/week/time-reference
+keeps the original receipt freshness; GPS/BDS epochs are never compared as one
+clock. GSV has no measurement epoch: its explicit freshness basis is report
+receipt, not proof of a current physical navigation solution. Fresh vendor
+reports are preferred over GSV; stale data remains labelled and is never renewed
+by a status request. Discovery consumes UART outside Feed, so its byte gap now
+invalidates parser/report state without clearing any command quarantine.
+
+GSV assembly is bounded to eight concurrent talker/signal scopes, a three-second
+receipt window and sequential matching parts. Missing/reordered parts, changed
+headers and duplicate satellite IDs invalidate a cycle. The public UG GSV record
+does not retain the trailing signal ID, so the native adapter reads only that
+metadata from the already framed/checksummed sentence; all satellite values and
+CRC checks still come from UG. Its hexadecimal signal field follows the
+[documented NMEA GSV layout](https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf),
+section 2.7.15. A sequence without an epoch cannot prove that an entire missing
+cycle was not skipped; no stronger cycle/measurement guarantee is claimed.
+Views contain at most 64 entries, with explicit truncation. They are individual
+reports, not a merged full sky across every signal/constellation. Native detail
+framing bounds are 512-byte NMEA and 4096-byte Unicore ASCII.
+
+Source invalidation clears caches/partial cycles; pending receiver mutations
+hide previous satellite reports. Browser polling is single-flight, uses a
+10-second request timeout, and discards private late responses after logout.
+Rendering uses text nodes, without HTML injection or browser credential storage.
+Twenty-four ASan/UBSan host cases and the browser mock pass, including real UG
+NMEA/UBX/Unicore wire parsing, CRC rejection, interleaved signal scopes, capacity,
+cache freshness, reset, no synthetic fix and delayed-logout response handling.
+S3/C3 IDF 6.1 builds and ELF checks pass: apps 1431488 / 1289040 bytes. Rover code
+is unchanged. Actual receiver throughput, completeness of real-device reports
+and browser/HTTPS interoperability remain HARDWARE_PENDING.

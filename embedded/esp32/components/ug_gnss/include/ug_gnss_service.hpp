@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "esp_err.h"
+#include "ug_satellite_reports.hpp"
 #include "ug_telemetry_operation.hpp"
 #include "universal_gnss_protocols/ubx_records.hpp"
 namespace ug::embedded
@@ -20,4 +21,10 @@ esp_err_t StartGnssService();
 bool QueueBaseOperation(const BaseOperation&);
 bool QueueTelemetryOperation(const TelemetryOperation&);
 ReceiverStatus ReceiverSnapshot();
+struct ReceiverSatelliteReport
+{
+  SatelliteReport report{};
+  std::uint64_t receiver_incarnation{};
+};
+ReceiverSatelliteReport ReceiverSatellites();
 }  // namespace ug::embedded

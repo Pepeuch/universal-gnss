@@ -28,6 +28,7 @@ NativeGnssUart uart;
 Receiver receiver(uart);
 std::mutex status_guard;
 ReceiverStatus status;
+ReceiverSatelliteReport satellite_snapshot;
 QueueHandle_t operations;
 StaticQueue_t operations_control;
 std::array<std::uint8_t, sizeof(GnssOperation)> operations_memory{};
@@ -72,6 +73,7 @@ void Owner(void*)
     status.model.clear();
     status.firmware.clear();
     status.survey.reset();
+    satellite_snapshot = {};
   };
   for (;;)
   {
@@ -109,6 +111,7 @@ void Owner(void*)
         status.model.clear();
         status.firmware.clear();
         status.survey.reset();
+        satellite_snapshot = {};
       }
       family = ReceiverDetectedFamily::kUnknown;
       probe.clear();
@@ -162,6 +165,14 @@ void Owner(void*)
           family = ReceiverDetectedFamily::kUnicore;
       }
       BeginCorrectionSource(0, false);
+      // Discovery consumes UART bytes outside Feed. Discard parser/cache state
+      // across that gap; this still cannot release a command quarantine.
+      receiver.InvalidateObservations();
+      PublishGnssSnapshot(receiver.state(), std::nullopt);
+      {
+        std::lock_guard<std::mutex> lock(status_guard);
+        satellite_snapshot = {};
+      }
       identity = QueryReceiverModel(family, uart, 1000, 4096);
       if (selector == "auto" && !identity.model_verified &&
           (family == ReceiverDetectedFamily::kUnknown || family == ReceiverDetectedFamily::kNmea))
@@ -214,6 +225,7 @@ void Owner(void*)
       status.model.clear();
       status.firmware.clear();
       status.survey.reset();
+      satellite_snapshot = {};
     }
     GnssOperation operation;
     if (xQueueReceive(operations, &operation, 0) == pdTRUE)
@@ -329,6 +341,7 @@ void Owner(void*)
       status.uart_event_saturations = uart.event_saturations;
       status.uart_read_failures = uart.read_failures;
       status.uart_drain_limits = drain_limits;
+      satellite_snapshot = {receiver.satellites(Now()), receiver.incarnation()};
       status.survey = identity.model_verified && identity.identity.model.value_or("") == "ZED-F9P"
                           ? receiver.survey()
                           : std::nullopt;
@@ -372,6 +385,11 @@ bool QueueTelemetryOperation(const TelemetryOperation& operation)
   request.kind = GnssOperation::Kind::kTelemetry;
   request.telemetry = operation;
   return QueueOperation(request);
+}
+ReceiverSatelliteReport ReceiverSatellites()
+{
+  std::lock_guard<std::mutex> lock(status_guard);
+  return pending.load() ? ReceiverSatelliteReport{} : satellite_snapshot;
 }
 ReceiverStatus ReceiverSnapshot()
 {

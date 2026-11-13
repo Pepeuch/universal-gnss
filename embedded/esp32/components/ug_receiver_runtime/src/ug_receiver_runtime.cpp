@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_receiver_runtime.hpp"
+#include "universal_gnss_protocols/nmea_parser.hpp"
 #include "universal_gnss_protocols/ubx_parser.hpp"
+#include "universal_gnss_protocols/unicore_parser.hpp"
 namespace ug::embedded
 {
 using namespace universal_gnss_driver;
@@ -45,11 +47,29 @@ bool Receiver::Feed(const std::uint8_t* bytes,
   const auto generation = fence_.BeginCapture();
   for (std::size_t i = 0; i < size; ++i)
   {
+    const auto nmea = satellite_nmea_.PushByte(bytes[i], receipt_ns);
+    if (nmea.record)
+    {
+      const auto gsv = universal_gnss_protocols::ParseNmeaGsv(*nmea.record);
+      std::optional<std::uint8_t> signal;
+      if (gsv.record && GsvSignalScope(*nmea.record, signal))
+        satellites_.Observe(*gsv.record, nmea.record->talker, signal);
+    }
+    const auto unicore = satellite_unicore_.PushByte(bytes[i], receipt_ns);
+    if (unicore.record)
+    {
+      const auto sats = universal_gnss_protocols::ParseUnicoreSatsInfo(*unicore.record);
+      if (sats.record)
+        satellites_.Observe(*sats.record);
+    }
     const auto framed = ubx_.PushByte(bytes[i], receipt_ns);
     if (!ubx_generation_ && framed.status == universal_gnss_protocols::ParserStatus::kNeedMoreData)
       ubx_generation_ = generation;
     if (framed.status == universal_gnss_protocols::ParserStatus::kRecordReady && framed.record)
     {
+      const auto sats = universal_gnss_protocols::ParseUbxNavSat(*framed.record);
+      if (sats.record)
+        satellites_.Observe(*sats.record);
       const auto survey = universal_gnss_protocols::ParseUbxNavSvin(*framed.record);
       if (survey.record)
       {
@@ -114,6 +134,9 @@ void Receiver::InvalidateObservations()
     Note(application_.MarkTimeout());
   session_.Reset();
   survey_.reset();
+  satellites_.Reset();
+  satellite_nmea_.Reset();
+  satellite_unicore_.Reset();
   ubx_.Reset();
   ublox_.Reset();
   unicore_.Reset();

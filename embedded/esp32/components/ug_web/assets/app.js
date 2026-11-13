@@ -1,5 +1,5 @@
 'use strict';
-let token = '';
+let token = '', sessionGeneration = 0, refreshing = false;
 const $ = id => document.getElementById(id);
 const show = value => { $('notice').textContent = String(value); };
 const print = value => JSON.stringify(value, null, 2);
@@ -7,21 +7,55 @@ async function call(path, body, authorized = true) {
   const headers = {};
   if (authorized && token) headers.Authorization = `Bearer ${token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', headers,
-    body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit'});
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${response.status} ${text}`);
-  if (response.headers.get('Content-Type')?.includes('application/json')) return JSON.parse(text);
-  return text;
-}
-async function refresh() {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
   try {
-    $('status').textContent = print(await call('/api/status', undefined, false));
-    if (token && !$('gnss').hidden) $('receiver').textContent = print(await call('/api/gnss/status'));
-  } catch (e) { show(e.message); }
+    const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', headers,
+      body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', signal: controller.signal});
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${response.status} ${text}`);
+    if (response.headers.get('Content-Type')?.includes('application/json')) return JSON.parse(text);
+    return text;
+  } finally { clearTimeout(timer); }
 }
+function satellites(report) {
+  const rows = $('satellite-rows'); rows.replaceChildren();
+  $('satellite-summary').textContent = !report.available ? 'Rapport non disponible' :
+    `${report.source} ${report.talker || ''} ${report.signal_id === undefined ? '' : 'signal ' + report.signal_id} — ${report.stale ? 'périmé' : 'reçu récemment'} — âge ${report.report_age_ms ?? '?'} ms${report.truncated ? ' — liste tronquée' : ''}`;
+  for (const sat of (report.satellites || [])) {
+    const row = document.createElement('tr');
+    for (const value of [sat.svid, sat.raw_system_id, sat.elevation, sat.azimuth, sat.cn0,
+                         sat.used === undefined ? undefined : sat.used ? 'Oui' : 'Non']) {
+      const cell = document.createElement('td'); cell.textContent = value === undefined ? 'Inconnu' : String(value); row.appendChild(cell);
+    }
+    rows.appendChild(row);
+  }
+}
+
+async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
+  const generation = sessionGeneration;
+  try {
+    const status = await call('/api/status', undefined, false);
+    if (generation !== sessionGeneration) return;
+    $('status').textContent = print(status);
+    if (token && !$('gnss').hidden) {
+      const receiver = await call('/api/gnss/status');
+      if (generation !== sessionGeneration || !token) return;
+      $('receiver').textContent = print(receiver);
+      const report = await call('/api/gnss/satellites');
+      if (generation !== sessionGeneration || !token) return;
+      satellites(report);
+    }
+  } catch (e) { if (generation === sessionGeneration) show(e.message); }
+  finally { refreshing = false; }
+}
+
 async function load() {
-  const config = await call('/api/config'); $('config').value = print(config);
+  const generation = sessionGeneration;
+  const config = await call('/api/config');
+  if (generation !== sessionGeneration || !token) return;
+  $('config').value = print(config);
   if (config.gnss) {
     $('gnss-enabled').checked = config.gnss.enabled;
     $('gnss-tx').value = String(config.gnss.tx_pin); $('gnss-rx').value = String(config.gnss.rx_pin);
@@ -30,8 +64,8 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { token = $('token').value; $('token').value = ''; await load(); await refresh(); show('Session ouverte'); });
-$('logout').onclick = () => { token = ''; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { ++sessionGeneration; token = ''; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {

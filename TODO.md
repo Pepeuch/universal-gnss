@@ -17,7 +17,8 @@ first HTTPS operator surface compile under IDF 6.1, including private NTRIP TLS
 credential provisioning and native ESP-NOW replay diagnostics. The C3 relay uses
 its declared one-publisher capacity without unused caster queues. Guarded receiver
 telemetry/signals and fresh F9P Survey-In reports are available;
-service supervision and degraded startup are implemented in the native profiles.
+service supervision, degraded startup and bounded satellite-report diagnostics
+are implemented in the native profiles.
 Offline legacy JSON conversion now prepares a disabled, schema-validated candidate
 with an explicit review report. Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
