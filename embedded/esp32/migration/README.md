@@ -699,3 +699,37 @@ reduced and critical polling plus resumption and existing authentication guards.
 Both affected SDK roles compile and pass the ELF/role/partition verifier; the
 minimal rover does not include this Web policy and is unchanged. No physical
 heap/concurrency or firmware flash test was performed.
+
+
+## Bounded service event history
+
+The historical `log.c` printf hook and destructive `/log` byte stream are REJECT
+mechanisms: they could capture arbitrary SDK text, secrets and receiver data.
+The useful diagnostic history is ADAPT as a fixed 32-entry typed service-event
+ring. It records boot/worker state transitions, changed watchdog errors and worker
+exits, using service/state/kind enums, numeric error codes and monotonic receipt
+times. No arbitrary message, credentials, MAC, position, raw GNSS or format string
+is accepted. Normal heartbeats and repeated identical watchdog errors do not flood
+the ring. The supervisor's existing mutex protects bounded copies; no event
+allocation, new task, flash write or SDK logging hook is added.
+
+Authenticated `GET /api/diagnostics/events`, the WebUI button and local console
+`events` return non-destructive chronological snapshots. Sequence, overwritten and
+rejected counters are explicit; HTTP counters are decimal strings. The sequence
+and ring reset at boot and are not durable audit evidence. Ages use only the SDK
+monotonic clock; a backwards interval is flagged rather than fabricated. There is
+no remote log erase, SDK log-level or unbounded stream endpoint. This service
+history is not yet a complete GNSS/NTRIP transaction log. The old `/log` shape is
+not emulated; operators use the explicit native endpoint.
+
+Detailed event responses share the reduced-memory admission rule with satellite
+reports. Failed field allocation returns 503 instead of a partial event response.
+The browser blocks late private replies after logout. Host ASan/UBSan tests cover
+ordering, wrap/loss, independent immutable snapshots, invalid enum/time rejection,
+actual boot failures and watchdog transitions. The minimal rover remains free of
+supervisor/Web dependencies and event/log output.
+
+All 28 native ASan/UBSan cases and the browser mock pass at this milestone.
+S3 gateway (1438864 bytes) and C3 relay (1296080 bytes) compile and pass role,
+language, partition and linked-CRC checks. The existing slots are unchanged.
+No physical test or firmware publication was performed.

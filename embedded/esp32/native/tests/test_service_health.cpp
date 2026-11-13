@@ -57,6 +57,13 @@ int main()
   assert(result.failed == ServiceBit(ServiceId::kNetworkCore));
   assert(result.blocked == ServiceBit(ServiceId::kNtripSetup));
   assert(ServicesDegraded(ServiceHealths(), now_us * 1000));
+  const auto boot_events = ServiceEvents();
+  assert(boot_events.count == 7);
+  assert(boot_events.events[1].service == ServiceId::kNetworkCore &&
+         boot_events.events[1].state == ServiceState::kFailed &&
+         boot_events.events[1].error == 123);
+  assert(boot_events.events[2].service == ServiceId::kNtripSetup &&
+         boot_events.events[2].state == ServiceState::kBlocked);
   auto bad = steps[0];
   bad.id = static_cast<ServiceId>(255);
   assert(!RunBoot(&bad, 1, ObserveBoot).plan_valid);
@@ -101,6 +108,11 @@ int main()
     now_us = 2000001;
     reset_error = 7;
     router.Progress();
+    const auto fault_events = ServiceEvents();
+    assert(fault_events.events[fault_events.count - 1].kind == ServiceEventKind::kWatchdog &&
+           fault_events.events[fault_events.count - 1].error == 7);
+    router.Progress();
+    assert(ServiceEvents().count == fault_events.count);  // Repeated faults cannot flood log.
     state = ServiceHealths()[Index(ServiceId::kRouting)];
     assert(state.stack_sampled && state.stack_min_bytes == 0 && state.watchdog_error == 7);
   }
@@ -110,14 +122,14 @@ int main()
   {
     WorkerHealth network_worker(ServiceId::kNtripInput, 30000000000LL, false);
     network_worker.Progress();
-    assert(added == 1 && fed == 2);
+    assert(added == 1 && fed == 3);
   }
   add_error = 9;
   {
     WorkerHealth unavailable(ServiceId::kGnss, 5000000000LL, true);
     unavailable.Progress();
     state = ServiceHealths()[Index(ServiceId::kGnss)];
-    assert(!state.watchdog_registered && state.watchdog_error == 9 && fed == 2);
+    assert(!state.watchdog_registered && state.watchdog_error == 9 && fed == 3);
   }
   assert(removed == 1);
 }

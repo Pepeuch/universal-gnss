@@ -48,7 +48,7 @@ enum class WebWork : std::uint8_t
   kCompactResources,
   kSnapshot,
   kMutation,
-  kSatelliteReport
+  kDetailedDiagnostics
 };
 inline bool AdmitWebWork(ResourcePressure pressure, WebWork work)
 {
@@ -57,7 +57,7 @@ inline bool AdmitWebWork(ResourcePressure pressure, WebWork work)
   if (pressure == ResourcePressure::kCritical ||
       (pressure != ResourcePressure::kNormal && pressure != ResourcePressure::kReduced))
     return false;
-  if (work == WebWork::kSatelliteReport)
+  if (work == WebWork::kDetailedDiagnostics)
     return pressure == ResourcePressure::kNormal;
   return work == WebWork::kSnapshot || work == WebWork::kMutation;
 }

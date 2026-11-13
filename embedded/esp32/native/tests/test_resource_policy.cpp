@@ -41,7 +41,7 @@ int main()
     assert(AdmitWebWork(pressure, WebWork::kCompactResources));
     assert(AdmitWebWork(pressure, WebWork::kSnapshot) == (pressure != ResourcePressure::kCritical));
     assert(AdmitWebWork(pressure, WebWork::kMutation) == (pressure != ResourcePressure::kCritical));
-    assert(AdmitWebWork(pressure, WebWork::kSatelliteReport) ==
+    assert(AdmitWebWork(pressure, WebWork::kDetailedDiagnostics) ==
            (pressure == ResourcePressure::kNormal));
     assert(!AdmitWebWork(pressure, static_cast<WebWork>(255)));
   }

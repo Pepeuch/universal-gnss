@@ -95,7 +95,7 @@ esp_err_t Resources(httpd_req_t* req)
                     memory.external_total,
                     memory.external_free,
                     AdmitWebWork(pressure, WebWork::kMutation) ? "true" : "false",
-                    AdmitWebWork(pressure, WebWork::kSatelliteReport) ? "true" : "false");
+                    AdmitWebWork(pressure, WebWork::kDetailedDiagnostics) ? "true" : "false");
   if (length < 0 || static_cast<std::size_t>(length) >= buffer.size())
     return Fail(req, "503 Service Unavailable", "resource report unavailable");
   Headers(req);
@@ -436,6 +436,40 @@ esp_err_t GnssReply(httpd_req_t* req)
   return Json(req, root.get());
 }
 #endif
+esp_err_t EventReply(httpd_req_t* req)
+{
+  const auto snapshot = ServiceEvents();
+  const auto now = esp_timer_get_time() * 1000;
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  if (!cJSON_AddStringToObject(root.get(), "scope", "volatile_service_events_this_boot") ||
+      !cJSON_AddStringToObject(
+          root.get(), "overwritten", std::to_string(snapshot.overwritten).c_str()) ||
+      !cJSON_AddStringToObject(root.get(), "rejected", std::to_string(snapshot.rejected).c_str()))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  auto* list = cJSON_AddArrayToObject(root.get(), "events");
+  if (!list)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < snapshot.count; ++i)
+  {
+    const auto& event = snapshot.events[i];
+    auto* value = cJSON_CreateObject();
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddItemToArray(list, value);
+    if (!cJSON_AddStringToObject(value, "sequence", std::to_string(event.sequence).c_str()) ||
+        !cJSON_AddStringToObject(value, "service", ServiceName(event.service)) ||
+        !cJSON_AddStringToObject(value, "state", ServiceStateName(event.state)) ||
+        !cJSON_AddStringToObject(value, "kind", ServiceEventName(event.kind)) ||
+        !cJSON_AddNumberToObject(value, "error", event.error) ||
+        !cJSON_AddBoolToObject(value, "clock_valid", now >= event.receipt_ns) ||
+        (now >= event.receipt_ns &&
+         !cJSON_AddNumberToObject(value, "age_ms", (now - event.receipt_ns) / 1000000)))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+  }
+  return Json(req, root.get());
+}
 esp_err_t Get(httpd_req_t* req)
 {
   if (req->content_len)
@@ -443,7 +477,9 @@ esp_err_t Get(httpd_req_t* req)
   const std::string_view uri(req->uri);
   if (uri == "/api/resources")
     return Resources(req);
-  const auto work = uri == "/api/gnss/satellites" ? WebWork::kSatelliteReport : WebWork::kSnapshot;
+  const auto work = uri == "/api/gnss/satellites" || uri == "/api/diagnostics/events"
+                        ? WebWork::kDetailedDiagnostics
+                        : WebWork::kSnapshot;
   if (!AdmitWebWork(AssessResources(CurrentMemory()), work))
     return ResourceBusy(req);
   if (uri == "/api/status" || uri == "/status")
@@ -452,6 +488,8 @@ esp_err_t Get(httpd_req_t* req)
     return CapabilitiesReply(req);
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  if (uri == "/api/diagnostics/events")
+    return EventReply(req);
   if (uri == "/api/config/history")
   {
     const auto history = ConfigurationBanks();

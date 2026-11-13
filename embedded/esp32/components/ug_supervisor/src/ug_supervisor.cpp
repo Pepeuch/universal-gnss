@@ -12,6 +12,7 @@ namespace
 {
 std::mutex guard;
 ServiceHealthSnapshot services;
+ServiceEventRing events;
 std::int64_t Now()
 {
   return esp_timer_get_time() * 1000;
@@ -28,6 +29,7 @@ void ExpectWorker(ServiceId id, std::int64_t deadline_ns)
   service.worker = true;
   service.deadline_ns = deadline_ns;
   service.progress_ns = Now();
+  events.Append(id, service.state, ServiceEventKind::kState, 0, service.progress_ns);
 }
 void ObserveService(ServiceId id, ServiceState state, std::int32_t error)
 {
@@ -39,9 +41,13 @@ void ObserveService(ServiceId id, ServiceState state, std::int32_t error)
   // Startup bookkeeping must not erase its watchdog/stack/progress evidence.
   if (state == ServiceState::kStarting && service.state == ServiceState::kRunning)
     return;
+  const auto before_state = service.state;
+  const auto before_error = service.error;
   if (!(state == ServiceState::kRunning && service.worker && !service.entered))
     service.state = state;
   service.error = error;
+  if (before_state != service.state || before_error != error)
+    events.Append(id, service.state, ServiceEventKind::kState, error, Now());
 }
 void ObserveBoot(ServiceId id, ServiceState state, std::int32_t error, void*)
 {
@@ -58,6 +64,11 @@ ServiceHealthSnapshot ServiceHealths()
   std::lock_guard<std::mutex> lock(guard);
   return services;
 }
+ServiceEventSnapshot ServiceEvents()
+{
+  std::lock_guard<std::mutex> lock(guard);
+  return events.Snapshot();
+}
 WorkerHealth::WorkerHealth(ServiceId id, std::int64_t deadline_ns, bool watchdog) : id_(id)
 {
   if (!ValidService(id_))
@@ -73,6 +84,9 @@ WorkerHealth::WorkerHealth(ServiceId id, std::int64_t deadline_ns, bool watchdog
   service.progress_ns = Now();
   service.watchdog_registered = watchdog_;
   service.watchdog_error = error;
+  events.Append(id_, service.state, ServiceEventKind::kState, 0, service.progress_ns);
+  if (error != ESP_OK)
+    events.Append(id_, service.state, ServiceEventKind::kWatchdog, error, service.progress_ns);
 }
 WorkerHealth::~WorkerHealth()
 {
@@ -88,6 +102,9 @@ WorkerHealth::~WorkerHealth()
   // Unexpected worker exit must not retain a cached healthy state.
   service.state = ServiceState::kFailed;
   service.error = ESP_ERR_INVALID_STATE;
+  events.Append(id_, service.state, ServiceEventKind::kWorkerExit, service.error, Now());
+  if (removed != ESP_OK)
+    events.Append(id_, service.state, ServiceEventKind::kWatchdog, removed, Now());
 }
 void WorkerHealth::Progress()
 {
@@ -107,7 +124,11 @@ void WorkerHealth::Progress()
   auto& service = services[static_cast<std::size_t>(id_)];
   service.progress_ns = now;
   if (error != ESP_OK)
+  {
+    if (service.watchdog_error != error)
+      events.Append(id_, service.state, ServiceEventKind::kWatchdog, error, now);
     service.watchdog_error = error;
+  }
   if (sampled)
   {
     service.stack_min_bytes = stack;

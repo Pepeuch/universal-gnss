@@ -1502,7 +1502,8 @@
       "git_object": "33213234f0544b6cbcc142ca896f8e6436771d54",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
     },
     {
       "path": "main/include/memory_policy.h",
@@ -1703,7 +1704,8 @@
       "git_object": "3ea92e000b16f4976cb26ef32d7fcd5c3da4f8cd",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
     },
     {
       "path": "main/main.c",
@@ -2662,7 +2664,8 @@
       "git_object": "72ad9d32622a6bc2d0ebc0963b48a2645abeed83",
       "group": "www",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
     },
     {
       "path": "www/c/lora.js",
@@ -2734,7 +2737,8 @@
       "git_object": "c402b19379981553d4d8c7fd99704b2f74b68dd0",
       "group": "www",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
     }
   ],
   "http_contracts": [

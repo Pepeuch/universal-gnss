@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "esp_err.h"
+#include "ug_service_events.hpp"
 #include "ug_service_health.hpp"
 namespace ug::embedded
 {
 void ExpectWorker(ServiceId, std::int64_t deadline_ns);
 void ObserveService(ServiceId, ServiceState, std::int32_t error = 0);
 ServiceHealthSnapshot ServiceHealths();
+ServiceEventSnapshot ServiceEvents();
 void ObserveBoot(ServiceId, ServiceState, std::int32_t, void*);
 // Each guard belongs to one task. Only that task feeds its own watchdog. No
 // watchdog timer/panic reconfiguration and no supervisor-triggered reboot.

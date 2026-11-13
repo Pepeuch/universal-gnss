@@ -87,7 +87,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -156,4 +156,10 @@ $('rollback').onclick = handle(async () => {
   if (prompt('Restaurer les réglages de la passerelle ? Les commandes déjà appliquées au GNSS ne seront pas annulées. Saisir ROLLBACK_CONFIGURATION. Identité admin et quarantaine conservées.') !== 'ROLLBACK_CONFIGURATION') return;
   show(await call('/api/config/rollback', {confirm:'ROLLBACK_CONFIGURATION', expected_generation:history.generation}));
   await load();
+});
+
+$('events-read').onclick = handle(async () => {
+  const generation = sessionGeneration, report = await call('/api/diagnostics/events');
+  if (generation !== sessionGeneration || !token) return;
+  $('events').textContent = print(report);
 });

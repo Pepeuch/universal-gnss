@@ -22,7 +22,7 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = () => 1, clearTimeout = () => {};
           class AbortController {constructor(){this.signal={};}abort(){}}
-          let hold_status = false, release_status, pressure = 'normal';
+          let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events;
           const confirm = () => true;
           const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
@@ -32,7 +32,10 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
-            const payload = path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+            if (hold_events && path === '/api/diagnostics/events') return new Promise(resolve => {
+              release_events = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"events":[{"private":"old-session"}]}'});
+            });
+            const payload = path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -79,6 +82,9 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(telemetry['rate_hz'], 5)
         self.assertEqual(telemetry['confirm'], 'APPLY_GNSS_TELEMETRY')
         self.assertEqual(telemetry['persistent_confirmation'], 'SAVE_RECEIVER_CONFIGURATION')
+        vm.eval("elements['events-read'].onclick();")
+        self.drain(vm)
+        self.assertIn('rtcm_router', vm.eval('elements.events.textContent'))
         vm.eval('elements.rollback.onclick();')
         self.drain(vm)
         rollback = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config/rollback').pop().options.body"))
@@ -103,9 +109,12 @@ class WebAssets(unittest.TestCase):
         vm.eval('refresh(); refresh();')
         self.drain(vm)
         self.assertEqual(vm.eval('calls.length'), before)
-        vm.eval('elements.logout.onclick(); release_status();')
+        vm.eval("hold_events=true; elements['events-read'].onclick();")
+        self.drain(vm)
+        vm.eval('elements.logout.onclick(); release_status(); release_events();')
         self.drain(vm)
         self.assertEqual(vm.eval('elements.receiver.textContent'), 'Session fermée')
+        self.assertEqual(vm.eval('elements.events.textContent'), 'Session fermée')
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')

@@ -144,3 +144,8 @@ target_include_directories(test_resource_policy PRIVATE ../../components/ug_supe
 target_compile_features(test_resource_policy PRIVATE cxx_std_17)
 target_compile_options(test_resource_policy PRIVATE -UNDEBUG)
 add_test(NAME embedded_resource_policy_contract COMMAND test_resource_policy)
+add_executable(test_service_events test_service_events.cpp)
+target_include_directories(test_service_events PRIVATE ../../components/ug_supervisor/include)
+target_compile_features(test_service_events PRIVATE cxx_std_17)
+target_compile_options(test_service_events PRIVATE -UNDEBUG)
+add_test(NAME embedded_service_events_contract COMMAND test_service_events)

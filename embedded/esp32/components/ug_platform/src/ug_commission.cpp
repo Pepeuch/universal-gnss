@@ -44,6 +44,26 @@ void Handle(std::string_view command)
     }
     ok = true;
   }
+  else if (command == "events")
+  {
+    const auto snapshot = ServiceEvents();
+    std::printf("UG_LOCAL events=%zu overwritten=%llu rejected=%llu (volatile this boot)\n",
+                snapshot.count,
+                static_cast<unsigned long long>(snapshot.overwritten),
+                static_cast<unsigned long long>(snapshot.rejected));
+    for (std::size_t i = 0; i < snapshot.count; ++i)
+    {
+      const auto& event = snapshot.events[i];
+      std::printf("UG_LOCAL seq=%llu uptime_ns=%lld service=%s state=%s kind=%s error=%ld\n",
+                  static_cast<unsigned long long>(event.sequence),
+                  static_cast<long long>(event.receipt_ns),
+                  ServiceName(event.service),
+                  ServiceStateName(event.state),
+                  ServiceEventName(event.kind),
+                  static_cast<long>(event.error));
+    }
+    ok = true;
+  }
   else if (command.substr(0, 9) == "rollback ")
     ok = RollbackConfiguration(command.substr(9), error);
   else if (command == "history")
@@ -85,7 +105,8 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected status/history, config/rollback/tls-init/tls-object <JSON> or reboot CONFIRM";
+    error = "expected status/history/events, config/rollback/tls-init/tls-object <JSON> or reboot "
+            "CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());
   std::fflush(stdout);
