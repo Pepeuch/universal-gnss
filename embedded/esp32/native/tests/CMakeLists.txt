@@ -79,7 +79,7 @@ add_executable(test_configuration test_configuration.cpp ../../components/ug_pla
 target_include_directories(test_configuration PRIVATE idf_stubs ../../components/ug_platform/include)
 target_compile_options(test_configuration PRIVATE -UNDEBUG)
 target_link_libraries(test_configuration PRIVATE ug_embedded_settings)
-foreach(scenario normal open-failure read-failure corrupt interrupted journal-corrupt)
+foreach(scenario normal open-failure read-failure corrupt interrupted journal-corrupt rollback)
     add_test(NAME embedded_configuration_${scenario} COMMAND test_configuration ${scenario})
 endforeach()
 add_library(ug_embedded_radio ../../components/espnow_rtcm/src/espnow_rtcm_codec.c

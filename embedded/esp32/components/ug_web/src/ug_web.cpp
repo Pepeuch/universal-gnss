@@ -144,7 +144,8 @@ esp_err_t Status(httpd_req_t* req)
   cJSON_AddNumberToObject(r, "tx_failures", radio.tx_failures);
   const auto services = ServiceHealths();
   const auto now = esp_timer_get_time() * 1000;
-  cJSON_AddBoolToObject(root.get(), "degraded", ServicesDegraded(services, now));
+  cJSON_AddBoolToObject(
+      root.get(), "degraded", ServicesDegraded(services, now) || !ConfigurationWritable());
   auto* health = cJSON_AddObjectToObject(root.get(), "services");
   if (!health)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
@@ -400,6 +401,19 @@ esp_err_t Get(httpd_req_t* req)
     return CapabilitiesReply(req);
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  if (uri == "/api/config/history")
+  {
+    const auto history = ConfigurationBanks();
+    JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+    if (!root)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddStringToObject(root.get(), "generation", std::to_string(history.generation).c_str());
+    cJSON_AddStringToObject(
+        root.get(), "previous_generation", std::to_string(history.previous_generation).c_str());
+    cJSON_AddBoolToObject(root.get(), "previous_available", history.previous_available);
+    cJSON_AddBoolToObject(root.get(), "writable", ConfigurationWritable());
+    return Json(req, root.get());
+  }
   if (uri == "/api/config" || uri == "/config" || uri == "/api/ntrip")
   {
     std::string json;
@@ -433,6 +447,16 @@ esp_err_t Post(httpd_req_t* req)
       return Fail(req, "409 Conflict", error.c_str());
     RestartNetworkServices();
     return Fail(req, "200 OK", "TLS object committed; connections restarting");
+  }
+  if (uri == "/api/config/rollback")
+  {
+    if (!RollbackConfiguration(body, error))
+      return Fail(req, "409 Conflict", error.c_str());
+    return Fail(
+        req,
+        "200 OK",
+        "previous gateway settings committed as a new generation; receiver commands are not "
+        "undone; admin identity and quarantine retained; boot-only changes require reboot");
   }
   if (uri == "/api/config" || uri == "/config")
   {

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_configuration.hpp"
 #include "nvs.h"
+#include "ug_json.hpp"
 #include "ug_settings_store.hpp"
 #include <atomic>
+#include <charconv>
+#include <cstring>
 #include <mutex>
 namespace ug::embedded
 {
@@ -106,6 +109,74 @@ bool PatchConfiguration(std::string_view json, std::string& error)
     return false;
   }
   std::atomic_store(&snapshot, std::move(replacement));
+  return true;
+}
+ConfigurationHistory ConfigurationBanks()
+{
+  std::lock_guard<std::mutex> lock(writer);
+  ConfigurationHistory history;
+  if (!store || !writable)
+    return history;
+  history.generation = store->generation();
+  Settings previous;
+  std::string error;
+  history.previous_available =
+      store->Previous(history.generation, previous, history.previous_generation, error);
+  if (!store->can_write())
+    writable = false;
+  return history;
+}
+bool RollbackConfiguration(std::string_view request, std::string& error)
+{
+  auto root = ParseBoundedObject(request, error);
+  if (!root)
+    return false;
+  error = "explicit rollback confirmation and decimal generation required";
+  if (!OnlyKeys(root.get(), {"confirm", "expected_generation"}))
+    return false;
+  const auto* confirm = cJSON_GetObjectItemCaseSensitive(root.get(), "confirm");
+  const auto* gen = cJSON_GetObjectItemCaseSensitive(root.get(), "expected_generation");
+  if (!cJSON_IsString(confirm) ||
+      std::strcmp(confirm->valuestring, "ROLLBACK_CONFIGURATION") != 0 || !cJSON_IsString(gen))
+    return false;
+  const std::string_view text(gen->valuestring);
+  std::uint64_t expected = 0;
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), expected);
+  if (text.empty() || parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() ||
+      !expected)
+    return false;
+  std::lock_guard<std::mutex> lock(writer);
+  if (!store || !writable)
+  {
+    error = "persistent configuration locked";
+    return false;
+  }
+  Settings next;
+  std::uint64_t previous_generation = 0;
+  if (!store->Previous(expected, next, previous_generation, error))
+  {
+    if (!store->can_write())
+      writable = false;
+    return false;
+  }
+  const auto current = Configuration();
+  if (!current || current->revision == UINT64_MAX)
+  {
+    error = "configuration revision exhausted";
+    return false;
+  }
+  // Recovery must not revive an old administrative credential. Receiver journal
+  // and HTTPS identity are separate and are never altered by configuration undo.
+  next.admin_token_sha256 = current->admin_token_sha256;
+  next.revision = current->revision + 1;
+  auto replacement = std::make_shared<const Settings>(next);
+  if (!store->Save(next, error))
+  {
+    writable = false;
+    return false;
+  }
+  std::atomic_store(&snapshot, std::move(replacement));
+  error.clear();
   return true;
 }
 bool ReceiverJournalBlocked()

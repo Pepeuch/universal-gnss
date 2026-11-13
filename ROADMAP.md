@@ -20,7 +20,9 @@ telemetry/signals and fresh F9P Survey-In reports are available;
 service supervision, degraded startup and bounded satellite-report diagnostics
 are implemented in the native profiles.
 Offline legacy JSON conversion now prepares a disabled, schema-validated candidate
-with an explicit review report. Remaining useful legacy features, device recovery,
+with an explicit review report. Explicit previous-bank settings restore now validates
+both banks and preserves admin identity and GNSS quarantine; it does not undo
+receiver commands. Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further

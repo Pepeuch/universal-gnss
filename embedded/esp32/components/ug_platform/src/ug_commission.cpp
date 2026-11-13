@@ -44,6 +44,18 @@ void Handle(std::string_view command)
     }
     ok = true;
   }
+  else if (command.substr(0, 9) == "rollback ")
+    ok = RollbackConfiguration(command.substr(9), error);
+  else if (command == "history")
+  {
+    const auto history = ConfigurationBanks();
+    std::printf("UG_LOCAL generation=%llu previous=%llu available=%d writable=%d\n",
+                static_cast<unsigned long long>(history.generation),
+                static_cast<unsigned long long>(history.previous_generation),
+                history.previous_available,
+                ConfigurationWritable());
+    ok = true;
+  }
   else if (command.substr(0, 7) == "config ")
     ok = PatchConfiguration(command.substr(7), error);
   else if (command.substr(0, 9) == "tls-init ")
@@ -73,7 +85,7 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected status, config/tls-init/tls-object <JSON> or reboot CONFIRM";
+    error = "expected status/history, config/rollback/tls-init/tls-object <JSON> or reboot CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());
   std::fflush(stdout);

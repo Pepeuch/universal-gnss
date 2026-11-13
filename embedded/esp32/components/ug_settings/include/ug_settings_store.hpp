@@ -26,6 +26,15 @@ public:
   // A malformed/incompatible record is preserved. One intact bank permits recovery.
   bool Load(Settings& out, std::string& error);
   bool Save(const Settings&, std::string& error);
+  // Read-only preparation. Validate the active bank too before offering an undo.
+  bool Previous(std::uint64_t expected_generation,
+                Settings& out,
+                std::uint64_t& previous_generation,
+                std::string& error);
+  bool can_write() const
+  {
+    return loaded_ && generation_ != UINT64_MAX;
+  }
   bool recovered() const
   {
     return recovered_;

@@ -19,6 +19,42 @@ void WriteLe(std::uint8_t* p, std::uint64_t value, unsigned n)
   for (unsigned i = 0; i < n; ++i)
     p[i] = static_cast<std::uint8_t>(value >> (8 * i));
 }
+enum class RecordStatus
+{
+  kInvalid,
+  kFutureSchema,
+  kValid
+};
+RecordStatus DecodeRecord(const std::vector<std::uint8_t>& record,
+                          const Capabilities& caps,
+                          Settings& out,
+                          std::uint64_t& generation,
+                          std::string& error)
+{
+  if (record.size() < 23 || record.size() > SettingsStore::kRecordLimit ||
+      std::memcmp(record.data(), "UGCF", 4) != 0)
+    return RecordStatus::kInvalid;
+  const auto crc = universal_gnss_protocols::ComputeRtcmCrc24Q(record.data(), record.size() - 3);
+  if (ReadLe(record.data() + record.size() - 3, 3) != crc)
+    return RecordStatus::kInvalid;
+  if (ReadLe(record.data() + 4, 4) != Settings::kSchema)
+  {
+    error = "persistent schema requires newer firmware or explicit migration";
+    return RecordStatus::kFutureSchema;
+  }
+  if (ReadLe(record.data() + 16, 4) != record.size() - 23)
+    return RecordStatus::kInvalid;
+  const auto gen = ReadLe(record.data() + 8, 8);
+  if (!gen)
+    return RecordStatus::kInvalid;
+  const std::string_view payload(reinterpret_cast<const char*>(record.data() + 20),
+                                 record.size() - 23);
+  if (payload.find("{\"schema\":1,") != 0 ||
+      !DecodeSettings(payload, DefaultSettings(caps), caps, out, error))
+    return RecordStatus::kInvalid;
+  generation = gen;
+  return RecordStatus::kValid;
+}
 }  // namespace
 SettingsStore::SettingsStore(SettingsStorage& storage, Capabilities caps)
     : storage_(storage), capabilities_(std::move(caps))
@@ -46,31 +82,12 @@ bool SettingsStore::Load(Settings& out, std::string& error)
     if (result == BlobRead::kMissing)
       continue;
     ++found;
-    if (record.size() < 23 || record.size() > kRecordLimit ||
-        std::memcmp(record.data(), "UGCF", 4) != 0)
-      continue;
-    const auto crc = universal_gnss_protocols::ComputeRtcmCrc24Q(record.data(), record.size() - 3);
-    if (ReadLe(record.data() + record.size() - 3, 3) != crc)
-      continue;
-    // Unknown schemas must never be silently overwritten by older firmware.
-    if (ReadLe(record.data() + 4, 4) != Settings::kSchema)
-    {
-      error = "persistent schema requires newer firmware or explicit migration";
+    const auto decoded =
+        DecodeRecord(record, capabilities_, candidates[slot], generations[slot], error);
+    if (decoded == RecordStatus::kFutureSchema)
       return false;
-    }
-    if (ReadLe(record.data() + 16, 4) != record.size() - 23)
+    if (decoded != RecordStatus::kValid)
       continue;
-    const auto generation = ReadLe(record.data() + 8, 8);
-    if (!generation)
-      continue;
-    const std::string_view payload(reinterpret_cast<const char*>(record.data() + 20),
-                                   record.size() - 23);
-    if (payload.find("{\"schema\":1,") != 0)
-      continue;  // Canonical complete snapshots, never partial patches.
-    if (!DecodeSettings(
-            payload, DefaultSettings(capabilities_), capabilities_, candidates[slot], error))
-      continue;
-    generations[slot] = generation;
     ++valid;
   }
   if (found && !valid)
@@ -94,6 +111,57 @@ bool SettingsStore::Load(Settings& out, std::string& error)
     out = DefaultSettings(capabilities_);
   recovered_ = valid < found;
   loaded_ = true;
+  error.clear();
+  return true;
+}
+bool SettingsStore::Previous(std::uint64_t expected,
+                             Settings& out,
+                             std::uint64_t& previous_generation,
+                             std::string& error)
+{
+  if (!loaded_ || !generation_ || expected != generation_)
+  {
+    error = "stale generation or no committed configuration";
+    return false;
+  }
+  Settings candidates[2];
+  std::uint64_t generations[2]{};
+  for (unsigned index = 0; index < 2; ++index)
+  {
+    const unsigned slot = index == 0 ? active_ : 1 - active_;
+    std::vector<std::uint8_t> record;
+    const auto read = storage_.Read(slot, record);
+    if (read == BlobRead::kError)
+    {
+      loaded_ = false;
+      error = "persistent storage read failed";
+      return false;
+    }
+    const auto decoded =
+        read == BlobRead::kFound
+            ? DecodeRecord(record, capabilities_, candidates[slot], generations[slot], error)
+            : RecordStatus::kInvalid;
+    if (decoded == RecordStatus::kFutureSchema)
+    {
+      loaded_ = false;
+      return false;
+    }
+    if (decoded != RecordStatus::kValid)
+    {
+      if (slot == active_)
+        loaded_ = false;
+      error = "no intact previous configuration or active bank changed";
+      return false;
+    }
+  }
+  if (generations[active_] != generation_ || generations[1 - active_] >= generation_)
+  {
+    loaded_ = false;
+    error = "persistent generations changed or ambiguous";
+    return false;
+  }
+  out = std::move(candidates[1 - active_]);
+  previous_generation = generations[1 - active_];
   error.clear();
   return true;
 }

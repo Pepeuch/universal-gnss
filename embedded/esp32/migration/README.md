@@ -25,7 +25,7 @@ Source audit, rather than README claims, determines the required behaviour:
 | Ethernet/Wi-Fi | W5500 fork, LAN8720, network events/captive AP | PARTIAL: official W5500 2.0.1, shared link ownership, boot-configured STA/AP; LAN8720 and physical validation remain open |
 | NTRIP | Legacy client, publishers, local caster, multislot supervisor, QoS | PARTIAL: actual UG NtripClient/TCP-TLS backend, five SOURCE-v1 publishers and bounded authenticated local caster; final runtime qualification/QoS remains open |
 | LoRa | Historical nonfunctional sketch | OPEN, deferred by maintainer: ESP-NOW first; no native LoRa activation or regional qualification |
-| Persistence | `config.c`, NVS and slot configuration | PARTIAL: strict schema1, dual banks, immutable snapshots and journal; legacy NVS import/recovery tools remain open |
+| Persistence | `config.c`, NVS and slot configuration | PARTIAL: strict schema1, dual banks, immutable snapshots and journal; offline legacy JSON conversion and guarded previous-bank restore available; on-device legacy NVS import remains open |
 | Web/API | `web_server.c`, `www/` and 37 explicit routes | PARTIAL: HTTPS configuration/status/BASE UI and bearer authentication; remaining useful historical operations still open |
 | OTA/board assistants/Mammotion | Inventory covers profiles, board headers, scripts and docs | OPEN: distinguish actual implementation from historical TODO; no image publication/flash |
 
@@ -632,3 +632,33 @@ Previously qualified Linux native tests remain 69/69; no portable source changed
 since that run. Native TLS concurrency/live heap, real receiver acceptance,
 watchdog reset behaviour, OTA/rollback and the official portal remain unqualified.
 The full migration therefore remains PARTIAL.
+
+
+## Explicit native settings rollback
+
+Authenticated `GET /api/config/history` exposes generation identifiers as decimal
+strings, availability and write-lock state; it exposes no previous secrets.
+`POST /api/config/rollback` requires exactly
+`{"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"3"}` with the
+currently inspected generation. The local console offers `history` and the same
+JSON through `rollback`. Stale requests, missing/invalid banks and ambiguous
+generations fail without a write. Both banks are CRC/schema-validated, active
+bank first, so a corrupted active bank cannot destroy the sole intact older bank.
+Unknown schemas or storage I/O errors lock further writes; nothing is erased.
+
+The previous settings are saved through the normal readback-verified path as a
+**new generation**, then published as an immutable snapshot under the same writer
+lock. Current administrative credentials, separate TLS objects/identity and the
+`gnss_dirty` journal survive. A failed commit leaves the current RAM snapshot
+intact and locks writes. This restores **gateway settings only**: it does not
+undo commands already executed by a receiver, restore its persistent BASE mode,
+clear quarantine or authorize recovery. Boot-only settings still need an explicit
+reboot. This is distinct from future firmware-image OTA rollback.
+
+Twenty-six native ASan/UBSan cases and the browser mock pass, including stale and
+numeric-generation rejection, active-bank corruption, admin/journal preservation,
+immutable readers and failed commit handling. S3 and C3 relay builds and native
+verifiers pass under C17/C++17. Applications, bootloaders and partition tables
+remain byte-identical between two build directories for both affected roles.
+The unchanged rover retains its previous proof. No hardware NVS/power-loss claim
+is made.

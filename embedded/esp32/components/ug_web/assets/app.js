@@ -133,3 +133,12 @@ $('detect').onclick = handle(async () => {
   if (!confirm('Relancer les interrogations de modèle en lecture seule ? Les corrections locales peuvent être interrompues brièvement. La quarantaine restera active.')) return;
   show(await call('/api/gnss/detect', {confirm: 'DETECT_RECEIVER'})); receiverPlans = null; await refresh();
 });
+
+$('rollback').onclick = handle(async () => {
+  const generation = sessionGeneration, history = await call('/api/config/history');
+  if (generation !== sessionGeneration || !token) return;
+  if (!history.writable || !history.previous_available) throw new Error('Aucune configuration précédente intacte disponible');
+  if (prompt('Restaurer les réglages de la passerelle ? Les commandes déjà appliquées au GNSS ne seront pas annulées. Saisir ROLLBACK_CONFIGURATION. Identité admin et quarantaine conservées.') !== 'ROLLBACK_CONFIGURATION') return;
+  show(await call('/api/config/rollback', {confirm:'ROLLBACK_CONFIGURATION', expected_generation:history.generation}));
+  await load();
+});

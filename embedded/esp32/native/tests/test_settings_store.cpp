@@ -84,4 +84,29 @@ int main()
   mem.read_error = true;
   SettingsStore io(mem, caps);
   assert(!io.Load(out, error));
+  Memory undo;
+  SettingsStore history(undo, caps);
+  assert(history.Load(out, error));
+  std::uint64_t old_generation = 0;
+  Settings old;
+  assert(!history.Previous(0, old, old_generation, error));
+  out.device_name = "undo-first";
+  assert(history.Save(out, error));
+  assert(!history.Previous(1, old, old_generation, error));
+  out.device_name = "undo-second";
+  assert(history.Save(out, error));
+  const auto latest_bank = undo.banks[1];
+  assert(!history.Previous(1, old, old_generation, error));
+  assert(history.Previous(2, old, old_generation, error) && old_generation == 1 &&
+         old.device_name == "undo-first");
+  assert(undo.banks[1] == latest_bank);  // Preparation is read-only.
+  assert(history.Save(old, error) && history.generation() == 3 && undo.banks[1] == latest_bank);
+  undo.banks[0].back() ^= 1;
+  assert(!history.Previous(3, old, old_generation, error) && !history.can_write());
+  assert(undo.banks[1] == latest_bank);  // Do not overwrite the sole intact bank.
+  SettingsStore after_fault(undo, caps);
+  assert(after_fault.Load(out, error) && out.device_name == "undo-second");
+  assert(!after_fault.Previous(2, old, old_generation, error));
+  undo.read_error = true;
+  assert(!after_fault.Previous(2, old, old_generation, error) && !after_fault.can_write());
 }

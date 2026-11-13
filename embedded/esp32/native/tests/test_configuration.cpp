@@ -84,6 +84,41 @@ int main(int argc, char** argv)
   assert(ug::embedded::ConfigurationWritable() == expected);
   if (expected)
   {
+    if (mode == "rollback")
+    {
+      using namespace ug::embedded;
+      const std::string first_hash(64, 'a'), current_hash(64, 'b');
+      assert(PatchConfiguration(
+          "{\"name\":\"first\",\"admin_token_sha256\":\"" + first_hash + "\"}", error));
+      assert(PatchConfiguration(R"({"name":"second"})", error));
+      assert(PatchConfiguration(
+          "{\"name\":\"third\",\"admin_token_sha256\":\"" + current_hash + "\"}", error));
+      assert(BeginReceiverJournal());
+      const auto immutable = Configuration();
+      const auto before_records = records;
+      const auto history = ConfigurationBanks();
+      assert(history.generation == 3 && history.previous_available &&
+             history.previous_generation == 2);
+      for (auto invalid :
+           {R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"2"})",
+            R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":3})",
+            R"({"confirm":"RESET","expected_generation":"3"})",
+            R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"18446744073709551616"})"})
+        assert(!RollbackConfiguration(invalid, error));
+      assert(records == before_records && Configuration()->device_name == "third");
+      assert(RollbackConfiguration(
+          R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"3"})", error));
+      assert(Configuration()->device_name == "second" && immutable->device_name == "third");
+      assert(Configuration()->admin_token_sha256 == current_hash && ReceiverJournalBlocked());
+      assert(records["gnss_dirty"] == std::vector<std::uint8_t>{1});
+      assert(ConfigurationBanks().generation == 4);
+      commit_fail = true;
+      assert(!RollbackConfiguration(
+          R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"4"})", error));
+      assert(Configuration()->device_name == "second" && !ConfigurationWritable() &&
+             ReceiverJournalBlocked());
+      return 0;
+    }
     assert(ug::embedded::PatchConfiguration(R"({"name":"updated"})", error));
     assert(snapshot->device_name == "ug-rtk");  // Immutable old readers remain valid.
     assert(ug::embedded::Configuration()->device_name == "updated");

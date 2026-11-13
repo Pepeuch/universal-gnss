@@ -9,6 +9,14 @@ std::shared_ptr<const Settings> Configuration();
 const Capabilities& BoardCapabilities();
 bool ConfigurationWritable();
 bool PatchConfiguration(std::string_view json, std::string& error);
+struct ConfigurationHistory
+{
+  std::uint64_t generation{}, previous_generation{};
+  bool previous_available{};
+};
+ConfigurationHistory ConfigurationBanks();
+// Gateway settings only: does not undo receiver commands or clear its journal.
+bool RollbackConfiguration(std::string_view request, std::string& error);
 // Journal must be committed before any receiver configuration is dispatched.
 // An interrupted/indeterminate transaction remains locked across MCU resets.
 bool ReceiverJournalBlocked();

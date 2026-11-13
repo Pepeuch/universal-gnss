@@ -24,7 +24,7 @@ class WebAssets(unittest.TestCase):
           class AbortController {constructor(){this.signal={};}abort(){}}
           let hold_status = false, release_status;
           const confirm = () => true;
-          const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : 'SAVE_RECEIVER_CONFIGURATION';
+          const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
@@ -32,7 +32,7 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
-            const payload = path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+            const payload = path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -79,6 +79,10 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(telemetry['rate_hz'], 5)
         self.assertEqual(telemetry['confirm'], 'APPLY_GNSS_TELEMETRY')
         self.assertEqual(telemetry['persistent_confirmation'], 'SAVE_RECEIVER_CONFIGURATION')
+        vm.eval('elements.rollback.onclick();')
+        self.drain(vm)
+        rollback = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config/rollback').pop().options.body"))
+        self.assertEqual(rollback, {'confirm':'ROLLBACK_CONFIGURATION', 'expected_generation':'3'})
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 1)
         vm.eval('hold_status=true; refresh();')
         self.drain(vm)
