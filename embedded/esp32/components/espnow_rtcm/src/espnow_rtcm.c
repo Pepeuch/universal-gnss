@@ -1,0 +1,385 @@
+/* Derived from esp32-rtk-gateway commit 7a1ec69f5e9d07522c0284ec2dbae380f72c7e85.
+ * GPL-3.0; see embedded/esp32/licenses/legacy-GPL-3.0.txt.
+ * UG adaptations retain the original protocol; provenance: migration/legacy_inventory.json.
+ */
+#include "espnow_rtcm.h"
+#include "sdkconfig.h"
+
+#if CONFIG_ESPNOW_RTCM_BASE || CONFIG_ESPNOW_RTCM_ROVER
+#include "driver/usb_serial_jtag.h"
+#include "esp_log.h"
+#include "esp_now.h"
+#include "esp_random.h"
+#include "esp_timer.h"
+#include "esp_wifi.h"
+#include "espnow_rtcm_codec.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include <stdio.h>
+#include <string.h>
+
+static espnow_rtcm_codec_t s_stream, s_radio;
+static espnow_rtcm_mailbox_t s_queue;
+static espnow_rtcm_message_t s_message; /* Worker-owned, not on the small task stack. */
+static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
+static TaskHandle_t s_worker;
+static uint8_t s_peer[6];
+#if CONFIG_ESPNOW_RTCM_BASE
+static SemaphoreHandle_t s_sent;
+static esp_now_send_status_t s_send_status;
+static bool s_tx_halted;
+#else
+static uint32_t s_usb_errors;
+#endif
+static bool s_started;
+static uint32_t s_dropped, s_invalid;
+
+static uint32_t now_ms(void)
+{
+  return (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+static bool queue_push(const uint8_t* data, size_t len)
+{
+  portENTER_CRITICAL(&s_lock);
+  bool ok = espnow_rtcm_mailbox_push(&s_queue, data, len, now_ms());
+  if (!ok)
+    ++s_dropped;
+  portEXIT_CRITICAL(&s_lock);
+  if (ok)
+    xTaskNotifyGive(s_worker);
+  return ok;
+}
+
+static bool queue_pop(void)
+{
+  portENTER_CRITICAL(&s_lock);
+  bool ok = espnow_rtcm_mailbox_pop(&s_queue, &s_message);
+  portEXIT_CRITICAL(&s_lock);
+  return ok;
+}
+
+#if CONFIG_ESPNOW_RTCM_BASE
+static void sent(const esp_now_send_info_t* info, esp_now_send_status_t status)
+{
+  (void)info;
+  s_send_status = status;
+  xSemaphoreGive(s_sent);
+}
+
+static esp_err_t send_fragment(const lora_transport_fragment_t* part, void* ctx)
+{
+  (void)ctx;
+  if (s_tx_halted)
+    return ESP_ERR_INVALID_STATE;
+  esp_err_t err = esp_now_send(s_peer, part->packet, part->packet_len);
+  if (err != ESP_OK)
+    return err;
+  if (xSemaphoreTake(s_sent, pdMS_TO_TICKS(200)) != pdTRUE)
+  {
+    /* A late callback must never acknowledge a different packet. Reboot to resume. */
+    s_tx_halted = true;
+    return ESP_ERR_TIMEOUT;
+  }
+  return s_send_status == ESP_NOW_SEND_SUCCESS ? ESP_OK : ESP_FAIL;
+}
+
+static esp_err_t enqueue_frame(const uint8_t* frame, size_t len, void* ctx)
+{
+  (void)ctx;
+  return queue_push(frame, len) ? ESP_OK : ESP_ERR_NO_MEM;
+}
+#else
+static void received(const esp_now_recv_info_t* info, const uint8_t* data, int len)
+{
+  if (!info || !data || len <= 0 || len > ESPNOW_RTCM_PACKET_SIZE ||
+      memcmp(info->src_addr, s_peer, sizeof(s_peer)))
+    return;
+  /* Wi-Fi callback only copies one bounded packet; never performs USB I/O. */
+  queue_push(data, (size_t)len);
+}
+
+static void usb_frame(const uint8_t* frame, size_t len)
+{
+  size_t offset = 0;
+  uint32_t start = now_ms();
+  while (offset < len && (uint32_t)(now_ms() - start) < 200)
+  {
+    int written = usb_serial_jtag_write_bytes(frame + offset, len - offset, pdMS_TO_TICKS(20));
+    if (written < 0)
+      break;
+    offset += (size_t)written;
+    if (!written)
+      vTaskDelay(1);
+  }
+  /* USB disconnect/stall can truncate a stream; no invented padding or logs. */
+  if (offset != len)
+    ++s_usb_errors;
+}
+#endif
+
+static void worker(void* arg)
+{
+  (void)arg;
+  for (;;)
+  {
+    ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+    while (queue_pop())
+    {
+      if ((uint32_t)(now_ms() - s_message.stamp_ms) > 1000)
+      {
+        ++s_dropped;
+        continue;
+      }
+#if CONFIG_ESPNOW_RTCM_BASE
+      if (espnow_rtcm_fragment(&s_radio, s_message.bytes, s_message.len, send_fragment, NULL) !=
+          ESP_OK)
+        ++s_invalid;
+#else
+      lora_transport_reassembly_result_t result;
+      if (espnow_rtcm_receive(&s_radio, s_message.bytes, s_message.len, now_ms(), &result) !=
+          ESP_OK)
+        ++s_invalid;
+      else if (result.complete)
+        usb_frame(result.frame, result.frame_len);
+#endif
+    }
+  }
+}
+
+esp_err_t espnow_rtcm_start(void)
+{
+  if (s_started)
+    return ESP_ERR_INVALID_STATE;
+  unsigned mac[6];
+  int end = 0;
+  if (sscanf(CONFIG_ESPNOW_RTCM_PEER_MAC,
+             "%2x:%2x:%2x:%2x:%2x:%2x%n",
+             &mac[0],
+             &mac[1],
+             &mac[2],
+             &mac[3],
+             &mac[4],
+             &mac[5],
+             &end) != 6 ||
+      CONFIG_ESPNOW_RTCM_PEER_MAC[end] != '\0')
+    return ESP_ERR_INVALID_ARG;
+  unsigned any = 0;
+  for (size_t i = 0; i < 6; ++i)
+  {
+    s_peer[i] = mac[i];
+    any |= mac[i];
+  }
+  if (!any || (s_peer[0] & 1))
+    return ESP_ERR_INVALID_ARG;
+  espnow_rtcm_codec_init(&s_stream);
+  espnow_rtcm_codec_init(&s_radio);
+  s_radio.transport.next_frame_seq = (uint16_t)esp_random();
+#if CONFIG_ESPNOW_RTCM_BASE
+  s_sent = xSemaphoreCreateBinary();
+  if (!s_sent)
+    return ESP_ERR_NO_MEM;
+#endif
+#if CONFIG_ESPNOW_RTCM_ROVER
+  usb_serial_jtag_driver_config_t usb = {.tx_buffer_size = 2048, .rx_buffer_size = 256};
+  esp_err_t err = usb_serial_jtag_driver_install(&usb);
+  if (err != ESP_OK)
+    return err;
+#else
+  esp_err_t err;
+#endif
+  wifi_init_config_t wifi = WIFI_INIT_CONFIG_DEFAULT();
+  if ((err = esp_wifi_init(&wifi)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_set_storage(WIFI_STORAGE_RAM)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_start()) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW20)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if ((err = esp_wifi_set_channel(CONFIG_ESPNOW_RTCM_CHANNEL, WIFI_SECOND_CHAN_NONE)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  uint8_t actual_channel = 0, sta_mac[6] = {0};
+  /* Initialize the output before reading and verifying the effective channel. */
+  wifi_second_chan_t secondary_channel = WIFI_SECOND_CHAN_NONE;
+  if ((err = esp_wifi_get_channel(&actual_channel, &secondary_channel)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+#if CONFIG_ESPNOW_RTCM_BASE
+  ESP_LOGI("ESP_NOW_RTCM",
+           "Channel requested %u, observed %u, secondary %u",
+           CONFIG_ESPNOW_RTCM_CHANNEL,
+           actual_channel,
+           secondary_channel);
+#endif
+  if (actual_channel != CONFIG_ESPNOW_RTCM_CHANNEL || secondary_channel != WIFI_SECOND_CHAN_NONE)
+    return ESP_ERR_INVALID_STATE;
+  if ((err = esp_wifi_get_mac(WIFI_IF_STA, sta_mac)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+#if CONFIG_ESPNOW_RTCM_BASE
+  /* BASE diagnostics only: the rover USB port remains a binary RTCM stream. */
+  ESP_LOGI("ESP_NOW_RTCM",
+           "STA %02x:%02x:%02x:%02x:%02x:%02x, channel %u, HT20",
+           sta_mac[0],
+           sta_mac[1],
+           sta_mac[2],
+           sta_mac[3],
+           sta_mac[4],
+           sta_mac[5],
+           actual_channel);
+#endif
+  if ((err = esp_now_init()) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  esp_now_peer_info_t peer = {
+      .channel = CONFIG_ESPNOW_RTCM_CHANNEL, .ifidx = WIFI_IF_STA, .encrypt = false};
+  memcpy(peer.peer_addr, s_peer, sizeof(s_peer));
+  if ((err = esp_now_add_peer(&peer)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+  if (xTaskCreate(worker, "espnow_rtcm", 4096, NULL, 4, &s_worker) != pdPASS)
+    return ESP_ERR_NO_MEM;
+#if CONFIG_ESPNOW_RTCM_BASE
+  if ((err = esp_now_register_send_cb(sent)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+#else
+  if ((err = esp_now_register_recv_cb(received)) != ESP_OK)
+  {
+#if CONFIG_ESPNOW_RTCM_BASE
+    ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
+#endif
+    return err;
+  }
+#endif
+  s_started = true;
+  return ESP_OK;
+}
+
+esp_err_t espnow_rtcm_send_frame(const uint8_t* frame, size_t len)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  if (!s_started || !espnow_rtcm_frame_valid(frame, len))
+    return ESP_ERR_INVALID_ARG;
+  return queue_push(frame, len) ? ESP_OK : ESP_ERR_NO_MEM;
+#else
+  (void)frame;
+  (void)len;
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+void espnow_rtcm_ntrip_reset(void)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  espnow_rtcm_stream_reset(&s_stream);
+  portENTER_CRITICAL(&s_lock);
+  s_queue.head = s_queue.count = 0;
+  portEXIT_CRITICAL(&s_lock);
+#endif
+}
+
+void espnow_rtcm_ntrip_response(bool icy)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  espnow_rtcm_ntrip_begin(&s_stream, icy);
+#else
+  (void)icy;
+#endif
+}
+
+void espnow_rtcm_ntrip_bytes(const uint8_t* data, size_t len)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  if (s_started)
+    (void)espnow_rtcm_ntrip_push(&s_stream, data, len, enqueue_frame, NULL);
+#else
+  (void)data;
+  (void)len;
+#endif
+}
+#else
+esp_err_t espnow_rtcm_start(void)
+{
+  return ESP_ERR_NOT_SUPPORTED;
+}
+esp_err_t espnow_rtcm_send_frame(const uint8_t* frame, size_t len)
+{
+  (void)frame;
+  (void)len;
+  return ESP_ERR_NOT_SUPPORTED;
+}
+void espnow_rtcm_ntrip_reset(void)
+{
+}
+void espnow_rtcm_ntrip_response(bool icy)
+{
+  (void)icy;
+}
+void espnow_rtcm_ntrip_bytes(const uint8_t* data, size_t len)
+{
+  (void)data;
+  (void)len;
+}
+#endif

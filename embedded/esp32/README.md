@@ -13,6 +13,11 @@ applications historiques complètes S3 Gateway/C3 Rover avec cette brique UG,
 dans un overlay externe transitoire ; les résultats, budgets et limites y sont
 séparés des preuves du premier commit décrites ci-dessous.
 
+La [reconstruction native complète](migration/README.md) est maintenant engagée,
+avec inventaire conservatoire et applications IDF 6.1 directement construites
+depuis UG. Les résultats ci-dessous restent ceux des lots RTCM précédents ; ils
+ne qualifient pas par anticipation les fonctionnalités du nouveau firmware.
+
 ## Périmètre implémenté
 
 `components/ug_rtcm` compile **le fichier UG existant**

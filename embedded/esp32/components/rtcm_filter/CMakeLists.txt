@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "src/rtcm_filter.c"
+        "src/rtcm_profiles.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        esp_timer
+        ug_rtcm
+)

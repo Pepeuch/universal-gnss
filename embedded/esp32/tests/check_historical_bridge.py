@@ -20,6 +20,8 @@ def run(*args, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--historical-repo', required=True)
+    parser.add_argument('--native-components', action='store_true',
+                        help='test the migrated UG radio/filter sources against pinned historical tests')
     args = parser.parse_args()
     sha = json.loads(REFERENCE.read_text())['commit']
     with tempfile.TemporaryDirectory(prefix='ug-espnow-crc-') as directory:
@@ -38,10 +40,11 @@ def main():
             obj = work / f'ug{index}.o'
             run('c++', '-std=c++17', *flags, *includes, '-c', str(cpp), '-o', str(obj))
             objects.append(str(obj))
-        includes += ['-I' + str(work / path) for path in (
-            'tests/host/stubs', 'components/espnow_rtcm/include',
+        component_root = EMBEDDED if args.native_components else work
+        includes += ['-I' + str(work / 'tests/host/stubs')]
+        includes += ['-I' + str(component_root / path) for path in ( 'components/espnow_rtcm/include',
             'components/lora_transport/include', 'components/rtcm_filter/include')]
-        sources = [str(work / path) for path in (
+        sources = [str(component_root / path) for path in (
             'components/espnow_rtcm/src/espnow_rtcm_codec.c',
             'components/lora_transport/src/lora_transport.c',
             'components/rtcm_filter/src/rtcm_filter.c',

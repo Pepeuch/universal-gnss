@@ -1,0 +1,2948 @@
+{
+  "reference": "7a1ec69f5e9d07522c0284ec2dbae380f72c7e85",
+  "nested_sx126x": "a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+  "classification_note": "Migration decision is not completion; OPEN until native equivalent is verified. REJECT build artifacts only, not historical features.",
+  "files": [
+    {
+      "path": ".github/FUNDING.yml",
+      "mode": "100644",
+      "git_object": "c5b57b395f2004758a64759e94b3b9546a30ef48",
+      "group": ".github",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": ".github/workflows/build-firmware-profiles.yml",
+      "mode": "100644",
+      "git_object": "4826d570dcebd4070feb2a059e3ca599174a132a",
+      "group": ".github",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": ".gitignore",
+      "mode": "100644",
+      "git_object": "76eaea99cf46d8fd76e31e2dca94f21326b1aa5c",
+      "group": ".gitignore",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": ".gitmodules",
+      "mode": "100644",
+      "git_object": "0a5686fb2775ec49891c23d55c0a55117722b6f2",
+      "group": ".gitmodules",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "a90365b5b62dfc88e1b7c49e224401752e47da66",
+      "group": "CMakeLists.txt",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "ESP32-S3-pinout.webp",
+      "mode": "100644",
+      "git_object": "7758c367ebecf64455ece134bd3c4cec62261411",
+      "group": "ESP32-S3-pinout.webp",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "ESP32S3POEPinout.png",
+      "mode": "100644",
+      "git_object": "0f423d2b2027b048af544849d65b76de26f0821f",
+      "group": "ESP32S3POEPinout.png",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "LICENSE",
+      "mode": "100644",
+      "git_object": "e72bfddabc15be5718a7cc061ac10e47741d8219",
+      "group": "LICENSE",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "git_object": "2a2b9c442f7f18bf25610f4104aed42e88b5c946",
+      "group": "README.md",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "TODO.md",
+      "mode": "100644",
+      "git_object": "fd566d168d4f69649120bca564ce36c33ce1e5bd",
+      "group": "TODO.md",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "buildflash.sh",
+      "mode": "100644",
+      "git_object": "107a41fa75a24611682db64bd4585d5e0695fda1",
+      "group": "buildflash.sh",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/board_config/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "4c1702692c29e68ef2ab06b3e432e0feeab19ebd",
+      "group": "components/board_config",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/board_config/include/board_pins.h",
+      "mode": "100644",
+      "git_object": "447dd82f863250b9e15db853ae22ef405ee4fcbd",
+      "group": "components/board_config",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/board_config/include/gpio_isr_helper.h",
+      "mode": "100644",
+      "git_object": "6d2493a57c6ae74373033d7165ef8b7df6ca3709",
+      "group": "components/board_config",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/board_config/src/gpio_isr_helper.c",
+      "mode": "100644",
+      "git_object": "2f8200f1e19f4bb7c6ea17d718f924b04037fe6b",
+      "group": "components/board_config",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/duty_cycle/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "55043e3c2969d5c1edcea8531783d0104add5ca7",
+      "group": "components/duty_cycle",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/duty_cycle/include/duty_cycle.h",
+      "mode": "100644",
+      "git_object": "22c39c490c4c5f1d9271b68907d5f025f8ac49c3",
+      "group": "components/duty_cycle",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/duty_cycle/src/duty_cycle.c",
+      "mode": "100644",
+      "git_object": "70e750bcc2bd2067d159ecef7510a03f7f724fc3",
+      "group": "components/duty_cycle",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/espnow_rtcm/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "749d0c3c4327d206f8c3dd7ab88dff5b86d20408",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/CMakeLists.txt"
+    },
+    {
+      "path": "components/espnow_rtcm/Kconfig",
+      "mode": "100644",
+      "git_object": "c5c4750cb5c4daecd1cd5d3163cfa0b758314ab1",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/Kconfig"
+    },
+    {
+      "path": "components/espnow_rtcm/include/espnow_rtcm.h",
+      "mode": "100644",
+      "git_object": "fe712b43d2efb23316e4bf4816174d222cc72a41",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/include/espnow_rtcm.h"
+    },
+    {
+      "path": "components/espnow_rtcm/include/espnow_rtcm_codec.h",
+      "mode": "100644",
+      "git_object": "afc266c29c5ca4484d7a896e4f07916bcc3a8a9a",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/include/espnow_rtcm_codec.h"
+    },
+    {
+      "path": "components/espnow_rtcm/src/espnow_rtcm.c",
+      "mode": "100644",
+      "git_object": "1ffd8f49830b9779caa7732ddb8b6fe7d2defdac",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/src/espnow_rtcm.c"
+    },
+    {
+      "path": "components/espnow_rtcm/src/espnow_rtcm_codec.c",
+      "mode": "100644",
+      "git_object": "29a307ae05f2cd51e4785ba0dfaed59b0f3af7ea",
+      "group": "components/espnow_rtcm",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/espnow_rtcm/src/espnow_rtcm_codec.c"
+    },
+    {
+      "path": "components/lora_radio/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "6519ddcfcb345db8208071e4119958279b41956f",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/Kconfig.projbuild",
+      "mode": "100644",
+      "git_object": "3228f57b478bfdfba416770590f7a419f9483a64",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/include/lora_radio.h",
+      "mode": "100644",
+      "git_object": "d8625079de0512a567ab380b35a471a6299f7d07",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/include/lora_region.h",
+      "mode": "100644",
+      "git_object": "0b94527e49e85500f4b0eb24298eac3dc43a62a8",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/src/lora_radio.c",
+      "mode": "100644",
+      "git_object": "02b56f48b1e12efa120bce6b137e2540c6a0c1a2",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/src/lora_radio_config.h",
+      "mode": "100644",
+      "git_object": "7e14486031c78d9d6d5ecc70da11f543679be110",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_radio/src/lora_region_profiles.c",
+      "mode": "100644",
+      "git_object": "2a60868b8b3604eef5b1b23245770d9768a5fa86",
+      "group": "components/lora_radio",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/lora_transport/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "d07403fbeec0e647419d31e4cd0ebeb291f98571",
+      "group": "components/lora_transport",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/lora_transport/CMakeLists.txt"
+    },
+    {
+      "path": "components/lora_transport/include/lora_transport.h",
+      "mode": "100644",
+      "git_object": "df0a01a95072be77c0a94c7b8af96c6ea9cf7e41",
+      "group": "components/lora_transport",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/lora_transport/include/lora_transport.h"
+    },
+    {
+      "path": "components/lora_transport/src/lora_transport.c",
+      "mode": "100644",
+      "git_object": "2ac1278eaac0749ad679040c18b1839104a946f3",
+      "group": "components/lora_transport",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/lora_transport/src/lora_transport.c"
+    },
+    {
+      "path": "components/rover_lora_pipeline/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "a5d42bae5f3d16e0b465edbce399d0844a86abe4",
+      "group": "components/rover_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/rover_lora_pipeline/include/rover_lora_pipeline.h",
+      "mode": "100644",
+      "git_object": "3f042027977bd2e794dbdb186bf60529668c54a5",
+      "group": "components/rover_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/rover_lora_pipeline/src/rover_lora_pipeline.c",
+      "mode": "100644",
+      "git_object": "7d3f7d075996ac8b9b3acd801f45516838a7cfcd",
+      "group": "components/rover_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/rtcm_filter/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "0164dbd13a8d205b2c82d21f5fe3c9201abd570e",
+      "group": "components/rtcm_filter",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/rtcm_filter/CMakeLists.txt"
+    },
+    {
+      "path": "components/rtcm_filter/include/rtcm_filter.h",
+      "mode": "100644",
+      "git_object": "20a032e237283ce2f4c82ecad30d3e6193429bd3",
+      "group": "components/rtcm_filter",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/rtcm_filter/include/rtcm_filter.h"
+    },
+    {
+      "path": "components/rtcm_filter/include/rtcm_profiles.h",
+      "mode": "100644",
+      "git_object": "97c15d9e63ffbc0f7f61d77ef8d314c13ed9c4cd",
+      "group": "components/rtcm_filter",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/rtcm_filter/include/rtcm_profiles.h"
+    },
+    {
+      "path": "components/rtcm_filter/src/rtcm_filter.c",
+      "mode": "100644",
+      "git_object": "2d9f7c8cc4df399ed371df2943932714bf34081a",
+      "group": "components/rtcm_filter",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/rtcm_filter/src/rtcm_filter.c"
+    },
+    {
+      "path": "components/rtcm_filter/src/rtcm_profiles.c",
+      "mode": "100644",
+      "git_object": "a74106e918c4b1b13efeb1a86c608ebb220d2244",
+      "group": "components/rtcm_filter",
+      "decision": "ADAPT",
+      "status": "IMPLEMENTED",
+      "validation": "HARDWARE_PENDING",
+      "native_path": "embedded/esp32/components/rtcm_filter/src/rtcm_profiles.c"
+    },
+    {
+      "path": "components/rtk_lora_pipeline/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "a694511bd45d503b823f1998dafcf64796bcc543",
+      "group": "components/rtk_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/rtk_lora_pipeline/include/rtk_lora_pipeline.h",
+      "mode": "100644",
+      "git_object": "4b75b8f5627fd9e3234c8a2c87446389bc9087c6",
+      "group": "components/rtk_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/rtk_lora_pipeline/src/rtk_lora_pipeline.c",
+      "mode": "100644",
+      "git_object": "2e0e09f22a5ceb0ec2257cf98543ab7cd9fed6e8",
+      "group": "components/rtk_lora_pipeline",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/sx126x_driver/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "e5d9b3555b47cccb3a1fee0cab9c11cd21b9db2d",
+      "group": "components/sx126x_driver",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/CHANGELOG.md",
+      "mode": "100644",
+      "git_object": "34484119c0bfade89cfc4e44ca635059234dd754",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "dde15bbd359c79719bec483b8468860c198b5fe3",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/LICENSE",
+      "mode": "100644",
+      "git_object": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/README.md",
+      "mode": "100644",
+      "git_object": "3757e77634d812704dd22b55183600a36c282402",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/idf_component.yml",
+      "mode": "100644",
+      "git_object": "332599f8d94d619123cd693115e010554e7ef9af",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/include/esp_eth_mac_w5500.h",
+      "mode": "100644",
+      "git_object": "ce2902d98868171fcc3ed7a0f67efc05a865beb3",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/include/esp_eth_phy_w5500.h",
+      "mode": "100644",
+      "git_object": "05e04f8c0a34e33e30dd33f42bb75ca567d4339a",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/src/esp_eth_mac_w5500.c",
+      "mode": "100644",
+      "git_object": "5342253608d8e26732d9d59cd52f6d04a37bc180",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/src/esp_eth_phy_w5500.c",
+      "mode": "100644",
+      "git_object": "62bcb4d133365accb7baf00b110a6dd3132e10f0",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "components/w5500/src/w5500.h",
+      "mode": "100644",
+      "git_object": "ac5013f2108660c30ce90b5fbaf5472f48495bdb",
+      "group": "components/w5500",
+      "decision": "SUPERSEDED",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/profiles/generic_esp32_eth-base-eu868-ublox-none-lan8720-4mb-none.json",
+      "mode": "100644",
+      "git_object": "badfd768e147cef692b080d87aabe882e6950c92",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/profiles/mammotion_esp32s3_rtk-base-eu868-unicore-llcc68-none-8mb-none.json",
+      "mode": "100644",
+      "git_object": "82fe156f6c0ecb0f66efb3a158eb3de991fbe570",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/profiles/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "c53e8a51ce84ea3f8b741b76b201d02b01560e63",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/profiles/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "5518baf5962caa33559015e55cc721d8e111a1ef",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/profiles/waveshare_esp32s3_eth-rover-eu868-unicore-sx1262-none-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "f70aadfd2d42c3f1e89f97c5bb78b449491102a8",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.board_generic_esp32_eth.defaults",
+      "mode": "100644",
+      "git_object": "51c4eb9b8abcb1b369dac528b1a1495e3f84abde",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.board_mammotion_esp32s3_rtk.defaults",
+      "mode": "100644",
+      "git_object": "ceaa85ddcae496e4124fd6d0ba21b21087637e96",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.board_waveshare_esp32s3_eth.defaults",
+      "mode": "100644",
+      "git_object": "e2cc01ea3cabf0826b99c09223386d2033986e2b",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.common.defaults",
+      "mode": "100644",
+      "git_object": "56bd3396db9d66db097b106c9f94609b439025e5",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.esp32.defaults",
+      "mode": "100644",
+      "git_object": "8632f5507a327ce21f9bf633098e533212f1dd04",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.esp32s3.defaults",
+      "mode": "100644",
+      "git_object": "1d04772de3472f0202ae7636283e9b91098a6a2d",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.espnow_base.defaults",
+      "mode": "100644",
+      "git_object": "8ec0b7d4ea0b1cebce1d55fa94c5a9712eb20b9f",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.eth_lan8720.defaults",
+      "mode": "100644",
+      "git_object": "26abf3cca6a506dfcbd7966b698d0b88cb1e0f35",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.eth_none.defaults",
+      "mode": "100644",
+      "git_object": "f821b3975dc3e9aa078ca82bc6a14695590e4012",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.eth_w5500.defaults",
+      "mode": "100644",
+      "git_object": "6084f2fe77bd3296f40eb715005bdf1bde4c3f66",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.flash_16mb.defaults",
+      "mode": "100644",
+      "git_object": "d68980e07e77ef5ede38dfe962899eda0b0ba700",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.flash_4mb.defaults",
+      "mode": "100644",
+      "git_object": "084d1c24073a0a17bcd3bf224d7eea735b843dcd",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.flash_8mb.defaults",
+      "mode": "100644",
+      "git_object": "6c73965bcc3d1053337b9dcf15c5d2b12942d01d",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.gnss_nmea.defaults",
+      "mode": "100644",
+      "git_object": "c5671a082ad71a36a83ff3025f02b48dcb852dc8",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.gnss_septentrio.defaults",
+      "mode": "100644",
+      "git_object": "24c6cd02cf982cf8b8967028de51e755d3e224c6",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.gnss_ublox.defaults",
+      "mode": "100644",
+      "git_object": "ef69c3e82a2ee07faca12d22f1c5afee18acd6fd",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.gnss_unicore.defaults",
+      "mode": "100644",
+      "git_object": "f4dfd5a89b37cdd99f3e8cfd837a924c1912eee3",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_driver_none.defaults",
+      "mode": "100644",
+      "git_object": "603908a39a7ffdd9bc1b7766d7fb4674ed3909b0",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_driver_sx126x.defaults",
+      "mode": "100644",
+      "git_object": "c9b86ecef323c3b43f77a2ae4a86d34cce4e8844",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_llcc68.defaults",
+      "mode": "100644",
+      "git_object": "cec18b64d22b7779186c2cd949bf58f4900103e8",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_none.defaults",
+      "mode": "100644",
+      "git_object": "ac821d90ce8c164c59b16c3c0fbfda87d322b1d3",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_sx1262.defaults",
+      "mode": "100644",
+      "git_object": "544748c992fcbe5fe438c724ea717788ac625983",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.lora_sx1268.defaults",
+      "mode": "100644",
+      "git_object": "87bffebde81bc0844a0ce91382334c9a1fe672c1",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.psram_4mb.defaults",
+      "mode": "100644",
+      "git_object": "23b1db0384ffa40be8293e5c4c646efec69d7559",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.psram_8mb.defaults",
+      "mode": "100644",
+      "git_object": "4b91f2c386eb68f22c139bc3ee130e99e9dec6a0",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.psram_none.defaults",
+      "mode": "100644",
+      "git_object": "41ca5a84fd649c2185b533c02ac82e3d612b8f56",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.region_as923.defaults",
+      "mode": "100644",
+      "git_object": "a006bd4547ce456158d772a2e61e81211a5391ed",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.region_au915.defaults",
+      "mode": "100644",
+      "git_object": "720bd76bd4d580ab3b4fee2ef8994f0748dbc282",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.region_custom.defaults",
+      "mode": "100644",
+      "git_object": "6767c46b6e60da9ece359cd6f22158173d642577",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.region_eu868.defaults",
+      "mode": "100644",
+      "git_object": "4f73af12eae2d8a394e2c35f3e3a7387776e8d82",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.region_us915.defaults",
+      "mode": "100644",
+      "git_object": "a625af1019436daeb4d85e9aaa3f9b77a3d61d3b",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.role_base.defaults",
+      "mode": "100644",
+      "git_object": "83048541fa68c19577e5519e428094e325aa8875",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.role_dual_debug.defaults",
+      "mode": "100644",
+      "git_object": "99bf277b4a01246cccfb7616325189c8f7b18cfd",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "configs/templates/sdkconfig.role_rover.defaults",
+      "mode": "100644",
+      "git_object": "7769bbff96ec082ee7554b091c9d7c8a80daa980",
+      "group": "configs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "dependencies.lock",
+      "mode": "100644",
+      "git_object": "57b7be9cadb1fe844dbd2ee45528d35209826049",
+      "group": "dependencies.lock",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/espnow-hardware-tests.md",
+      "mode": "100644",
+      "git_object": "886d611469e85bbc0c5df5b68b4ed32fad8349cc",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/espnow-rtcm-usb.md",
+      "mode": "100644",
+      "git_object": "24ed7526aa2349c01123cd5c5a10c3b6bab21d79",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/bootloader.bin",
+      "mode": "100644",
+      "git_object": "ab82fd39e9d40337f2ba4bca6d0b7f3615486db3",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/esp32-rtk-gateway.bin",
+      "mode": "100644",
+      "git_object": "5b3be663140508e22d79cef5072787a83f72e9ca",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/ota_data_initial.bin",
+      "mode": "100644",
+      "git_object": "b4033a70859495e76028b6ef104256ff854ea609",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/partition-table.bin",
+      "mode": "100644",
+      "git_object": "1d70441e515d1729b52d45350337309c015bb6c6",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/profile.json",
+      "mode": "100644",
+      "git_object": "c53e8a51ce84ea3f8b741b76b201d02b01560e63",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb/www.bin",
+      "mode": "100644",
+      "git_object": "260627d6c64a29cffb9c3c09296adc0a8da95894",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/bootloader.bin",
+      "mode": "100644",
+      "git_object": "c2a9d4caf961e8dd9d5fa9c07154978e42060a4e",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/esp32-rtk-gateway.bin",
+      "mode": "100644",
+      "git_object": "591225592f846a0a78e07247be514b2c33551d02",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/ota_data_initial.bin",
+      "mode": "100644",
+      "git_object": "b4033a70859495e76028b6ef104256ff854ea609",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/partition-table.bin",
+      "mode": "100644",
+      "git_object": "1d70441e515d1729b52d45350337309c015bb6c6",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/profile.json",
+      "mode": "100644",
+      "git_object": "8e6b354a387f70aab9566e81697964dd3df0bca0",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb/www.bin",
+      "mode": "100644",
+      "git_object": "4e87dc5a9e362ab55cbf15df84fdf2d557e5397c",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/bootloader.bin",
+      "mode": "100644",
+      "git_object": "28d8c378ad1551b31fbd3b53de1aa35544e7f54e",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/esp32-rtk-gateway.bin",
+      "mode": "100644",
+      "git_object": "44d1c945a5fc56fe3f04239a48d207d2b6603794",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/ota_data_initial.bin",
+      "mode": "100644",
+      "git_object": "b4033a70859495e76028b6ef104256ff854ea609",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/partition-table.bin",
+      "mode": "100644",
+      "git_object": "1d70441e515d1729b52d45350337309c015bb6c6",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/profile.json",
+      "mode": "100644",
+      "git_object": "f18d07a4ec77dc486ac0f2d8ca54196e54744f04",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb/www.bin",
+      "mode": "100644",
+      "git_object": "9f4cd0ffe82f9ea990bfd30542bfc50c04c546f2",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/bootloader.bin",
+      "mode": "100644",
+      "git_object": "0c0bcb0c68a0acc3711e4102f2dd9ca0e08bc158",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/esp32-rtk-gateway.bin",
+      "mode": "100644",
+      "git_object": "5c7bdf668d9e54fda3139e24da5da76cb52e81b8",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/ota_data_initial.bin",
+      "mode": "100644",
+      "git_object": "b4033a70859495e76028b6ef104256ff854ea609",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/partition-table.bin",
+      "mode": "100644",
+      "git_object": "1d70441e515d1729b52d45350337309c015bb6c6",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/profile.json",
+      "mode": "100644",
+      "git_object": "5518baf5962caa33559015e55cc721d8e111a1ef",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb/www.bin",
+      "mode": "100644",
+      "git_object": "260627d6c64a29cffb9c3c09296adc0a8da95894",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/bootloader.bin",
+      "mode": "100644",
+      "git_object": "13fd768a4d92a93fec9f57780bf36ac259a2abf4",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/esp32-rtk-gateway.bin",
+      "mode": "100644",
+      "git_object": "cb8d140178de4d9aee2c33ea03dbf26db186bab1",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/ota_data_initial.bin",
+      "mode": "100644",
+      "git_object": "b4033a70859495e76028b6ef104256ff854ea609",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/partition-table.bin",
+      "mode": "100644",
+      "git_object": "1d70441e515d1729b52d45350337309c015bb6c6",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/profile.json",
+      "mode": "100644",
+      "git_object": "0c217eabeea87810c2d9728a91a577a62bc0ec29",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/firmware/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb/www.bin",
+      "mode": "100644",
+      "git_object": "4e87dc5a9e362ab55cbf15df84fdf2d557e5397c",
+      "group": "docs",
+      "decision": "REJECT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/flasher.html",
+      "mode": "100644",
+      "git_object": "da614d5e6de59cf6d5670af27b8dfa2c820da1d5",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-ublox-sx1262-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "161ae647480c7d1c78c65927f383b9f052063622",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "f8425fe96de0d72149603fdef56193dbf1a6a46a",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-ublox-sx126x-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "ebabfdb6ddb9d96357c197fd64314b7b8a94994f",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-unicore-none-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "d03e44880d718ae9c928ecebd57accaeb871f7a1",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-unicore-sx1262-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "8bafe514f88496057ec15f2ac10e65633065fcd7",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/manifests/waveshare_esp32s3_eth-base-eu868-unicore-sx126x-w5500-16mb-8mb.json",
+      "mode": "100644",
+      "git_object": "e7f759176edc905e04c484fdd1f542b3e4f74690",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "docs/webui_audit.md",
+      "mode": "100644",
+      "git_object": "00b5549e1f4430341d85a52b8cc27c6a44b4d3a0",
+      "group": "docs",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "esp32s3ethfull.jpg",
+      "mode": "100644",
+      "git_object": "92e913499944e8d742b6863cadb2c6b3ee30c347",
+      "group": "esp32s3ethfull.jpg",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "external/sx126x_driver",
+      "mode": "160000",
+      "git_object": "a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+      "group": "external",
+      "decision": "PORT",
+      "status": "OPEN"
+    },
+    {
+      "path": "firmware/espnow_rover/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "7e7d41c2158bea89ae48d148dbba69f8d935a1e5",
+      "group": "firmware",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "firmware/espnow_rover/main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "f5d5897bccb99694442eb32dfe93dfd9777d4285",
+      "group": "firmware",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "firmware/espnow_rover/main/rover.c",
+      "mode": "100644",
+      "git_object": "b529ae46d4561ec135cbc823768bb0a97e9f488e",
+      "group": "firmware",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "firmware/espnow_rover/sdkconfig.defaults",
+      "mode": "100644",
+      "git_object": "05cd002648d84d4e98e1276c9442dda45a235f50",
+      "group": "firmware",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "0185ab48b90b6b7d1976dc547ae298dc7a0de3be",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/Kconfig.projbuild",
+      "mode": "100644",
+      "git_object": "475082c90350ca521317d130dd052f81e6c20194",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/capabilities.c",
+      "mode": "100644",
+      "git_object": "29fe96692c6bdd10491dabfd68aa374344bba14c",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/captive_portal.c",
+      "mode": "100644",
+      "git_object": "5ead89254f9dec341a00fe0ce98a13c7a4e90ee6",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/component.mk",
+      "mode": "100644",
+      "git_object": "0b9d7585e76877a6b3e3a3c81197a0ad8147b3df",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config.c",
+      "mode": "100644",
+      "git_object": "59909d1c476c15d0be408563e02fa81c1077d787",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/board_caps.h",
+      "mode": "100644",
+      "git_object": "728a04b3262b29f25418ba18a014d0005bcecaa1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/board_config.h",
+      "mode": "100644",
+      "git_object": "e6680a31e65125216b08cd94540aad5b683aa46a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_generic_esp32.h",
+      "mode": "100644",
+      "git_object": "0780deeaf5de7c4555f7d918e40b234605a037f1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_generic_esp32_eth.h",
+      "mode": "100644",
+      "git_object": "ae15e76bcbdbf6d37d5b6cf4b0153f7fddb39bd3",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_generic_esp32c3.h",
+      "mode": "100644",
+      "git_object": "b0c3b727f4dd340ba8b7d0ef2b2413623d81c8c3",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_generic_esp32c6.h",
+      "mode": "100644",
+      "git_object": "45ced57a3030f74f2d2aa50a20c3020f1f7ec6f4",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_mammotion_esp32s3_rtk.h",
+      "mode": "100644",
+      "git_object": "9fc395d7edc30f0959d77a2d56d979d0339cd326",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/boards/board_waveshare_esp32s3_eth.h",
+      "mode": "100644",
+      "git_object": "06680dc2849ab60ccddf15824476eac416a0ff94",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/targets/target_esp32.h",
+      "mode": "100644",
+      "git_object": "727488454596f44dd9979d5384a082a55281445b",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/targets/target_esp32c3.h",
+      "mode": "100644",
+      "git_object": "29cac9e7183b8501637e244810c1547f9b6d59cf",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/targets/target_esp32c6.h",
+      "mode": "100644",
+      "git_object": "e68aedb2172683cdfa9f35a4c41b84c45c3fb448",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/config/targets/target_esp32s3.h",
+      "mode": "100644",
+      "git_object": "ae7adbba11b6face360e65326821ed5c611ca25c",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/core_dump.c",
+      "mode": "100644",
+      "git_object": "e8f9bc95ceba46c2570e54da91f1a42d2ec8725a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ethernet/eth_lan8720.c",
+      "mode": "100644",
+      "git_object": "650b7f64c3e5ed4d17536b1128a1418ad337642b",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ethernet/eth_lan8720.h",
+      "mode": "100644",
+      "git_object": "b8870f9ae1f04f19dcec7d4bd7b512e41d4d8c29",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ethernet/eth_w5500.c",
+      "mode": "100644",
+      "git_object": "f847d966ad9a2a6b3a8edfefebe495a634d47164",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ethernet/eth_w5500.h",
+      "mode": "100644",
+      "git_object": "1c5964d000d4e5bea9b4b1fa3e1c126af80a69b0",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/idf_component.yml",
+      "mode": "100644",
+      "git_object": "b6e2a55136bb74673d218f2e9408c075e1f8ce45",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/capabilities.h",
+      "mode": "100644",
+      "git_object": "6eb70c897377131006d761ce819e18901f5cc6c1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/captive_portal.h",
+      "mode": "100644",
+      "git_object": "17a789d7eb38b25f75405a74940f03585d84b003",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/config.h",
+      "mode": "100644",
+      "git_object": "222aaf80e32afd7d3e63bc52b7bdbe2e141c59a1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/core_dump.h",
+      "mode": "100644",
+      "git_object": "c384b6c8932d07209160f71203d247e5ab9fa01c",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/esp_netif.h",
+      "mode": "100644",
+      "git_object": "92c937c129433af5f31c20f4f2da0600e797193d",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_defaults.h",
+      "mode": "100644",
+      "git_object": "da01500db1cf9ca58634824973d2f95bcf7bee28",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_ip_addr.h",
+      "mode": "100644",
+      "git_object": "a1542459ca183fc5deaf9e62a8f1f047a5bb2b8a",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_net_stack.h",
+      "mode": "100644",
+      "git_object": "ab6d6a07fdc53a6a453f1503da0a5e88ae490c45",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_ppp.h",
+      "mode": "100644",
+      "git_object": "413910c4331c260f09f53cdf8a4b61f8113aac4b",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_slip.h",
+      "mode": "100644",
+      "git_object": "5cad14ea284170339d190c1c7975437ca095d357",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_sta_list.h",
+      "mode": "100644",
+      "git_object": "d464132ace8864649bc116ef81801331a09e746d",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_netif_types.h",
+      "mode": "100644",
+      "git_object": "9359025e354724be8f9fd6425116f4546e6aa35f",
+      "group": "main",
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers only; no copied SDK headers in native firmware"
+    },
+    {
+      "path": "main/include/esp_ota_ops.hold",
+      "mode": "100644",
+      "git_object": "c5e1729e913d8d9281a90714cabaf96258d39f6c",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/interface/ntrip.h",
+      "mode": "100644",
+      "git_object": "9c6ebfcc0f3446edbb25f7ca0bc599ead4ba5eea",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/interface/socket_client.h",
+      "mode": "100644",
+      "git_object": "71e970c66ce73dc838404d2068522404b553fb93",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/interface/socket_server.h",
+      "mode": "100644",
+      "git_object": "aa0a49f5f9a65e68718d41a69128d937f772c014",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/log.h",
+      "mode": "100644",
+      "git_object": "33213234f0544b6cbcc142ca896f8e6436771d54",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/memory_policy.h",
+      "mode": "100644",
+      "git_object": "5ce11f9a889931577ca94455759766a485430cea",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/network.h",
+      "mode": "100644",
+      "git_object": "55828cb77a1e988745d735e7ec16eb43ea614b4d",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/network_ethernet.h",
+      "mode": "100644",
+      "git_object": "8c6967fef3b7fd018a3b7029db58bbd0d30f34fa",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/network_state.h",
+      "mode": "100644",
+      "git_object": "80707c7a7d2e2d506dac04adcff00cfe533b375a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/ntrip_runtime.h",
+      "mode": "100644",
+      "git_object": "6b267103e82f2db9ad7adcfa5d2c889625989b2a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/ntrip_slots.h",
+      "mode": "100644",
+      "git_object": "2a2576bd5755a292fcec5cb7261232bb418e0166",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/protocol/nmea.h",
+      "mode": "100644",
+      "git_object": "ca5ddcca0a909b5265375354a85afac2c13cf9be",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/receiver.h",
+      "mode": "100644",
+      "git_object": "804c5bf8ccf04d3eadf4217f296c252b116b36cc",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/receiver_types.h",
+      "mode": "100644",
+      "git_object": "b55475d1b7c0be41f841927befe207ffdb65988a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/retry.h",
+      "mode": "100644",
+      "git_object": "deac4be57013c813415a51085d72a839ff17b5a2",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/status_led.h",
+      "mode": "100644",
+      "git_object": "6c6c5e1483ea965142d610fd9804d20ffda47e35",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/stream_stats.h",
+      "mode": "100644",
+      "git_object": "e0d083dbe65cf5bb8096943ee3cc63dafaa54826",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/tasks.h",
+      "mode": "100644",
+      "git_object": "17b3d7cd9b7518c43afa1967f365ce1cc7b429bf",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/uart.h",
+      "mode": "100644",
+      "git_object": "6880b79ffa63e25d02075c5c80a0f24f2469dab2",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/util.h",
+      "mode": "100644",
+      "git_object": "d392a18b035d7a9ffeef6d58552251b2a32dcaa1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/web_server.h",
+      "mode": "100644",
+      "git_object": "7bfc803ebaa8d6a28cf74860730d69a02345b166",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/include/wifi.h",
+      "mode": "100644",
+      "git_object": "e2e4c811774337b10fba1bf61b8b307ac64278b5",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/ntrip_caster.c",
+      "mode": "100644",
+      "git_object": "872177b580eee32e0647e0fcb07d8d4b164a687d",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/ntrip_client.c",
+      "mode": "100644",
+      "git_object": "a1a70fa992460085869fa97b32732055d2421e8f",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/ntrip_server.c",
+      "mode": "100644",
+      "git_object": "1ebbdfd1dd5748c7e88037b71b5fb6d1b10bc5ac",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/ntrip_server_2.c",
+      "mode": "100644",
+      "git_object": "1a734392308bba4636a0566c636a98be4c3299e1",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/ntrip_util.c",
+      "mode": "100644",
+      "git_object": "cedd5438a86cbe707141da46997bc8f7607d9a8d",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/socket_client.c",
+      "mode": "100644",
+      "git_object": "4d2dcdc747777cb0fcefe637ca3127e751c26e80",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/interface/socket_server.c",
+      "mode": "100644",
+      "git_object": "c60fa9ca2dc789fd0f6e2b0734e8b23ef22d7272",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/log.c",
+      "mode": "100644",
+      "git_object": "3ea92e000b16f4976cb26ef32d7fcd5c3da4f8cd",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/main.c",
+      "mode": "100644",
+      "git_object": "8614bc3ce5849990362d292dda34356de20daac2",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/memory_policy.c",
+      "mode": "100644",
+      "git_object": "f1f59ec60979585b59fe31d89237493267ce4f84",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/network.c",
+      "mode": "100644",
+      "git_object": "373983fb4e78ace88733e3f6607076cb42cb3ffe",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/network_ethernet.c",
+      "mode": "100644",
+      "git_object": "cecb9c7fdafe0d6045f31aa7c0806063742ae259",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/network_state.c",
+      "mode": "100644",
+      "git_object": "c501c726d78093b201cfe514c3750e6c4a1e352a",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ntrip_runtime.c",
+      "mode": "100644",
+      "git_object": "b925441b3832bd0343ad3a9aaea21357842ed6eb",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/ntrip_slots.c",
+      "mode": "100644",
+      "git_object": "7e7dc8af021f513836d8335de9c7093b93ba8470",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/protocol/nmea.c",
+      "mode": "100644",
+      "git_object": "52fcf82a7df4e2be2e3d4b42f811fc8303674bc8",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/receiver.c",
+      "mode": "100644",
+      "git_object": "0448ccb283616e325cfcba32cd70bc8779bf5d25",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/retry.c",
+      "mode": "100644",
+      "git_object": "e0a55735dd6946a1690b1aea71aba1dc81db2aa6",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/status_led.c",
+      "mode": "100644",
+      "git_object": "6a07e9077a2f445282de139c0dacc5f485ecdbe0",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/stream_stats.c",
+      "mode": "100644",
+      "git_object": "a82bd490e55d7c10419379adf57507dc4c0cc5c3",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/uart.c",
+      "mode": "100644",
+      "git_object": "e52df255f679da62084c86bcf9da02f061f8db1b",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/util.c",
+      "mode": "100644",
+      "git_object": "fc32a060980415a55c540353046b8c76ff6c0144",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/web_server.c",
+      "mode": "100644",
+      "git_object": "8e82884359e2433bc194670df2f4c08df9c0471c",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "main/wifi.c",
+      "mode": "100644",
+      "git_object": "73db2a0ebb9fd9f11b1f5188040cff02a73c0205",
+      "group": "main",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/.component_hash",
+      "mode": "100644",
+      "git_object": "28c5a320de91a39c59800f267d19db94e2cc0b2a",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/.cz.yaml",
+      "mode": "100644",
+      "git_object": "33938973cabb7cc5b3cac49cb079cd547406838d",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/CHANGELOG.md",
+      "mode": "100644",
+      "git_object": "1740ab90630337950dc0e817416719f9de2ba1f8",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/CHECKSUMS.json",
+      "mode": "100644",
+      "git_object": "52d325c5612f3907690a0dc0ffdc69ee50a719a4",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "e0b2a4d9e0f2c3938fd2805da854bfee529a4897",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/Kconfig",
+      "mode": "100644",
+      "git_object": "3ef88c8d65a484f63a3537bd5e7e0ad082781db9",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/LICENSE",
+      "mode": "100644",
+      "git_object": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/README.md",
+      "mode": "100644",
+      "git_object": "a644ad4d4aea8b3ac7c6f391eac5d357912e1a19",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "9a16f140a093ec5d238d26b8acb7039d9607ecba",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/README.md",
+      "mode": "100644",
+      "git_object": "6ccdef970249b81399c8d00604e21b10c41af31d",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "eb0e6d9eb4a85d47c608542704ee4563ee8d7d00",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/main/Kconfig.projbuild",
+      "mode": "100644",
+      "git_object": "18e1cc2097e903a4d30aa4dc31f4b4e74be19418",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/main/idf_component.yml",
+      "mode": "100644",
+      "git_object": "e9277dfc99344d380bb8e618ae0015550317dd34",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/main/mdns_example_main.c",
+      "mode": "100644",
+      "git_object": "a6aaea2d4c53185b59d5ddbb09fd21268e9b62da",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/pytest_mdns.py",
+      "mode": "100644",
+      "git_object": "e78e094dd7a80df0be64269aee47b74feff0f6b6",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/sdkconfig.ci.eth_custom_netif",
+      "mode": "100644",
+      "git_object": "b9d7120415e69bfd2dcf5b315db90d7862cb8a2d",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/sdkconfig.ci.eth_def",
+      "mode": "100644",
+      "git_object": "703b4543eeba6dbb0308407909a26c521780fd8e",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/sdkconfig.ci.eth_no_ipv4",
+      "mode": "100644",
+      "git_object": "b77a752705f855565d0c051b122fb20e58209615",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/sdkconfig.ci.eth_no_ipv6",
+      "mode": "100644",
+      "git_object": "d669ec07510a02142b7b285179109b77c42a7d03",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/examples/query_advertise/sdkconfig.ci.eth_socket",
+      "mode": "100644",
+      "git_object": "5d92405260b6fe219ee38e8a8763d50456038a6c",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/idf_component.yml",
+      "mode": "100644",
+      "git_object": "7c9bb1adad7d7b0f1ef6cbd0aa0e9f5de2676a89",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/include/mdns.h",
+      "mode": "100644",
+      "git_object": "cc9a39d1575ca991a93dd29480fa5a0dcba36009",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/include/mdns_console.h",
+      "mode": "100644",
+      "git_object": "cb28eca7af8b35ac9592d32e49a0561d156ed3bf",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/mdns.c",
+      "mode": "100644",
+      "git_object": "49574dfbd79087bec60413607392195937f9de5b",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/mdns_console.c",
+      "mode": "100644",
+      "git_object": "80f009a1223453570128abf266ce35e846e1b146",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/mdns_networking_lwip.c",
+      "mode": "100644",
+      "git_object": "16604cdf14e21081caf813343d3261afa102cc66",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/mdns_networking_socket.c",
+      "mode": "100644",
+      "git_object": "a99a9cc2d9fbe86f984d63e96f80160589f6bd7a",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/private_include/mdns_networking.h",
+      "mode": "100644",
+      "git_object": "83cbe90cc903e985724ccd571630853e5cd79643",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/private_include/mdns_private.h",
+      "mode": "100644",
+      "git_object": "ce4c96b6312cec8f6eb144daefb2e69ec054404f",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "5f0d7bdd6423c6fa1421c0d185986fb2985b5c75",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/README.md",
+      "mode": "100644",
+      "git_object": "4953f0e28efadde5440424b00c3509b6793869ce",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/components/esp_netif_linux/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "6f8d51ec8c308c37201785b97c9c5037a07b4751",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/components/esp_netif_linux/Kconfig",
+      "mode": "100644",
+      "git_object": "3b3c309920b5f922da46350c673c522e5de52c9c",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/components/esp_netif_linux/esp_netif_linux.c",
+      "mode": "100644",
+      "git_object": "93e4386c81bb12a19a44421bd5beeecbb8f17b52",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/components/esp_netif_linux/include/esp_wifi_types.h",
+      "mode": "100644",
+      "git_object": "e878e2715d3abaf31082dd63311546c9734002c2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/components/esp_netif_linux/include/machine/endian.h",
+      "mode": "100644",
+      "git_object": "488bce0e39028155d21d04ef70afc5ed4d630576",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/dnsfixture.py",
+      "mode": "100644",
+      "git_object": "6dcf0c99f5a2865d52b64f5b982bd8fb74de001e",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "0e6f226ab7e0f46beb9fd8e932409b2f82132b7a",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/main/Kconfig.projbuild",
+      "mode": "100644",
+      "git_object": "9bf4bba235d79780a7f6ec046dc6da07e302b16b",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/main/idf_component.yml",
+      "mode": "100644",
+      "git_object": "e2d4fe9ba216ed8dba393f797c7e046633c97df0",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/main/main.c",
+      "mode": "100644",
+      "git_object": "581231f18eeba2adf1d63bace65d01c3748ec258",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/pytest_mdns.py",
+      "mode": "100644",
+      "git_object": "f8b95f5514076c3bd449a6b5e4a1b32c969a1941",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/sdkconfig.ci.app",
+      "mode": "100644",
+      "git_object": "809c518a194dab90c959f2435a3b7f14d70e813d",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/sdkconfig.ci.console",
+      "mode": "100644",
+      "git_object": "3b6dcb67465499e6222e109680660d34caf2379e",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/sdkconfig.ci.target",
+      "mode": "100644",
+      "git_object": "2a43df1a3952045827e195ed7f4ae459173a87c2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/host_test/sdkconfig.defaults",
+      "mode": "100644",
+      "git_object": "7e79ce497b9e1748dbeae594831cdc14fcd56da2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "d65845194f92e9b55e0f5f5cece58f422dfcd6f1",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/Makefile",
+      "mode": "100644",
+      "git_object": "6f45edb9df87294f507e9c01608c84d748be6df3",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/README.md",
+      "mode": "100644",
+      "git_object": "e22a89606f932f4dc755804ce254720b9ddfa99f",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/esp32_mock.c",
+      "mode": "100644",
+      "git_object": "5830c251e7261007288da52977acc6312d38bd63",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/esp32_mock.h",
+      "mode": "100644",
+      "git_object": "e8e84ceb480f09b3222d4964d87dbc7def23001c",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/esp_attr.h",
+      "mode": "100644",
+      "git_object": "75b66786aa7eb0174b887c6c8dd131f392b60d1b",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/esp_netif_mock.c",
+      "mode": "100644",
+      "git_object": "80629ad63d8beefdf646856a70bc55767df95302",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/input_packets.txt",
+      "mode": "100644",
+      "git_object": "15c5df2ba4126472b2c1389e141daca6beede8e2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/mdns_di.h",
+      "mode": "100644",
+      "git_object": "ed56960f47cd54274a116344c3b55792fd457d6e",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/mdns_mock.h",
+      "mode": "100644",
+      "git_object": "d37da92968800c9f5100cd35c41a36f696751014",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/sdkconfig.h",
+      "mode": "100644",
+      "git_object": "da75d14752f4afa2d7cc302175a402e5c08d969a",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_afl_fuzz_host/test.c",
+      "mode": "100644",
+      "git_object": "5556c563de6d5f2c7a69fdfc29748520d9a6bef8",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "62d1565f92e8bad19cfbb0b2f9f589fc113c6ce5",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/README.md",
+      "mode": "100644",
+      "git_object": "96b76dcb7a3a6faedf5b83a1a1874335336177a2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "b5902d5891cfaa156c547eca1df9616fb50a2a1b",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/main/Kconfig.projbuild",
+      "mode": "100644",
+      "git_object": "a1c0d729c10b3b3f2a394c64397f8806521dd2c2",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/main/idf_component.yml",
+      "mode": "100644",
+      "git_object": "e9277dfc99344d380bb8e618ae0015550317dd34",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/main/main.c",
+      "mode": "100644",
+      "git_object": "e67014ce44cdd025a5c08f2f8306c18624e50a1c",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/main/mdns_test.c",
+      "mode": "100644",
+      "git_object": "06df424f8c197429915bcdf7254275bea8f689a8",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/pytest_mdns_app.py",
+      "mode": "100644",
+      "git_object": "2b04cb75a4c214077e35a2a4de63c5524b56d3ae",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/sdkconfig.ci",
+      "mode": "100644",
+      "git_object": "d89171dda154c4ee33dfde59fcda36569d56d0e5",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/test_apps/sdkconfig.defaults",
+      "mode": "100644",
+      "git_object": "0c4ffe9158821eaeb556c5fb29f4aa2a370484e1",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "450d475e403d57abe5d2260f9b43f77e4e97f11a",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/main/CMakeLists.txt",
+      "mode": "100644",
+      "git_object": "d04d217e4e399a6196c8057e313e9a83d244f434",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/main/test_mdns.c",
+      "mode": "100644",
+      "git_object": "ff024e2fc3b0fcd92ee13cffa707e6eca87f57e5",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/pytest_app_mdns.py",
+      "mode": "100644",
+      "git_object": "5106112730af31905a30de912135e22940298685",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/sdkconfig.ci",
+      "mode": "100644",
+      "git_object": "9660719189b1740af34f62282d3ed6d8a322bf4d",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "managed_components/espressif__mdns/tests/unit_test/sdkconfig.defaults",
+      "mode": "100644",
+      "git_object": "168e08d4cd4d04c28d8538e9a482aaed61a66c88",
+      "group": "managed_components",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "partitions.csv",
+      "mode": "100644",
+      "git_object": "66c05016ac5d60a7a1d490b57036f4e85b1a6780",
+      "group": "partitions.csv",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "partitions_16mb.csv",
+      "mode": "100644",
+      "git_object": "ad43ae968e1e9628d50808eee1555a554ee95dc6",
+      "group": "partitions_16mb.csv",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "partitions_4mb.csv",
+      "mode": "100644",
+      "git_object": "649fd36585e7ea579e12d0a696b2c08cd2e05c2d",
+      "group": "partitions_4mb.csv",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "partitions_8mb.csv",
+      "mode": "100644",
+      "git_object": "861fda0793c95b711d79f09cf4e9bd8f6c199257",
+      "group": "partitions_8mb.csv",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/build_profile.sh",
+      "mode": "100755",
+      "git_object": "e982e82975e7bbcea0e8ff7914c456c6a5c02568",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/check_profile_build_inputs.sh",
+      "mode": "100644",
+      "git_object": "b0d2856ee757fe3cfd2d5f91d2dd9ae8eec8a959",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/check_rtcm_capture.py",
+      "mode": "100644",
+      "git_object": "6889e25a570ea7fe948f0690972247eafa90f3ec",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/check_rtcm_usb.py",
+      "mode": "100644",
+      "git_object": "bab42b46387f93ef2c09a04969b11b5673ddff9b",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/check_webui_assets.sh",
+      "mode": "100644",
+      "git_object": "fc4a103a9824df1d27e15d86db60e7d0be9a91d5",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "scripts/test_espnow_host.sh",
+      "mode": "100644",
+      "git_object": "ea02e4c1b9c33a1d762d8cc238dc02f68d919334",
+      "group": "scripts",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "sdkconfig",
+      "mode": "100644",
+      "git_object": "b430187d87805a2c94689a84a76eed05b7ad1165",
+      "group": "sdkconfig",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/bridge_pipe.c",
+      "mode": "100644",
+      "git_object": "d4bafd3b6598e7705e3b536c84ca4308152cb337",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/stubs/esp_check.h",
+      "mode": "100644",
+      "git_object": "a7efb54b2f0302b6716673f19b05463f4d8f3f81",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/stubs/esp_err.h",
+      "mode": "100644",
+      "git_object": "f99f08ae921e60cb8f5a9b85cafe8164ff632282",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/stubs/esp_log.h",
+      "mode": "100644",
+      "git_object": "82fdad7229f26a55e2f64983ce7bd41d3778530b",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/stubs/esp_timer.h",
+      "mode": "100644",
+      "git_object": "2fdf94b252c6161fbb52b0fbe7a1885038902ed8",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/test_espnow_rtcm.c",
+      "mode": "100644",
+      "git_object": "7e1019889bbbb05b7b62d4bf5b821712238136ff",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "tests/host/test_rtcm_usb.py",
+      "mode": "100644",
+      "git_object": "4c3937e98fc7004394ab544a757281c1497e75bb",
+      "group": "tests",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "trash/setup.html",
+      "mode": "100644",
+      "git_object": "e5a8455e33e9e00e0e567750c11fb2fd42e1c61b",
+      "group": "trash",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "ublox.pdf",
+      "mode": "100644",
+      "git_object": "f9365fd20302c95e98347c0d4d6d8305a59a4381",
+      "group": "ublox.pdf",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/advanced.html",
+      "mode": "100644",
+      "git_object": "1d5546bc6d64a4de7fc0058670ec15b04bfaad6f",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/app-lite.css",
+      "mode": "100644",
+      "git_object": "c7e4e7f034254d2718bae004d476878750535d94",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/app-lite.js",
+      "mode": "100644",
+      "git_object": "80bd677b32709091c2dccd628153227b16fd2bbe",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/advanced.js",
+      "mode": "100644",
+      "git_object": "51ab6da20f78a6c5ad8c8721eba7c2323d27eaa7",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/api.js",
+      "mode": "100644",
+      "git_object": "20fc3898fe01e806da6ca98eb98d8094c1b1273a",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/config.js",
+      "mode": "100644",
+      "git_object": "38dcee89c338a04505dbf08ad736ea2f056f50dc",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/dashboard.js",
+      "mode": "100644",
+      "git_object": "78b2000aa307485b924d5a06592411a3f9703da9",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/gnss.js",
+      "mode": "100644",
+      "git_object": "614a40413e302c21bbae71bad94092564087a6a8",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/log.js",
+      "mode": "100644",
+      "git_object": "72ad9d32622a6bc2d0ebc0963b48a2645abeed83",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/lora.js",
+      "mode": "100644",
+      "git_object": "bb0bc20a893e70bacadbb27fc1a9f382f4617970",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/nav.js",
+      "mode": "100644",
+      "git_object": "cc2fd25410883a9556effc6e96cd109093fc0df7",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/ntrip.js",
+      "mode": "100644",
+      "git_object": "7fdc4363cd2d30657145dd2208e28444cc307627",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/c/runtime.js",
+      "mode": "100644",
+      "git_object": "6dd05634cd3d99eb1b6161135cef32ef9e0c2185",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/config.html",
+      "mode": "100644",
+      "git_object": "1f521e7ab869834dab5447b29dfeceab1e22705d",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/dashboard.html",
+      "mode": "100644",
+      "git_object": "e77ccb0c62bb5dff831db7ac92560c427729a7a9",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/favicon.ico",
+      "mode": "100644",
+      "git_object": "77b29b458e3ce47d1778c321554a150fda526369",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/index.html",
+      "mode": "100644",
+      "git_object": "80a8c4bb11c5d6b97c7996d7ef6ca69ca45a0c72",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    },
+    {
+      "path": "www/log.html",
+      "mode": "100644",
+      "git_object": "c402b19379981553d4d8c7fd99704b2f74b68dd0",
+      "group": "www",
+      "decision": "ADAPT",
+      "status": "OPEN"
+    }
+  ],
+  "http_contracts": [
+    {
+      "path": "/config",
+      "method": "HTTP_GET",
+      "handler": "config_get_handler"
+    },
+    {
+      "path": "/config",
+      "method": "HTTP_POST",
+      "handler": "config_post_handler"
+    },
+    {
+      "path": "/status",
+      "method": "HTTP_GET",
+      "handler": "status_get_handler"
+    },
+    {
+      "path": "/api/config",
+      "method": "HTTP_GET",
+      "handler": "config_get_handler"
+    },
+    {
+      "path": "/api/config",
+      "method": "HTTP_POST",
+      "handler": "config_post_handler"
+    },
+    {
+      "path": "/api/status",
+      "method": "HTTP_GET",
+      "handler": "status_get_handler"
+    },
+    {
+      "path": "/api/capabilities",
+      "method": "HTTP_GET",
+      "handler": "capabilities_get_handler"
+    },
+    {
+      "path": "/api/gnss/status",
+      "method": "HTTP_GET",
+      "handler": "gnss_status_get_handler"
+    },
+    {
+      "path": "/api/gnss/satellites",
+      "method": "HTTP_GET",
+      "handler": "gnss_satellites_get_handler"
+    },
+    {
+      "path": "/api/gnss/diagnostics",
+      "method": "HTTP_GET",
+      "handler": "gnss_diagnostics_get_handler"
+    },
+    {
+      "path": "/api/gnss/base/status",
+      "method": "HTTP_GET",
+      "handler": "gnss_base_status_get_handler"
+    },
+    {
+      "path": "/api/gnss/base/start-survey",
+      "method": "HTTP_POST",
+      "handler": "gnss_base_start_survey_post_handler"
+    },
+    {
+      "path": "/api/gnss/base/stop-survey",
+      "method": "HTTP_POST",
+      "handler": "gnss_base_stop_survey_post_handler"
+    },
+    {
+      "path": "/api/gnss/base/apply-fixed",
+      "method": "HTTP_POST",
+      "handler": "gnss_base_apply_fixed_post_handler"
+    },
+    {
+      "path": "/api/gnss/base/clear",
+      "method": "HTTP_POST",
+      "handler": "gnss_base_clear_post_handler"
+    },
+    {
+      "path": "/api/gnss/profiles",
+      "method": "HTTP_GET",
+      "handler": "gnss_profiles_get_handler"
+    },
+    {
+      "path": "/api/gnss/profile/apply",
+      "method": "HTTP_POST",
+      "handler": "gnss_profile_apply_post_handler"
+    },
+    {
+      "path": "/api/gnss/command",
+      "method": "HTTP_POST",
+      "handler": "gnss_command_post_handler"
+    },
+    {
+      "path": "/api/gnss/receiver/raw",
+      "method": "HTTP_GET",
+      "handler": "gnss_raw_get_handler"
+    },
+    {
+      "path": "/api/gnss/capabilities",
+      "method": "HTTP_GET",
+      "handler": "gnss_capabilities_get_handler"
+    },
+    {
+      "path": "/api/gnss/detect",
+      "method": "HTTP_POST",
+      "handler": "gnss_detect_post_handler"
+    },
+    {
+      "path": "/api/ntrip",
+      "method": "HTTP_GET",
+      "handler": "ntrip_get_handler"
+    },
+    {
+      "path": "/api/ntrip",
+      "method": "HTTP_POST",
+      "handler": "ntrip_post_handler"
+    },
+    {
+      "path": "/api/ntrip/runtime",
+      "method": "HTTP_GET",
+      "handler": "ntrip_runtime_get_handler"
+    },
+    {
+      "path": "/api/ntrip/restart",
+      "method": "HTTP_POST",
+      "handler": "ntrip_restart_handler"
+    },
+    {
+      "path": "/api/ntrip/enable/*",
+      "method": "HTTP_POST",
+      "handler": "ntrip_enable_handler"
+    },
+    {
+      "path": "/api/ntrip/disable/*",
+      "method": "HTTP_POST",
+      "handler": "ntrip_disable_handler"
+    },
+    {
+      "path": "/api/dev/fake-rtcm/start",
+      "method": "HTTP_POST",
+      "handler": "fake_rtcm_start_handler"
+    },
+    {
+      "path": "/api/dev/fake-rtcm/stop",
+      "method": "HTTP_POST",
+      "handler": "fake_rtcm_stop_handler"
+    },
+    {
+      "path": "/api/dev/ntrip/mock",
+      "method": "HTTP_POST",
+      "handler": "ntrip_mock_post_handler"
+    },
+    {
+      "path": "/api/dev/ntrip/selftest/start",
+      "method": "HTTP_POST",
+      "handler": "ntrip_selftest_start_handler"
+    },
+    {
+      "path": "/api/dev/ntrip/selftest/result",
+      "method": "HTTP_GET",
+      "handler": "ntrip_selftest_result_handler"
+    },
+    {
+      "path": "/log",
+      "method": "HTTP_GET",
+      "handler": "log_get_handler"
+    },
+    {
+      "path": "/core_dump",
+      "method": "HTTP_GET",
+      "handler": "core_dump_get_handler"
+    },
+    {
+      "path": "/heap_info",
+      "method": "HTTP_GET",
+      "handler": "heap_info_get_handler"
+    },
+    {
+      "path": "/wifi/scan",
+      "method": "HTTP_GET",
+      "handler": "wifi_scan_get_handler"
+    },
+    {
+      "path": "/*",
+      "method": "HTTP_GET",
+      "handler": "file_get_handler"
+    }
+  ],
+  "local_historical_branches": {
+    "feat/advanced-gnss-diagnostics": {
+      "commit": "e6240c16ab5d94542237f9e2fa37e9f59a4a9588",
+      "ahead_of_reference": 0
+    },
+    "feat/espnow-rtcm-usb": {
+      "commit": "7a1ec69f5e9d07522c0284ec2dbae380f72c7e85",
+      "ahead_of_reference": 0
+    },
+    "feat/hardware-setup-wizard": {
+      "commit": "bb3a1351f00588e03d341b6be12a78f4b32693a8",
+      "ahead_of_reference": 0
+    },
+    "feat/memory-buffer-architecture": {
+      "commit": "a38f637b152113682d03833c53b8a5c013edcc50",
+      "ahead_of_reference": 0
+    },
+    "feat/universal-board-architecture": {
+      "commit": "3db0ec8ff6590cea7345f2126d93ce61f73fe5d9",
+      "ahead_of_reference": 0
+    },
+    "feat/webui-modular": {
+      "commit": "0734fbfaa2fad2ac5abda9fe82293bd41d1796ae",
+      "ahead_of_reference": 0
+    },
+    "main": {
+      "commit": "b119aa278acd59fdc1857578d130e4e72010ebb2",
+      "ahead_of_reference": 0
+    }
+  }
+}
