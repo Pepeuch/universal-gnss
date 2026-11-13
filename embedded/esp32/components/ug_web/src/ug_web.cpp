@@ -13,6 +13,7 @@ extern "C" {
 #include "ug_gateway_service.hpp"
 #include "ug_json.hpp"
 #include "ug_services.hpp"
+#include "ug_supervisor.hpp"
 #if UG_LOCAL_GNSS
 #include "ug_gnss_service.hpp"
 #endif
@@ -140,6 +141,29 @@ esp_err_t Status(httpd_req_t* req)
   cJSON_AddNumberToObject(r, "tx_frames", radio.tx_frames);
   cJSON_AddNumberToObject(r, "mac_ack_packets", radio.tx_packets_acknowledged);
   cJSON_AddNumberToObject(r, "tx_failures", radio.tx_failures);
+  const auto services = ServiceHealths();
+  const auto now = esp_timer_get_time() * 1000;
+  cJSON_AddBoolToObject(root.get(), "degraded", ServicesDegraded(services, now));
+  auto* health = cJSON_AddObjectToObject(root.get(), "services");
+  if (!health)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < services.size(); ++i)
+  {
+    const auto& service = services[i];
+    auto* value = cJSON_AddObjectToObject(health, ServiceName(static_cast<ServiceId>(i)));
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddStringToObject(value, "state", ServiceStateName(service.state));
+    cJSON_AddNumberToObject(value, "error", service.error);
+    cJSON_AddBoolToObject(value, "progress_stale", ServiceStale(service, now));
+    cJSON_AddBoolToObject(value, "worker_entered", service.entered);
+    cJSON_AddBoolToObject(value, "watchdog_registered", service.watchdog_registered);
+    cJSON_AddNumberToObject(value, "watchdog_error", service.watchdog_error);
+    if (service.worker && now >= service.progress_ns)
+      cJSON_AddNumberToObject(value, "progress_age_ms", (now - service.progress_ns) / 1000000);
+    if (service.stack_sampled)
+      cJSON_AddNumberToObject(value, "stack_min_bytes", service.stack_min_bytes);
+  }
   // Public status contains no positions, credentials, raw receiver bytes or private MACs.
   return Json(req, root.get());
 }

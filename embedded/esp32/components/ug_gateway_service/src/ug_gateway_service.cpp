@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gateway_service.hpp"
+#include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
 extern "C" {
 #include "espnow_rtcm.h"
@@ -74,6 +75,7 @@ void RefreshDestinations()
 }
 void Owner(void*)
 {
+  WorkerHealth health(ServiceId::kRouting, 5000000000LL, true);
   for (;;)
   {
     RefreshControls();
@@ -105,6 +107,7 @@ void Owner(void*)
     portENTER_CRITICAL(&guard);
     stats.routing = gateway.metrics();
     portEXIT_CRITICAL(&guard);
+    health.Progress();
   }
 }
 }  // namespace
@@ -117,6 +120,7 @@ esp_err_t StartGatewayService()
   if (!ingress)
     return ESP_ERR_NO_MEM;
 
+  ExpectWorker(ServiceId::kRouting, 5000000000LL);
   if (xTaskCreate(Owner, "ug_rtcm", 6144, nullptr, 5, nullptr) != pdPASS)
   {
     vQueueDelete(ingress);

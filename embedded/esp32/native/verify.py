@@ -38,7 +38,7 @@ def verify(work, profile, local_gnss=False):
     if 'lora_transport_crc16' not in symbols:
         raise ValueError('radio fragment CRC16 was lost')
     if profile == 'rover':
-        forbidden = ('ug_network', 'ug_settings', 'ug_platform', 'ug_web', 'ug_receiver', '/core/gnss_ntrip/')
+        forbidden = ('ug_network', 'ug_settings', 'ug_platform', 'ug_web', 'ug_supervisor', 'ug_receiver', '/core/gnss_ntrip/')
         if any(any(token in file for token in forbidden) for file in production):
             raise ValueError('rover unexpectedly embeds gateway/network/admin components')
         lines = (work / 'sdkconfig').read_text().splitlines()

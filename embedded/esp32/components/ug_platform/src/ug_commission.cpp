@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_commission.hpp"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "mbedtls/platform_util.h"
 #include "ug_configuration.hpp"
 #include "ug_credentials.hpp"
 #include "ug_json.hpp"
+#include "ug_supervisor.hpp"
 #include <array>
 #include <cstdio>
 #include <cstring>
@@ -21,7 +23,28 @@ void Handle(std::string_view command)
 {
   std::string error;
   bool ok = false;
-  if (command.substr(0, 7) == "config ")
+  if (command == "status")
+  {
+    const auto services = ServiceHealths();
+    const auto now = esp_timer_get_time() * 1000;
+    std::printf("UG_LOCAL degraded=%d\n", ServicesDegraded(services, now));
+    for (std::size_t i = 0; i < services.size(); ++i)
+    {
+      const auto& s = services[i];
+      if (s.state == ServiceState::kDisabled)
+        continue;
+      std::printf(
+          "UG_LOCAL service=%s state=%s error=%ld stale=%d watchdog=%d watchdog_error=%ld\n",
+          ServiceName(static_cast<ServiceId>(i)),
+          ServiceStateName(s.state),
+          static_cast<long>(s.error),
+          ServiceStale(s, now),
+          s.watchdog_registered,
+          static_cast<long>(s.watchdog_error));
+    }
+    ok = true;
+  }
+  else if (command.substr(0, 7) == "config ")
     ok = PatchConfiguration(command.substr(7), error);
   else if (command.substr(0, 9) == "tls-init ")
   {
@@ -50,7 +73,7 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected config/tls-init/tls-object <JSON> or reboot CONFIRM";
+    error = "expected status, config/tls-init/tls-object <JSON> or reboot CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());
   std::fflush(stdout);

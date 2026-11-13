@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Twenty-one host cases now cover routing/source reset, command causality/quarantine,
+Twenty-two host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -447,3 +447,38 @@ supported model plans, no implicit BASE-to-ROVER change, no unsolicited
 constellation keys, approval, command safety and negative input/model cases.
 S3 and C3 IDF 6.1 builds pass (1419824-byte S3 app; 1283392-byte C3 relay); physical receiver acceptance and
 maximum UART bandwidth at each selected rate remain pending.
+
+## Service supervision and degraded startup
+
+Gateway/relay startup now follows explicit dependencies. Failed network-core,
+router, Ethernet, radio or NTRIP setup does not skip independent GNSS/console
+services. Failed publisher allocation no longer skips the remaining independent
+slots. Radio starts before the administration services, preserving correction
+resource priority. Unavailable TLS identity is reported as HTTPS startup failure;
+there is still no unauthenticated/plaintext fallback or automatic NVS erase.
+
+Public status and local `status` show bounded per-service lifecycle/error,
+worker entry, progress age/staleness, watchdog registration/errors and sampled
+minimum free stack bytes. Startup success is not a network link, a connected
+caster, GNSS fix or physical correction delivery. Worker progress is not another
+GNSS observation. The registry uses only one IDF monotonic clock and fixed slots;
+reading status never refreshes progress or a watchdog.
+
+The routing, GNSS and radio-control owners register/feed their own SDK task
+watchdog; failures remain visible. Network workers have a 30-second progress
+alarm, without a task-watchdog subscription that could mistake DNS/TLS waiting
+for a CPU hang. Bounded owner progress uses a five-second diagnostic threshold.
+The existing SDK watchdog initialization, timeout and panic policy are unchanged:
+the current default is five seconds with panic disabled, **not a newly qualified
+automatic reboot/recovery mechanism**. A missing task entry, backwards clock,
+unexpected worker exit or watchdog error cannot retain a healthy cached status.
+No monitor restarts workers, clears a receiver journal/quarantine or feeds another
+task. Watchdog resets and startup faults on physical boards remain pending.
+
+Twenty-two ASan/UBSan host cases pass, including injected startup dependency
+failure, independent-service retention, startup/task-entry races, zero stack
+headroom, stale progress and SDK watchdog errors. S3/C3 IDF 6.1 builds pass:
+1422448-byte gateway and 1286368-byte relay apps in unchanged OTA slots. These
+are link budgets; live TLS concurrency/heap margins still need board evidence.
+A fresh C3 rover build passes at 682512 bytes and its ELF verifier rejects
+gateway/admin/supervisor dependencies. The browser mock also passes.

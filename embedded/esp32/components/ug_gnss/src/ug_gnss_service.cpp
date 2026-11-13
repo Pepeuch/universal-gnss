@@ -10,6 +10,7 @@
 #include "ug_idf_uart.hpp"
 #include "ug_receiver_runtime.hpp"
 #include "ug_services.hpp"
+#include "ug_supervisor.hpp"
 #include "ug_uart_drain.hpp"
 #include "ug_wait.hpp"
 #include "universal_gnss_driver/receiver_discovery.hpp"
@@ -42,6 +43,7 @@ void Error(const std::string& error)
 }
 void Owner(void*)
 {
+  WorkerHealth health(ServiceId::kGnss, 5000000000LL, true);
   std::vector<std::uint8_t> probe;
   probe.reserve(4096);
   ReceiverModelQueryResult identity;
@@ -184,6 +186,8 @@ void Owner(void*)
       {
         invalidate_input();
         Error("GNSS UART discontinuity during identity query");
+        health.Progress();
+        vTaskDelay(1);
         continue;
       }
       epoch = BeginCorrectionSource(0, local);
@@ -330,6 +334,7 @@ void Owner(void*)
                           : std::nullopt;
     }
     // At most 4096 bytes per turn, then give lower-priority services CPU time.
+    health.Progress();
     vTaskDelay(1);
   }
 }
@@ -341,6 +346,7 @@ esp_err_t StartGnssService()
     return ESP_ERR_INVALID_STATE;
   operations =
       xQueueCreateStatic(1, sizeof(GnssOperation), operations_memory.data(), &operations_control);
+  ExpectWorker(ServiceId::kGnss, 5000000000LL);
   if (!operations || xTaskCreate(Owner, "ug_gnss", 16384, nullptr, 4, nullptr) != pdPASS)
     return ESP_ERR_NO_MEM;
   return ESP_OK;

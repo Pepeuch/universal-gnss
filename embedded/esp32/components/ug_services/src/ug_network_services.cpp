@@ -9,6 +9,7 @@
 #include "ug_ntrip_publisher.hpp"
 #include "ug_observation.hpp"
 #include "ug_services.hpp"
+#include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
 #include <atomic>
@@ -57,6 +58,7 @@ Outbox caster_box;
 #endif
 void InputWorker(void*)
 {
+  WorkerHealth health(ServiceId::kNtripInput, 30000000000LL, false);
   std::uint64_t config_generation = 0, link_generation = 0;
   NtripConnection input(
       [](const auto& f) {
@@ -97,6 +99,7 @@ void InputWorker(void*)
     stats.upstream_flowing = input.client().IsCorrectionFlowing();
     stats.upstream_frames = input.client().metrics().rtcm_frames_received;
     portEXIT_CRITICAL(&metrics_guard);
+    health.Progress();
     vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
   }
 }
@@ -104,6 +107,9 @@ void PublisherWorker(void* context)
 {
   auto& box = *static_cast<Outbox*>(context);
   const auto slot = box.slot;
+  WorkerHealth health(static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
+                      30000000000LL,
+                      false);
   NtripPublisher publisher;
   Gateway::Frame frame;
   std::uint64_t config_generation = 0, link_generation = 0;
@@ -167,12 +173,14 @@ void PublisherWorker(void* context)
     stats.publisher_frames[slot] = publisher.metrics().frames;
     stats.publisher_failures[slot] = publisher.metrics().failures;
     portEXIT_CRITICAL(&metrics_guard);
+    health.Progress();
     vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
   }
 }
 #if UG_SERVICE_CASTER
 void CasterWorker(void*)
 {
+  WorkerHealth health(ServiceId::kCaster, 30000000000LL, false);
   universal_gnss_ntrip::LocalRtcmCaster caster;
   Gateway::Frame frame;
   std::uint64_t config_generation = 0, link_generation = 0, cache_generation = 0, incarnation = 0;
@@ -241,6 +249,7 @@ void CasterWorker(void*)
     stats.caster_running = caster.running();
     stats.caster_frames = caster.metrics().served_frames;
     portEXIT_CRITICAL(&metrics_guard);
+    health.Progress();
     vTaskDelay(FiniteWaitTicks(5, configTICK_RATE_HZ));
   }
 }
@@ -288,22 +297,38 @@ esp_err_t StartNetworkServices()
   if (caps.publisher_slots > UG_SERVICE_PUBLISHERS || (caps.caster && !UG_SERVICE_CASTER) ||
       caps.publisher_slots + 1 > Gateway::kSinks)
     return ESP_ERR_INVALID_STATE;  // Never silently truncate a board capability.
+  bool ok = true;
+  ExpectWorker(ServiceId::kNtripInput, 30000000000LL);
   if (xTaskCreate(InputWorker, "ug_ntrip_in", 10240, nullptr, 3, nullptr) != pdPASS)
-    return ESP_ERR_NO_MEM;
+  {
+    ObserveService(ServiceId::kNtripInput, ServiceState::kFailed, ESP_ERR_NO_MEM);
+    ok = false;
+  }
   for (std::size_t i = 0; i < caps.publisher_slots; ++i)
   {
+    const auto id = static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + i);
+    ExpectWorker(id, 30000000000LL);
     auto& box = publishers[i];
     box.slot = i;
     if (!box.Create() ||
         xTaskCreate(PublisherWorker, "ug_ntrip_out", 8192, &box, 2, nullptr) != pdPASS)
-      return ESP_ERR_NO_MEM;
+    {
+      ObserveService(id, ServiceState::kFailed, ESP_ERR_NO_MEM);
+      ok = false;  // One failed publisher must not skip remaining independent slots.
+    }
   }
 #if UG_SERVICE_CASTER
   if (caps.caster)
+  {
+    ExpectWorker(ServiceId::kCaster, 30000000000LL);
     if (!caster_box.Create() ||
         xTaskCreate(CasterWorker, "ug_caster", 8192, nullptr, 2, nullptr) != pdPASS)
-      return ESP_ERR_NO_MEM;
+    {
+      ObserveService(ServiceId::kCaster, ServiceState::kFailed, ESP_ERR_NO_MEM);
+      ok = false;
+    }
+  }
 #endif
-  return ESP_OK;
+  return ok ? ESP_OK : ESP_ERR_NO_MEM;
 }
 }  // namespace ug::embedded

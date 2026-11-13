@@ -15,8 +15,11 @@ No new hardware qualification is claimed.
 UG receiver/routing/BASE plans, native NTRIP services, strict persistence and a
 first HTTPS operator surface compile under IDF 6.1, including private NTRIP TLS
 credential provisioning and native ESP-NOW replay diagnostics. The C3 relay uses
-its declared one-publisher capacity without unused caster queues. Remaining useful
-legacy features, OTA/runtime and final qualification remain open. LoRa is deferred
+its declared one-publisher capacity without unused caster queues. Guarded receiver
+telemetry/signals and fresh F9P Survey-In reports are available;
+service supervision and degraded startup are implemented in the native profiles.
+Remaining useful legacy features, configuration import, OTA/runtime qualification
+and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
