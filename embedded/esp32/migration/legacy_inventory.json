@@ -1468,8 +1468,9 @@
       "mode": "100644",
       "git_object": "c5e1729e913d8d9281a90714cabaf96258d39f6c",
       "group": "main",
-      "decision": "ADAPT",
-      "status": "OPEN"
+      "decision": "SUPERSEDED",
+      "status": "IMPLEMENTED",
+      "replacement": "Official ESP-IDF 6.1 headers; obsolete copied .hold header is not a native build input. This does not implement OTA."
     },
     {
       "path": "main/include/interface/ntrip.h",

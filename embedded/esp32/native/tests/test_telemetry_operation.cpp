@@ -10,6 +10,22 @@ int main()
 {
   ug::embedded::TelemetryOperation op, before;
   std::string error;
+  assert(ug::embedded::DecodeDetectionOperation(R"({"confirm":"DETECT_RECEIVER"})", error));
+  for (auto text : {R"({})",
+                    R"({"confirm":"RESET_RECEIVER"})",
+                    R"({"confirm":"DETECT_RECEIVER","raw":"FRESET"})"})
+    assert(!ug::embedded::DecodeDetectionOperation(text, error));
+  const auto f9p = ug::embedded::InspectReceiverPlans("ZED-F9P", true);
+  assert(f9p.telemetry && f9p.fixed && f9p.survey_in && !f9p.time_optimization);
+  for (auto model : {"UM980", "UM982"})
+  {
+    const auto unicore = ug::embedded::InspectReceiverPlans(model, true);
+    assert(unicore.telemetry && unicore.fixed && !unicore.survey_in && unicore.time_optimization);
+  }
+  const auto um981 = ug::embedded::InspectReceiverPlans("UM981", true);
+  assert(um981.telemetry && !um981.fixed && !um981.survey_in && !um981.time_optimization);
+  assert(!ug::embedded::InspectReceiverPlans("ZED-F9P", false).fixed);
+  assert(!ug::embedded::InspectReceiverPlans("NMEA", true).telemetry);
   assert(ug::embedded::DecodeTelemetryOperation(
       R"({"rate_hz":5,"confirm":"APPLY_GNSS_TELEMETRY"})", op, error));
   for (const auto* model : {"ZED-F9P", "UM980", "UM981", "UM982"})

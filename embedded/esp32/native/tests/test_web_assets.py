@@ -32,7 +32,7 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
-            const payload = path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+            const payload = path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -43,6 +43,11 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         calls = json.loads(vm.eval('JSON.stringify(calls)'))
         self.assertTrue(any(c['options']['headers'].get('Authorization') == 'Bearer ' + 'z'*64 for c in calls))
+        self.assertFalse(vm.eval("elements['base-submit'].disabled"))
+        vm.eval('elements.detect.onclick();')
+        self.drain(vm)
+        detect = json.loads(vm.eval("calls.filter(c=>c.path==='/api/gnss/detect').pop().options.body"))
+        self.assertEqual(detect['confirm'], 'DETECT_RECEIVER')
         self.assertEqual(vm.eval('elements.token.value'), '')
         vm.eval("elements.base.onsubmit({preventDefault(){},target:{mode:'fixed',height_datum:'ellipsoidal',latitude_deg:'48.123456789',longitude_deg:'2.123456789',height_m:'123.4567',persist:true}});")
         self.drain(vm)
@@ -87,6 +92,8 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')
+        self.assertTrue(vm.eval("elements['base-submit'].disabled"))
+        self.assertTrue(vm.eval("elements['telemetry-submit'].disabled"))
         self.assertNotIn('localStorage', (ASSETS/'app.js').read_text())
         self.assertNotIn('innerHTML', (ASSETS/'app.js').read_text())
         html = (ASSETS/'index.html').read_text()

@@ -230,8 +230,22 @@ void Owner(void*)
     GnssOperation operation;
     if (xQueueReceive(operations, &operation, 0) == pdTRUE)
     {
-      if (!enabled || !identity.model_verified || ReceiverJournalBlocked() || transaction ||
-          receiver.indeterminate())
+      if (operation.kind == GnssOperation::Kind::kDetect)
+      {
+        if (!enabled || transaction)
+          Error("GNSS UART unavailable or mutation in progress");
+        else
+        {
+          // Read-only discovery is allowed while quarantined, but never clears
+          // the application/journal or re-enables its local correction source.
+          invalidate_input();
+          if (!ReceiverJournalBlocked() && !receiver.indeterminate())
+            Error("");
+        }
+        pending = false;
+      }
+      else if (!enabled || !identity.model_verified || ReceiverJournalBlocked() || transaction ||
+               receiver.indeterminate())
       {
         Error("receiver identity unavailable, command busy or persistent quarantine");
         pending = false;
@@ -242,7 +256,7 @@ void Owner(void*)
         const std::string model = identity.identity.model.value_or("");
         if (operation.kind == GnssOperation::Kind::kTelemetry)
           plan = BuildTelemetryPlan(operation.telemetry, model, true);
-        else
+        else if (operation.kind == GnssOperation::Kind::kBase)
         {
           BaseConfigRequest request;
           request.vendor = family == ReceiverDetectedFamily::kUblox ? ReceiverVendor::kUblox
@@ -384,6 +398,12 @@ bool QueueTelemetryOperation(const TelemetryOperation& operation)
   GnssOperation request;
   request.kind = GnssOperation::Kind::kTelemetry;
   request.telemetry = operation;
+  return QueueOperation(request);
+}
+bool QueueReceiverDetection()
+{
+  GnssOperation request;
+  request.kind = GnssOperation::Kind::kDetect;
   return QueueOperation(request);
 }
 ReceiverSatelliteReport ReceiverSatellites()

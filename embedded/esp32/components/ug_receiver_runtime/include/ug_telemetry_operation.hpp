@@ -15,12 +15,19 @@ struct TelemetryOperation
 bool DecodeTelemetryOperation(std::string_view, TelemetryOperation&, std::string& error);
 universal_gnss_driver::BaseConfigPlan
 BuildTelemetryPlan(const TelemetryOperation&, std::string_view verified_model, bool model_verified);
+bool DecodeDetectionOperation(std::string_view, std::string& error);
+struct ReceiverPlanCapabilities
+{
+  bool telemetry{}, fixed{}, survey_in{}, time_optimization{};
+};
+ReceiverPlanCapabilities InspectReceiverPlans(std::string_view verified_model, bool verified);
 struct GnssOperation
 {
   enum class Kind : std::uint8_t
   {
     kBase,
-    kTelemetry
+    kTelemetry,
+    kDetect
   };
   Kind kind{Kind::kBase};
   BaseOperation base{};

@@ -16,6 +16,7 @@ extern "C" {
 #include "ug_supervisor.hpp"
 #if UG_LOCAL_GNSS
 #include "ug_gnss_service.hpp"
+#include "universal_gnss_driver/unicore_model_profile.hpp"
 #endif
 #include <array>
 #include <cstring>
@@ -188,6 +189,40 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   return Json(req, root.get());
 }
 #if UG_LOCAL_GNSS
+esp_err_t GnssCapabilitiesReply(httpd_req_t* req)
+{
+  const auto receiver = ReceiverSnapshot();
+  const auto plans = InspectReceiverPlans(receiver.model, receiver.model_verified);
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddStringToObject(root.get(), "model", receiver.model.c_str());
+  cJSON_AddBoolToObject(root.get(), "model_verified", receiver.model_verified);
+  cJSON_AddBoolToObject(root.get(), "telemetry", plans.telemetry);
+  cJSON_AddBoolToObject(root.get(), "fixed", plans.fixed);
+  cJSON_AddBoolToObject(root.get(), "survey_in", plans.survey_in);
+  cJSON_AddBoolToObject(root.get(), "time_optimization", plans.time_optimization);
+  cJSON_AddStringToObject(root.get(), "qualification", "software_contract_only");
+  auto* options = cJSON_AddArrayToObject(root.get(), "signal_groups");
+  if (!options)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  if (receiver.model_verified && receiver.model.find("UM") == 0)
+  {
+    const auto& model = universal_gnss_driver::ResolveUnicoreModelProfile(receiver.model);
+    for (const auto& group : model.signal_group_options)
+    {
+      if (group.base_mode_only || group.low_power_mode || group.groups.size() > 2)
+        continue;
+      auto* values = cJSON_CreateArray();
+      if (!values)
+        return Fail(req, "503 Service Unavailable", "memory unavailable");
+      cJSON_AddItemToArray(options, values);
+      for (auto id : group.groups)
+        cJSON_AddItemToArray(values, cJSON_CreateNumber(id));
+    }
+  }
+  return Json(req, root.get());
+}
 esp_err_t SatellitesReply(httpd_req_t* req)
 {
   const auto snapshot = ReceiverSatellites();
@@ -375,6 +410,8 @@ esp_err_t Get(httpd_req_t* req)
     return httpd_resp_send(req, json.data(), json.size());
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/capabilities")
+    return GnssCapabilitiesReply(req);
   if (uri == "/api/gnss/satellites")
     return SatellitesReply(req);
   if (uri == "/api/gnss/status" || uri == "/api/gnss/diagnostics" || uri == "/api/gnss/base/status")
@@ -404,6 +441,16 @@ esp_err_t Post(httpd_req_t* req)
     return Fail(req, "200 OK", "configuration saved; radio/Wi-Fi/TLS changes require reboot");
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/detect")
+  {
+    if (!DecodeDetectionOperation(body, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    if (!Configuration()->gnss_enabled || !QueueReceiverDetection())
+      return Fail(req, "409 Conflict", "enable the reviewed GNSS UART first; owner may be busy");
+    return Fail(req,
+                "202 Accepted",
+                "read-only detection queued; local corrections may pause; quarantine is preserved");
+  }
   if (uri == "/api/gnss/telemetry/apply")
   {
     TelemetryOperation operation;

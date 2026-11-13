@@ -7,6 +7,40 @@
 #include <cstring>
 namespace ug::embedded
 {
+bool DecodeDetectionOperation(std::string_view body, std::string& error)
+{
+  auto root = ParseBoundedObject(body, error);
+  if (!root)
+    return false;
+  error = "explicit DETECT_RECEIVER confirmation required; no raw commands accepted";
+  if (!OnlyKeys(root.get(), {"confirm"}))
+    return false;
+  auto* confirm = cJSON_GetObjectItemCaseSensitive(root.get(), "confirm");
+  if (!cJSON_IsString(confirm) || std::strcmp(confirm->valuestring, "DETECT_RECEIVER") != 0)
+    return false;
+  error.clear();
+  return true;
+}
+ReceiverPlanCapabilities InspectReceiverPlans(std::string_view model, bool verified)
+{
+  using namespace universal_gnss_driver;
+  ReceiverPlanCapabilities out;
+  out.telemetry = BuildTelemetryPlan({}, model, verified).ok();
+  if (!verified)
+    return out;
+  BaseConfigRequest request;
+  request.vendor = model == "ZED-F9P" ? ReceiverVendor::kUblox : ReceiverVendor::kUnicore;
+  request.model = model;
+  request.model_verified = verified;
+  request.confirm_persistent = true;
+  request.mode = BaseMode::kFixed;
+  out.fixed = BuildBaseConfigProfile(request).ok();
+  request.mode = BaseMode::kSurveyIn;
+  out.survey_in = BuildBaseConfigProfile(request).ok();
+  request.mode = BaseMode::kUnicoreTimeOptimization;
+  out.time_optimization = BuildBaseConfigProfile(request).ok();
+  return out;
+}
 bool DecodeTelemetryOperation(std::string_view body, TelemetryOperation& out, std::string& error)
 {
   auto root = ParseBoundedObject(body, error);

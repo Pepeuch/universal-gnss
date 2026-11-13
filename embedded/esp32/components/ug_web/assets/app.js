@@ -1,5 +1,5 @@
 'use strict';
-let token = '', sessionGeneration = 0, refreshing = false;
+let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
 const $ = id => document.getElementById(id);
 const show = value => { $('notice').textContent = String(value); };
 const print = value => JSON.stringify(value, null, 2);
@@ -43,6 +43,13 @@ async function refresh() {
       const receiver = await call('/api/gnss/status');
       if (generation !== sessionGeneration || !token) return;
       $('receiver').textContent = print(receiver);
+      if (!receiverPlans || receiverPlans.model !== receiver.model || receiverPlans.model_verified !== receiver.model_verified) {
+        const plans = await call('/api/gnss/capabilities');
+        if (generation !== sessionGeneration || !token) return;
+        receiverPlans = plans; $('receiver-plans').textContent = print(plans);
+        $('base-submit').disabled = !(plans.fixed || plans.survey_in || plans.time_optimization);
+        $('telemetry-submit').disabled = !plans.telemetry;
+      }
       const report = await call('/api/gnss/satellites');
       if (generation !== sessionGeneration || !token) return;
       satellites(report);
@@ -64,8 +71,8 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { ++sessionGeneration; token = ''; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -78,6 +85,8 @@ $('base').onsubmit = handle(async event => {
   for (const key of ['latitude_deg','longitude_deg','height_m','duration_s','accuracy_01mm','reuse_distance_m','receiver_port']) {
     const input = fields.get(key); if (input !== '') value[key] = Number(input);
   }
+  const supported = {'fixed': 'fixed', 'survey-in': 'survey_in', 'time': 'time_optimization'};
+  if (!receiverPlans || !receiverPlans[supported[value.mode]]) throw new Error('Mode indisponible pour le modèle vérifié');
   if (!confirm('Appliquer ce plan au récepteur identifié ? Une erreur peut interrompre les corrections.')) return;
   value.confirm = 'APPLY_BASE_CONFIGURATION';
   if (value.persist || value.mode === 'time') {
@@ -118,4 +127,9 @@ $('telemetry').onsubmit = handle(async () => {
     value.persistent_confirmation = 'SAVE_RECEIVER_CONFIGURATION';
   }
   show(await call('/api/gnss/telemetry/apply', value));
+});
+
+$('detect').onclick = handle(async () => {
+  if (!confirm('Relancer les interrogations de modèle en lecture seule ? Les corrections locales peuvent être interrompues brièvement. La quarantaine restera active.')) return;
+  show(await call('/api/gnss/detect', {confirm: 'DETECT_RECEIVER'})); receiverPlans = null; await refresh();
 });

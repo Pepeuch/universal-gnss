@@ -574,3 +574,31 @@ cache freshness, reset, no synthetic fix and delayed-logout response handling.
 S3/C3 IDF 6.1 builds and ELF checks pass: apps 1431488 / 1289040 bytes. Rover code
 is unchanged. Actual receiver throughput, completeness of real-device reports
 and browser/HTTPS interoperability remain HARDWARE_PENDING.
+
+## Read-only rediscovery and model capabilities
+
+Authenticated POST `/api/gnss/detect` accepts only
+`{"confirm":"DETECT_RECEIVER"}`. The same single UART owner queues read-only
+model discovery, invalidates state across bytes consumed by discovery and rejects
+requests when the UART is disabled or a mutation is busy. It does not clear a
+command/persistent quarantine, its reason, or reactivate a quarantined correction
+source. The operator explicitly confirms the possible correction pause. No raw
+command text, reset or persistence bypass is exposed.
+
+Authenticated `/api/gnss/capabilities` computes available BASE modes by invoking
+the actual UG builders without dispatch: verified F9P fixed/Survey-In, UM980/982
+fixed/TIME, UM981 telemetry only under the currently documented contract.
+Unverified/unsupported models receive no speculative BASE capability. Qualified
+signal-group options come from the existing UG model tables. The UI gates forms
+with these software capabilities; the owner still rechecks identity and safety
+at dispatch. Software capability is explicitly distinct from hardware qualification.
+Twenty-four host cases and the browser mock pass; S3/C3 builds pass at 1434512 /
+1290496 bytes. Receiver hardware tests were not replayed.
+
+A targeted historical OTA audit found no active `esp_ota_*` application calls in
+`main/` at the pinned reference. Includes and the obsolete copied
+`main/include/esp_ota_ops.hold` are not an implemented updater. That header is
+SUPERSEDED by official SDK headers; this closes only the vendor-header inventory
+item, not the future OTA function. Secure image/board/partition compatibility,
+installation-vs-update policy and rollback qualification remain OPEN; no OTA or
+flashing endpoint is exposed by this migration milestone.
