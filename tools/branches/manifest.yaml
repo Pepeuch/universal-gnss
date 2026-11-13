@@ -507,6 +507,10 @@
     {
       "path": "universal-gnss-validation/",
       "reason": "Immutable historical campaign material"
+    },
+    {
+      "path": "embedded/esp32/",
+      "reason": "Experimental ESP-IDF-only sources and pinned historical reference; never a ROS2 payload dependency"
     }
   ],
   "references": [
