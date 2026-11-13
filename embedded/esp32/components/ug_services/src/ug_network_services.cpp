@@ -9,6 +9,7 @@
 #include "ug_ntrip_publisher.hpp"
 #include "ug_observation.hpp"
 #include "ug_services.hpp"
+#include "ug_wait.hpp"
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
 #include <atomic>
 #include <mutex>
@@ -93,7 +94,7 @@ void InputWorker(void*)
     stats.upstream_flowing = input.client().IsCorrectionFlowing();
     stats.upstream_frames = input.client().metrics().rtcm_frames_received;
     portEXIT_CRITICAL(&metrics_guard);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
   }
 }
 void PublisherWorker(void* context)
@@ -163,7 +164,7 @@ void PublisherWorker(void* context)
     stats.publisher_frames[slot] = publisher.metrics().frames;
     stats.publisher_failures[slot] = publisher.metrics().failures;
     portEXIT_CRITICAL(&metrics_guard);
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
   }
 }
 void CasterWorker(void*)
@@ -236,7 +237,7 @@ void CasterWorker(void*)
     stats.caster_running = caster.running();
     stats.caster_frames = caster.metrics().served_frames;
     portEXIT_CRITICAL(&metrics_guard);
-    vTaskDelay(pdMS_TO_TICKS(5));
+    vTaskDelay(FiniteWaitTicks(5, configTICK_RATE_HZ));
   }
 }
 }  // namespace

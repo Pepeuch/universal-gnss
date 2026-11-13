@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gateway_service.hpp"
+#include "ug_wait.hpp"
 extern "C" {
 #include "espnow_rtcm.h"
 }
@@ -77,7 +78,7 @@ void Owner(void*)
   {
     RefreshControls();
     RefreshDestinations();
-    if (xQueueReceive(ingress, &input, pdMS_TO_TICKS(5)) == pdTRUE)
+    if (xQueueReceive(ingress, &input, FiniteWaitTicks(5, configTICK_RATE_HZ)) == pdTRUE)
     {
       RefreshControls();
       if (input.complete)

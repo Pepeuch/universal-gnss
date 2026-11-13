@@ -2,6 +2,7 @@
 #include "ug_gateway.hpp"
 #include "ug_observation.hpp"
 #include "ug_rtcm.h"
+#include "ug_wait.hpp"
 #include <cassert>
 #include <vector>
 
@@ -84,3 +85,9 @@ int main()
   assert(!ug::embedded::FreshPositionForGga(position, std::nullopt, 10).fix_valid);
   assert(position.fix_valid && position.latitude_deg);  // Cached source was not rewritten.
 }
+
+static_assert(ug::embedded::FiniteWaitTicks(5, 100) == 1);
+static_assert(ug::embedded::FiniteWaitTicks(5, 1000) == 5);
+static_assert(ug::embedded::FiniteWaitTicks(10, 50) == 1);
+static_assert(ug::embedded::FiniteWaitTicks(11, 100) == 2);
+static_assert(ug::embedded::FiniteWaitTicks(UINT32_MAX, UINT32_MAX) == UINT32_MAX - 1);

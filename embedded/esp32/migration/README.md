@@ -206,3 +206,13 @@ compiled ELF is inspected for exactly one UG CRC implementation, the real UG
 network/session symbols, and absent GNSS/admin dependencies in excluded profiles.
 Full reproducibility, final RAM budgets and remaining firmware features still need
 qualification at completion.
+
+Worker waits round upward to at least one RTOS tick. At the SDK default of
+100 Hz, an unadjusted five-millisecond wait truncates to zero and can starve
+lower-priority network/UART tasks. Compile-time tests cover 50/100/1000-Hz
+quantization and saturation without mapping a finite wait to an infinite one.
+
+LoRa remains a deferred historical sketch, by maintainer priority. ESP-NOW is the
+primary radio path. Existing framing/CRC16 code is retained; it does not establish
+an operational LoRa radio or regulatory qualification. No LoRa driver, new RF
+mode or regional emission policy is activated by this migration milestone.

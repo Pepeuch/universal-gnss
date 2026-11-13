@@ -10,6 +10,7 @@
 #include "ug_gateway_service.hpp"
 #include "ug_receiver_runtime.hpp"
 #include "ug_services.hpp"
+#include "ug_wait.hpp"
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include <algorithm>
 #include <atomic>
@@ -28,7 +29,7 @@ public:
   {
     if (!opened || !data || !size)
       return {0, TransportStatus::kError, TransportError::kInvalidArgument};
-    const auto n = uart_read_bytes(UART_NUM_1, data, size, pdMS_TO_TICKS(10));
+    const auto n = uart_read_bytes(UART_NUM_1, data, size, FiniteWaitTicks(10, configTICK_RATE_HZ));
     if (n < 0)
       return {0, TransportStatus::kError, TransportError::kReadFailure};
     return {static_cast<std::size_t>(n), TransportStatus::kOk, TransportError::kNone};
