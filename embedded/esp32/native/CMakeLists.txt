@@ -32,3 +32,17 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(UG_PROFILE "${UG_PROFILE}")
 idf_build_set_property(UG_LOCAL_GNSS "${UG_LOCAL_GNSS}")
 project(universal-gnss-esp32)
+
+# IDF 6.1 defaults to GNU C23/C++26. UG-owned sources intentionally retain their
+# portable C17/C++17 contract; leave SDK/managed components on their own defaults.
+idf_build_get_property(native_components BUILD_COMPONENTS)
+foreach(component IN LISTS native_components)
+    idf_component_get_property(component_dir ${component} COMPONENT_DIR)
+    string(FIND "${component_dir}" "${UG_ROOT}/embedded/esp32/components/" owned_prefix)
+    if(component STREQUAL "main" OR owned_prefix EQUAL 0)
+        idf_component_get_property(component_lib ${component} COMPONENT_LIB)
+        target_compile_options(${component_lib} PRIVATE
+            "$<$<COMPILE_LANGUAGE:C>:-std=gnu17>"
+            "$<$<COMPILE_LANGUAGE:CXX>:-std=gnu++17>")
+    endif()
+endforeach()

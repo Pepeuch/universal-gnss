@@ -7,11 +7,33 @@ import shlex
 import subprocess
 
 
+def project_standards(commands, source_root, main_root):
+    source_root, main_root = Path(source_root).resolve(), Path(main_root).resolve()
+    roots = [source_root / path for path in ('core', 'protocols', 'embedded/esp32/components')]
+    found = {'c': set(), 'cxx': set()}
+    for entry in commands:
+        source = Path(entry['file']).resolve()
+        if not (source.parent == main_root or any(source.is_relative_to(root) for root in roots)):
+            continue
+        language = 'c' if source.suffix == '.c' else 'cxx' if source.suffix in ('.cpp', '.cc', '.cxx') else None
+        if language is None:
+            continue
+        flags = [arg.removeprefix('-std=') for arg in shlex.split(entry['command']) if arg.startswith('-std=')]
+        allowed = ('gnu17', 'c17') if language == 'c' else ('gnu++17', 'c++17')
+        if not flags or flags[-1] not in allowed:
+            raise ValueError('project language contract is not C17/C++17: ' + str(source))
+        found[language].add(flags[-1])
+    return {key: sorted(values) for key, values in found.items()}
+
+
 def verify(work, profile, local_gnss=False):
     work = Path(work).resolve()
     build = work / 'build'
     commands = json.loads((build / 'compile_commands.json').read_text())
     source_main = Path(__file__).resolve().parent / 'main'
+    if (work / 'project/CMakeLists.txt').read_bytes() != (source_main.parent / 'CMakeLists.txt').read_bytes():
+        raise ValueError('stale copied native project CMake input')
+    standards = project_standards(commands, Path(__file__).resolve().parents[3], work / 'project/main')
     generated_main = work / 'project/main'
     selected_main = [Path(entry['file']) for entry in commands
                      if Path(entry['file']).parent == generated_main]
@@ -70,7 +92,7 @@ def verify(work, profile, local_gnss=False):
               'app_slots': [{'label': p.name, 'offset': p.offset, 'size': p.size} for p in slots],
               'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'ug_crc_definitions': crc_definitions,
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
-              'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
+              'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
     (work / 'native-verification.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     return result

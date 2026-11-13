@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Twenty-four host cases now cover routing/source reset, command causality/quarantine,
+Twenty-five host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -602,3 +602,33 @@ SUPERSEDED by official SDK headers; this closes only the vendor-header inventory
 item, not the future OTA function. Secure image/board/partition compatibility,
 installation-vs-update policy and rollback qualification remain OPEN; no OTA or
 flashing endpoint is exposed by this migration milestone.
+
+## Native language and integration qualification
+
+IDF 6.1 actually defaults to GNU C23/C++26; `cxx_std_17` alone expresses only a
+minimum. Native UG-owned components and `main` now explicitly compile as GNU
+C17/C++17. SDK and managed components retain their own SDK defaults, as supported
+by the SDK's C++ guide. The verifier checks the **last effective** language flag
+for every compiled UG C/C++ source and checks the copied native root CMake file.
+A regression rejects missing flags or a later C++26/C23 override. No compiler
+warning was suppressed and no functional UG/Linux/ROS2 interface was changed.
+
+The three native roles build and pass ELF/partition/role checks under these
+explicit standards. Applications, bootloaders and partition tables are byte-for-
+byte identical across two output directories for each role. Current app budgets:
+S3 GNSS gateway **1431520 / 3145728** bytes; C3 relay **1288400 / 1310720**;
+C3 rover **682512 / 1310720**. Project source units include exactly one UG CRC;
+relay excludes the GNSS driver and rover excludes network/config/admin/supervisor.
+These reproducibility checks used prepared pinned dependency caches, the official
+IDF image and a disconnected UID1000 build container; they do not promise future
+registry availability or attest hardware/runtime performance.
+
+Twenty-five native ASan/UBSan CTest cases, the QuickJS browser case, the existing
+55 Python tests and 200 generator/CI tests pass. All eight ROS2 distributions
+retain 13 manifest components, pass generation/integrity/reproduction and exclude
+embedded/runtime/development content. Kilted was generated only; no new Kilted or
+ROS2 isolated build, device test, flash, push or publication was performed.
+Previously qualified Linux native tests remain 69/69; no portable source changed
+since that run. Native TLS concurrency/live heap, real receiver acceptance,
+watchdog reset behaviour, OTA/rollback and the official portal remain unqualified.
+The full migration therefore remains PARTIAL.
