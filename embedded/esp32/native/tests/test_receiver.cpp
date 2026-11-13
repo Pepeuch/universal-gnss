@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_receiver_runtime.hpp"
 #include "universal_gnss_protocols/nmea_checksum.hpp"
+#include "universal_gnss_protocols/ubx_checksum.hpp"
 #include "universal_gnss_transport/memory_stream.hpp"
 #include <cassert>
 #include <cmath>
@@ -20,6 +21,18 @@ static ReceiverCommand Command()
 static void Feed(ug::embedded::Receiver& r, const std::string& s, std::int64_t now)
 {
   assert(r.Feed(reinterpret_cast<const std::uint8_t*>(s.data()), s.size(), now));
+}
+static std::vector<std::uint8_t> Survey(std::uint32_t tow)
+{
+  std::vector<std::uint8_t> bytes{0xb5, 0x62, 1, 0x3b, 40, 0};
+  bytes.resize(46);
+  for (unsigned i = 0; i < 4; ++i)
+    bytes[10 + i] = static_cast<std::uint8_t>(tow >> (8 * i));
+  bytes[42] = 1;  // Valid, inactive: raw receiver report, not an operation ACK.
+  const auto crc = universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2, bytes.size() - 2);
+  bytes.push_back(crc.ck_a);
+  bytes.push_back(crc.ck_b);
+  return bytes;
 }
 int main()
 {
@@ -70,6 +83,28 @@ int main()
   assert(!r.Feed(nullptr, 0, -1));
   // Input loss during a pending operation immediately invalidates/quarantines,
   // even before its normal response timeout; a later ACK cannot release it.
+  ug::embedded::Receiver surveyed(sink, config);
+  const auto survey = Survey(1000);
+  assert(surveyed.Feed(survey.data(), 20, 1));
+  assert(!surveyed.survey());
+  assert(surveyed.Feed(survey.data() + 20, survey.size() - 20, 2));
+  assert(surveyed.survey() && surveyed.survey()->valid && !surveyed.survey()->active);
+  assert(surveyed.survey()->timestamp_ns == 1);
+  assert(surveyed.Feed(survey.data(), survey.size(), 9000000000LL));
+  assert(surveyed.survey()->timestamp_ns == 1);  // Duplicate epoch never renews freshness.
+  const auto next = Survey(2000);
+  assert(surveyed.Feed(next.data(), next.size(), 9000000001LL));
+  assert(surveyed.survey()->timestamp_ns == 9000000001LL);
+  assert(surveyed.Start({command}, 9000000002LL));
+  assert(!surveyed.survey());  // Earlier status cannot qualify the next operation.
+  surveyed.InvalidateObservations();
+  assert(!surveyed.survey() && surveyed.indeterminate());
+  const std::array<std::uint8_t, 8> poll{0xb5, 0x62, 1, 0x3b, 0, 0, 0x3c, 0xb5};
+  universal_gnss_protocols::UbxFrameFramer poll_framer;
+  universal_gnss_protocols::ParserResult<universal_gnss_protocols::UbxFrame> polled;
+  for (const auto byte : poll)
+    polled = poll_framer.PushByte(byte);
+  assert(polled.record && polled.record->payload.empty() && polled.record->message_id == 0x3b);
   ug::embedded::Receiver interrupted(sink, config);
   assert(interrupted.Start({command}, 1));
   Feed(interrupted, "<O", 2);

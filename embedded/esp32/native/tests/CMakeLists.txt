@@ -116,3 +116,6 @@ target_include_directories(test_idf_uart PRIVATE uart_stubs idf_stubs ../../comp
 target_compile_options(test_idf_uart PRIVATE -UNDEBUG)
 target_link_libraries(test_idf_uart PRIVATE ug_embedded_settings universal_gnss_transport)
 add_test(NAME embedded_idf_uart_contract COMMAND test_idf_uart)
+add_executable(test_nav_svin "${UG_ROOT}/protocols/gnss_protocols/tests/test_ubx_nav_svin.cpp")
+target_link_libraries(test_nav_svin PRIVATE universal_gnss_protocols)
+add_test(NAME embedded_nav_svin_contract COMMAND test_nav_svin)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_receiver_runtime.hpp"
+#include "universal_gnss_protocols/ubx_parser.hpp"
 namespace ug::embedded
 {
 using namespace universal_gnss_driver;
@@ -25,6 +26,7 @@ bool Receiver::Start(std::vector<ReceiverCommand> commands, const std::int64_t n
     if (!HasSafeDispatchApproval(command) || command.payload.binary.size() > 512 ||
         command.payload.text.size() > 512)
       return false;
+  survey_.reset();  // Earlier status never qualifies a newly requested BASE operation.
   const auto result = application_.Start(std::move(commands), now_ns);
   Note(result);
   return result.state != ReceiverConfigApplicationState::kFailed;
@@ -48,6 +50,16 @@ bool Receiver::Feed(const std::uint8_t* bytes,
       ubx_generation_ = generation;
     if (framed.status == universal_gnss_protocols::ParserStatus::kRecordReady && framed.record)
     {
+      const auto survey = universal_gnss_protocols::ParseUbxNavSvin(*framed.record);
+      if (survey.record)
+      {
+        auto next = *survey.record;
+        // Polling the same navigation epoch is a cached report, not a new
+        // physical observation. Retain its original receipt freshness.
+        if (survey_ && survey_->i_tow_ms == next.i_tow_ms)
+          next.timestamp_ns = survey_->timestamp_ns;
+        survey_ = next;
+      }
       ublox_.ProcessUbxFrame(*framed.record, ubx_generation_.value_or(generation));
       UbloxRoutedResponse response;
       while (ublox_.PopResponse(response))
@@ -101,6 +113,7 @@ void Receiver::InvalidateObservations()
   if (application_.transaction_engine().current_transaction())
     Note(application_.MarkTimeout());
   session_.Reset();
+  survey_.reset();
   ubx_.Reset();
   ublox_.Reset();
   unicore_.Reset();

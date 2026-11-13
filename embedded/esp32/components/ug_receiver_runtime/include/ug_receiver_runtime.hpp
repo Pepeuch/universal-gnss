@@ -6,6 +6,7 @@
 #include "universal_gnss_driver/ublox_response_router.hpp"
 #include "universal_gnss_driver/unicore_response_router.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_protocols/ubx_records.hpp"
 #include <array>
 
 namespace ug::embedded
@@ -34,6 +35,10 @@ public:
   {
     return application_;
   }
+  const std::optional<universal_gnss_protocols::UbxNavSvinRecord>& survey() const
+  {
+    return survey_;
+  }
   bool indeterminate() const
   {
     return application_.transaction_engine().session_indeterminate();
@@ -56,6 +61,7 @@ private:
   bool line_overflow_{false};
   std::optional<std::uint64_t> ubx_generation_{};
   std::uint64_t line_generation_{0}, incarnation_{1};
+  std::optional<universal_gnss_protocols::UbxNavSvinRecord> survey_{};
   std::int64_t last_receipt_ns_{0};
 };
 }  // namespace ug::embedded

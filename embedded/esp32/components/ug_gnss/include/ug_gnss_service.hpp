@@ -2,6 +2,7 @@
 #pragma once
 #include "esp_err.h"
 #include "ug_base_operation.hpp"
+#include "universal_gnss_protocols/ubx_records.hpp"
 namespace ug::embedded
 {
 struct ReceiverStatus
@@ -13,6 +14,7 @@ struct ReceiverStatus
       uart_read_failures{}, uart_drain_limits{};
   std::int64_t last_bytes_ns{};
   unsigned operation_state{};
+  std::optional<universal_gnss_protocols::UbxNavSvinRecord> survey{};
 };
 esp_err_t StartGnssService();
 bool QueueBaseOperation(const BaseOperation&);

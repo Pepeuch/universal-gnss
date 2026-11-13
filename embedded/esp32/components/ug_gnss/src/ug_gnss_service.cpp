@@ -54,6 +54,7 @@ void Owner(void*)
   bool enabled = false, local = false, query_done = false, transaction = false;
   std::int64_t probe_started = Now(), last_bytes = 0;
   std::uint64_t drain_limits = 0;
+  std::int64_t last_survey_poll = 0;
   auto invalidate_input = [&] {
     receiver.InvalidateObservations();
     epoch = BeginCorrectionSource(0, local);
@@ -67,6 +68,7 @@ void Owner(void*)
     status.model_verified = false;
     status.model.clear();
     status.firmware.clear();
+    status.survey.reset();
   };
   for (;;)
   {
@@ -103,6 +105,7 @@ void Owner(void*)
         status.model_verified = false;
         status.model.clear();
         status.firmware.clear();
+        status.survey.reset();
       }
       family = ReceiverDetectedFamily::kUnknown;
       probe.clear();
@@ -201,6 +204,7 @@ void Owner(void*)
       status.model_verified = false;
       status.model.clear();
       status.firmware.clear();
+      status.survey.reset();
     }
     BaseOperation operation;
     if (xQueueReceive(operations, &operation, 0) == pdTRUE)
@@ -273,6 +277,18 @@ void Owner(void*)
       transaction = false;
       pending = false;
     }
+    // Poll NAV-SVIN only for a verified F9P, never while a mutation is pending
+    // or quarantined. This read-only poll changes no receiver output settings.
+    if (enabled && identity.model_verified && identity.identity.model.value_or("") == "ZED-F9P" &&
+        !pending && !transaction && !ReceiverJournalBlocked() && !receiver.indeterminate() &&
+        Now() - last_survey_poll >= 1000000000LL)
+    {
+      constexpr std::array<std::uint8_t, 8> poll{0xb5, 0x62, 0x01, 0x3b, 0, 0, 0x3c, 0xb5};
+      const auto written = uart.Write(poll.data(), poll.size());
+      if (written.bytes_written != poll.size())
+        Error("NAV-SVIN poll write failed");
+      last_survey_poll = Now();
+    }
     PublishGnssSnapshot(
         receiver.state(),
         receiver.metrics().position_payload_freshness.last_position_observation_timestamp_ns);
@@ -290,6 +306,9 @@ void Owner(void*)
       status.uart_event_saturations = uart.event_saturations;
       status.uart_read_failures = uart.read_failures;
       status.uart_drain_limits = drain_limits;
+      status.survey = identity.model_verified && identity.identity.model.value_or("") == "ZED-F9P"
+                          ? receiver.survey()
+                          : std::nullopt;
     }
     // At most 4096 bytes per turn, then give lower-priority services CPU time.
     vTaskDelay(1);

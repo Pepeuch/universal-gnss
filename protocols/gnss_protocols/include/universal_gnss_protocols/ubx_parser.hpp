@@ -13,6 +13,8 @@ ParserResult<UbxAckRecord> ParseUbxAck(const UbxFrame& frame);
 
 ParserResult<UbxRxmRtcmRecord> ParseUbxRxmRtcm(const UbxFrame& frame);
 
+ParserResult<UbxNavSvinRecord> ParseUbxNavSvin(const UbxFrame& frame);
+
 ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame);
 
 ParserResult<UbxNavPvtRecord> ParseUbxNavPvt(const UbxFrame& frame);

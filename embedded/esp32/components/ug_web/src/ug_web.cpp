@@ -209,6 +209,30 @@ esp_err_t GnssReply(httpd_req_t* req)
       "last_bytes_age_ms",
       gnss.last_bytes_ns ? (esp_timer_get_time() * 1000 - gnss.last_bytes_ns) / 1000000 : -1);
   cJSON_AddStringToObject(root.get(), "survey_completion", "not_inferred_from_ACK");
+  if (gnss.survey)
+  {
+    const auto& survey = *gnss.survey;
+    const bool fresh = survey.timestamp_ns && now >= *survey.timestamp_ns &&
+                       now - *survey.timestamp_ns <= 3000000000LL;
+    auto* value = cJSON_AddObjectToObject(root.get(), "survey_report");
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddStringToObject(value, "source", "UBX-NAV-SVIN");
+    cJSON_AddBoolToObject(value, "stale", !fresh);
+    cJSON_AddBoolToObject(value, "active", survey.active);
+    cJSON_AddBoolToObject(value, "position_valid", survey.valid);
+    cJSON_AddBoolToObject(value, "fresh_valid_inactive", fresh && survey.valid && !survey.active);
+    cJSON_AddBoolToObject(value, "confirms_current_request", false);
+    cJSON_AddNumberToObject(value, "i_tow_ms", survey.i_tow_ms);
+    cJSON_AddNumberToObject(value, "duration_s", survey.duration_s);
+    cJSON_AddNumberToObject(value, "observations", survey.observations);
+    cJSON_AddNumberToObject(value, "mean_accuracy_m", survey.mean_accuracy_01mm * 0.0001);
+    cJSON_AddNumberToObject(value, "mean_ecef_x_m", survey.mean_x_01mm * 0.0001);
+    cJSON_AddNumberToObject(value, "mean_ecef_y_m", survey.mean_y_01mm * 0.0001);
+    cJSON_AddNumberToObject(value, "mean_ecef_z_m", survey.mean_z_01mm * 0.0001);
+    if (survey.timestamp_ns && now >= *survey.timestamp_ns)
+      cJSON_AddNumberToObject(value, "observation_age_ms", (now - *survey.timestamp_ns) / 1000000);
+  }
   return Json(req, root.get());
 }
 #endif

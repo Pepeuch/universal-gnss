@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Nineteen host cases now cover routing/source reset, command causality/quarantine,
+Twenty host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -375,3 +375,33 @@ including the actual SDK adapter against driver/queue stubs and a lost-input
 pending-command regression. The S3 IDF 6.1 build passes; electrical behaviour,
 maximum-rate loss/latency and real UART faults remain HARDWARE_PENDING. The
 GNSS-free relay and rover do not link this adapter.
+
+## Receiver-reported F9P Survey-In diagnostics
+
+The existing UG protocol library now provides an additive `ParseUbxNavSvin`
+decoder for the manufacturer's [UBX-NAV-SVIN v0 layout](https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf),
+section 3.15.21, pp.156–157. It validates checksum, length, version, flags,
+navigation-week time and high-precision residuals. ECEF centimetres plus signed
+0.1-mm residuals are retained exactly as integer 0.1-mm coordinates. Existing
+Linux/ROS2 runtime mappings are unchanged; this status does not create a GNSS
+position, RTK FIX or correction observation.
+
+The native owner polls a verified F9P once per second when no configuration is
+pending/quarantined. It does not modify receiver output settings. Status exposes
+the reported duration, observation count, accuracy, ECEF mean and active/valid
+flags, with a three-second receipt freshness limit. Repeated reports with the
+same navigation iTOW retain their first receipt time; polling cached data cannot
+renew observation freshness. Reconfiguration, discontinuity and a new BASE
+request discard earlier survey status. Receipt and GNSS clocks are never compared.
+
+A fresh valid/inactive report describes the receiver's reported state, **not**
+proof that the most recent request caused it. The API explicitly keeps
+`confirms_current_request=false`; no hardware byte-cutoff or command-to-survey
+causality is inferred from UART reset/ACK. Unicore TIME status is not silently
+mapped to F9P Survey-In semantics.
+
+Twenty ASan/UBSan host cases, 69 native CTests, the browser mock and S3/C3 IDF 6.1
+builds pass. Tests include malformed/truncated/wrong-version/CRC frames, signed
+coordinate extrema, fragmented reports, cached iTOW freshness and command reset.
+Current apps: S3 1406928 bytes; C3 relay 1281856 bytes. No receiver hardware or
+new physical Survey-In qualification was performed.
