@@ -24,6 +24,8 @@ int main()
 {
   Gateway gateway;
   Gateway::Frame out;
+  assert(!gateway.ConfigureSink(Gateway::kSinks, true, 1000));
+  assert(!gateway.Pop(Gateway::kSinks, 1, out));
   assert(!gateway.ConfigureSource(6, 1, true));
   assert(!gateway.ConfigureSource(0, 0, true));
   assert(gateway.ConfigureSource(0, 1, true));

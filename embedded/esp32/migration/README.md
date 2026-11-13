@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Sixteen host cases now cover routing/source reset, command causality/quarantine,
+Seventeen host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -334,3 +334,21 @@ client's GGA source was live UART text, not a configured manual/reference positi
 The native source uses fresh UG observations instead. Manual reference GGA for a
 GNSS-free VRS client is a future extension; it must not fabricate a physical GNSS
 observation to satisfy an injection API.
+
+## Constrained relay resource capacity
+
+The C3 relay compiles the same gateway engine with two sinks (ESP-NOW and one
+publisher), rather than reserving the S3's eight. It allocates one publisher
+outbox and excludes the unavailable caster worker/outbox. Runtime startup rejects
+capabilities larger than the compiled capacity; no requested slot is silently
+ignored. The complete gateway contract is also compiled/tested with two sinks,
+including out-of-range rejection, source invalidation, queue saturation and age.
+
+IDF 6.1 builds pass for S3 and C3. The S3 application remains 1403744 bytes; C3
+falls from 1288384 to 1281712 bytes in its unchanged 1310720-byte app slots.
+The C3 ELF contains a 2204-byte publisher outbox and a 4792-byte gateway, with no
+caster worker or caster outbox; SDK size reports 68576-byte BSS. These are static
+link budgets, not measured runtime heap/stack headroom. The common-root bundle
+remains necessary for this profile; trust verification and private CA support
+are unchanged. Seventeen ASan/UBSan host cases pass. Rover dependencies, network
+isolation and physical qualification are unchanged.

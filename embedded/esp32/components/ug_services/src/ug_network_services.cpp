@@ -51,7 +51,10 @@ struct Outbox
     return Current(frame) && xQueueSend(box.queue, &frame, 0) == pdTRUE;
   }
 };
-Outbox publishers[5], caster_box;
+Outbox publishers[UG_SERVICE_PUBLISHERS];
+#if UG_SERVICE_CASTER
+Outbox caster_box;
+#endif
 void InputWorker(void*)
 {
   std::uint64_t config_generation = 0, link_generation = 0;
@@ -167,6 +170,7 @@ void PublisherWorker(void* context)
     vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
   }
 }
+#if UG_SERVICE_CASTER
 void CasterWorker(void*)
 {
   universal_gnss_ntrip::LocalRtcmCaster caster;
@@ -240,6 +244,7 @@ void CasterWorker(void*)
     vTaskDelay(FiniteWaitTicks(5, configTICK_RATE_HZ));
   }
 }
+#endif
 }  // namespace
 void NetworkAvailabilityChanged(bool available)
 {
@@ -279,10 +284,13 @@ NetworkServiceStats NetworkStats()
 }
 esp_err_t StartNetworkServices()
 {
+  const auto& caps = BoardCapabilities();
+  if (caps.publisher_slots > UG_SERVICE_PUBLISHERS || (caps.caster && !UG_SERVICE_CASTER) ||
+      caps.publisher_slots + 1 > Gateway::kSinks)
+    return ESP_ERR_INVALID_STATE;  // Never silently truncate a board capability.
   if (xTaskCreate(InputWorker, "ug_ntrip_in", 10240, nullptr, 3, nullptr) != pdPASS)
     return ESP_ERR_NO_MEM;
-  const auto& caps = BoardCapabilities();
-  for (std::size_t i = 0; i < caps.publisher_slots && i < 5; ++i)
+  for (std::size_t i = 0; i < caps.publisher_slots; ++i)
   {
     auto& box = publishers[i];
     box.slot = i;
@@ -290,10 +298,12 @@ esp_err_t StartNetworkServices()
         xTaskCreate(PublisherWorker, "ug_ntrip_out", 8192, &box, 2, nullptr) != pdPASS)
       return ESP_ERR_NO_MEM;
   }
+#if UG_SERVICE_CASTER
   if (caps.caster)
     if (!caster_box.Create() ||
         xTaskCreate(CasterWorker, "ug_caster", 8192, nullptr, 2, nullptr) != pdPASS)
       return ESP_ERR_NO_MEM;
+#endif
   return ESP_OK;
 }
 }  // namespace ug::embedded

@@ -93,3 +93,16 @@ target_link_libraries(test_gateway_radio_pty PRIVATE ug_embedded_ntrip ug_embedd
 target_compile_options(test_gateway_radio_pty PRIVATE -UNDEBUG)
 add_test(NAME embedded_gateway_radio_pty COMMAND test_gateway_radio_pty)
 set_tests_properties(embedded_gateway_radio_pty PROPERTIES TIMEOUT 15)
+
+# Compile the exact same engine and contract for the constrained relay capacity.
+add_library(ug_embedded_gateway_small ../../components/ug_gateway/src/ug_gateway.cpp
+    ../../components/ug_rtcm/src/rtcm.cpp)
+target_include_directories(ug_embedded_gateway_small PUBLIC ../../components/ug_gateway/include
+    ../../components/ug_rtcm/include)
+target_compile_definitions(ug_embedded_gateway_small PUBLIC UG_GATEWAY_SINKS=2)
+target_compile_features(ug_embedded_gateway_small PUBLIC cxx_std_17)
+target_link_libraries(ug_embedded_gateway_small PUBLIC universal_gnss_protocols)
+add_executable(test_gateway_small test_gateway.cpp)
+target_compile_options(test_gateway_small PRIVATE -UNDEBUG)
+target_link_libraries(test_gateway_small PRIVATE ug_embedded_gateway_small)
+add_test(NAME embedded_gateway_small_contract COMMAND test_gateway_small)

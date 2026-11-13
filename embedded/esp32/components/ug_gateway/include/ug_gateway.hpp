@@ -5,6 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 
+#ifndef UG_GATEWAY_SINKS
+#define UG_GATEWAY_SINKS 8
+#endif
+static_assert(UG_GATEWAY_SINKS >= 2 && UG_GATEWAY_SINKS <= 8);
+
 namespace ug::embedded
 {
 // Single-owner engine. UART/network tasks enqueue input to this owner; sinks
@@ -13,7 +18,8 @@ class Gateway
 {
 public:
   static constexpr std::size_t kSources = 6;  // local receiver + five network slots
-  static constexpr std::size_t kSinks = 8;    // ESP-NOW, five uploaders, local caster, LoRa;
+  // Native capacity only; destination identity/protocol is unchanged.
+  static constexpr std::size_t kSinks = UG_GATEWAY_SINKS;
   static constexpr std::size_t kDepth = 2;
   static constexpr std::size_t kMaxFrame = 1029;
   struct Frame

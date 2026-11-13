@@ -9,11 +9,15 @@ and GNSS-free NTRIP relay share one gateway engine; local GNSS is optional for
 are implemented on `feat/esp32`. The [transitional application integration](embedded/esp32/integration/README.md)
 now builds the real historical S3 Gateway/C3 Rover with UG CRC, with software
 validation and two-build reproducibility; definitive profiles remain to migrate.
-No new hardware qualification or NTRIP/WebUI/NVS/runtime migration is claimed.
+The overlay remains transitional; native service migration is described below.
+No new hardware qualification is claimed.
 [Native ESP32 reconstruction](embedded/esp32/migration/README.md) is now in progress:
 UG receiver/routing/BASE plans, native NTRIP services, strict persistence and a
-first HTTPS operator surface compile under IDF 6.1. LoRa, remaining legacy
-features, OTA/runtime and final qualification remain open. This is not a completed firmware claim.
+first HTTPS operator surface compile under IDF 6.1, including private NTRIP TLS
+credential provisioning and native ESP-NOW replay diagnostics. The C3 relay uses
+its declared one-publisher capacity without unused caster queues. Remaining useful
+legacy features, OTA/runtime and final qualification remain open. LoRa is deferred
+by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
 historical checklists and completion metrics are unchanged.
