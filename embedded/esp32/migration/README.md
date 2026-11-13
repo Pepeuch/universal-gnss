@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Twenty host cases now cover routing/source reset, command causality/quarantine,
+Twenty-one host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -405,3 +405,45 @@ builds pass. Tests include malformed/truncated/wrong-version/CRC frames, signed
 coordinate extrema, fragmented reports, cached iTOW freshness and command reset.
 Current apps: S3 1406928 bytes; C3 relay 1281856 bytes. No receiver hardware or
 new physical Survey-In qualification was performed.
+
+## Typed UG receiver telemetry profiles
+
+Authenticated POST `/api/gnss/telemetry/apply` accepts `rate_hz` (1, 2, 5 or 10),
+optional `receiver_port` (1/2 for F9P), optional complete `constellations` object
+(`gps`, `galileo`, `beidou`, `glonass` booleans), or Unicore `signal_groups`
+(one/two model-qualified IDs). `confirm` must be `APPLY_GNSS_TELEMETRY`.
+`persist=true` additionally requires
+`persistent_confirmation=SAVE_RECEIVER_CONFIGURATION`. Unknown/duplicate fields,
+unsupported rates/models/groups, cross-vendor options and disabling every
+constellation are rejected. The UI provides the common telemetry/rate operation;
+advanced signal selection uses this typed API rather than raw command text.
+
+The F9P plan uses the existing UBX builder for navigation rate plus PVT, SAT,
+STATUS, DOP and GGA. Only explicitly requested constellation flags are changed.
+The Unicore plan uses existing UG model tables and command builders for GGA/GSV,
+GST, PVTSLNA, BESTNAVA, RTK/RTCM status and satellite information; requested rates
+apply to output periods, not an invented universal navigation-cycle setting.
+Unicore output commands use the current command port: explicit alternate-port
+selection is not qualified and is rejected. Base-only/low-power signal presets
+are also rejected until their mode preconditions can be established.
+
+The convenient UG Unicore diagnostics preset derives from a ROVER preset, so the
+native BASE adapter deliberately builds only the requested telemetry operations.
+It emits no implicit MODE, baud change, factory reset or RTK timeout mutation.
+All requested commands abort on failure; an unsupported output is not reported
+as successfully applied. Runtime-only is the default. Persistence still uses UG
+safety approval and the same UART owner, single operation queue and NVS journal.
+BASE requests also expose the existing UG `receiver_port` 1/2 selector for RTCM.
+
+Local corrections are suspended before receiver mutation, with pending frames
+invalidated. An indeterminate command or persistent journal keeps that local
+source disabled, including after reboot; network-only NTRIP relay remains
+independent. Successful acknowledgement clears the journal before local routing
+can resume. No receiver-side byte cutoff or physical output qualification is
+inferred from this software source boundary.
+
+Twenty-one ASan/UBSan host cases and the browser mock pass. Tests verify all four
+supported model plans, no implicit BASE-to-ROVER change, no unsolicited
+constellation keys, approval, command safety and negative input/model cases.
+S3 and C3 IDF 6.1 builds pass (1419824-byte S3 app; 1283392-byte C3 relay); physical receiver acceptance and
+maximum UART bandwidth at each selected rate remain pending.

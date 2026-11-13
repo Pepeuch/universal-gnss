@@ -41,7 +41,7 @@ $('export').onclick = handle(async () => {
 $('import').onchange = handle(async event => { const file = event.target.files[0]; if (!file || file.size > 8192) throw new Error('Fichier JSON : maximum 8192 octets'); const text = await file.text(); JSON.parse(text); $('config').value = text; });
 $('base').onsubmit = handle(async event => {
   const fields = new FormData(event.target), value = {mode: fields.get('mode'), height_datum: fields.get('height_datum'), rtcm_output: true, persist: fields.has('persist')};
-  for (const key of ['latitude_deg','longitude_deg','height_m','duration_s','accuracy_01mm','reuse_distance_m']) {
+  for (const key of ['latitude_deg','longitude_deg','height_m','duration_s','accuracy_01mm','reuse_distance_m','receiver_port']) {
     const input = fields.get(key); if (input !== '') value[key] = Number(input);
   }
   if (!confirm('Appliquer ce plan au récepteur identifié ? Une erreur peut interrompre les corrections.')) return;
@@ -74,3 +74,14 @@ call('/api/capabilities', undefined, false).then(caps => {
   }
 }).catch(e => show(e.message));
 refresh(); setInterval(refresh, 3000);
+
+$('telemetry').onsubmit = handle(async () => {
+  const value = {rate_hz: Number($('telemetry-rate').value), persist: $('telemetry-persist').checked,
+    confirm: 'APPLY_GNSS_TELEMETRY'};
+  if (!confirm('Modifier les messages du récepteur identifié ? Les corrections locales seront suspendues pendant la configuration.')) return;
+  if (value.persist) {
+    if (prompt('Écriture persistante : saisir SAVE_RECEIVER_CONFIGURATION') !== 'SAVE_RECEIVER_CONFIGURATION') return;
+    value.persistent_confirmation = 'SAVE_RECEIVER_CONFIGURATION';
+  }
+  show(await call('/api/gnss/telemetry/apply', value));
+});

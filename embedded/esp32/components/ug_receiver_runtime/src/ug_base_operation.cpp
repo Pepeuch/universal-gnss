@@ -21,6 +21,7 @@ bool DecodeBaseOperation(std::string_view body, BaseOperation& out, std::string&
                  "accuracy_01mm",
                  "reuse_distance_m",
                  "rtcm_output",
+                 "receiver_port",
                  "persist",
                  "confirm",
                  "persistent_confirmation"}))
@@ -71,6 +72,10 @@ bool DecodeBaseOperation(std::string_view body, BaseOperation& out, std::string&
       !number("height_m", operation.height_m, -1000, 100000, fixed) ||
       !number("reuse_distance_m", operation.reuse_distance_m, 0, 10))
     return false;
+  double port = operation.receiver_port;
+  if (!number("receiver_port", port, 1, 2, false, true))
+    return false;
+  operation.receiver_port = static_cast<std::uint8_t>(port);
   double duration = operation.duration_s, accuracy = operation.accuracy_01mm;
   if (!number("duration_s", duration, 1, 86400, false, true) ||
       !number("accuracy_01mm", accuracy, 1, 100000000, false, true))

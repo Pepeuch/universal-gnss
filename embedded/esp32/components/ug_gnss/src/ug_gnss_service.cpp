@@ -29,7 +29,7 @@ std::mutex status_guard;
 ReceiverStatus status;
 QueueHandle_t operations;
 StaticQueue_t operations_control;
-std::array<std::uint8_t, sizeof(BaseOperation)> operations_memory{};
+std::array<std::uint8_t, sizeof(GnssOperation)> operations_memory{};
 std::atomic<bool> pending{false};
 std::int64_t Now()
 {
@@ -57,6 +57,7 @@ void Owner(void*)
   std::int64_t last_survey_poll = 0;
   auto invalidate_input = [&] {
     receiver.InvalidateObservations();
+    local = local && !ReceiverJournalBlocked() && !receiver.indeterminate();
     epoch = BeginCorrectionSource(0, local);
     identity = {};
     family = ReceiverDetectedFamily::kUnknown;
@@ -112,12 +113,15 @@ void Owner(void*)
       query_done = false;
       probe_started = Now();
       last_bytes = 0;
-      local = enabled && settings->local_input;
+      local = enabled && settings->local_input && !ReceiverJournalBlocked() &&
+              !receiver.indeterminate();
       epoch = BeginCorrectionSource(0, local);
     }
-    if (local != (enabled && settings->local_input))
+    const bool route_local =
+        enabled && settings->local_input && !ReceiverJournalBlocked() && !receiver.indeterminate();
+    if (local != route_local)
     {
-      local = enabled && settings->local_input;
+      local = route_local;
       epoch = BeginCorrectionSource(0, local);
     }
     if (enabled)
@@ -194,6 +198,7 @@ void Owner(void*)
     if (last_bytes && now - last_bytes > 5000000000LL)
     {
       receiver.InvalidateObservations();
+      local = local && !ReceiverJournalBlocked() && !receiver.indeterminate();
       epoch = BeginCorrectionSource(0, local);
       last_bytes = 0;
       identity = {};
@@ -206,7 +211,7 @@ void Owner(void*)
       status.firmware.clear();
       status.survey.reset();
     }
-    BaseOperation operation;
+    GnssOperation operation;
     if (xQueueReceive(operations, &operation, 0) == pdTRUE)
     {
       if (!enabled || !identity.model_verified || ReceiverJournalBlocked() || transaction ||
@@ -217,24 +222,32 @@ void Owner(void*)
       }
       else
       {
-        BaseConfigRequest request;
-        request.vendor = family == ReceiverDetectedFamily::kUblox ? ReceiverVendor::kUblox
-                                                                  : ReceiverVendor::kUnicore;
+        BaseConfigPlan plan;
         const std::string model = identity.identity.model.value_or("");
-        request.model = model;
-        request.model_verified = true;
-        request.mode = operation.mode;
-        request.height_datum = operation.datum;
-        request.latitude_deg = operation.latitude_deg;
-        request.longitude_deg = operation.longitude_deg;
-        request.height_m = operation.height_m;
-        request.duration_s = operation.duration_s;
-        request.accuracy_01mm = operation.accuracy_01mm;
-        request.reuse_distance_m = operation.reuse_distance_m;
-        request.rtcm_output = operation.rtcm_output;
-        request.persist = operation.persist;
-        request.confirm_persistent = operation.confirm_persistent;
-        auto plan = BuildBaseConfigProfile(request);
+        if (operation.kind == GnssOperation::Kind::kTelemetry)
+          plan = BuildTelemetryPlan(operation.telemetry, model, true);
+        else
+        {
+          BaseConfigRequest request;
+          request.vendor = family == ReceiverDetectedFamily::kUblox ? ReceiverVendor::kUblox
+                                                                    : ReceiverVendor::kUnicore;
+          request.model = model;
+          request.model_verified = true;
+          request.mode = operation.base.mode;
+          request.height_datum = operation.base.datum;
+          request.latitude_deg = operation.base.latitude_deg;
+          request.longitude_deg = operation.base.longitude_deg;
+          request.height_m = operation.base.height_m;
+          request.duration_s = operation.base.duration_s;
+          request.accuracy_01mm = operation.base.accuracy_01mm;
+          request.reuse_distance_m = operation.base.reuse_distance_m;
+          request.rtcm_output = operation.base.rtcm_output;
+          request.uart_port = operation.base.receiver_port;
+          request.persist = operation.base.persist;
+          request.confirm_persistent = operation.base.confirm_persistent;
+          plan = BuildBaseConfigProfile(request);
+        }
+
         if (!plan.ok())
         {
           Error(plan.error);
@@ -247,6 +260,12 @@ void Owner(void*)
         }
         else
         {
+          // Configuration may change the reference position/output/signals.
+          // Suspend local corrections before dispatch; an incomplete journal
+          // keeps this source disabled across a reboot as well.
+          local = false;
+          epoch = BeginCorrectionSource(0, false);
+          receiver.InvalidateObservations();
           transaction = receiver.Start(std::move(plan.commands), Now());
           if (!transaction)
           {
@@ -317,16 +336,16 @@ void Owner(void*)
 }  // namespace
 esp_err_t StartGnssService()
 {
-  static_assert(std::is_trivially_copyable_v<BaseOperation>);
+  static_assert(std::is_trivially_copyable_v<GnssOperation>);
   if (operations)
     return ESP_ERR_INVALID_STATE;
   operations =
-      xQueueCreateStatic(1, sizeof(BaseOperation), operations_memory.data(), &operations_control);
+      xQueueCreateStatic(1, sizeof(GnssOperation), operations_memory.data(), &operations_control);
   if (!operations || xTaskCreate(Owner, "ug_gnss", 16384, nullptr, 4, nullptr) != pdPASS)
     return ESP_ERR_NO_MEM;
   return ESP_OK;
 }
-bool QueueBaseOperation(const BaseOperation& operation)
+static bool QueueOperation(const GnssOperation& operation)
 {
   if (!operations || pending.exchange(true))
     return false;
@@ -334,6 +353,19 @@ bool QueueBaseOperation(const BaseOperation& operation)
     return true;
   pending = false;
   return false;
+}
+bool QueueBaseOperation(const BaseOperation& operation)
+{
+  GnssOperation request;
+  request.base = operation;
+  return QueueOperation(request);
+}
+bool QueueTelemetryOperation(const TelemetryOperation& operation)
+{
+  GnssOperation request;
+  request.kind = GnssOperation::Kind::kTelemetry;
+  request.telemetry = operation;
+  return QueueOperation(request);
 }
 ReceiverStatus ReceiverSnapshot()
 {

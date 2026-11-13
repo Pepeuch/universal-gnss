@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "esp_err.h"
-#include "ug_base_operation.hpp"
+#include "ug_telemetry_operation.hpp"
 #include "universal_gnss_protocols/ubx_records.hpp"
 namespace ug::embedded
 {
@@ -18,5 +18,6 @@ struct ReceiverStatus
 };
 esp_err_t StartGnssService();
 bool QueueBaseOperation(const BaseOperation&);
+bool QueueTelemetryOperation(const TelemetryOperation&);
 ReceiverStatus ReceiverSnapshot();
 }  // namespace ug::embedded

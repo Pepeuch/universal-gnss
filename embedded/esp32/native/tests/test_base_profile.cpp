@@ -127,4 +127,13 @@ int main()
       operation,
       parse_error));
   assert(operation.confirm_persistent);
+  assert(ug::embedded::DecodeBaseOperation(
+      R"({"mode":"survey-in","receiver_port":2,"confirm":"APPLY_BASE_CONFIGURATION"})",
+      operation,
+      parse_error));
+  assert(operation.receiver_port == 2);
+  assert(!ug::embedded::DecodeBaseOperation(
+      R"({"mode":"survey-in","receiver_port":3,"confirm":"APPLY_BASE_CONFIGURATION"})",
+      operation,
+      parse_error));
 }

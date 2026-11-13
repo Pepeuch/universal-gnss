@@ -284,6 +284,21 @@ esp_err_t Post(httpd_req_t* req)
     return Fail(req, "200 OK", "configuration saved; radio/Wi-Fi/TLS changes require reboot");
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/telemetry/apply")
+  {
+    TelemetryOperation operation;
+    if (!DecodeTelemetryOperation(body, operation, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    const auto receiver = ReceiverSnapshot();
+    if (!receiver.present || !receiver.model_verified || receiver.quarantined)
+      return Fail(req, "409 Conflict", "receiver not verified or quarantined");
+    const auto plan = BuildTelemetryPlan(operation, receiver.model, receiver.model_verified);
+    if (!plan.ok())
+      return Fail(req, "400 Bad Request", plan.error.c_str());
+    if (!QueueTelemetryOperation(operation))
+      return Fail(req, "409 Conflict", "receiver busy");
+    return Fail(req, "202 Accepted", "telemetry profile queued; observe receiver acknowledgement");
+  }
   if (uri == "/api/gnss/base/apply-fixed" || uri == "/api/gnss/base/start-survey" ||
       uri == "/api/gnss/base/apply")
   {
