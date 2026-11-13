@@ -1,15 +1,16 @@
-"""Run immutable historical host tests with only CRC24Q delegated to UG, in /tmp."""
+"""Run immutable historical host tests with the application overlay, in /tmp."""
 import argparse
-import io
 import json
 import os
 from pathlib import Path
 import subprocess
-import tarfile
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 EMBEDDED = ROOT / 'embedded/esp32'
+sys.path.insert(0, str(EMBEDDED / 'integration'))
+from prepare import adapt, extract, REFERENCE
 
 
 def run(*args, **kwargs):
@@ -20,28 +21,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--historical-repo', required=True)
     args = parser.parse_args()
-    sha = json.loads((EMBEDDED / 'historical-reference.json').read_text())['commit']
-    archive = subprocess.check_output([
-        'git', '-C', args.historical_repo, 'archive', sha,
-        'components/espnow_rtcm', 'components/lora_transport', 'components/rtcm_filter',
-        'tests/host', 'scripts/check_rtcm_usb.py', 'scripts/check_rtcm_capture.py'])
+    sha = json.loads(REFERENCE.read_text())['commit']
     with tempfile.TemporaryDirectory(prefix='ug-espnow-crc-') as directory:
         work = Path(directory)
-        with tarfile.open(fileobj=io.BytesIO(archive)) as stream:
-            stream.extractall(work, filter='data')
-        source = work / 'components/rtcm_filter/src/rtcm_filter.c'
-        text = source.read_text()
-        start = text.index('uint32_t rtcm3_crc24q(')
-        end = text.index('void rtcm3_stream_parser_init(', start)
-        source.write_text('#include "ug_rtcm.h"\n' + text[:start] + '''
-uint32_t rtcm3_crc24q(const uint8_t *data, size_t len)
-{
-    uint32_t crc = 0;
-    (void)ug_rtcm_crc24q(data, len, &crc);
-    return crc;
-}
-
-''' + text[end:])
+        extract(args.historical_repo, sha, work, (
+            'components/espnow_rtcm', 'components/lora_transport', 'components/rtcm_filter',
+            'tests/host', 'scripts/check_rtcm_usb.py', 'scripts/check_rtcm_capture.py',
+            'CMakeLists.txt', 'firmware/espnow_rover/CMakeLists.txt'))
+        adapt(work)
         flags = ['-g', '-fsanitize=address,undefined', '-Wall', '-Wextra', '-Werror']
         includes = ['-I' + str(EMBEDDED / 'components/ug_rtcm/include'),
                     '-I' + str(ROOT / 'protocols/gnss_protocols/include')]

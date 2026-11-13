@@ -7,6 +7,12 @@ Référence historique publiée : `7a1ec69f5e9d07522c0284ec2dbae380f72c7e85`
 Le firmware historique reste la référence matérielle (740/740 trames nominales).
 Aucune endurance, réception RF ou opération de flash n'a été rejouée dans ce lot.
 
+Le premier commit portable est `134e48b12acec960bba842cb06715847ec960a99`.
+Le [lot d'intégration applicative](integration/README.md) construit maintenant les
+applications historiques complètes S3 Gateway/C3 Rover avec cette brique UG,
+dans un overlay externe transitoire ; les résultats, budgets et limites y sont
+séparés des preuves du premier commit décrites ci-dessous.
+
 ## Périmètre implémenté
 
 `components/ug_rtcm` compile **le fichier UG existant**
@@ -27,8 +33,10 @@ par un appel à UG, puis les tests historiques inchangés sont exécutés.
 Le parseur historique et la fragmentation ne sont pas importés dans UG.
 `probe/` est une application de compilation, pas un firmware gateway ou rover.
 Les binaires de probe utilisent les partitions génériques IDF : ne pas les
-flasher sur les cartes du banc. Le prochain lot intègrera le composant à la
-chaîne ESP-NOW réelle. Les preuves physiques historiques nominales (740/740) sont
+flasher sur les cartes du banc. Le lot suivant
+[intègre le composant à la chaîne ESP-NOW réelle](integration/README.md) dans une
+copie de build transitoire, sans migration des autres services.
+Les preuves physiques historiques nominales (740/740) sont
 acceptées pour poursuivre le développement ; les compléments d'endurance et de
 portée se feront sur le terrain. Ce lot ne revendique aucune nouvelle preuve RF.
 
@@ -89,7 +97,8 @@ production n'est liée par le composant UG lui-même.
 | `gnss_runtime` | ADAPT | Threads requis ; factory POSIX et supervisor Linux à exclure. FreeRTOS doit porter l'orchestration sans réinterpréter les contrats UG |
 
 Cela n'est pas une certification des six bibliothèques complètes sur ESP32 :
-seul le CRC UG est compilé et lié dans les probes de ce premier lot.
+seul le CRC UG est qualifié sous IDF, dans les probes du premier lot puis dans
+les applications de référence du [lot suivant](integration/README.md).
 
 Inventaire historique et traitement prévu :
 
@@ -116,8 +125,10 @@ Le checkout historique existant reste utilisable en deuxième racine d'un worksp
 éditeur (ajouter son dossier existant, sans nouveau clone UG).
 
 UG contient une licence LGPLv3 ; le dépôt historique une GPLv3, avec notices GPLv3
-ou ultérieure dans ses fichiers. Le sous-module Semtech/Lora-net a ses propres
-notices à auditer avant reprise. Aucune source historique GPL ni source fournisseur
+ou ultérieure dans ses fichiers. Le sous-module Semtech/Lora-net conserve ses
+notices Clear BSD, inventoriées dans le
+[lot applicatif](integration/README.md#licences-et-limites-de-qualification).
+Aucune source historique GPL ni source fournisseur
 n'est copiée dans l'arbre UG. Le harnais extrait une copie locale temporaire pour
 les tests, conserve les notices et ne distribue aucun nouveau firmware combiné.
 L'import futur de code GPL et sa distribution devront faire l'objet d'une revue
@@ -130,14 +141,14 @@ Une seule distribution future porte le nom **`esp32`**. Ses profils matériels e
 fonctionnels sont des configurations de compilation de cette distribution, pas
 des distributions distinctes, des forks du moteur ou des branches spécialisées.
 Aucun profil ESP32 n'est encore ajouté au générateur ROS2 : `embedded/esp32/`
-reste explicitement exclu de ses payloads. Ce premier lot fournit uniquement la
-brique RTCM et des probes de compilation, pas les firmwares de ces profils.
+reste explicitement exclu de ses payloads. La brique RTCM et les applications de
+référence construites par l'overlay transitoire ne constituent pas encore les firmwares définitifs de ces profils.
 
 | Profil fonctionnel prévu | Fonction | Cible matérielle envisagée | État |
 |---|---|---|---|
-| `gateway` | Passerelle complète : GNSS local facultatif, NTRIP, Ethernet, ESP-NOW, configuration, diagnostics et WebUI | S3 + W5500 en premier | Architecture définie, application à porter |
+| `gateway` | Passerelle complète : GNSS local facultatif, NTRIP, Ethernet, ESP-NOW, configuration, diagnostics et WebUI | S3 + W5500 en premier | Overlay historique compilé ; application UG à porter |
 | `relay-ntrip` | Passerelle légère sans récepteur GNSS : NTRIP sur Ethernet redistribué par ESP-NOW, services réduits | C3 + W5500 possible après étude broches/mémoire | Configuration du même moteur, non implémentée |
-| `rover` | Réception ESP-NOW, réassemblage/validation, sortie RTCM USB ou UART ; services inutiles exclus | C3 en premier, C6 futur | Application à porter |
+| `rover` | Réception ESP-NOW, réassemblage/validation, sortie RTCM USB ou UART ; services inutiles exclus | C3 en premier, C6 futur | Overlay historique compilé ; application UG à porter |
 | `repeater-espnow` | Extension de couverture radio ESP-NOW | À étudier | Futur uniquement, aucune implémentation dans ce lot |
 
 `relay-ntrip` désigne une source réseau Ethernet/NTRIP vers la radio. Ce n'est

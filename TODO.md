@@ -6,7 +6,10 @@ A single future `esp32` distribution is planned with compilation profiles
 `gateway`, `relay-ntrip`, `rover` and, later, `repeater-espnow`. The BASE gateway
 and GNSS-free NTRIP relay share one gateway engine; local GNSS is optional for
 `gateway`. The [portable RTCM pilot and migration plan](embedded/esp32/README.md)
-are prepared on `feat/esp32`; the profiles are not implemented by this first lot.
+are implemented on `feat/esp32`. The [transitional application integration](embedded/esp32/integration/README.md)
+now builds the real historical S3 Gateway/C3 Rover with UG CRC, with software
+validation and two-build reproducibility; definitive profiles remain to migrate.
+No new hardware qualification or NTRIP/WebUI/NVS/runtime migration is claimed.
 Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
 historical checklists and completion metrics are unchanged.
@@ -20,7 +23,7 @@ compilation, with a bounded supported-profile CI matrix and incompatible-profile
 partition rejection. Architecture and dependencies are detailed in the
 [ESP32 portal migration plan](embedded/esp32/README.md#portail-officiel-ug-build--flash--lot-futur).
 No portal, Pages deployment, firmware publication or CI change belongs to the
-current portable RTCM lot.
+current RTCM application-integration lot.
 
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
