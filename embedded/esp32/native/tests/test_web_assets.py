@@ -17,7 +17,7 @@ class WebAssets(unittest.TestCase):
         vm.set_time_limit(2)
         vm.eval(r'''
           const elements = {}, calls = [];
-          const document = {getElementById(id) {return elements[id] ||= {value:'', textContent:'', hidden:false};},
+          const document = {getElementById(id) {return elements[id] ||= {value:'', textContent:'', hidden:false,appendChild(){}};},
                             createElement() {return {click(){}};}};
           const setInterval = () => {};
           const confirm = () => true;
@@ -26,8 +26,8 @@ class WebAssets(unittest.TestCase):
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
             calls.push({path,options});
-            const payload = path === '/api/capabilities' ? {gnss:true} : path === '/api/config' ?
-              {schema:1,upstream:{endpoint:{password_set:true}}} : {};
+            const payload = path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+              {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
         ''')
@@ -44,6 +44,13 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(operation['latitude_deg'], 48.123456789)
         self.assertEqual(operation['confirm'], 'APPLY_BASE_CONFIGURATION')
         self.assertEqual(operation['persistent_confirmation'], 'SAVE_RECEIVER_CONFIGURATION')
+        vm.eval("elements['gnss-enabled'].checked=true; elements['gnss-tx'].value='17'; elements['gnss-rx'].value='18'; elements['correction-input'].value='local'; elements.transport.onsubmit();")
+        self.drain(vm)
+        patch = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').pop().options.body"))
+        self.assertEqual(patch['gnss']['tx_pin'], 17)
+        self.assertEqual(patch['gnss']['rx_pin'], 18)
+        self.assertTrue(patch['gnss']['enabled'])
+        self.assertEqual(patch['input'], 'local')
         vm.eval('elements.logout.onclick();')
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')

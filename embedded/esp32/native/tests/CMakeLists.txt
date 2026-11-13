@@ -82,3 +82,14 @@ target_link_libraries(test_configuration PRIVATE ug_embedded_settings)
 foreach(scenario normal open-failure read-failure corrupt interrupted journal-corrupt)
     add_test(NAME embedded_configuration_${scenario} COMMAND test_configuration ${scenario})
 endforeach()
+add_library(ug_embedded_radio ../../components/espnow_rtcm/src/espnow_rtcm_codec.c
+    ../../components/lora_transport/src/lora_transport.c
+    ../../components/rtcm_filter/src/rtcm_filter.c ../../components/rtcm_filter/src/rtcm_profiles.c)
+target_include_directories(ug_embedded_radio PUBLIC radio_stubs
+    ../../components/espnow_rtcm/include ../../components/lora_transport/include ../../components/rtcm_filter/include)
+target_link_libraries(ug_embedded_radio PUBLIC ug_embedded_gateway)
+add_executable(test_gateway_radio_pty test_gateway_radio_pty.cpp)
+target_link_libraries(test_gateway_radio_pty PRIVATE ug_embedded_ntrip ug_embedded_radio util)
+target_compile_options(test_gateway_radio_pty PRIVATE -UNDEBUG)
+add_test(NAME embedded_gateway_radio_pty COMMAND test_gateway_radio_pty)
+set_tests_properties(embedded_gateway_radio_pty PROPERTIES TIMEOUT 15)

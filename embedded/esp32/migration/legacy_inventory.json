@@ -2477,7 +2477,10 @@
       "git_object": "6889e25a570ea7fe948f0690972247eafa90f3ec",
       "group": "scripts",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "IMPLEMENTED",
+      "native_path": "embedded/esp32/tools/check_rtcm_capture.py",
+      "validation": "HARDWARE_PENDING",
+      "evidence": "native/tests/test_capture_tools.py plus native TCP/UG/codec/PTY replay; no physical USB claim"
     },
     {
       "path": "scripts/check_rtcm_usb.py",
@@ -2485,7 +2488,10 @@
       "git_object": "bab42b46387f93ef2c09a04969b11b5673ddff9b",
       "group": "scripts",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "IMPLEMENTED",
+      "native_path": "embedded/esp32/tools/check_rtcm_usb.py",
+      "validation": "HARDWARE_PENDING",
+      "evidence": "native/tests/test_capture_tools.py plus native TCP/UG/codec/PTY replay; no physical USB claim"
     },
     {
       "path": "scripts/check_webui_assets.sh",

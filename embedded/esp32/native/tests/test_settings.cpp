@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_admin.hpp"
+#include "ug_board.hpp"
 #include "ug_json.hpp"
 #include "ug_settings.hpp"
 #include <cassert>
@@ -8,13 +9,31 @@ using namespace ug::embedded;
 int main()
 {
   Capabilities base{true, true, false, 5, "waveshare-s3-eth", "gateway"};
+  base.gnss_pin_mask = GnssPinsForBoard(base.board);
+  for (int pin : {0,  3,  9,  10, 11, 12, 13, 14, 19, 20, 26, 27,
+                  28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 45, 46})
+    assert(!(base.gnss_pin_mask & (UINT64_C(1) << pin)));
+  assert(GnssPinsForBoard("unknown") == 0);
   Capabilities relay{false, false, false, 1, "supermini-c3", "relay-ntrip"};
   std::string error, json;
   Settings original = DefaultSettings(base), out;
   assert(ValidateSettings(original, base, error));
   assert(EncodeSettings(original, json, true));
   assert(DecodeSettings(json, original, base, out, error));
-  assert(out.local_input && out.gnss_enabled && out.revision == 2);
+  assert(!out.local_input && !out.gnss_enabled && out.revision == 2);
+  assert(!DecodeSettings(R"({"gnss":{"enabled":true}})", original, base, out, error));
+  assert(DecodeSettings(R"({"input":"local","gnss":{"enabled":true,"tx_pin":17,"rx_pin":18}})",
+                        original,
+                        base,
+                        out,
+                        error));
+  assert(out.gnss_enabled && out.gnss_tx_pin == 17 && out.gnss_rx_pin == 18);
+  assert(!DecodeSettings(R"({"input":"local","gnss":{"enabled":true,"tx_pin":17,"rx_pin":37}})",
+                         original,
+                         base,
+                         out,
+                         error));
+  assert(!DecodeSettings(R"({"gnss":{"tx_pin":17,"rx_pin":17}})", original, base, out, error));
   auto configured = original;
   configured.upstream.password = "upstream-test-secret";
   configured.wifi_password = "wifi-test-secret";

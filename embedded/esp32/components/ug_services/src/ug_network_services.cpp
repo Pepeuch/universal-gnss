@@ -260,6 +260,11 @@ universal_gnss::GnssRuntimeState GnssSnapshot()
   std::lock_guard<std::mutex> lock(state_guard);
   return gnss_snapshot;
 }
+GnssObservationSnapshot GnssObservation()
+{
+  std::lock_guard<std::mutex> lock(state_guard);
+  return {gnss_snapshot, position_receipt_ns};
+}
 NetworkServiceStats NetworkStats()
 {
   portENTER_CRITICAL(&metrics_guard);

@@ -33,26 +33,50 @@ static esp_now_send_status_t s_send_status;
 static bool s_tx_halted;
 static uint32_t s_tx_epoch = 1, s_message_epoch;
 #else
-static uint32_t s_usb_errors;
+
 #endif
 static bool s_started;
-static uint32_t s_dropped, s_invalid;
+static espnow_rtcm_stats_t s_stats;
+static void counter_add(uint64_t* counter, uint64_t value)
+{
+  portENTER_CRITICAL(&s_lock);
+  *counter += value;
+  portEXIT_CRITICAL(&s_lock);
+}
+void espnow_rtcm_get_stats(espnow_rtcm_stats_t* out)
+{
+  if (!out)
+    return;
+  portENTER_CRITICAL(&s_lock);
+  *out = s_stats;
+  out->started = s_started;
+  out->queued = s_queue.count;
+#if CONFIG_ESPNOW_RTCM_BASE
+  out->tx_quarantined = s_tx_halted;
+#endif
+  portEXIT_CRITICAL(&s_lock);
+}
 
 static uint32_t now_ms(void)
 {
   return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
-static bool queue_push(const uint8_t* data, size_t len)
+static bool queue_push_at(const uint8_t* data, size_t len, uint32_t stamp_ms)
 {
   portENTER_CRITICAL(&s_lock);
-  bool ok = espnow_rtcm_mailbox_push(&s_queue, data, len, now_ms());
+  bool ok = espnow_rtcm_mailbox_push(&s_queue, data, len, stamp_ms);
   if (!ok)
-    ++s_dropped;
+    ++s_stats.dropped;
   portEXIT_CRITICAL(&s_lock);
   if (ok)
     xTaskNotifyGive(s_worker);
   return ok;
+}
+
+static bool queue_push(const uint8_t* data, size_t len)
+{
+  return queue_push_at(data, len, now_ms());
 }
 
 static bool queue_pop(void)
@@ -78,21 +102,30 @@ static esp_err_t send_fragment(const lora_transport_fragment_t* part, void* ctx)
 {
   const uint32_t epoch = *(const uint32_t*)ctx;
   portENTER_CRITICAL(&s_lock);
-  const bool invalidated = epoch != s_tx_epoch;
+  const bool invalidated = epoch != s_tx_epoch || s_tx_halted;
   portEXIT_CRITICAL(&s_lock);
+  if ((uint32_t)(now_ms() - s_message.stamp_ms) > 1000)
+    return ESP_ERR_TIMEOUT;
   if (invalidated)
-    return ESP_ERR_INVALID_STATE;
-  if (s_tx_halted)
     return ESP_ERR_INVALID_STATE;
   esp_err_t err = esp_now_send(s_peer, part->packet, part->packet_len);
   if (err != ESP_OK)
+  {
+    counter_add(&s_stats.tx_failures, 1);
     return err;
+  }
   if (xSemaphoreTake(s_sent, pdMS_TO_TICKS(200)) != pdTRUE)
   {
     /* A late callback must never acknowledge a different packet. Reboot to resume. */
+    portENTER_CRITICAL(&s_lock);
     s_tx_halted = true;
+    portEXIT_CRITICAL(&s_lock);
+    counter_add(&s_stats.tx_failures, 1);
     return ESP_ERR_TIMEOUT;
   }
+  counter_add(s_send_status == ESP_NOW_SEND_SUCCESS ? &s_stats.tx_packets_acknowledged
+                                                    : &s_stats.tx_failures,
+              1);
   return s_send_status == ESP_NOW_SEND_SUCCESS ? ESP_OK : ESP_FAIL;
 }
 
@@ -107,6 +140,7 @@ static void received(const esp_now_recv_info_t* info, const uint8_t* data, int l
   if (!info || !data || len <= 0 || len > ESPNOW_RTCM_PACKET_SIZE ||
       memcmp(info->src_addr, s_peer, sizeof(s_peer)))
     return;
+  counter_add(&s_stats.rx_packets, 1);
   /* Wi-Fi callback only copies one bounded packet; never performs USB I/O. */
   queue_push(data, (size_t)len);
 }
@@ -120,13 +154,17 @@ static void usb_frame(const uint8_t* frame, size_t len)
     int written = usb_serial_jtag_write_bytes(frame + offset, len - offset, pdMS_TO_TICKS(20));
     if (written < 0)
       break;
+    if (written > 0)
+      counter_add(&s_stats.usb_bytes, (uint64_t)written);
     offset += (size_t)written;
     if (!written)
       vTaskDelay(1);
   }
   /* USB disconnect/stall can truncate a stream; no invented padding or logs. */
   if (offset != len)
-    ++s_usb_errors;
+    counter_add(&s_stats.usb_errors, 1);
+  else
+    counter_add(&s_stats.usb_frames, 1);
 }
 #endif
 
@@ -140,21 +178,32 @@ static void worker(void* arg)
     {
       if ((uint32_t)(now_ms() - s_message.stamp_ms) > 1000)
       {
-        ++s_dropped;
+        counter_add(&s_stats.dropped, 1);
         continue;
       }
 #if CONFIG_ESPNOW_RTCM_BASE
       const uint32_t epoch = s_message_epoch;
       if (espnow_rtcm_fragment(
               &s_radio, s_message.bytes, s_message.len, send_fragment, (void*)&epoch) != ESP_OK)
-        ++s_invalid;
+        counter_add(&s_stats.invalid, 1);
+      else
+        counter_add(&s_stats.tx_frames, 1);
 #else
       lora_transport_reassembly_result_t result;
       if (espnow_rtcm_receive(&s_radio, s_message.bytes, s_message.len, now_ms(), &result) !=
           ESP_OK)
-        ++s_invalid;
+        counter_add(&s_stats.invalid, 1);
       else if (result.complete)
+      {
+        counter_add(&s_stats.rx_frames, 1);
         usb_frame(result.frame, result.frame_len);
+      }
+      portENTER_CRITICAL(&s_lock);
+      s_stats.rx_crc16_errors = s_radio.crc16_errors;
+      s_stats.rx_crc24q_errors = s_radio.crc24q_errors;
+      s_stats.reassembly_expired = s_radio.reassembly_expired;
+      s_stats.reassembly_abandoned = s_radio.reassembly_abandoned;
+      portEXIT_CRITICAL(&s_lock);
 #endif
     }
   }
@@ -356,19 +405,28 @@ esp_err_t espnow_rtcm_start(void)
     return err;
   }
 #endif
+  portENTER_CRITICAL(&s_lock);
+  s_stats.effective_channel = actual_channel;
   s_started = true;
+  portEXIT_CRITICAL(&s_lock);
   return ESP_OK;
 }
 
 esp_err_t espnow_rtcm_send_frame(const uint8_t* frame, size_t len)
 {
+  return espnow_rtcm_send_frame_at(frame, len, now_ms());
+}
+esp_err_t espnow_rtcm_send_frame_at(const uint8_t* frame, size_t len, uint32_t receipt_ms)
+{
 #if CONFIG_ESPNOW_RTCM_BASE
-  if (!s_started || !espnow_rtcm_frame_valid(frame, len))
+  if (!s_started || !espnow_rtcm_frame_valid(frame, len) ||
+      (uint32_t)(now_ms() - receipt_ms) > 1000)
     return ESP_ERR_INVALID_ARG;
-  return queue_push(frame, len) ? ESP_OK : ESP_ERR_NO_MEM;
+  return queue_push_at(frame, len, receipt_ms) ? ESP_OK : ESP_ERR_NO_MEM;
 #else
   (void)frame;
   (void)len;
+  (void)receipt_ms;
   return ESP_ERR_NOT_SUPPORTED;
 #endif
 }
@@ -377,8 +435,11 @@ void espnow_rtcm_invalidate_pending(void)
 {
 #if CONFIG_ESPNOW_RTCM_BASE
   portENTER_CRITICAL(&s_lock);
-  ++s_tx_epoch;
-  s_dropped += s_queue.count;
+  if (s_tx_epoch == UINT32_MAX)
+    s_tx_halted = true;
+  else
+    ++s_tx_epoch;
+  s_stats.dropped += s_queue.count;
   s_queue.head = s_queue.count = 0;
   portEXIT_CRITICAL(&s_lock);
 #endif
@@ -414,6 +475,14 @@ void espnow_rtcm_ntrip_bytes(const uint8_t* data, size_t len)
 #endif
 }
 #else
+void espnow_rtcm_get_stats(espnow_rtcm_stats_t* out)
+{
+  if (out)
+  {
+    const espnow_rtcm_stats_t empty = {0};
+    *out = empty;
+  }
+}
 esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel)
 {
   (void)peer_mac;
@@ -425,6 +494,13 @@ void espnow_rtcm_invalidate_pending(void)
 }
 esp_err_t espnow_rtcm_start(void)
 {
+  return ESP_ERR_NOT_SUPPORTED;
+}
+esp_err_t espnow_rtcm_send_frame_at(const uint8_t* frame, size_t len, uint32_t receipt_ms)
+{
+  (void)frame;
+  (void)len;
+  (void)receipt_ms;
   return ESP_ERR_NOT_SUPPORTED;
 }
 esp_err_t espnow_rtcm_send_frame(const uint8_t* frame, size_t len)

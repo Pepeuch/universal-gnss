@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_web.hpp"
+extern "C" {
+#include "espnow_rtcm.h"
+}
 #include "esp_heap_caps.h"
 #include "esp_https_server.h"
 #include "esp_system.h"
@@ -119,6 +122,21 @@ esp_err_t Status(httpd_req_t* req)
                               gateway.routing.dropped_full);
   cJSON_AddNumberToObject(root.get(), "stale_drops", gateway.routing.dropped_stale);
   cJSON_AddBoolToObject(root.get(), "receiver_quarantined", ReceiverJournalBlocked());
+  espnow_rtcm_stats_t radio;
+  espnow_rtcm_get_stats(&radio);
+  auto* r = cJSON_AddObjectToObject(root.get(), "espnow");
+  if (!r)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddBoolToObject(r, "started", radio.started);
+  cJSON_AddBoolToObject(r, "configured_enabled", config->radio_enabled);
+  cJSON_AddBoolToObject(r, "tx_quarantined", radio.tx_quarantined);
+  cJSON_AddNumberToObject(r, "effective_channel", radio.effective_channel);
+  cJSON_AddNumberToObject(r, "queued", radio.queued);
+  cJSON_AddNumberToObject(r, "dropped", radio.dropped);
+  cJSON_AddNumberToObject(r, "invalid", radio.invalid);
+  cJSON_AddNumberToObject(r, "tx_frames", radio.tx_frames);
+  cJSON_AddNumberToObject(r, "mac_ack_packets", radio.tx_packets_acknowledged);
+  cJSON_AddNumberToObject(r, "tx_failures", radio.tx_failures);
   // Public status contains no positions, credentials, raw receiver bytes or private MACs.
   return Json(req, root.get());
 }
@@ -131,6 +149,12 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   cJSON_AddBoolToObject(root.get(), "gnss", caps.local_gnss);
   cJSON_AddBoolToObject(root.get(), "caster", caps.caster);
   cJSON_AddBoolToObject(root.get(), "lora", caps.lora);
+  auto* pins = cJSON_AddArrayToObject(root.get(), "gnss_allowed_pins");
+  if (!pins)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (unsigned pin = 0; pin < 64; ++pin)
+    if (caps.gnss_pin_mask & (UINT64_C(1) << pin))
+      cJSON_AddItemToArray(pins, cJSON_CreateNumber(pin));
   cJSON_AddNumberToObject(root.get(), "publishers", caps.publisher_slots);
   cJSON_AddBoolToObject(root.get(), "fixed_channel_espnow", true);
   cJSON_AddBoolToObject(root.get(), "radio_wifi_changes_require_reboot", true);
@@ -140,7 +164,8 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
 esp_err_t GnssReply(httpd_req_t* req)
 {
   const auto gnss = ReceiverSnapshot();
-  const auto state = GnssSnapshot();
+  const auto observation = GnssObservation();
+  const auto& state = observation.state;
   JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
   if (!root)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
@@ -152,6 +177,12 @@ esp_err_t GnssReply(httpd_req_t* req)
   cJSON_AddBoolToObject(root.get(), "quarantined", gnss.quarantined);
   cJSON_AddStringToObject(root.get(), "last_error", gnss.last_error.c_str());
   cJSON_AddNumberToObject(root.get(), "operation_state", gnss.operation_state);
+  const auto now = esp_timer_get_time() * 1000;
+  const auto receipt = observation.position_receipt_ns;
+  const bool stale = !receipt || now < *receipt || now - *receipt > 3000000000LL;
+  cJSON_AddBoolToObject(root.get(), "position_stale", stale);
+  if (receipt && now >= *receipt)
+    cJSON_AddNumberToObject(root.get(), "position_observation_age_ms", (now - *receipt) / 1000000);
   cJSON_AddBoolToObject(root.get(), "fix_valid", state.fix_valid);
   cJSON_AddNumberToObject(root.get(), "fix_type", static_cast<unsigned>(state.fix_type));
   if (state.latitude_deg)

@@ -118,7 +118,10 @@ esp_err_t espnow_rtcm_receive(espnow_rtcm_codec_t* codec,
     return ESP_ERR_INVALID_SIZE;
   uint16_t crc = ((uint16_t)packet[len - 2] << 8) | packet[len - 1];
   if (lora_transport_crc16(packet, len - 2) != crc)
+  {
+    ++codec->crc16_errors;
     return ESP_ERR_INVALID_CRC;
+  }
   /* Invalid headers must not advance the sequence/freshness boundary. */
   uint8_t checksum = 0;
   for (size_t i = 0; i < 10; ++i)
@@ -129,6 +132,8 @@ esp_err_t espnow_rtcm_receive(espnow_rtcm_codec_t* codec,
     return ESP_ERR_INVALID_RESPONSE;
   if (codec->have_sequence && (uint32_t)(now_ms - codec->progress_ms) >= ESPNOW_RTCM_REASSEMBLY_MS)
   {
+    if (codec->transport.reassembly_active)
+      ++codec->reassembly_expired;
     codec->have_sequence = false;
     codec->transport.reassembly_active = false;
   }
@@ -138,6 +143,8 @@ esp_err_t espnow_rtcm_receive(espnow_rtcm_codec_t* codec,
     uint16_t advance = (uint16_t)(sequence - codec->sequence);
     if ((advance == 0 && !codec->transport.reassembly_active) || advance >= 0x8000U)
       return ESP_ERR_INVALID_STATE;
+    if (advance > 0 && codec->transport.reassembly_active)
+      ++codec->reassembly_abandoned;
   }
   esp_err_t err = lora_transport_reassemble_push(&codec->transport, packet, len, result);
   if (err != ESP_OK)
@@ -148,9 +155,12 @@ esp_err_t espnow_rtcm_receive(espnow_rtcm_codec_t* codec,
   if (result->complete && (!espnow_rtcm_frame_valid(result->frame, result->frame_len) ||
                            packet[8] != (result->frame_len + payload_max - 1) / payload_max))
   {
+    ++codec->crc24q_errors;
     memset(result, 0, sizeof(*result));
     return ESP_ERR_INVALID_CRC;
   }
+  if (result->complete)
+    ++codec->completed_frames;
   return ESP_OK;
 }
 

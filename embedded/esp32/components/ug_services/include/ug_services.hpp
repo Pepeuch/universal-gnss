@@ -10,6 +10,12 @@ void NetworkAvailabilityChanged(bool available);
 void PublishGnssSnapshot(const universal_gnss::GnssRuntimeState& state,
                          std::optional<std::int64_t> position_receipt_ns = std::nullopt);
 universal_gnss::GnssRuntimeState GnssSnapshot();
+struct GnssObservationSnapshot
+{
+  universal_gnss::GnssRuntimeState state;
+  std::optional<std::int64_t> position_receipt_ns;
+};
+GnssObservationSnapshot GnssObservation();
 struct NetworkServiceStats
 {
   bool upstream_connected{}, upstream_flowing{}, caster_running{};

@@ -3,6 +3,7 @@ import argparse
 import json
 import yaml
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,7 +14,15 @@ sys.path.insert(0, str(ROOT / 'embedded/esp32/integration'))
 from build import merged_defaults, C3_PARTITIONS
 
 
-def build(output, profile, board, gnss, provision=False, dependency_cache=None):
+def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=1):
+    if peer_mac is not None:
+        if not re.fullmatch(r'(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', peer_mac):
+            raise ValueError('peer must be an explicit unicast STA MAC')
+        octets = bytes.fromhex(peer_mac.replace(':',''))
+        if octets[0] & 1 or not any(octets):
+            raise ValueError('peer must be a nonzero unicast MAC')
+    if not 1 <= channel <= 11:
+        raise ValueError('fixed ESP-NOW channel must be between 1 and 11')
     work = Path(output).resolve()
     if work.exists() or ROOT == work or ROOT in work.parents:
         raise ValueError('build output must be new and outside source roots')
@@ -51,10 +60,9 @@ CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
-CONFIG_ESPNOW_RTCM_CHANNEL=1
 ''', 'CONFIG_ESPNOW_RTCM_ROVER=y' if rover else 'CONFIG_ESPNOW_RTCM_BASE=y',
-                'CONFIG_ESPNOW_RTCM_PEER_MAC="02:00:00:00:00:01"' if rover else
-                'CONFIG_ESPNOW_RTCM_PEER_MAC="02:00:00:00:00:02"']
+                f'CONFIG_ESPNOW_RTCM_CHANNEL={channel}',
+                'CONFIG_ESPNOW_RTCM_PEER_MAC="' + (peer_mac or ('02:00:00:00:00:01' if rover else '02:00:00:00:00:02')) + '"']
     if s3:
         defaults += ['''CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
@@ -99,7 +107,9 @@ if __name__ == '__main__':
     p.add_argument('--profile', required=True, choices=('gateway', 'relay-ntrip', 'rover'))
     p.add_argument('--board', required=True, choices=('waveshare-s3-eth', 'supermini-c3'))
     p.add_argument('--local-gnss', action='store_true')
+    p.add_argument('--peer-mac', help='explicit peer Wi-Fi STA MAC; omitted means a fictitious compile-only peer')
+    p.add_argument('--channel', type=int, default=1, help='fixed common ESP-NOW channel; no automatic selection')
     p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')
     p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
     a = p.parse_args()
-    build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache)
+    build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel)

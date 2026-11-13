@@ -216,3 +216,71 @@ LoRa remains a deferred historical sketch, by maintainer priority. ESP-NOW is th
 primary radio path. Existing framing/CRC16 code is retained; it does not establish
 an operational LoRa radio or regulatory qualification. No LoRa driver, new RF
 mode or regional emission policy is activated by this migration milestone.
+
+
+## ESP-NOW software data-path qualification
+
+The native host test now traverses a real loopback TCP caster, **UG NtripClient**,
+UG gateway ownership/CRC validation, the unchanged ESP-NOW fragment wire format,
+reassembly and a raw Linux PTY. It verifies nominal byte order, an absent fragment,
+CRC16 corruption, and an RTCM payload with repaired fragment CRC16 but invalid
+RTCM CRC24Q. Corrupt/partial frames never reach the PTY. This is a software replay,
+not a new physical radio/USB qualification. Historical codec tests are also replayed
+against the current native components (12 C groups and 11 Python cases).
+
+Radio queueing preserves the original source receipt timestamp rather than
+refreshing its age. Source invalidation clears queued transmissions; every next
+fragment checks epoch and age. A missing MAC callback retains the existing TX
+quarantine; no later packet can consume its delayed callback. Receiver counters
+separate CRC16/CRC24Q rejection, completed RTCM frames, expiry and actual USB bytes.
+They are read as snapshots; the rover never prints diagnostics into RTCM. S3
+status exposes radio state/channel/queue/drop/TX counters without revealing MACs.
+MAC acknowledgements are not proof of Linux USB delivery.
+
+`radio.enabled=false` stops accepting new frames immediately and clears pending
+radio frames through the control owner. In-flight RF bytes cannot be retracted.
+Enabling a radio that was disabled at boot still requires reboot; peer/channel
+changes are boot-applied and never select an access point's channel implicitly.
+The build recipe accepts explicit `--peer-mac` and `--channel`; omitted peers are
+fictitious compile-only values. No real/private MAC is committed.
+
+Linux validation tools are now maintained under `embedded/esp32/tools/`:
+
+```bash
+python3 embedded/esp32/tools/check_rtcm_usb.py /dev/serial/by-id/<identified-rover> --frames 100 --timeout 60 --output /tmp/new-private-capture.rtcm
+python3 embedded/esp32/tools/check_rtcm_capture.py /tmp/reference.rtcm /tmp/new-private-capture.rtcm
+```
+
+The first command opens only the explicitly supplied port, reads binary data and
+reports CRC/noise/count/rate. Capture output is private and created exclusively;
+existing files are never overwritten. The second command compares finite captures
+including order, missing/extra frames and integrity. The independent Python CRC
+is a host verifier, not another firmware CRC engine. Five new PTY/parser/tool
+regressions pass. ROM boot bytes remain distinct from application logs and are
+not silently discarded by these strict tools. No physical port was opened during
+this migration. UG Linux/ROS2 consumers remain unchanged.
+
+
+### UART resource correction
+
+The inherited UART RX37 default conflicts with the configured octal PSRAM. The
+[Espressif hardware guidelines](https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32s3/schematic-checklist.html)
+reserve GPIO33–37 in this memory mode. Native GNSS therefore starts disabled,
+with no assigned TX/RX pins, even when the driver is compiled. An explicit,
+validated pin pair and enable operation is required. The board resource mask
+excludes flash/PSRAM, W5500, USB and strapping pins; tests cover those exclusions.
+A mask is not a claim that a receiver is physically wired or voltage-compatible.
+No physical hardware or installed firmware was touched while correcting this.
+The setup page exposes the allowed candidates and the chosen UART/model/baud.
+
+
+Latest ESP-NOW/UART milestone (compile-only): generated app binaries fit their
+unchanged OTA slots: S3 gateway **1399920 / 3145728 bytes**, C3 relay **1284352 /
+1310720 bytes**, C3 rover **682512 / 1310720 bytes**. Exact bytes are rechecked
+against the generated partition table and ELF by `native/verify.py`; these budgets
+do not constitute runtime heap/stack measurements. Sixteen host CTest cases,
+five Linux capture-tool cases, the browser mock and historical codec regressions
+pass. Native radio disable/expiry/counter code compiles on both chip families;
+its physical timing/USB behaviour remains HARDWARE_PENDING. Start strict binary
+capture after ROM boot and before enabling the correction source; an arbitrary
+mid-frame start is deliberately not silently discarded.

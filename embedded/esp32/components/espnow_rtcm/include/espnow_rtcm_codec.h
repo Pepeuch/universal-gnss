@@ -22,6 +22,7 @@ typedef struct
   uint32_t progress_ms;
   size_t header_bytes;
   uint8_t header_match, header_separator;
+  uint64_t crc16_errors, crc24q_errors, reassembly_expired, completed_frames, reassembly_abandoned;
 } espnow_rtcm_codec_t;
 
 typedef struct

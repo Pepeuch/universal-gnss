@@ -245,8 +245,7 @@ bool OnlyKeys(const cJSON* node, std::initializer_list<const char*> keys)
 Settings DefaultSettings(const Capabilities& c)
 {
   Settings s;
-  s.gnss_enabled = c.local_gnss;
-  s.local_input = c.local_gnss;
+  (void)c;  // Compile capability never authorizes an unconfigured physical UART.
   return s;
 }
 bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& error)
@@ -261,6 +260,14 @@ bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& err
     return fail("profile excludes local GNSS");
   if (s.local_input && !s.gnss_enabled)
     return fail("local corrections require the configured GNSS source");
+  auto pin_allowed = [&](int pin) {
+    return pin >= 0 && pin < 64 && (c.gnss_pin_mask & (UINT64_C(1) << pin));
+  };
+  const bool unconfigured = s.gnss_tx_pin == -1 && s.gnss_rx_pin == -1;
+  if ((s.gnss_enabled && unconfigured) ||
+      (!unconfigured && (!c.local_gnss || !pin_allowed(s.gnss_tx_pin) ||
+                         !pin_allowed(s.gnss_rx_pin) || s.gnss_tx_pin == s.gnss_rx_pin)))
+    return fail("GNSS requires explicit distinct board-authorized UART pins");
   if (s.gnss_baud < 9600 || s.gnss_baud > 921600)
     return fail("invalid GNSS baud");
   if (s.gnss_model != "auto" && s.gnss_model != "NMEA" && s.gnss_model != "UM980" &&
@@ -373,10 +380,12 @@ bool DecodeSettings(std::string_view json,
   if (auto* gnss = r.Get("gnss"))
   {
     Reader g{gnss, error};
-    if (!g.Keys({"enabled", "baud", "model"}))
+    if (!g.Keys({"enabled", "baud", "model", "tx_pin", "rx_pin"}))
       return false;
     g.Bool("enabled", s.gnss_enabled);
     g.Integer("baud", s.gnss_baud, 9600, 921600);
+    g.Integer("tx_pin", s.gnss_tx_pin, -1, 63);
+    g.Integer("rx_pin", s.gnss_rx_pin, -1, 63);
     g.String("model", s.gnss_model, 24);
     if (!g.ok)
       return false;
@@ -523,6 +532,8 @@ bool EncodeSettings(const Settings& s, std::string& output, const bool secrets)
   auto* g = b.Object(n, "gnss");
   b.Bool(g, "enabled", s.gnss_enabled);
   b.Number(g, "baud", s.gnss_baud);
+  b.Number(g, "tx_pin", s.gnss_tx_pin);
+  b.Number(g, "rx_pin", s.gnss_rx_pin);
   b.String(g, "model", s.gnss_model);
   auto* u = b.Object(n, "upstream");
   b.Bool(u, "enabled", s.upstream_enabled);

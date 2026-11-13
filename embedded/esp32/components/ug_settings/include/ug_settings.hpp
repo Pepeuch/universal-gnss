@@ -11,6 +11,7 @@ struct Capabilities
   bool local_gnss{false}, caster{false}, lora{false};
   std::size_t publisher_slots{0};
   std::string board{}, role{};
+  std::uint64_t gnss_pin_mask{0};  // Board-reviewed free GPIOs; zero grants no UART pins.
 };
 struct PublisherSettings
 {
@@ -24,6 +25,7 @@ struct Settings
   std::string device_name{"ug-rtk"};
   bool local_input{false}, gnss_enabled{false}, upstream_enabled{false};
   std::uint32_t gnss_baud{115200};
+  int gnss_tx_pin{-1}, gnss_rx_pin{-1};  // No inherited/guessed board pin assignment.
   std::string gnss_model{"auto"};
   universal_gnss_ntrip::NtripConfig upstream{};
   std::array<PublisherSettings, 5> publishers{};

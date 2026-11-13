@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gnss_service.hpp"
+#include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -50,8 +51,51 @@ public:
   void Close() override
   {
     opened = false;
+    if (installed)
+    {
+      uart_driver_delete(UART_NUM_1);
+      installed = false;
+    }
+    if (tx >= 0)
+      gpio_reset_pin(static_cast<gpio_num_t>(tx));
+    if (rx >= 0)
+      gpio_reset_pin(static_cast<gpio_num_t>(rx));
+    tx = rx = -1;
   }
-  bool opened{false};
+  bool Open(const Settings& settings)
+  {
+    Close();
+    auto allowed = [&](int pin) {
+      return pin >= 0 && pin < 64 && (BoardCapabilities().gnss_pin_mask & (UINT64_C(1) << pin));
+    };
+    if (!allowed(settings.gnss_tx_pin) || !allowed(settings.gnss_rx_pin) ||
+        settings.gnss_tx_pin == settings.gnss_rx_pin ||
+        !GPIO_IS_VALID_OUTPUT_GPIO(settings.gnss_tx_pin) ||
+        !GPIO_IS_VALID_GPIO(settings.gnss_rx_pin))
+      return false;
+    uart_config_t config{};
+    config.baud_rate = settings.gnss_baud;
+    config.data_bits = UART_DATA_8_BITS;
+    config.parity = UART_PARITY_DISABLE;
+    config.stop_bits = UART_STOP_BITS_1;
+    config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
+    config.source_clk = UART_SCLK_DEFAULT;
+    if (uart_driver_install(UART_NUM_1, 4096, 1024, 0, nullptr, 0) != ESP_OK)
+      return false;
+    installed = true;
+    tx = settings.gnss_tx_pin;
+    rx = settings.gnss_rx_pin;
+    if (uart_param_config(UART_NUM_1, &config) != ESP_OK ||
+        uart_set_pin(UART_NUM_1, tx, rx, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK)
+    {
+      Close();
+      return false;
+    }
+    opened = true;
+    return true;
+  }
+  bool opened{false}, installed{false};
+  int tx{-1}, rx{-1};
 };
 Uart uart;
 Receiver receiver(uart);
@@ -72,22 +116,6 @@ void Error(const std::string& error)
 }
 void Owner(void*)
 {
-  uart_config_t config{};
-  config.baud_rate = 115200;
-  config.data_bits = UART_DATA_8_BITS;
-  config.parity = UART_PARITY_DISABLE;
-  config.stop_bits = UART_STOP_BITS_1;
-  config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
-  config.source_clk = UART_SCLK_DEFAULT;
-  if (uart_driver_install(UART_NUM_1, 4096, 1024, 0, nullptr, 0) != ESP_OK ||
-      uart_param_config(UART_NUM_1, &config) != ESP_OK ||
-      uart_set_pin(UART_NUM_1, 38, 37, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK)
-  {
-    Error("GNSS UART unavailable");
-    vTaskDelete(nullptr);
-    return;
-  }
-  uart.opened = true;
   std::array<std::uint8_t, 512> bytes{};
   std::vector<std::uint8_t> probe;
   probe.reserve(4096);
@@ -95,6 +123,8 @@ void Owner(void*)
   ReceiverDetectedFamily family = ReceiverDetectedFamily::kUnknown;
   std::uint64_t epoch = 0;
   std::uint32_t baud = 0;
+  int tx_pin = -2, rx_pin = -2;
+  bool configured_enabled = false;
   std::string selector;
   bool enabled = false, local = false, query_done = false, transaction = false;
   std::int64_t probe_started = Now(), last_bytes = 0;
@@ -102,7 +132,8 @@ void Owner(void*)
   {
     const auto settings = Configuration();
     if (baud != settings->gnss_baud || selector != settings->gnss_model ||
-        enabled != settings->gnss_enabled)
+        configured_enabled != settings->gnss_enabled || tx_pin != settings->gnss_tx_pin ||
+        rx_pin != settings->gnss_rx_pin)
     {
       BeginCorrectionSource(0, false);
       receiver.InvalidateObservations();
@@ -111,7 +142,9 @@ void Owner(void*)
           receiver.metrics().position_payload_freshness.last_position_observation_timestamp_ns);
       baud = settings->gnss_baud;
       selector = settings->gnss_model;
-      enabled = settings->gnss_enabled;
+      configured_enabled = settings->gnss_enabled;
+      tx_pin = settings->gnss_tx_pin;
+      rx_pin = settings->gnss_rx_pin;
       ReceiverSessionConfig telemetry;
       if (selector == "NMEA")
         telemetry.kind = ReceiverSessionKind::kNmea;
@@ -120,8 +153,10 @@ void Owner(void*)
       else if (selector == "UM980" || selector == "UM981" || selector == "UM982")
         telemetry.kind = ReceiverSessionKind::kUnicore;
       receiver.ConfigureTelemetry(telemetry);
-      if (uart_set_baudrate(UART_NUM_1, baud) != ESP_OK)
-        enabled = false;
+      uart.Close();
+      enabled = configured_enabled && uart.Open(*settings);
+      if (configured_enabled && !enabled)
+        Error("GNSS UART unavailable or board pins rejected");
       identity = {};
       {
         std::lock_guard<std::mutex> lock(status_guard);
@@ -142,7 +177,7 @@ void Owner(void*)
       local = enabled && settings->local_input;
       epoch = BeginCorrectionSource(0, local);
     }
-    const auto read = uart.Read(bytes.data(), bytes.size());
+    const auto read = enabled ? uart.Read(bytes.data(), bytes.size()) : ReadResult{};
     const auto now = Now();
     if (enabled && read.bytes_read)
     {

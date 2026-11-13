@@ -20,7 +20,15 @@ async function refresh() {
     if (token && !$('gnss').hidden) $('receiver').textContent = print(await call('/api/gnss/status'));
   } catch (e) { show(e.message); }
 }
-async function load() { $('config').value = print(await call('/api/config')); }
+async function load() {
+  const config = await call('/api/config'); $('config').value = print(config);
+  if (config.gnss) {
+    $('gnss-enabled').checked = config.gnss.enabled;
+    $('gnss-tx').value = String(config.gnss.tx_pin); $('gnss-rx').value = String(config.gnss.rx_pin);
+    $('gnss-baud').value = String(config.gnss.baud); $('gnss-model').value = config.gnss.model;
+    $('correction-input').value = config.input;
+  }
+}
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { token = $('token').value; $('token').value = ''; await load(); await refresh(); show('Session ouverte'); });
 $('logout').onclick = () => { token = ''; $('token').value = ''; $('config').value = ''; $('receiver').textContent = 'Session fermée'; show('Session fermée'); };
@@ -44,5 +52,17 @@ $('base').onsubmit = handle(async event => {
   }
   show(await call('/api/gnss/base/apply', value));
 });
-call('/api/capabilities', undefined, false).then(caps => { $('gnss').hidden = !caps.gnss; }).catch(e => show(e.message));
+$('transport').onsubmit = handle(async () => {
+  const value = {input: $('correction-input').value, gnss: {enabled: $('gnss-enabled').checked,
+    tx_pin: Number($('gnss-tx').value), rx_pin: Number($('gnss-rx').value),
+    baud: Number($('gnss-baud').value), model: $('gnss-model').value}};
+  if (!confirm('Appliquer ce transport au câblage GNSS réel ? Une commande en cours sera interrompue.')) return;
+  show(await call('/api/config', value)); await load();
+});
+call('/api/capabilities', undefined, false).then(caps => {
+  $('gnss').hidden = !caps.gnss;
+  for (const pin of (caps.gnss_allowed_pins || [])) for (const id of ['gnss-tx','gnss-rx']) {
+    const option = document.createElement('option'); option.value = String(pin); option.textContent = String(pin); $(id).appendChild(option);
+  }
+}).catch(e => show(e.message));
 refresh(); setInterval(refresh, 3000);
