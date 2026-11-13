@@ -128,3 +128,8 @@ target_include_directories(test_service_health PRIVATE health_stubs idf_stubs ..
 target_compile_options(test_service_health PRIVATE -UNDEBUG)
 target_compile_features(test_service_health PRIVATE cxx_std_17)
 add_test(NAME embedded_service_health_contract COMMAND test_service_health)
+add_executable(ug_validate_settings ../tools/validate_settings.cpp)
+target_link_libraries(ug_validate_settings PRIVATE ug_embedded_settings)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME embedded_legacy_import_contract COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_legacy_import.py")
+set_tests_properties(embedded_legacy_import_contract PROPERTIES ENVIRONMENT "UG_CONFIG_VALIDATOR=$<TARGET_FILE:ug_validate_settings>;PYTHONDONTWRITEBYTECODE=1" TIMEOUT 30)

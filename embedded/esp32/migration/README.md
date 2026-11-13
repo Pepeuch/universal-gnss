@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Twenty-two host cases now cover routing/source reset, command causality/quarantine,
+Twenty-three host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -482,3 +482,52 @@ headroom, stale progress and SDK watchdog errors. S3/C3 IDF 6.1 builds pass:
 are link budgets; live TLS concurrency/heap margins still need board evidence.
 A fresh C3 rover build passes at 682512 bytes and its ELF verifier rejects
 gateway/admin/supervisor dependencies. The browser mock also passes.
+
+## Explicit legacy configuration conversion
+
+`native/tools/migrate_legacy_config.py` prepares a private, offline native schema1
+candidate and review report from the historical `/config` JSON and optional full
+`/api/ntrip` JSON. It targets the contract at the pinned historical commit, not
+an authenticated firmware backup. Source hashes and the validator binary hash
+are recorded. Original files are read-only; the tool never opens serial/network,
+reads/writes NVS, applies configuration, reboots or flashes.
+
+Build the actual native settings validator with the host-test CMake project,
+then use an external private directory:
+
+```bash
+cmake --build /tmp/ug-native-host --target ug_validate_settings
+python3 embedded/esp32/native/tools/migrate_legacy_config.py --legacy-config /private/legacy-config.json --legacy-ntrip /private/legacy-ntrip.json --validator /tmp/ug-native-host/ug_validate_settings --board waveshare-s3-eth --role gateway --output /private/new-ug-review
+```
+
+The candidate disables upstream, publishers, caster, Wi-Fi, GNSS and radio.
+Review it before manually importing it through the authenticated native config
+UI/API. These are requested settings, not proof that boot-only Wi-Fi/radio changes
+have taken effect; the documented explicit reboot rules still apply. Provision
+UG administration separately; old authentication is never reused. Candidates may
+contain supplied plaintext secrets: output directory mode700 and files mode600,
+new paths only, outside UG. Neither output file belongs in Git.
+
+Masked passwords (`CONFIG_VALUE_UNCHANGED` or `********`) are not credentials:
+the candidate clears them and reports required re-entry, without retaining an
+unrelated old UG password. Native caster credentials stay paired. Flat publisher
+keys are deliberately not treated as authoritative because the historical
+`ntr_slots_v1` store can supersede them; all five publication records come from
+`/api/ntrip`, or remain empty/disabled. All five are preserved even for a C3,
+whose actual native validator prevents enabling unsupported slots. TLS flags
+from the slot export are retained; upstream TLS/GGA require explicit review.
+
+Hardware pins/models, BASE coordinates/datum/survey presets, admin credentials,
+TLS identities, LoRa and unsupported settings are **not** guessed/imported.
+Untransferred flat fields, slot metadata, source metadata and previously enabled
+services are listed for review. This is not automatic NVS migration or complete
+restore of masked secrets/hardware state. The old `config` namespace and its
+binary ABI are untouched; UG keeps its existing `ug_config` banks/journal and
+never ports the historical automatic NVS erase fallback.
+
+The tool rejects duplicate/nonfinite/over-budget JSON, incomplete/duplicate slot
+exports, unsafe destinations and invalid native candidates before creating any
+output. It calls the compiled UG parser rather than duplicating its validator.
+Twenty-three ASan/UBSan host cases pass; the new Python case runs seven synthetic
+end-to-end/negative tests. Firmware payloads did not change in this tooling phase,
+so the preceding S3/C3/rover builds are reused rather than rerun.
