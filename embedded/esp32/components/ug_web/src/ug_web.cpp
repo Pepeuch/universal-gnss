@@ -199,6 +199,11 @@ esp_err_t GnssReply(httpd_req_t* req)
   if (state.satellites_visible)
     cJSON_AddNumberToObject(root.get(), "satellites_visible", *state.satellites_visible);
   cJSON_AddNumberToObject(root.get(), "observations", gnss.observations);
+  cJSON_AddNumberToObject(root.get(), "uart_overflows", gnss.uart_overflows);
+  cJSON_AddNumberToObject(root.get(), "uart_line_errors", gnss.uart_line_errors);
+  cJSON_AddNumberToObject(root.get(), "uart_event_saturations", gnss.uart_event_saturations);
+  cJSON_AddNumberToObject(root.get(), "uart_read_failures", gnss.uart_read_failures);
+  cJSON_AddNumberToObject(root.get(), "uart_drain_limits", gnss.uart_drain_limits);
   cJSON_AddNumberToObject(
       root.get(),
       "last_bytes_age_ms",

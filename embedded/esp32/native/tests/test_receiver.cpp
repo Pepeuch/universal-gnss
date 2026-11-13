@@ -68,4 +68,13 @@ int main()
   assert(!r.Feed(nullptr, 1, 10000011));
   assert(!r.Feed(reinterpret_cast<const std::uint8_t*>(payload.data()), 513, 10000011));
   assert(!r.Feed(nullptr, 0, -1));
+  // Input loss during a pending operation immediately invalidates/quarantines,
+  // even before its normal response timeout; a later ACK cannot release it.
+  ug::embedded::Receiver interrupted(sink, config);
+  assert(interrupted.Start({command}, 1));
+  Feed(interrupted, "<O", 2);
+  interrupted.InvalidateObservations();
+  assert(interrupted.indeterminate());
+  Feed(interrupted, "K\r\n<OK\r\n", 3);
+  assert(interrupted.indeterminate() && !interrupted.Start({command}, 4));
 }

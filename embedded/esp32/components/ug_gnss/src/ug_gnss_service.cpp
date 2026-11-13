@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gnss_service.hpp"
-#include "driver/gpio.h"
-#include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -9,8 +7,10 @@
 #include "freertos/task.h"
 #include "ug_configuration.hpp"
 #include "ug_gateway_service.hpp"
+#include "ug_idf_uart.hpp"
 #include "ug_receiver_runtime.hpp"
 #include "ug_services.hpp"
+#include "ug_uart_drain.hpp"
 #include "ug_wait.hpp"
 #include "universal_gnss_driver/receiver_discovery.hpp"
 #include <algorithm>
@@ -23,81 +23,7 @@ namespace
 {
 using namespace universal_gnss_driver;
 using namespace universal_gnss_transport;
-class Uart final : public ByteDuplex
-{
-public:
-  ReadResult Read(std::uint8_t* data, std::size_t size) override
-  {
-    if (!opened || !data || !size)
-      return {0, TransportStatus::kError, TransportError::kInvalidArgument};
-    const auto n = uart_read_bytes(UART_NUM_1, data, size, FiniteWaitTicks(10, configTICK_RATE_HZ));
-    if (n < 0)
-      return {0, TransportStatus::kError, TransportError::kReadFailure};
-    return {static_cast<std::size_t>(n), TransportStatus::kOk, TransportError::kNone};
-  }
-  WriteResult Write(const std::uint8_t* data, std::size_t size) override
-  {
-    if (!opened || (!data && size) || size > 512)
-      return {0, TransportStatus::kError, TransportError::kInvalidArgument};
-    const auto n = uart_write_bytes(UART_NUM_1, data, size);
-    return n < 0 ? WriteResult{0, TransportStatus::kError, TransportError::kWriteFailure}
-                 : WriteResult{
-                       static_cast<std::size_t>(n), TransportStatus::kOk, TransportError::kNone};
-  }
-  bool IsOpen() const override
-  {
-    return opened;
-  }
-  void Close() override
-  {
-    opened = false;
-    if (installed)
-    {
-      uart_driver_delete(UART_NUM_1);
-      installed = false;
-    }
-    if (tx >= 0)
-      gpio_reset_pin(static_cast<gpio_num_t>(tx));
-    if (rx >= 0)
-      gpio_reset_pin(static_cast<gpio_num_t>(rx));
-    tx = rx = -1;
-  }
-  bool Open(const Settings& settings)
-  {
-    Close();
-    auto allowed = [&](int pin) {
-      return pin >= 0 && pin < 64 && (BoardCapabilities().gnss_pin_mask & (UINT64_C(1) << pin));
-    };
-    if (!allowed(settings.gnss_tx_pin) || !allowed(settings.gnss_rx_pin) ||
-        settings.gnss_tx_pin == settings.gnss_rx_pin ||
-        !GPIO_IS_VALID_OUTPUT_GPIO(settings.gnss_tx_pin) ||
-        !GPIO_IS_VALID_GPIO(settings.gnss_rx_pin))
-      return false;
-    uart_config_t config{};
-    config.baud_rate = settings.gnss_baud;
-    config.data_bits = UART_DATA_8_BITS;
-    config.parity = UART_PARITY_DISABLE;
-    config.stop_bits = UART_STOP_BITS_1;
-    config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
-    config.source_clk = UART_SCLK_DEFAULT;
-    if (uart_driver_install(UART_NUM_1, 4096, 1024, 0, nullptr, 0) != ESP_OK)
-      return false;
-    installed = true;
-    tx = settings.gnss_tx_pin;
-    rx = settings.gnss_rx_pin;
-    if (uart_param_config(UART_NUM_1, &config) != ESP_OK ||
-        uart_set_pin(UART_NUM_1, tx, rx, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK)
-    {
-      Close();
-      return false;
-    }
-    opened = true;
-    return true;
-  }
-  bool opened{false}, installed{false};
-  int tx{-1}, rx{-1};
-};
-Uart uart;
+NativeGnssUart uart;
 Receiver receiver(uart);
 std::mutex status_guard;
 ReceiverStatus status;
@@ -116,7 +42,6 @@ void Error(const std::string& error)
 }
 void Owner(void*)
 {
-  std::array<std::uint8_t, 512> bytes{};
   std::vector<std::uint8_t> probe;
   probe.reserve(4096);
   ReceiverModelQueryResult identity;
@@ -128,6 +53,21 @@ void Owner(void*)
   std::string selector;
   bool enabled = false, local = false, query_done = false, transaction = false;
   std::int64_t probe_started = Now(), last_bytes = 0;
+  std::uint64_t drain_limits = 0;
+  auto invalidate_input = [&] {
+    receiver.InvalidateObservations();
+    epoch = BeginCorrectionSource(0, local);
+    identity = {};
+    family = ReceiverDetectedFamily::kUnknown;
+    query_done = false;
+    probe.clear();
+    probe_started = Now();
+    last_bytes = 0;
+    std::lock_guard<std::mutex> lock(status_guard);
+    status.model_verified = false;
+    status.model.clear();
+    status.firmware.clear();
+  };
   for (;;)
   {
     const auto settings = Configuration();
@@ -154,7 +94,7 @@ void Owner(void*)
         telemetry.kind = ReceiverSessionKind::kUnicore;
       receiver.ConfigureTelemetry(telemetry);
       uart.Close();
-      enabled = configured_enabled && uart.Open(*settings);
+      enabled = configured_enabled && uart.Open(*settings, BoardCapabilities().gnss_pin_mask);
       if (configured_enabled && !enabled)
         Error("GNSS UART unavailable or board pins rejected");
       identity = {};
@@ -177,19 +117,28 @@ void Owner(void*)
       local = enabled && settings->local_input;
       epoch = BeginCorrectionSource(0, local);
     }
-    const auto read = enabled ? uart.Read(bytes.data(), bytes.size()) : ReadResult{};
-    const auto now = Now();
-    if (enabled && read.bytes_read)
+    if (enabled)
     {
-      last_bytes = now;
-      receiver.Feed(bytes.data(), read.bytes_read, now);
-      if (local)
-        SubmitCorrectionBytes(0, epoch, bytes.data(), read.bytes_read, now);
-      if (!query_done && probe.size() < 4096)
-        probe.insert(probe.end(),
-                     bytes.begin(),
-                     bytes.begin() + std::min(read.bytes_read, 4096 - probe.size()));
+      const auto drained = DrainUart(
+          [](auto* data, auto size, bool wait) { return uart.ReadBatch(data, size, wait); },
+          [&](const auto* data, auto size) {
+            const auto received = Now();
+            last_bytes = received;
+            receiver.Feed(data, size, received);
+            if (local)
+              SubmitCorrectionBytes(0, epoch, data, size, received);
+            if (!query_done && probe.size() < 4096)
+              probe.insert(probe.end(), data, data + std::min(size, 4096 - probe.size()));
+          });
+      if (drained.budget_exhausted)
+        ++drain_limits;
+      if (uart.TakeFault() || drained.failed)
+      {
+        invalidate_input();
+        Error("GNSS UART discontinuity; observations and pending corrections invalidated");
+      }
     }
+    const auto now = Now();
     if (enabled && !query_done && (probe.size() >= 4096 || now - probe_started >= 2000000000LL))
     {
       // Active queries are read-only vendor polls. No configured model string proves identity.
@@ -223,6 +172,12 @@ void Owner(void*)
       {
         identity.model_verified = false;
         Error("verified model does not match configured selector");
+      }
+      if (uart.TakeFault())
+      {
+        invalidate_input();
+        Error("GNSS UART discontinuity during identity query");
+        continue;
       }
       epoch = BeginCorrectionSource(0, local);
       query_done = true;
@@ -330,7 +285,13 @@ void Owner(void*)
       status.busy = pending;
       status.quarantined = ReceiverJournalBlocked() || receiver.indeterminate();
       status.operation_state = static_cast<unsigned>(state);
+      status.uart_overflows = uart.overflows;
+      status.uart_line_errors = uart.line_errors;
+      status.uart_event_saturations = uart.event_saturations;
+      status.uart_read_failures = uart.read_failures;
+      status.uart_drain_limits = drain_limits;
     }
+    // At most 4096 bytes per turn, then give lower-priority services CPU time.
     vTaskDelay(1);
   }
 }

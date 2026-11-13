@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Seventeen host cases now cover routing/source reset, command causality/quarantine,
+Nineteen host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -352,3 +352,26 @@ link budgets, not measured runtime heap/stack headroom. The common-root bundle
 remains necessary for this profile; trust verification and private CA support
 are unchanged. Seventeen ASan/UBSan host cases pass. Rover dependencies, network
 isolation and physical qualification are unchanged.
+
+## UART ingress continuity and fairness
+
+The GNSS owner drains at most eight 512-byte batches per turn and then yields.
+Only the first read can wait; later reads are nonblocking. This removes the
+previous one-batch-per-tick artificial ceiling without claiming physical UART
+throughput. Each received batch keeps its actual monotonic receipt time.
+
+The SDK UART event queue is examined before and after reads. FIFO/ring-buffer
+full, parity/frame/break errors, read errors or a saturated event queue reject the
+ambiguous batch, discard local input, invalidate receiver observations/model and
+change the correction source incarnation. A full event queue is conservative
+because SDK ISR notifications can otherwise be dropped. A failed local flush
+keeps reads failed. These resets never clear a pending command's quarantine or
+persistent mutation journal, and never establish a receiver-side prior-byte
+cutoff. Bytes already transmitted cannot be recalled.
+
+Authenticated GNSS diagnostics expose overflow, line-error, event saturation,
+read-failure and drain-budget counters. Nineteen ASan/UBSan host cases pass,
+including the actual SDK adapter against driver/queue stubs and a lost-input
+pending-command regression. The S3 IDF 6.1 build passes; electrical behaviour,
+maximum-rate loss/latency and real UART faults remain HARDWARE_PENDING. The
+GNSS-free relay and rover do not link this adapter.
