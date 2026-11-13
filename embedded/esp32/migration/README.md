@@ -733,3 +733,47 @@ All 28 native ASan/UBSan cases and the browser mock pass at this milestone.
 S3 gateway (1438864 bytes) and C3 relay (1296080 bytes) compile and pass role,
 language, partition and linked-CRC checks. The existing slots are unchanged.
 No physical test or firmware publication was performed.
+
+
+## Owner-scoped NTRIP diagnostics and controlled restart
+
+Authenticated `GET /api/ntrip/runtime` reports the incoming client, the board's
+actual publisher capacity (five S3, one C3) and the S3 local caster. Each owner
+publishes fixed-size metrics with its configuration revision, network generation
+and monotonic sample receipt. Samples older than five seconds, unsampled owners,
+link loss, a changed link/configuration or a backwards clock cannot report an
+active connection. The public status uses the same projection. A healthy worker
+heartbeat is not evidence of a connected caster or fresh corrections.
+
+`upstream_flowing` continues to use **UG's existing correction-flow timeout** and
+is additionally masked when its owner sample is not current/connected. No second
+flow clock or last-frame observation is invented. Counters remain diagnostic
+history when samples are invalid. The incoming `reconnect_count`, received bytes,
+frames and GGA counts have the lifetime/reset semantics of the actual UG client;
+bytes include received protocol traffic, not only RTCM payload. Publisher counters
+are their owner's lifetime SOURCE-v1 connects, complete frames/bytes, failures and
+expired frames. Caster counters are accepted clients, rejected requests, served
+frames and slow-client disconnects; no unmeasured caster-byte value is exposed.
+Large counters/revisions are decimal strings, not lossy JSON doubles. No endpoint
+contains hostnames, mountpoints, credentials or private MAC addresses.
+
+Authenticated `POST /api/ntrip/restart` accepts exactly
+`{"confirm":"RESTART_NTRIP_SERVICES"}`. It uses the existing cancellation/network-
+generation mechanism, immediately invalidates the incoming correction source and
+requests all network owners to reconnect asynchronously. HTTP 202 is an accepted
+request, not proof of completed reconnection. Receiver configuration, quarantine,
+NVS, Ethernet/Wi-Fi settings and radio channel are unchanged. Existing config
+patches remain the way to enable/disable selected slots; old flat slot APIs are
+not silently emulated. The UI offers explicit read/restart actions with session
+guards. Memory admission still applies before body allocation/dispatch.
+
+The host regression verifies exact sample-age boundaries, stale link/revision,
+missing samples, backwards clock, counter retention, immutable projection and
+strict restart confirmations (including duplicate/extra keys). Browser tests
+exercise the request shape and logout clearing. No live reconnect or hardware
+network qualification is claimed.
+
+All 29 native ASan/UBSan cases and the browser test pass. S3 gateway
+1443136-byte and C3 relay 1300144-byte images pass the native ELF/role/partition
+checks. The C3 relay now has only 10576 bytes of application-slot margin; further
+features require measured size/admission review, never silent repartitioning.

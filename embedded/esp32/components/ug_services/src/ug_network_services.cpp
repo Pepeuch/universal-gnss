@@ -94,10 +94,23 @@ void InputWorker(void*)
       position = FreshPositionForGga(gnss_snapshot, position_receipt_ns, Now());
     }
     input.Tick(Now(), &position);
+    const auto& metrics = input.client().metrics();
+    NetworkOwnerStats sample;
+    sample.configuration_revision = config_generation;
+    sample.link_generation = link_generation;
+    sample.receipt_ns = Now();
+    sample.sampled = true;
+    sample.active = input.client().IsConnected();
+    sample.frames = metrics.rtcm_frames_received;
+    sample.bytes = metrics.bytes_received;
+    sample.connections = metrics.reconnect_count;
+    const bool flowing = input.client().IsCorrectionFlowing();
     portENTER_CRITICAL(&metrics_guard);
-    stats.upstream_connected = input.client().IsConnected();
-    stats.upstream_flowing = input.client().IsCorrectionFlowing();
-    stats.upstream_frames = input.client().metrics().rtcm_frames_received;
+    stats.upstream = sample;
+    stats.upstream_flowing = flowing;
+    stats.upstream_error = static_cast<std::uint32_t>(metrics.last_error);
+    stats.upstream_gga_sent = metrics.gga_sent_count;
+    stats.upstream_gga_errors = metrics.gga_send_errors;
     portEXIT_CRITICAL(&metrics_guard);
     health.Progress();
     vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
@@ -169,9 +182,20 @@ void PublisherWorker(void* context)
       }
       (void)publisher.Send(frame, Now());
     }
+    const auto& metrics = publisher.metrics();
+    NetworkOwnerStats sample;
+    sample.configuration_revision = config_generation;
+    sample.link_generation = link_generation;
+    sample.receipt_ns = Now();
+    sample.sampled = true;
+    sample.active = publisher.streaming();
+    sample.frames = metrics.frames;
+    sample.bytes = metrics.bytes;
+    sample.connections = metrics.connects;
+    sample.failures = metrics.failures;
+    sample.expired = metrics.expired;
     portENTER_CRITICAL(&metrics_guard);
-    stats.publisher_frames[slot] = publisher.metrics().frames;
-    stats.publisher_failures[slot] = publisher.metrics().failures;
+    stats.publishers[slot] = sample;
     portEXIT_CRITICAL(&metrics_guard);
     health.Progress();
     vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
@@ -245,9 +269,18 @@ void CasterWorker(void*)
       (void)caster.PublishFrame(f);
     }
     caster.Poll();
+    NetworkOwnerStats sample;
+    sample.configuration_revision = config_generation;
+    sample.link_generation = link_generation;
+    sample.receipt_ns = Now();
+    sample.sampled = true;
+    sample.active = caster.running();
+    sample.frames = caster.metrics().served_frames;
+    sample.connections = caster.metrics().accepted_clients;
+    sample.failures = caster.metrics().rejected_requests;
+    sample.expired = caster.metrics().slow_client_disconnects;
     portENTER_CRITICAL(&metrics_guard);
-    stats.caster_running = caster.running();
-    stats.caster_frames = caster.metrics().served_frames;
+    stats.caster = sample;
     portEXIT_CRITICAL(&metrics_guard);
     health.Progress();
     vTaskDelay(FiniteWaitTicks(5, configTICK_RATE_HZ));
@@ -289,7 +322,8 @@ NetworkServiceStats NetworkStats()
   portENTER_CRITICAL(&metrics_guard);
   const auto out = stats;
   portEXIT_CRITICAL(&metrics_guard);
-  return out;
+  return ProjectNetworkStats(
+      out, Configuration()->revision, network_generation.load(), network_ready.load(), Now());
 }
 esp_err_t StartNetworkServices()
 {

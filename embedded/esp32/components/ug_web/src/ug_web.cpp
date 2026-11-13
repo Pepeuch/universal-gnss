@@ -12,6 +12,7 @@ extern "C" {
 #include "ug_credentials.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_json.hpp"
+#include "ug_network_operations.hpp"
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
@@ -163,7 +164,7 @@ esp_err_t Status(httpd_req_t* req)
   cJSON_AddNumberToObject(root.get(),
                           "largest_internal",
                           heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-  cJSON_AddBoolToObject(root.get(), "upstream_connected", net.upstream_connected);
+  cJSON_AddBoolToObject(root.get(), "upstream_connected", net.upstream.active);
   cJSON_AddBoolToObject(root.get(), "upstream_flowing", net.upstream_flowing);
   cJSON_AddNumberToObject(root.get(), "rtcm_frames", gateway.routing.valid);
   cJSON_AddNumberToObject(root.get(), "rtcm_rejected", gateway.routing.rejected);
@@ -436,6 +437,79 @@ esp_err_t GnssReply(httpd_req_t* req)
   return Json(req, root.get());
 }
 #endif
+bool OwnerJson(cJSON* parent,
+               const char* name,
+               const NetworkOwnerStats& stats,
+               const char* connection_counter,
+               const char* failure_counter,
+               const char* expired_counter,
+               bool report_bytes = true)
+{
+  auto* root = cJSON_AddObjectToObject(parent, name);
+  if (!root || !cJSON_AddBoolToObject(root, "sample_current", stats.current) ||
+      !cJSON_AddBoolToObject(root, "sampled", stats.sampled) ||
+      !cJSON_AddBoolToObject(root, "active", stats.active) ||
+      !cJSON_AddStringToObject(root,
+                               "sample_configuration_revision",
+                               std::to_string(stats.configuration_revision).c_str()) ||
+      !cJSON_AddStringToObject(
+          root, "sample_link_generation", std::to_string(stats.link_generation).c_str()) ||
+      !cJSON_AddStringToObject(root, "frames", std::to_string(stats.frames).c_str()) ||
+      !cJSON_AddStringToObject(root, connection_counter, std::to_string(stats.connections).c_str()))
+    return false;
+  if (report_bytes && !cJSON_AddStringToObject(root, "bytes", std::to_string(stats.bytes).c_str()))
+    return false;
+  if (failure_counter &&
+      !cJSON_AddStringToObject(root, failure_counter, std::to_string(stats.failures).c_str()))
+    return false;
+  if (expired_counter &&
+      !cJSON_AddStringToObject(root, expired_counter, std::to_string(stats.expired).c_str()))
+    return false;
+  const auto now = esp_timer_get_time() * 1000;
+  return !stats.sampled || stats.receipt_ns < 0 || now < stats.receipt_ns ||
+         cJSON_AddNumberToObject(root, "sample_age_ms", (now - stats.receipt_ns) / 1000000);
+}
+esp_err_t NtripRuntimeReply(httpd_req_t* req)
+{
+  const auto stats = NetworkStats();
+  const auto config = Configuration();
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root || !cJSON_AddBoolToObject(root.get(), "network_ready", stats.network_ready) ||
+      !cJSON_AddStringToObject(
+          root.get(), "link_generation", std::to_string(stats.link_generation).c_str()) ||
+      !cJSON_AddStringToObject(root.get(),
+                               "configuration_revision",
+                               std::to_string(stats.configuration_revision).c_str()) ||
+      !cJSON_AddBoolToObject(root.get(), "upstream_flowing", stats.upstream_flowing) ||
+      !cJSON_AddBoolToObject(root.get(), "local_input_selected", config->local_input) ||
+      !OwnerJson(root.get(), "upstream", stats.upstream, "reconnect_count", nullptr, nullptr) ||
+      !cJSON_AddNumberToObject(root.get(), "upstream_error", stats.upstream_error) ||
+      !cJSON_AddStringToObject(
+          root.get(), "gga_sent", std::to_string(stats.upstream_gga_sent).c_str()) ||
+      !cJSON_AddStringToObject(
+          root.get(), "gga_errors", std::to_string(stats.upstream_gga_errors).c_str()))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  auto* publishers = cJSON_AddObjectToObject(root.get(), "publishers");
+  if (!publishers)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < BoardCapabilities().publisher_slots; ++i)
+    if (!OwnerJson(publishers,
+                   std::to_string(i).c_str(),
+                   stats.publishers[i],
+                   "connections",
+                   "failures",
+                   "expired"))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+  if (BoardCapabilities().caster && !OwnerJson(root.get(),
+                                               "caster",
+                                               stats.caster,
+                                               "accepted_clients",
+                                               "rejected_requests",
+                                               "slow_client_disconnects",
+                                               false))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  return Json(req, root.get());
+}
 esp_err_t EventReply(httpd_req_t* req)
 {
   const auto snapshot = ServiceEvents();
@@ -490,6 +564,8 @@ esp_err_t Get(httpd_req_t* req)
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
   if (uri == "/api/diagnostics/events")
     return EventReply(req);
+  if (uri == "/api/ntrip/runtime")
+    return NtripRuntimeReply(req);
   if (uri == "/api/config/history")
   {
     const auto history = ConfigurationBanks();
@@ -532,6 +608,15 @@ esp_err_t Post(httpd_req_t* req)
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");
   const std::string_view uri(req->uri);
+  if (uri == "/api/ntrip/restart")
+  {
+    if (!DecodeNetworkRestart(body, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    RestartNetworkServices();
+    return Fail(req,
+                "202 Accepted",
+                "NTRIP restart requested; owners reconnect asynchronously; receiver unchanged");
+  }
   if (uri == "/api/tls/object")
   {
     if (!ApplyTlsObject(body, error))

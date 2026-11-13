@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "esp_err.h"
+#include "ug_network_diagnostics.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 namespace ug::embedded
 {
@@ -17,10 +18,5 @@ struct GnssObservationSnapshot
   std::optional<std::int64_t> position_receipt_ns;
 };
 GnssObservationSnapshot GnssObservation();
-struct NetworkServiceStats
-{
-  bool upstream_connected{}, upstream_flowing{}, caster_running{};
-  std::uint64_t upstream_frames{}, publisher_frames[5]{}, publisher_failures[5]{}, caster_frames{};
-};
 NetworkServiceStats NetworkStats();
 }  // namespace ug::embedded

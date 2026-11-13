@@ -24,7 +24,9 @@ with an explicit review report. Explicit previous-bank settings restore now vali
 both banks and preserves admin identity and GNSS quarantine; it does not undo
 receiver commands. Native Web resource admission distinguishes internal RAM from
 PSRAM and retains compact diagnostics under memory pressure. A bounded typed
-service event history is available without capturing raw SDK logs. Remaining useful
+service event history is available without capturing raw SDK logs. Per-owner NTRIP
+metrics and explicitly confirmed connection restart are exposed with stale-sample
+protection. Remaining useful
 legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
