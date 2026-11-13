@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 """Regression for the actual native compile-command language gate."""
 import importlib.util
+import gzip
 from pathlib import Path
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('native_verify', Path(__file__).resolve().parents[1]/'verify.py')
@@ -10,6 +12,28 @@ spec.loader.exec_module(module)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_linked_web_assets_cannot_be_stale_missing_or_duplicated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'source'
+            source.mkdir()
+            packed = root / 'esp-idf/ug_web/web_assets'
+            packed.mkdir(parents=True)
+            application = b'fake-app-prefix'
+            for name in ('index.html', 'app.js', 'style.css'):
+                raw = ('content-' + name).encode()
+                (source/name).write_bytes(raw)
+                compressed = gzip.compress(raw, mtime=0)
+                (packed/(name+'.gz')).write_bytes(compressed)
+                application += compressed
+            self.assertEqual(len(module.check_web_assets(root, source, application)), 3)
+            for invalid in (b'no-assets', application * 2):
+                with self.assertRaises(ValueError):
+                    module.check_web_assets(root, source, invalid)
+            (source/'index.html').write_text('newer-source')
+            with self.assertRaises(ValueError):
+                module.check_web_assets(root, source, application)
+
     def test_project_standards_are_effective_not_minimum_or_overridden(self):
         commands = [
             {'file': '/ug/core/lib.cpp', 'command': 'g++ -std=gnu++26 -std=gnu++17 -c /ug/core/lib.cpp'},

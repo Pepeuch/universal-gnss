@@ -777,3 +777,40 @@ All 29 native ASan/UBSan cases and the browser test pass. S3 gateway
 1443136-byte and C3 relay 1300144-byte images pass the native ELF/role/partition
 checks. The C3 relay now has only 10576 bytes of application-slot margin; further
 features require measured size/admission review, never silent repartitioning.
+
+
+## Deterministic compressed Web assets
+
+The native Web component embeds only build-generated gzip representations of
+`index.html`, `app.js` and `style.css`, from an explicit three-file allowlist.
+The source assets remain readable and browser-tested. No timestamps, original
+paths or filenames enter gzip headers. The pinned SDK/Python/zlib environment
+defines the compression implementation; no cross-zlib reproducibility promise is
+made. CMake regenerates assets when a source or the packer changes, and uses
+stable linker symbol names. All generated files stay in the external build tree.
+The verifier decompresses each generated representation, compares it with the
+current source and requires it to occur exactly once in the linked application.
+
+Static routes return `Content-Encoding: gzip`, their original media type and
+`Vary: Accept-Encoding`, with existing CSP/authentication/cache policies. A client
+explicitly refusing gzip gets 406; absent Accept-Encoding expresses no preference
+(RFC 9110). The bounded parser handles gzip/wildcard weights, explicit exclusion
+and conflicting duplicates conservatively. API responses remain uncompressed and
+unchanged. Decompression runs in the browser, with no firmware inflate buffer or
+additional network/routing task. A real browser/TLS session on native hardware is
+still pending; source-level browser tests are not that qualification.
+
+Current source assets total 20869 bytes and their gzip payloads total 7585 bytes.
+Before compression, the C3 relay app was 1300144 bytes with 10576 bytes of slot
+margin. The measured linked reduction includes the HTTP negotiation code and is
+reported by the native verifier. This saves flash without changing either board's
+partition map, NVS, firmware role, radio protocol or public GNSS contracts.
+Host tests cover exact decompression, independent output paths, allowlist, gzip
+headers, stale/missing/duplicate linked representations and encoding negotiation.
+
+Final apps are **1430832** bytes (S3) and **1287808** bytes (C3 relay): net
+reductions of 12304 and 12336 bytes respectively, after negotiation code. C3 slot
+margin rises to **22912** bytes. The 31 native ASan/UBSan cases pass. App,
+bootloader and partition binaries are byte-identical in two independent build
+directories for both affected roles; the unchanged minimal rover retains its
+previous reproducibility proof. No hardware/browser deployment is claimed.

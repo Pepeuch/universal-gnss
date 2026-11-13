@@ -1,6 +1,7 @@
 """Inspect native linked objects/roles and budgets. Never opens devices or flashes."""
 import argparse
 import hashlib
+import gzip
 import json
 from pathlib import Path
 import shlex
@@ -24,6 +25,17 @@ def project_standards(commands, source_root, main_root):
             raise ValueError('project language contract is not C17/C++17: ' + str(source))
         found[language].add(flags[-1])
     return {key: sorted(values) for key, values in found.items()}
+
+
+def check_web_assets(build, source_assets, application):
+    reports = []
+    for name in ('index.html', 'app.js', 'style.css'):
+        packed = (Path(build) / 'esp-idf/ug_web/web_assets' / (name + '.gz')).read_bytes()
+        source = Path(source_assets) / name
+        if gzip.decompress(packed) != source.read_bytes() or application.count(packed) != 1:
+            raise ValueError('stale or missing linked Web asset: ' + name)
+        reports.append({'name': name, 'source_bytes': source.stat().st_size, 'gzip_bytes': len(packed)})
+    return reports
 
 
 def verify(work, profile, local_gnss=False):
@@ -79,6 +91,9 @@ def verify(work, profile, local_gnss=False):
     if local_gnss and 'universal_gnss_driver::ReceiverSession::FeedBytes(' not in symbols:
         raise ValueError('actual receiver/session engine not linked')
     binary = elf.with_suffix('.bin')
+    web_assets = []
+    if profile != 'rover':
+        web_assets = check_web_assets(build, source_main.parent.parent / 'components/ug_web/assets', binary.read_bytes())
     # Partition table binary is the authoritative generated layout, using SDK's parser.
     import os
     import sys
@@ -93,6 +108,7 @@ def verify(work, profile, local_gnss=False):
               'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'ug_crc_definitions': crc_definitions,
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
               'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
+    result['web_assets'] = web_assets
     (work / 'native-verification.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     return result

@@ -11,6 +11,7 @@ extern "C" {
 #include "ug_configuration.hpp"
 #include "ug_credentials.hpp"
 #include "ug_gateway_service.hpp"
+#include "ug_http_encoding.hpp"
 #include "ug_json.hpp"
 #include "ug_network_operations.hpp"
 #include "ug_resource_policy.hpp"
@@ -32,12 +33,12 @@ namespace
 WebIdentity identity;
 httpd_handle_t server;
 extern "C" {
-extern const std::uint8_t index_start[] asm("_binary_index_html_start"),
-    index_end[] asm("_binary_index_html_end");
-extern const std::uint8_t js_start[] asm("_binary_app_js_start"), js_end[] asm(
-                                                                      "_binary_app_js_end");
-extern const std::uint8_t css_start[] asm("_binary_style_css_start"), css_end[] asm(
-                                                                          "_binary_style_css_end");
+extern const std::uint8_t index_start[] asm("_binary_ug_web_index_gz_start"),
+    index_end[] asm("_binary_ug_web_index_gz_end");
+extern const std::uint8_t js_start[] asm("_binary_ug_web_js_gz_start"),
+    js_end[] asm("_binary_ug_web_js_gz_end");
+extern const std::uint8_t css_start[] asm("_binary_ug_web_css_gz_start"),
+    css_end[] asm("_binary_ug_web_css_gz_end");
 }
 void Headers(httpd_req_t* req)
 {
@@ -693,8 +694,22 @@ esp_err_t Asset(httpd_req_t* req)
 {
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
+  std::array<char, 513> encoding{};
+  const auto length = httpd_req_get_hdr_value_len(req, "Accept-Encoding");
+  if (length >= encoding.size())
+    return Fail(req, "406 Not Acceptable", "gzip Web representation required");
+  const auto header =
+      httpd_req_get_hdr_value_str(req, "Accept-Encoding", encoding.data(), encoding.size());
+  if (header != ESP_OK && header != ESP_ERR_NOT_FOUND)
+    return Fail(req, "400 Bad Request", "invalid encoding preference");
+  httpd_resp_set_hdr(req, "Vary", "Accept-Encoding");
+  if (!AcceptsGzip({encoding.data(), length}, header == ESP_OK))
+    return Fail(req, "406 Not Acceptable", "gzip Web representation required");
   const std::string_view uri(req->uri);
+  if (uri != "/" && uri != "/app.js" && uri != "/style.css")
+    return Fail(req, "404 Not Found", "asset not found");
   Headers(req);
+  httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
   if (uri == "/")
   {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
