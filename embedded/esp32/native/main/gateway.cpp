@@ -113,7 +113,7 @@ extern "C" void app_main()
 #endif
   if (xTaskCreate(RadioControl, "ug_radio_control", 3072, nullptr, 3, nullptr) != pdPASS)
     ESP_LOGE("UG", "Radio control task unavailable");
-  if (StartLocalCommissioning() != ESP_OK)
+  if (StartLocalCommissioning(RestartNetworkServices) != ESP_OK)
     ESP_LOGE("UG", "Local commissioning unavailable");
   if (StartWebService() != ESP_OK)
     ESP_LOGW("UG", "HTTPS unavailable: provision TLS identity locally, then reboot");

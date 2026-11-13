@@ -38,7 +38,8 @@ struct TcpClientConfig
   std::string tls_server_name{};
   // Optional PEM trust bundle loaded in addition to the Linux system trust store.
   // IDF: an explicit file selects a private trust bundle; an empty file setting
-  // uses the SDK certificate bundle. IDF never allows tls_verify_peer=false.
+  // uses the SDK certificate bundle. The native IDF adapter also resolves private
+  // nvs://ug_tls/<name> objects. IDF never allows tls_verify_peer=false.
   std::string tls_ca_file{};
   std::string tls_client_certificate_file{};
   std::string tls_client_private_key_file{};

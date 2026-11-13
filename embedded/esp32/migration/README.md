@@ -24,7 +24,7 @@ Source audit, rather than README claims, determines the required behaviour:
 | RTCM/filter/radio framing | `rtcm_filter`, `lora_transport`, `espnow_rtcm` | Native components adapted with original protocol/CRC16, one existing UG CRC24Q implementation |
 | Ethernet/Wi-Fi | W5500 fork, LAN8720, network events/captive AP | PARTIAL: official W5500 2.0.1, shared link ownership, boot-configured STA/AP; LAN8720 and physical validation remain open |
 | NTRIP | Legacy client, publishers, local caster, multislot supervisor, QoS | PARTIAL: actual UG NtripClient/TCP-TLS backend, five SOURCE-v1 publishers and bounded authenticated local caster; final runtime qualification/QoS remains open |
-| LoRa | SX126x driver, region tables, duty cycle, pipelines | OPEN: preserve regional policy and qualify native adapter; never enable unknown hardware |
+| LoRa | Historical nonfunctional sketch | OPEN, deferred by maintainer: ESP-NOW first; no native LoRa activation or regional qualification |
 | Persistence | `config.c`, NVS and slot configuration | PARTIAL: strict schema1, dual banks, immutable snapshots and journal; legacy NVS import/recovery tools remain open |
 | Web/API | `web_server.c`, `www/` and 37 explicit routes | PARTIAL: HTTPS configuration/status/BASE UI and bearer authentication; remaining useful historical operations still open |
 | OTA/board assistants/Mammotion | Inventory covers profiles, board headers, scripts and docs | OPEN: distinguish actual implementation from historical TODO; no image publication/flash |
@@ -122,7 +122,7 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Fifteen host cases now cover routing/source reset, command causality/quarantine,
+Sixteen host cases now cover routing/source reset, command causality/quarantine,
 vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
 local caster policy, strict settings, and interrupted/corrupt persistent storage.
 They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
@@ -195,8 +195,8 @@ compile peers are fictitious; real peer MACs must be provisioned deliberately.
 
 ### Compile-only budgets at this milestone
 
-S3 gateway: 1395968-byte app in each existing 3145728-byte OTA slot. C3 relay:
-1280192-byte app in each 1310720-byte OTA slot. The common-root TLS bundle and size optimization are required for the existing
+S3 gateway: 1403744-byte app in each existing 3145728-byte OTA slot. C3 relay:
+1288384-byte app in each 1310720-byte OTA slot. The common-root TLS bundle and size optimization are required for the existing
 1280-KiB slots; detailed verified bytes are recorded by `native/verify.py` in the
 external build directory. Assertions stay enabled. The C3 common-root bundle is
 a deliberately smaller trust set, not disabled certificate/hostname verification;
@@ -284,3 +284,53 @@ pass. Native radio disable/expiry/counter code compiles on both chip families;
 its physical timing/USB behaviour remains HARDWARE_PENDING. Start strict binary
 capture after ROM boot and before enabling the correction source; an arbitrary
 mid-frame start is deliberately not silently discarded.
+
+## Private NTRIP trust and client identities
+
+Native TLS endpoints can reference `nvs://ug_tls/<name>` for their CA bundle,
+client certificate and client private key. Names contain 1–15 ASCII letters,
+digits, `_` or `-`; namespace/path traversal is rejected. This is an ESP-IDF
+adapter storage URI, not a Linux filename contract. The existing host filesystem
+backend is unchanged. No SPIFFS driver/mount/automatic format is needed on C3.
+Certificates are bounded to 4096 bytes and private keys to 2048 bytes; the parser
+rejects malformed PEM and weak RSA/ECC keys before storage. NVS capacity remains
+finite; a full partition returns an error, never an automatic erase. Production
+flash protection remains a separate deployment prerequisite.
+
+Use authenticated HTTPS `/api/tls/object` or the local console command
+`tls-object <JSON>`. The request contains `name`, `kind` (`certificate`,
+`private-key` or `delete`), PEM when adding/replacing, and explicit `confirm`:
+`REPLACE_TLS_OBJECT` or `DELETE_TLS_OBJECT`. There is no read/export API for
+private objects. The UI clears the PEM field on success/logout. Updating objects
+invalidates the upstream source and restarts NTRIP/caster connections without
+reinterpreting an old correction as a new observation. Already transmitted bytes
+cannot be recalled. The HTTPS server's own identity still changes only at reboot.
+
+SDK-seam tests cover private-bundle loading, invalid namespace/traversal, absent
+storage, oversized blobs and embedded NULs; strict settings and the browser mock
+also pass. These are distinct from a real ESP TLS handshake. An additional attempt
+to run the SDK's Mbed TLS package as a standalone host library was not executable:
+the image omits the framework and standalone builtin bignum header. No vendor
+files or compiler/security checks were altered to force that optional experiment.
+The actual firmware crypto API compiles on S3 and C3; runtime TLS/NVS power-failure
+qualification remains pending.
+
+Early HTTP errors close the session rather than letting ESP-IDF purge an
+unbounded unread body after authentication/size rejection. GET bodies are
+rejected, and accepted JSON requests retain their aggregate read deadline.
+The native ELF verifier also checks that copied, compiled `main` files and its
+CMake declaration match the current source, detecting stale external build copies.
+
+The HTTPS worker runs at priority 2, below correction routing (5) and UART/radio
+owners (4). This protects scheduling priority, not a claimed physical latency
+bound. TLS-disabled TCP connections do not read stale/unused certificate settings;
+the SDK-seam regression covers that case as well.
+
+Historical multislot audit: `main/include/ntrip_slots.h` defines only a SERVER
+role, and `ntrip_runtime.c` fans out to five independent uploaders. The native
+single upstream plus five S3 publishers therefore preserves the implemented
+model; five simultaneous incoming streams were not an existing feature. The old
+client's GGA source was live UART text, not a configured manual/reference position.
+The native source uses fresh UG observations instead. Manual reference GGA for a
+GNSS-free VRS client is a future extension; it must not fabricate a physical GNSS
+observation to satisfy an injection API.

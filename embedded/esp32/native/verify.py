@@ -11,6 +11,15 @@ def verify(work, profile, local_gnss=False):
     work = Path(work).resolve()
     build = work / 'build'
     commands = json.loads((build / 'compile_commands.json').read_text())
+    source_main = Path(__file__).resolve().parent / 'main'
+    generated_main = work / 'project/main'
+    selected_main = [Path(entry['file']) for entry in commands
+                     if Path(entry['file']).parent == generated_main]
+    selected_main.append(generated_main / 'CMakeLists.txt')
+    for actual in selected_main:
+        original = source_main / actual.name
+        if not original.is_file() or actual.read_bytes() != original.read_bytes():
+            raise ValueError('stale copied main input: ' + str(actual))
     production = [entry['file'] for entry in commands]
     if any('/oldrtkesp/' in file for file in production):
         raise ValueError('historical checkout must never be a native build input')

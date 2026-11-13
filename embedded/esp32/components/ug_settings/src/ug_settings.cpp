@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_settings.hpp"
 #include "cJSON.h"
+#include "ug_certificate_uri.hpp"
 #include "ug_json.hpp"
 #include <algorithm>
 #include <cmath>
@@ -29,7 +30,8 @@ bool Endpoint(const universal_gnss_ntrip::NtripConfig& c, bool enabled)
     return false;
   for (const auto* path :
        {&c.tls_ca_file, &c.tls_client_certificate_file, &c.tls_client_private_key_file})
-    if (!path->empty() && (!Text(*path, 128, false) || path->find("/spiffs/certs/") != 0 ||
+    if (!path->empty() && (!Text(*path, 128, false) ||
+                           (path->find("/spiffs/certs/") != 0 && !NvsCertificateName(*path)) ||
                            path->find("..") != std::string::npos))
       return false;
   return c.tls_client_certificate_file.empty() == c.tls_client_private_key_file.empty();
@@ -275,6 +277,9 @@ bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& err
     return fail("unsupported GNSS model selector");
   if (!Endpoint(s.upstream, s.upstream_enabled))
     return fail("invalid upstream endpoint or trust policy");
+  if (s.upstream_enabled && s.upstream.send_gga && !s.gnss_enabled)
+    return fail(
+        "NTRIP GGA requires an enabled local GNSS source; manual reference GGA is unavailable");
   for (std::size_t i = 0; i < s.publishers.size(); ++i)
   {
     const auto& p = s.publishers[i];

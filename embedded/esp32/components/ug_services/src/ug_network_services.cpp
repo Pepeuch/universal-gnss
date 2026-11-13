@@ -248,6 +248,11 @@ void NetworkAvailabilityChanged(bool available)
   if (!available)
     upstream_generation = BeginCorrectionSource(kUpstream, false);
 }
+void RestartNetworkServices()
+{
+  upstream_generation = BeginCorrectionSource(kUpstream, false);
+  network_generation.fetch_add(1);
+}
 void PublishGnssSnapshot(const universal_gnss::GnssRuntimeState& state,
                          std::optional<std::int64_t> receipt)
 {

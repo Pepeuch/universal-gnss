@@ -7,6 +7,7 @@ namespace ug::embedded
 esp_err_t StartNetworkServices();
 // IDF event task may invalidate sources while a network worker is inside connect.
 void NetworkAvailabilityChanged(bool available);
+void RestartNetworkServices();
 void PublishGnssSnapshot(const universal_gnss::GnssRuntimeState& state,
                          std::optional<std::int64_t> position_receipt_ns = std::nullopt);
 universal_gnss::GnssRuntimeState GnssSnapshot();

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_admin.hpp"
 #include "ug_board.hpp"
+#include "ug_certificate_uri.hpp"
 #include "ug_json.hpp"
 #include "ug_settings.hpp"
 #include <cassert>
@@ -34,6 +35,17 @@ int main()
                          out,
                          error));
   assert(!DecodeSettings(R"({"gnss":{"tx_pin":17,"rx_pin":17}})", original, base, out, error));
+  assert(NvsCertificateName("nvs://ug_tls/ca").value() == "ca");
+  for (auto bad : {"nvs://other/ca",
+                   "nvs://ug_tls/../ca",
+                   "nvs://ug_tls/",
+                   "nvs://ug_tls/too_long_object_name",
+                   "nvs://ug_tls/key with space"})
+    assert(!NvsCertificateName(bad));
+  assert(DecodeSettings(
+      R"({"upstream":{"endpoint":{"ca_file":"nvs://ug_tls/ca"}}})", original, base, out, error));
+  assert(!DecodeSettings(
+      R"({"upstream":{"endpoint":{"ca_file":"nvs://ug_tls/../ca"}}})", original, base, out, error));
   auto configured = original;
   configured.upstream.password = "upstream-test-secret";
   configured.wifi_password = "wifi-test-secret";
@@ -110,6 +122,12 @@ int main()
       out,
       error));
   assert(!out.gnss_enabled && out.upstream_enabled);
+  assert(!DecodeSettings(
+      R"({"upstream":{"enabled":true,"endpoint":{"host":"caster.test","send_gga":true}}})",
+      minimal,
+      relay,
+      out,
+      error));
   assert(DecodeSettings(R"({"radio":{"enabled":false},"wifi":{"sta":true,"ssid":"test"}})",
                         minimal,
                         relay,

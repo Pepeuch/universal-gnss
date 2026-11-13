@@ -31,7 +31,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { token = $('token').value; $('token').value = ''; await load(); await refresh(); show('Session ouverte'); });
-$('logout').onclick = () => { token = ''; $('token').value = ''; $('config').value = ''; $('receiver').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { token = ''; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -51,6 +51,14 @@ $('base').onsubmit = handle(async event => {
     value.persistent_confirmation = 'SAVE_RECEIVER_CONFIGURATION';
   }
   show(await call('/api/gnss/base/apply', value));
+});
+$('tls-object').onsubmit = handle(async () => {
+  const kind = $('tls-kind').value, value = {name: $('tls-name').value, kind};
+  const confirmation = kind === 'delete' ? 'DELETE_TLS_OBJECT' : 'REPLACE_TLS_OBJECT';
+  if (prompt(`Saisir ${confirmation} pour confirmer`) !== confirmation) return;
+  value.confirm = confirmation;
+  if (kind !== 'delete') value.pem = $('tls-pem').value;
+  show(await call('/api/tls/object', value)); $('tls-pem').value = '';
 });
 $('transport').onsubmit = handle(async () => {
   const value = {input: $('correction-input').value, gnss: {enabled: $('gnss-enabled').checked,

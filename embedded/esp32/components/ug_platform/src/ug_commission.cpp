@@ -16,6 +16,7 @@ namespace
 {
 // Single local operator owner. Never linked into the rover's binary RTCM path.
 std::array<char, 8192 + 32> line{};
+void (*tls_changed)() = nullptr;
 void Handle(std::string_view command)
 {
   std::string error;
@@ -35,6 +36,12 @@ void Handle(std::string_view command)
         ok = StoreWebIdentity({cert->valuestring, key->valuestring}, error);
     }
   }
+  else if (command.substr(0, 11) == "tls-object ")
+  {
+    ok = ApplyTlsObject(command.substr(11), error);
+    if (ok && tls_changed)
+      tls_changed();
+  }
   else if (command == "reboot CONFIRM")
   {
     std::puts("UG_LOCAL restarting");
@@ -43,7 +50,7 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected config <JSON>, tls-init <JSON> or reboot CONFIRM";
+    error = "expected config/tls-init/tls-object <JSON> or reboot CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());
   std::fflush(stdout);
@@ -81,8 +88,9 @@ void Console(void*)
   }
 }
 }  // namespace
-esp_err_t StartLocalCommissioning()
+esp_err_t StartLocalCommissioning(void (*credentials_changed)())
 {
+  tls_changed = credentials_changed;
   return xTaskCreate(Console, "ug_local_setup", 16384, nullptr, 1, nullptr) == pdPASS
              ? ESP_OK
              : ESP_ERR_NO_MEM;

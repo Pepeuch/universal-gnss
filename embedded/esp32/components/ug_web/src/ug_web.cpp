@@ -49,7 +49,10 @@ esp_err_t Fail(httpd_req_t* req, const char* status, const char* message)
   Headers(req);
   httpd_resp_set_status(req, status);
   httpd_resp_set_type(req, "text/plain; charset=utf-8");
-  return httpd_resp_sendstr(req, message);
+  const auto result = httpd_resp_sendstr(req, message);
+  // SDK would otherwise purge an arbitrarily large unread request body after an
+  // early rejection. Returning an error closes the session before that purge.
+  return status[0] == '4' || status[0] == '5' ? ESP_FAIL : result;
 }
 bool Authenticated(httpd_req_t* req)
 {
@@ -206,6 +209,8 @@ esp_err_t GnssReply(httpd_req_t* req)
 #endif
 esp_err_t Get(httpd_req_t* req)
 {
+  if (req->content_len)
+    return Fail(req, "400 Bad Request", "GET body is not supported");
   const std::string_view uri(req->uri);
   if (uri == "/api/status" || uri == "/status")
     return Status(req);
@@ -236,6 +241,13 @@ esp_err_t Post(httpd_req_t* req)
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");
   const std::string_view uri(req->uri);
+  if (uri == "/api/tls/object")
+  {
+    if (!ApplyTlsObject(body, error))
+      return Fail(req, "409 Conflict", error.c_str());
+    RestartNetworkServices();
+    return Fail(req, "200 OK", "TLS object committed; connections restarting");
+  }
   if (uri == "/api/config" || uri == "/config")
   {
     if (!PatchConfiguration(body, error))
@@ -268,6 +280,8 @@ esp_err_t Post(httpd_req_t* req)
 }
 esp_err_t Asset(httpd_req_t* req)
 {
+  if (req->content_len)
+    return Fail(req, "400 Bad Request", "GET body is not supported");
   const std::string_view uri(req->uri);
   Headers(req);
   if (uri == "/")
@@ -295,6 +309,7 @@ esp_err_t StartWebService()
   if (!LoadWebIdentity(identity, error))
     return ESP_ERR_INVALID_STATE;  // No plaintext fallback.
   httpd_ssl_config_t config = ug_https_defaults();
+  config.httpd.task_priority = 2;  // Below correction routing (5) and UART/radio owners (4).
   config.httpd.stack_size = 24576;
   config.httpd.max_uri_handlers = 10;
   config.httpd.max_open_sockets = 3;

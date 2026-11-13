@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 // SDK API seam tests: these do not claim a real ESP TLS handshake.
 #include "esp_tls.h"
+#include "nvs.h"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 #include <cassert>
 #include <cerrno>
@@ -11,6 +12,32 @@
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
+static std::string stored_pem = "fake-cert";
+static bool nvs_fail = false;
+esp_err_t nvs_open(const char* ns, int mode, nvs_handle_t* out)
+{
+  assert(std::strcmp(ns, "ug_tls") == 0 && mode == NVS_READONLY);
+  *out = 1;
+  return nvs_fail ? -1 : ESP_OK;
+}
+esp_err_t nvs_get_blob(nvs_handle_t, const char* key, void* data, std::size_t* size)
+{
+  if (std::strcmp(key, "ca") != 0)
+    return ESP_ERR_NVS_NOT_FOUND;
+  if (!data)
+  {
+    *size = stored_pem.size();
+    return ESP_OK;
+  }
+  if (*size < stored_pem.size())
+    return -1;
+  std::memcpy(data, stored_pem.data(), stored_pem.size());
+  *size = stored_pem.size();
+  return ESP_OK;
+}
+void nvs_close(nvs_handle_t)
+{
+}
 using namespace universal_gnss_transport;
 static int verification_flags = 0;
 static int next_fd = -1, next_result = 1;
@@ -89,6 +116,21 @@ int main()
   cfg.tls_verify_peer = true;
   cfg.tls_ca_file = "/nonexistent-trust-bundle";
   assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
+  cfg.tls_ca_file = "nvs://ug_tls/../ca";
+  assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
+  cfg.tls_ca_file = "nvs://ug_tls/ca";
+  nvs_fail = true;
+  assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
+  nvs_fail = false;
+  stored_pem = std::string(4097, 'x');
+  assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
+  stored_pem = std::string("key\0tail", 8);
+  assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
+  stored_pem = "fake-cert";
+  int ca_peer = Pair();
+  assert(t.Open(cfg) == TransportError::kNone);
+  t.Close();
+  ::close(ca_peer);
   cfg.tls_ca_file.clear();
   cfg.tls_client_private_key_file = "missing-key";
   assert(t.Open(cfg) == TransportError::kInvalidArgument);
@@ -129,6 +171,18 @@ int main()
   assert(r.status == TransportStatus::kError && r.error == TransportError::kReadFailure);
   force_wait = false;
   close(peer);
+  peer = Pair();
+  expect_tls = false;
+  cfg.tls_enabled = false;
+  cfg.tls_ca_file = "nvs://ug_tls/missing";
+  cfg.tls_client_private_key_file = "unused-key";
+  nvs_fail = true;
+  assert(t.Open(cfg) == TransportError::kNone);
+  t.Close();
+  close(peer);
+  nvs_fail = false;
+  cfg.tls_ca_file.clear();
+  cfg.tls_client_private_key_file.clear();
   peer = Pair();
   const int adopted = next_fd;
   next_fd = -1;

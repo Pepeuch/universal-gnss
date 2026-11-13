@@ -8,6 +8,8 @@
 #include "lwip/sockets.h"
 #include "lwip/tcp.h"
 #include "mbedtls/platform_util.h"
+#include "nvs.h"
+#include "ug_certificate_uri.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 #include <algorithm>
 #include <array>
@@ -26,6 +28,31 @@ bool LoadPem(const std::string& path, std::string& destination)
 {
   if (path.empty())
     return true;
+  if (path.compare(0, 6, "nvs://") == 0)
+  {
+    const auto name = ug::embedded::NvsCertificateName(path);
+    if (!name)
+      return false;
+    nvs_handle_t handle{};
+    if (nvs_open("ug_tls", NVS_READONLY, &handle) != ESP_OK)
+      return false;
+    const std::string key(*name);
+    std::size_t size = 0;
+    bool ok =
+        nvs_get_blob(handle, key.c_str(), nullptr, &size) == ESP_OK && size > 0 && size <= 4096;
+    if (ok)
+    {
+      destination.resize(size);
+      ok = nvs_get_blob(handle, key.c_str(), destination.data(), &size) == ESP_OK;
+      if (ok)
+        destination.resize(size);
+    }
+    nvs_close(handle);
+    if (!ok || destination.find('\0') != std::string::npos)
+      return false;
+    destination.push_back('\0');
+    return true;
+  }
   FILE* file = std::fopen(path.c_str(), "rb");
   if (!file)
     return false;
@@ -103,12 +130,12 @@ TransportError TcpClientTransport::Open(const TcpClientConfig& config)
     return failed(TransportError::kInvalidArgument);
   if (config.tls_enabled && !config.tls_verify_peer)
     return failed(TransportError::kTlsVerificationFailure);  // No insecure production fallback.
-  if ((!config.tls_client_certificate_file.empty()) !=
-      (!config.tls_client_private_key_file.empty()))
+  if (config.tls_enabled && ((!config.tls_client_certificate_file.empty()) !=
+                             (!config.tls_client_private_key_file.empty())))
     return failed(TransportError::kInvalidArgument);
-  if (!LoadPem(config.tls_ca_file, ca_pem_) ||
-      !LoadPem(config.tls_client_certificate_file, client_pem_) ||
-      !LoadPem(config.tls_client_private_key_file, key_pem_))
+  if (config.tls_enabled && (!LoadPem(config.tls_ca_file, ca_pem_) ||
+                             !LoadPem(config.tls_client_certificate_file, client_pem_) ||
+                             !LoadPem(config.tls_client_private_key_file, key_pem_)))
     return failed(TransportError::kTlsVerificationFailure);
   idf_tls_ = esp_tls_init();
   if (!idf_tls_)

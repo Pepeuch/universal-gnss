@@ -3,5 +3,5 @@
 #include "esp_err.h"
 namespace ug::embedded
 {
-esp_err_t StartLocalCommissioning();
+esp_err_t StartLocalCommissioning(void (*credentials_changed)() = nullptr);
 }

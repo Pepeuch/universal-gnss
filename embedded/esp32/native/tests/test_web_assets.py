@@ -21,7 +21,7 @@ class WebAssets(unittest.TestCase):
                             createElement() {return {click(){}};}};
           const setInterval = () => {};
           const confirm = () => true;
-          const prompt = () => 'SAVE_RECEIVER_CONFIGURATION';
+          const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
@@ -51,6 +51,17 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(patch['gnss']['rx_pin'], 18)
         self.assertTrue(patch['gnss']['enabled'])
         self.assertEqual(patch['input'], 'local')
+        vm.eval("document.getElementById('tls-name').value='ca'; document.getElementById('tls-kind').value='certificate'; document.getElementById('tls-pem').value='public-test-data'; elements['tls-object'].onsubmit();")
+        self.drain(vm)
+        tls = json.loads(vm.eval("calls.filter(c=>c.path==='/api/tls/object').pop().options.body"))
+        self.assertEqual(tls['confirm'], 'REPLACE_TLS_OBJECT')
+        self.assertEqual(tls['kind'], 'certificate')
+        self.assertEqual(vm.eval("elements['tls-pem'].value"), '')
+        vm.eval("elements['tls-kind'].value='delete'; elements['tls-object'].onsubmit();")
+        self.drain(vm)
+        tls = json.loads(vm.eval("calls.filter(c=>c.path==='/api/tls/object').pop().options.body"))
+        self.assertEqual(tls['confirm'], 'DELETE_TLS_OBJECT')
+        self.assertNotIn('pem', tls)
         vm.eval('elements.logout.onclick();')
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')
