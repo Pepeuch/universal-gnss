@@ -11,8 +11,10 @@ void app_main(void)
 {
   esp_log_level_set("*", ESP_LOG_NONE);
   // Never erase persistent configuration automatically, including on version errors.
-  if (nvs_flash_init() != ESP_OK || esp_netif_init() != ESP_OK ||
-      esp_event_loop_create_default() != ESP_OK || espnow_rtcm_start() != ESP_OK)
+  (void)nvs_flash_init();  // Wi-Fi uses RAM-only configuration; persistent failure does not erase
+                           // data.
+  if (esp_netif_init() != ESP_OK || esp_event_loop_create_default() != ESP_OK ||
+      espnow_rtcm_start() != ESP_OK)
     return;
   for (;;)
     vTaskDelay(pdMS_TO_TICKS(1000));

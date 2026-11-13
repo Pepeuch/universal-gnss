@@ -1,0 +1,6 @@
+dependencies:
+  idf: "==6.1"
+  espressif/w5500: "==2.0.1"
+  espressif/wiznet_common: "==1.1.0"
+  espressif/mdns: "==1.15.1"
+  espressif/cjson: "==1.7.19~2"

@@ -1,0 +1,310 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+#include "ug_web.hpp"
+#include "esp_heap_caps.h"
+#include "esp_https_server.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+#include "ug_admin.hpp"
+#include "ug_configuration.hpp"
+#include "ug_credentials.hpp"
+#include "ug_gateway_service.hpp"
+#include "ug_json.hpp"
+#include "ug_services.hpp"
+#if UG_LOCAL_GNSS
+#include "ug_gnss_service.hpp"
+#endif
+#include <array>
+#include <cstring>
+#include <string_view>
+extern "C" httpd_ssl_config_t ug_https_defaults(void);
+namespace ug::embedded
+{
+namespace
+{
+WebIdentity identity;
+httpd_handle_t server;
+extern "C" {
+extern const std::uint8_t index_start[] asm("_binary_index_html_start"),
+    index_end[] asm("_binary_index_html_end");
+extern const std::uint8_t js_start[] asm("_binary_app_js_start"), js_end[] asm(
+                                                                      "_binary_app_js_end");
+extern const std::uint8_t css_start[] asm("_binary_style_css_start"), css_end[] asm(
+                                                                          "_binary_style_css_end");
+}
+void Headers(httpd_req_t* req)
+{
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+  httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
+  httpd_resp_set_hdr(req,
+                     "Content-Security-Policy",
+                     "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors "
+                     "'none'; base-uri 'none'");
+  httpd_resp_set_hdr(req, "Referrer-Policy", "no-referrer");
+}
+esp_err_t Fail(httpd_req_t* req, const char* status, const char* message)
+{
+  Headers(req);
+  httpd_resp_set_status(req, status);
+  httpd_resp_set_type(req, "text/plain; charset=utf-8");
+  return httpd_resp_sendstr(req, message);
+}
+bool Authenticated(httpd_req_t* req)
+{
+  const auto size = httpd_req_get_hdr_value_len(req, "Authorization");
+  if (!size || size > 135)
+    return false;
+  std::array<char, 136> header{};
+  if (httpd_req_get_hdr_value_str(req, "Authorization", header.data(), header.size()) != ESP_OK)
+    return false;
+  return AuthorizedBearer({header.data(), size}, Configuration()->admin_token_sha256, Sha256);
+}
+bool Body(httpd_req_t* req, std::string& body)
+{
+  char type[48]{};
+  if (req->content_len <= 0 || req->content_len > 8192 ||
+      httpd_req_get_hdr_value_str(req, "Content-Type", type, sizeof(type)) != ESP_OK ||
+      (std::strcmp(type, "application/json") != 0 &&
+       std::strcmp(type, "application/json; charset=utf-8") != 0))
+    return false;
+  body.resize(req->content_len);
+  std::size_t used = 0;
+  const auto deadline = esp_timer_get_time() + 5000000;
+  while (used < body.size())
+  {
+    if (esp_timer_get_time() > deadline)
+      return false;
+    const auto n = httpd_req_recv(req, body.data() + used, body.size() - used);
+    if (n <= 0)
+      return false;
+    used += static_cast<std::size_t>(n);
+  }
+  return true;
+}
+esp_err_t Json(httpd_req_t* req, const cJSON* root)
+{
+  char* text = root ? cJSON_PrintUnformatted(root) : nullptr;
+  if (!text)
+    return Fail(req, "503 Service Unavailable", "response memory budget unavailable");
+  Headers(req);
+  httpd_resp_set_type(req, "application/json");
+  const auto result = httpd_resp_sendstr(req, text);
+  cJSON_free(text);
+  return result;
+}
+esp_err_t Status(httpd_req_t* req)
+{
+  const auto net = NetworkStats();
+  const auto gateway = GatewayStats();
+  auto config = Configuration();
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddStringToObject(root.get(), "board", BoardCapabilities().board.c_str());
+  cJSON_AddStringToObject(root.get(), "role", BoardCapabilities().role.c_str());
+  cJSON_AddBoolToObject(root.get(), "configuration_writable", ConfigurationWritable());
+  cJSON_AddBoolToObject(root.get(), "admin_configured", !config->admin_token_sha256.empty());
+  cJSON_AddNumberToObject(root.get(), "uptime_s", esp_timer_get_time() / 1000000);
+  cJSON_AddNumberToObject(root.get(), "heap_free", esp_get_free_heap_size());
+  cJSON_AddNumberToObject(root.get(), "heap_min", esp_get_minimum_free_heap_size());
+  cJSON_AddNumberToObject(root.get(),
+                          "largest_internal",
+                          heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+  cJSON_AddBoolToObject(root.get(), "upstream_connected", net.upstream_connected);
+  cJSON_AddBoolToObject(root.get(), "upstream_flowing", net.upstream_flowing);
+  cJSON_AddNumberToObject(root.get(), "rtcm_frames", gateway.routing.valid);
+  cJSON_AddNumberToObject(root.get(), "rtcm_rejected", gateway.routing.rejected);
+  cJSON_AddNumberToObject(root.get(),
+                          "queue_drops",
+                          gateway.ingress_dropped + gateway.destination_dropped +
+                              gateway.routing.dropped_full);
+  cJSON_AddNumberToObject(root.get(), "stale_drops", gateway.routing.dropped_stale);
+  cJSON_AddBoolToObject(root.get(), "receiver_quarantined", ReceiverJournalBlocked());
+  // Public status contains no positions, credentials, raw receiver bytes or private MACs.
+  return Json(req, root.get());
+}
+esp_err_t CapabilitiesReply(httpd_req_t* req)
+{
+  const auto& caps = BoardCapabilities();
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddBoolToObject(root.get(), "gnss", caps.local_gnss);
+  cJSON_AddBoolToObject(root.get(), "caster", caps.caster);
+  cJSON_AddBoolToObject(root.get(), "lora", caps.lora);
+  cJSON_AddNumberToObject(root.get(), "publishers", caps.publisher_slots);
+  cJSON_AddBoolToObject(root.get(), "fixed_channel_espnow", true);
+  cJSON_AddBoolToObject(root.get(), "radio_wifi_changes_require_reboot", true);
+  return Json(req, root.get());
+}
+#if UG_LOCAL_GNSS
+esp_err_t GnssReply(httpd_req_t* req)
+{
+  const auto gnss = ReceiverSnapshot();
+  const auto state = GnssSnapshot();
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddBoolToObject(root.get(), "present", gnss.present);
+  cJSON_AddBoolToObject(root.get(), "model_verified", gnss.model_verified);
+  cJSON_AddStringToObject(root.get(), "model", gnss.model.c_str());
+  cJSON_AddStringToObject(root.get(), "firmware", gnss.firmware.c_str());
+  cJSON_AddBoolToObject(root.get(), "busy", gnss.busy);
+  cJSON_AddBoolToObject(root.get(), "quarantined", gnss.quarantined);
+  cJSON_AddStringToObject(root.get(), "last_error", gnss.last_error.c_str());
+  cJSON_AddNumberToObject(root.get(), "operation_state", gnss.operation_state);
+  cJSON_AddBoolToObject(root.get(), "fix_valid", state.fix_valid);
+  cJSON_AddNumberToObject(root.get(), "fix_type", static_cast<unsigned>(state.fix_type));
+  if (state.latitude_deg)
+    cJSON_AddNumberToObject(root.get(), "latitude_deg", *state.latitude_deg);
+  if (state.longitude_deg)
+    cJSON_AddNumberToObject(root.get(), "longitude_deg", *state.longitude_deg);
+  if (state.altitude_m)
+    cJSON_AddNumberToObject(root.get(), "altitude_m", *state.altitude_m);
+  if (state.satellites_used)
+    cJSON_AddNumberToObject(root.get(), "satellites_used", *state.satellites_used);
+  if (state.satellites_visible)
+    cJSON_AddNumberToObject(root.get(), "satellites_visible", *state.satellites_visible);
+  cJSON_AddNumberToObject(root.get(), "observations", gnss.observations);
+  cJSON_AddNumberToObject(
+      root.get(),
+      "last_bytes_age_ms",
+      gnss.last_bytes_ns ? (esp_timer_get_time() * 1000 - gnss.last_bytes_ns) / 1000000 : -1);
+  cJSON_AddStringToObject(root.get(), "survey_completion", "not_inferred_from_ACK");
+  return Json(req, root.get());
+}
+#endif
+esp_err_t Get(httpd_req_t* req)
+{
+  const std::string_view uri(req->uri);
+  if (uri == "/api/status" || uri == "/status")
+    return Status(req);
+  if (uri == "/api/capabilities")
+    return CapabilitiesReply(req);
+  if (!Authenticated(req))
+    return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  if (uri == "/api/config" || uri == "/config" || uri == "/api/ntrip")
+  {
+    std::string json;
+    if (!EncodeSettings(*Configuration(), json))
+      return Fail(req, "503 Service Unavailable", "configuration unavailable");
+    Headers(req);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, json.data(), json.size());
+  }
+#if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/status" || uri == "/api/gnss/diagnostics" || uri == "/api/gnss/base/status")
+    return GnssReply(req);
+#endif
+  return Fail(req, "404 Not Found", "API operation unavailable in this profile");
+}
+esp_err_t Post(httpd_req_t* req)
+{
+  if (!Authenticated(req))
+    return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  std::string body, error;
+  if (!Body(req, body))
+    return Fail(req, "400 Bad Request", "bounded application/json body required");
+  const std::string_view uri(req->uri);
+  if (uri == "/api/config" || uri == "/config")
+  {
+    if (!PatchConfiguration(body, error))
+      return Fail(req, "409 Conflict", error.c_str());
+    return Fail(req, "200 OK", "configuration saved; radio/Wi-Fi/TLS changes require reboot");
+  }
+#if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/base/apply-fixed" || uri == "/api/gnss/base/start-survey" ||
+      uri == "/api/gnss/base/apply")
+  {
+    BaseOperation operation;
+    if (!DecodeBaseOperation(body, operation, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    if ((uri == "/api/gnss/base/apply-fixed" &&
+         operation.mode != universal_gnss_driver::BaseMode::kFixed) ||
+        (uri == "/api/gnss/base/start-survey" &&
+         operation.mode == universal_gnss_driver::BaseMode::kFixed))
+      return Fail(req, "400 Bad Request", "route and mode disagree");
+    const auto receiver = ReceiverSnapshot();
+    if (!receiver.present || !receiver.model_verified || receiver.quarantined ||
+        !QueueBaseOperation(operation))
+      return Fail(req, "409 Conflict", "receiver not verified, quarantined or busy");
+    return Fail(
+        req,
+        "202 Accepted",
+        "operation queued; observe receiver status for acknowledgement and actual survey evidence");
+  }
+#endif
+  return Fail(req, "404 Not Found", "API operation unavailable in this profile");
+}
+esp_err_t Asset(httpd_req_t* req)
+{
+  const std::string_view uri(req->uri);
+  Headers(req);
+  if (uri == "/")
+  {
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    return httpd_resp_send(
+        req, reinterpret_cast<const char*>(index_start), index_end - index_start);
+  }
+  if (uri == "/app.js")
+  {
+    httpd_resp_set_type(req, "application/javascript");
+    return httpd_resp_send(req, reinterpret_cast<const char*>(js_start), js_end - js_start);
+  }
+  if (uri == "/style.css")
+  {
+    httpd_resp_set_type(req, "text/css");
+    return httpd_resp_send(req, reinterpret_cast<const char*>(css_start), css_end - css_start);
+  }
+  return Fail(req, "404 Not Found", "asset not found");
+}
+}  // namespace
+esp_err_t StartWebService()
+{
+  std::string error;
+  if (!LoadWebIdentity(identity, error))
+    return ESP_ERR_INVALID_STATE;  // No plaintext fallback.
+  httpd_ssl_config_t config = ug_https_defaults();
+  config.httpd.stack_size = 24576;
+  config.httpd.max_uri_handlers = 10;
+  config.httpd.max_open_sockets = 3;
+  config.httpd.lru_purge_enable = true;
+  config.httpd.recv_wait_timeout = 3;
+  config.httpd.send_wait_timeout = 3;
+  config.httpd.uri_match_fn = httpd_uri_match_wildcard;
+  config.tls_handshake_timeout_ms = 3000;
+  config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem.c_str());
+  config.servercert_len = identity.certificate_pem.size() + 1;
+  config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem.c_str());
+  config.prvtkey_len = identity.private_key_pem.size() + 1;
+  auto result = httpd_ssl_start(&server, &config);
+  if (result != ESP_OK)
+    return result;
+  const struct
+  {
+    const char* path;
+    httpd_method_t method;
+    esp_err_t (*handler)(httpd_req_t*);
+  } routes[] = {{"/", HTTP_GET, Asset},
+                {"/app.js", HTTP_GET, Asset},
+                {"/style.css", HTTP_GET, Asset},
+                {"/config", HTTP_GET, Get},
+                {"/config", HTTP_POST, Post},
+                {"/status", HTTP_GET, Get},
+                {"/api/*", HTTP_GET, Get},
+                {"/api/*", HTTP_POST, Post}};
+  for (const auto& route : routes)
+  {
+    httpd_uri_t uri{};
+    uri.uri = route.path;
+    uri.method = route.method;
+    uri.handler = route.handler;
+    if ((result = httpd_register_uri_handler(server, &uri)) != ESP_OK)
+    {
+      httpd_ssl_stop(server);
+      server = nullptr;
+      return result;
+    }
+  }
+  return ESP_OK;
+}
+}  // namespace ug::embedded

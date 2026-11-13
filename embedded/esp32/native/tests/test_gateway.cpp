@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gateway.hpp"
+#include "ug_observation.hpp"
 #include "ug_rtcm.h"
 #include <cassert>
 #include <vector>
@@ -73,4 +74,13 @@ int main()
   }
   assert(gateway.ConfigureSource(1, 3, false));
   assert(!gateway.Feed(1, 3, bytes.data(), bytes.size(), 5000));
+  universal_gnss::GnssRuntimeState position;
+  position.fix_valid = true;
+  position.latitude_deg = 48.123456789;
+  assert(ug::embedded::FreshPositionForGga(position, 10, 10).fix_valid);
+  assert(ug::embedded::FreshPositionForGga(position, 10, 3000000010LL).fix_valid);
+  assert(!ug::embedded::FreshPositionForGga(position, 10, 3000000011LL).fix_valid);
+  assert(!ug::embedded::FreshPositionForGga(position, 10, 9).latitude_deg);
+  assert(!ug::embedded::FreshPositionForGga(position, std::nullopt, 10).fix_valid);
+  assert(position.fix_valid && position.latitude_deg);  // Cached source was not rewritten.
 }

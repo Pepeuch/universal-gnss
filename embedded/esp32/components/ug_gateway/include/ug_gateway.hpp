@@ -13,7 +13,7 @@ class Gateway
 {
 public:
   static constexpr std::size_t kSources = 6;  // local receiver + five network slots
-  static constexpr std::size_t kSinks = 5;
+  static constexpr std::size_t kSinks = 8;    // ESP-NOW, five uploaders, local caster, LoRa;
   static constexpr std::size_t kDepth = 2;
   static constexpr std::size_t kMaxFrame = 1029;
   struct Frame
@@ -35,6 +35,12 @@ public:
             const std::uint8_t* bytes,
             std::size_t size,
             std::int64_t receipt_ns);
+  // For an already framed producer (e.g. UG NtripClient observed frames).
+  bool FeedFrame(std::size_t source,
+                 std::uint64_t incarnation,
+                 const std::uint8_t* bytes,
+                 std::size_t size,
+                 std::int64_t receipt_ns);
   bool Pop(std::size_t sink, std::int64_t now_ns, Frame& out);
   const Metrics& metrics() const
   {
@@ -57,6 +63,11 @@ private:
     bool enabled{false};
   };
   void Invalidate(std::size_t source);
+  bool Route(std::size_t source,
+             std::uint64_t incarnation,
+             const std::uint8_t* bytes,
+             std::size_t size,
+             std::int64_t receipt_ns);
   std::array<Source, kSources> sources_{};
   std::array<Sink, kSinks> sinks_{};
   Metrics metrics_{};

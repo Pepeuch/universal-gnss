@@ -75,30 +75,59 @@ bool Gateway::Feed(const std::size_t source,
     if (result.status != universal_gnss_protocols::ParserStatus::kRecordReady || !result.record)
       continue;
     const auto& record = *result.record;
-    // RecordReady is not a checksum guarantee. Never route invalid corrections.
-    if (!ug_rtcm_frame_valid(record.raw_bytes.data(), record.raw_bytes.size()))
+    // RecordReady is not a checksum guarantee.
+    Route(source,
+          incarnation,
+          record.raw_bytes.data(),
+          record.raw_bytes.size(),
+          record.timestamp_ns.value_or(receipt_ns));
+  }
+  return true;
+}
+
+bool Gateway::FeedFrame(const std::size_t source,
+                        const std::uint64_t incarnation,
+                        const std::uint8_t* bytes,
+                        const std::size_t size,
+                        const std::int64_t receipt_ns)
+{
+  if (source >= kSources || receipt_ns < 0)
+    return false;
+  auto& state = sources_[source];
+  if (!state.enabled || incarnation != state.incarnation || receipt_ns < state.last_receipt_ns)
+    return false;
+  state.last_receipt_ns = receipt_ns;
+  return Route(source, incarnation, bytes, size, receipt_ns);
+}
+
+bool Gateway::Route(const std::size_t source,
+                    const std::uint64_t incarnation,
+                    const std::uint8_t* bytes,
+                    const std::size_t size,
+                    const std::int64_t receipt_ns)
+{
+  if (!ug_rtcm_frame_valid(bytes, size))
+  {
+    ++metrics_.rejected;
+    return false;
+  }
+  ++metrics_.valid;
+  Frame frame;
+  frame.size = size;
+  frame.source = source;
+  frame.incarnation = incarnation;
+  frame.receipt_ns = receipt_ns;
+  std::copy(bytes, bytes + size, frame.bytes.begin());
+  for (auto& sink : sinks_)
+  {
+    if (!sink.enabled)
+      continue;
+    if (sink.count == kDepth)
     {
-      ++metrics_.rejected;
+      ++metrics_.dropped_full;
       continue;
     }
-    ++metrics_.valid;
-    Frame frame;
-    frame.size = record.raw_bytes.size();
-    std::copy(record.raw_bytes.begin(), record.raw_bytes.end(), frame.bytes.begin());
-    frame.source = source;
-    frame.incarnation = incarnation;
-    frame.receipt_ns = record.timestamp_ns.value_or(receipt_ns);
-    for (auto& sink : sinks_)
-    {
-      if (!sink.enabled)
-        continue;
-      if (sink.count == kDepth)
-      {
-        ++metrics_.dropped_full;
-        continue;
-      }
-      sink.queue[(sink.head + sink.count++) % kDepth] = frame;
-    }
+    sink.queue[(sink.head + sink.count++) % kDepth] = frame;
   }
   return true;
 }

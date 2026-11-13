@@ -62,6 +62,9 @@ int main()
   assert(r.indeterminate());
   r.InvalidateObservations();  // Neither reconnect nor parser reset clears quarantine.
   assert(r.indeterminate() && !r.Start({command}, 10000010));
+  r.ConfigureTelemetry(config);
+  assert(r.indeterminate() && !r.Start({command}, 10000010));
+  assert(!r.state().fix_valid && !r.state().latitude_deg);
   assert(!r.Feed(nullptr, 1, 10000011));
   assert(!r.Feed(reinterpret_cast<const std::uint8_t*>(payload.data()), 513, 10000011));
   assert(!r.Feed(nullptr, 0, -1));

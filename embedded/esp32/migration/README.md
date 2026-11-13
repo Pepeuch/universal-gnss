@@ -20,13 +20,13 @@ Source audit, rather than README claims, determines the required behaviour:
 | Area | Existing evidence | Native status |
 |---|---|---|
 | GNSS telemetry/detection | `main/receiver.c`, NMEA/UBX and guessed text parsers | PARTIAL: actual UG sessions/probes/configuration libraries built for S3; native session owner tested |
-| Fixed BASE / survey | Historical Unicore profile emits `FIX POSITION`, `SURVEY START`, `RTCMOUTPUT` and marks a queued profile applied | PARTIAL: new vendor-specific UG BASE plan builder, simulated command safety; operator/runtime integration still open |
+| Fixed BASE / survey | Historical Unicore profile emits `FIX POSITION`, `SURVEY START`, `RTCMOUTPUT` and marks a queued profile applied | PARTIAL: verified-model UG BASE plans, single UART owner, typed asynchronous API and persistent interruption journal; physical/survey completion qualification remains open |
 | RTCM/filter/radio framing | `rtcm_filter`, `lora_transport`, `espnow_rtcm` | Native components adapted with original protocol/CRC16, one existing UG CRC24Q implementation |
-| Ethernet/Wi-Fi | W5500 fork, LAN8720, network events/captive AP | OPEN: official IDF 6.1 drivers and network ownership integration |
-| NTRIP | Legacy client, publishers, local caster, multislot supervisor, QoS | OPEN: one shared UG client/router/supervisor for BASE and GNSS-free relay |
+| Ethernet/Wi-Fi | W5500 fork, LAN8720, network events/captive AP | PARTIAL: official W5500 2.0.1, shared link ownership, boot-configured STA/AP; LAN8720 and physical validation remain open |
+| NTRIP | Legacy client, publishers, local caster, multislot supervisor, QoS | PARTIAL: actual UG NtripClient/TCP-TLS backend, five SOURCE-v1 publishers and bounded authenticated local caster; final runtime qualification/QoS remains open |
 | LoRa | SX126x driver, region tables, duty cycle, pipelines | OPEN: preserve regional policy and qualify native adapter; never enable unknown hardware |
-| Persistence | `config.c`, NVS and slot configuration | OPEN: schema/rollback/credential handling and recovery without automatic erasure |
-| Web/API | `web_server.c`, `www/` and 37 explicit routes | OPEN: retain useful contracts, strict validation/authentication, bounded monitoring |
+| Persistence | `config.c`, NVS and slot configuration | PARTIAL: strict schema1, dual banks, immutable snapshots and journal; legacy NVS import/recovery tools remain open |
+| Web/API | `web_server.c`, `www/` and 37 explicit routes | PARTIAL: HTTPS configuration/status/BASE UI and bearer authentication; remaining useful historical operations still open |
 | OTA/board assistants/Mammotion | Inventory covers profiles, board headers, scripts and docs | OPEN: distinguish actual implementation from historical TODO; no image publication/flash |
 
 The old commands above are not a manufacturer contract and are not copied into
@@ -53,8 +53,8 @@ A slow destination drops whole frames without blocking another destination.
 
 The future single `esp32` distribution has roles `gateway`, `relay-ntrip`, `rover`,
 separate from boards. Gateway and GNSS-free relay use the same engine. The native
-C3 relay skeleton excludes the GNSS library but is **not yet an operational
-NTRIP relay**. The minimal rover excludes the gateway/receiver/network services.
+C3 relay compiles the same network/router engine without GNSS driver sources.
+Its Ethernet/ESP-NOW operation still requires the documented physical wiring test. The minimal rover excludes the gateway/receiver/network services.
 Radio repeater support and the official Build & Flash portal remain separate
 requirements; no experimental binaries are published automatically.
 
@@ -111,9 +111,9 @@ binary backup is an input to a commit.
 With IDF 6.1 activated, normal user, from UG root:
 
 ```bash
-python3 embedded/esp32/native/build.py --output /tmp/ug-native-s3 --profile gateway --board waveshare-s3-eth --local-gnss
+python3 embedded/esp32/native/build.py --output /tmp/ug-native-s3 --profile gateway --board waveshare-s3-eth --local-gnss --provision
 python3 embedded/esp32/native/build.py --output /tmp/ug-native-c3 --profile rover --board supermini-c3
-cmake -S embedded/esp32/native/tests -B /tmp/ug-native-host
+cmake -S embedded/esp32/native/tests -B /tmp/ug-native-host -DUG_CJSON_SOURCE=/path/to/official-managed-cjson/cJSON
 cmake --build /tmp/ug-native-host
 ctest --test-dir /tmp/ug-native-host --output-on-failure
 ```
@@ -122,11 +122,87 @@ Outputs must be new external directories. Default peers are fictitious,
 channel 1 is fixed; neither configuration nor partition tables authorize flash.
 NVS initialization never automatically erases configuration on version/full errors.
 Initial native builds S3, C3 rover and C3 relay skeleton pass IDF 6.1 compilation.
-Three new host tests cover routing/source reset, command causality/quarantine,
-and vendor BASE plans, under ASan/UBSan. Existing Linux discovery/auto-config and
+Fifteen host cases now cover routing/source reset, command causality/quarantine,
+vendor BASE plans, TCP/TLS backend seams, real loopback NTRIP client/publisher,
+local caster policy, strict settings, and interrupted/corrupt persistent storage.
+They pass under ASan/UBSan. A separate QuickJS browser test passes with mocked
+DOM/fetch; this is not an HTTPS or physical-browser interoperability claim. Existing Linux discovery/auto-config and
 configuration-apply regressions pass. Final firmware budgets and reproducibility
 will be measured after the remaining services are actually linked.
 
 HARDWARE_PENDING: no installed firmware changed, no new RF/USB/receiver/endurance
-claim. Native network services, operator BASE application, LoRa, persistence,
-WebUI and CI/portal are not declared complete by these foundation builds.
+claim. The firmware is still PARTIAL: LoRa, remaining GNSS/Web/API features, legacy
+configuration import, OTA, runtime/QoS and CI/portal remain open. No physical
+GNSS/survey, Ethernet, TLS handshake or new RF/USB test is inferred from a build.
+
+
+## Native network/configuration milestone
+
+The gateway and GNSS-free relay share one UG NtripClient and router, with distinct
+bounded queues/tasks for sockets and UART. A reconnect/configuration change/link
+handover changes source ownership and discards old queued corrections. In-flight
+physical bytes cannot be retracted. No software generation counter claims such a
+cutoff. A cached GGA position is withheld after three seconds without a UG position
+observation, including when other receiver records continue. Receipt clocks remain
+IDF monotonic; SNTP affects certificate validity only.
+
+The new SOURCE-v1 publisher uses UG transport/TLS and reconnect policy. Historical
+publisher code actually emits SOURCE v1 regardless of its version label; HTTP-v2
+upload/chunking support is not claimed. Four-client local caster policy adds
+optional Basic authentication, bounded requests and strict cache-source changes;
+existing Linux defaults remain unchanged.
+
+Settings accept at most 8192 bytes, depth 12 and a bounded JSON node estimate;
+unknown/duplicate fields and invalid roles fail atomically. GET/export redacts
+secrets; redacted exports cannot reconstruct missing credentials. Two NVS records
+provide schema/generation/corruption recovery. An unknown schema locks writes,
+and an unreadable/full NVS is never automatically erased. CRC detects corruption,
+not tampering. Production flash encryption/secure boot is not provisioned by this
+work; secrets at rest remain subject to the device's existing flash protection.
+
+Before command dispatch, the GNSS owner commits a persistent journal. Interrupted
+or ambiguous application remains quarantined across reboot. Parser/telemetry reset
+never clears it. No remote endpoint clears quarantine. Successful command ACKs do
+not prove Survey-In completion or physical RTCM generation.
+
+HTTPS starts only with a locally provisioned matching certificate/key. There is
+no shared default credential and no plaintext API fallback. The server uses the
+[official IDF HTTPS API](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/protocols/esp_https_server.html).
+Use `native/tools/commission.py --output <new-private-external-directory>` to
+prepare a unique test/admin token and self-signed P-256 identity. This tool never
+opens a serial port or flashes. Its private console-input file must be transmitted
+only through the intended local setup console, after independent port/hardware
+identification. Verify/trust the certificate fingerprint locally. The local
+commands are `tls-init <JSON>`, `config <JSON>` and `reboot CONFIRM`. The rover
+links neither this console nor network/Web/settings services.
+
+Wi-Fi/radio/TLS identity/name settings take effect after explicit reboot. The
+current fixed-channel ESP-NOW profile rejects STA association; AP mode uses the
+configured channel. No automatic pairing/channel switching is added. Default
+compile peers are fictitious; real peer MACs must be provisioned deliberately.
+
+### Current API coverage and intentional incompatibilities
+
+- `/api/status` (`/status`) and `/api/capabilities`: bounded public diagnostics,
+  without coordinates, credentials, raw receiver data or private MACs.
+- Authenticated GET `/api/config` (`/config`): schema1, redacted secrets; POST
+  applies a validated patch and commits before publishing its immutable snapshot.
+- Authenticated GNSS status/diagnostics/BASE status and typed BASE application,
+  with mandatory explicit confirmation; persistence has a second explicit token.
+- Other inventoried operations remain OPEN. They return unavailable rather than
+  a synthetic success. The old unauthenticated flat config is deliberately not
+  accepted by the new schema; legacy import still needs an explicit reviewed map.
+
+### Compile-only budgets at this milestone
+
+S3 gateway: 1395968-byte app in each existing 3145728-byte OTA slot. C3 relay:
+1280192-byte app in each 1310720-byte OTA slot. The common-root TLS bundle and size optimization are required for the existing
+1280-KiB slots; detailed verified bytes are recorded by `native/verify.py` in the
+external build directory. Assertions stay enabled. The C3 common-root bundle is
+a deliberately smaller trust set, not disabled certificate/hostname verification;
+endpoints outside it require a provisioned private CA. No partition was changed.
+SDK dependency provisioning precedes network-disconnected UID1000 builds. The
+compiled ELF is inspected for exactly one UG CRC implementation, the real UG
+network/session symbols, and absent GNSS/admin dependencies in excluded profiles.
+Full reproducibility, final RAM budgets and remaining firmware features still need
+qualification at completion.

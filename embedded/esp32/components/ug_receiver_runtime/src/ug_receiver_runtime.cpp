@@ -89,6 +89,12 @@ void Receiver::Step(const std::int64_t now_ns)
     Note(application_.Step(now_ns));
 }
 
+void Receiver::ConfigureTelemetry(ReceiverSessionConfig config)
+{
+  InvalidateObservations();  // In-flight mutation becomes indeterminate; quarantine is retained.
+  session_ = ReceiverSession(std::move(config));
+}
+
 void Receiver::InvalidateObservations()
 {
   // A disconnected pending command cannot be made safe by resetting parsers.

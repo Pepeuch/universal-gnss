@@ -1,3 +1,4 @@
+#include "ug_base_operation.hpp"
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "universal_gnss_driver/base_config_profile_builder.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
@@ -108,4 +109,22 @@ int main()
   r.uart_port = 1;
   r.mode = static_cast<BaseMode>(255);
   assert(!BuildBaseConfigProfile(r).ok());
+  ug::embedded::BaseOperation operation;
+  std::string parse_error;
+  assert(ug::embedded::DecodeBaseOperation(
+      R"({"mode":"fixed","latitude_deg":48.123456789,"longitude_deg":2.123456789,"height_m":123.4567,"confirm":"APPLY_BASE_CONFIGURATION"})",
+      operation,
+      parse_error));
+  assert(operation.latitude_deg == 48.123456789);
+  for (const auto* invalid :
+       {R"({"mode":"fixed","confirm":"APPLY_BASE_CONFIGURATION"})",
+        R"({"mode":"time","confirm":"APPLY_BASE_CONFIGURATION"})",
+        R"({"mode":"survey-in","duration_s":1.5,"confirm":"APPLY_BASE_CONFIGURATION"})",
+        R"({"mode":"fixed","model_verified":true})"})
+    assert(!ug::embedded::DecodeBaseOperation(invalid, operation, parse_error));
+  assert(ug::embedded::DecodeBaseOperation(
+      R"({"mode":"time","confirm":"APPLY_BASE_CONFIGURATION","persistent_confirmation":"SAVE_RECEIVER_CONFIGURATION"})",
+      operation,
+      parse_error));
+  assert(operation.confirm_persistent);
 }

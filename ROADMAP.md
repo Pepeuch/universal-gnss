@@ -11,8 +11,9 @@ now builds the real historical S3 Gateway/C3 Rover with UG CRC, with software
 validation and two-build reproducibility; definitive profiles remain to migrate.
 No new hardware qualification or NTRIP/WebUI/NVS/runtime migration is claimed.
 [Native ESP32 reconstruction](embedded/esp32/migration/README.md) is now in progress:
-UG receiver/routing/BASE-plan foundations compile under IDF 6.1; network, service
-and operator integration remain open. This is not a completed firmware claim.
+UG receiver/routing/BASE plans, native NTRIP services, strict persistence and a
+first HTTPS operator surface compile under IDF 6.1. LoRa, remaining legacy
+features, OTA/runtime and final qualification remain open. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
 historical checklists and completion metrics are unchanged.

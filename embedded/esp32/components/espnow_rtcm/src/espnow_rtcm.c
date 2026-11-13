@@ -25,10 +25,13 @@ static espnow_rtcm_message_t s_message; /* Worker-owned, not on the small task s
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t s_worker;
 static uint8_t s_peer[6];
+static char s_peer_text[18] = CONFIG_ESPNOW_RTCM_PEER_MAC;
+static uint8_t s_channel = CONFIG_ESPNOW_RTCM_CHANNEL;
 #if CONFIG_ESPNOW_RTCM_BASE
 static SemaphoreHandle_t s_sent;
 static esp_now_send_status_t s_send_status;
 static bool s_tx_halted;
+static uint32_t s_tx_epoch = 1, s_message_epoch;
 #else
 static uint32_t s_usb_errors;
 #endif
@@ -56,6 +59,9 @@ static bool queue_pop(void)
 {
   portENTER_CRITICAL(&s_lock);
   bool ok = espnow_rtcm_mailbox_pop(&s_queue, &s_message);
+#if CONFIG_ESPNOW_RTCM_BASE
+  s_message_epoch = s_tx_epoch;
+#endif
   portEXIT_CRITICAL(&s_lock);
   return ok;
 }
@@ -70,7 +76,12 @@ static void sent(const esp_now_send_info_t* info, esp_now_send_status_t status)
 
 static esp_err_t send_fragment(const lora_transport_fragment_t* part, void* ctx)
 {
-  (void)ctx;
+  const uint32_t epoch = *(const uint32_t*)ctx;
+  portENTER_CRITICAL(&s_lock);
+  const bool invalidated = epoch != s_tx_epoch;
+  portEXIT_CRITICAL(&s_lock);
+  if (invalidated)
+    return ESP_ERR_INVALID_STATE;
   if (s_tx_halted)
     return ESP_ERR_INVALID_STATE;
   esp_err_t err = esp_now_send(s_peer, part->packet, part->packet_len);
@@ -133,8 +144,9 @@ static void worker(void* arg)
         continue;
       }
 #if CONFIG_ESPNOW_RTCM_BASE
-      if (espnow_rtcm_fragment(&s_radio, s_message.bytes, s_message.len, send_fragment, NULL) !=
-          ESP_OK)
+      const uint32_t epoch = s_message_epoch;
+      if (espnow_rtcm_fragment(
+              &s_radio, s_message.bytes, s_message.len, send_fragment, (void*)&epoch) != ESP_OK)
         ++s_invalid;
 #else
       lora_transport_reassembly_result_t result;
@@ -148,13 +160,39 @@ static void worker(void* arg)
   }
 }
 
+esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel)
+{
+  if (s_started || channel < 1 || channel > 11)
+    return ESP_ERR_INVALID_STATE;
+  if (peer_mac && *peer_mac)
+  {
+    if (strlen(peer_mac) != 17)
+      return ESP_ERR_INVALID_ARG;
+    unsigned mac[6];
+    int end = 0;
+    if (sscanf(peer_mac,
+               "%2x:%2x:%2x:%2x:%2x:%2x%n",
+               &mac[0],
+               &mac[1],
+               &mac[2],
+               &mac[3],
+               &mac[4],
+               &mac[5],
+               &end) != 6 ||
+        end != 17 || (mac[0] & 1) || !(mac[0] | mac[1] | mac[2] | mac[3] | mac[4] | mac[5]))
+      return ESP_ERR_INVALID_ARG;
+    memcpy(s_peer_text, peer_mac, 18);
+  }
+  s_channel = channel;
+  return ESP_OK;
+}
 esp_err_t espnow_rtcm_start(void)
 {
   if (s_started)
     return ESP_ERR_INVALID_STATE;
   unsigned mac[6];
   int end = 0;
-  if (sscanf(CONFIG_ESPNOW_RTCM_PEER_MAC,
+  if (sscanf(s_peer_text,
              "%2x:%2x:%2x:%2x:%2x:%2x%n",
              &mac[0],
              &mac[1],
@@ -163,7 +201,7 @@ esp_err_t espnow_rtcm_start(void)
              &mac[4],
              &mac[5],
              &end) != 6 ||
-      CONFIG_ESPNOW_RTCM_PEER_MAC[end] != '\0')
+      s_peer_text[end] != '\0')
     return ESP_ERR_INVALID_ARG;
   unsigned any = 0;
   for (size_t i = 0; i < 6; ++i)
@@ -190,7 +228,10 @@ esp_err_t espnow_rtcm_start(void)
   esp_err_t err;
 #endif
   wifi_init_config_t wifi = WIFI_INIT_CONFIG_DEFAULT();
-  if ((err = esp_wifi_init(&wifi)) != ESP_OK)
+  wifi.nvs_enable = false;
+  wifi_mode_t existing_mode;
+  bool existing_wifi = esp_wifi_get_mode(&existing_mode) == ESP_OK;
+  if (!existing_wifi && (err = esp_wifi_init(&wifi)) != ESP_OK)
   {
 #if CONFIG_ESPNOW_RTCM_BASE
     ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
@@ -204,14 +245,17 @@ esp_err_t espnow_rtcm_start(void)
 #endif
     return err;
   }
-  if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK)
+  if ((err = esp_wifi_set_mode(
+           existing_wifi && (existing_mode == WIFI_MODE_AP || existing_mode == WIFI_MODE_APSTA)
+               ? WIFI_MODE_APSTA
+               : WIFI_MODE_STA)) != ESP_OK)
   {
 #if CONFIG_ESPNOW_RTCM_BASE
     ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
 #endif
     return err;
   }
-  if ((err = esp_wifi_start()) != ESP_OK)
+  if (!existing_wifi && (err = esp_wifi_start()) != ESP_OK)
   {
 #if CONFIG_ESPNOW_RTCM_BASE
     ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
@@ -232,7 +276,7 @@ esp_err_t espnow_rtcm_start(void)
 #endif
     return err;
   }
-  if ((err = esp_wifi_set_channel(CONFIG_ESPNOW_RTCM_CHANNEL, WIFI_SECOND_CHAN_NONE)) != ESP_OK)
+  if ((err = esp_wifi_set_channel(s_channel, WIFI_SECOND_CHAN_NONE)) != ESP_OK)
   {
 #if CONFIG_ESPNOW_RTCM_BASE
     ESP_LOGE("ESP_NOW_RTCM", "Setup failed at line %d: %s", __LINE__, esp_err_to_name(err));
@@ -252,11 +296,11 @@ esp_err_t espnow_rtcm_start(void)
 #if CONFIG_ESPNOW_RTCM_BASE
   ESP_LOGI("ESP_NOW_RTCM",
            "Channel requested %u, observed %u, secondary %u",
-           CONFIG_ESPNOW_RTCM_CHANNEL,
+           s_channel,
            actual_channel,
            secondary_channel);
 #endif
-  if (actual_channel != CONFIG_ESPNOW_RTCM_CHANNEL || secondary_channel != WIFI_SECOND_CHAN_NONE)
+  if (actual_channel != s_channel || secondary_channel != WIFI_SECOND_CHAN_NONE)
     return ESP_ERR_INVALID_STATE;
   if ((err = esp_wifi_get_mac(WIFI_IF_STA, sta_mac)) != ESP_OK)
   {
@@ -284,8 +328,7 @@ esp_err_t espnow_rtcm_start(void)
 #endif
     return err;
   }
-  esp_now_peer_info_t peer = {
-      .channel = CONFIG_ESPNOW_RTCM_CHANNEL, .ifidx = WIFI_IF_STA, .encrypt = false};
+  esp_now_peer_info_t peer = {.channel = s_channel, .ifidx = WIFI_IF_STA, .encrypt = false};
   memcpy(peer.peer_addr, s_peer, sizeof(s_peer));
   if ((err = esp_now_add_peer(&peer)) != ESP_OK)
   {
@@ -330,6 +373,17 @@ esp_err_t espnow_rtcm_send_frame(const uint8_t* frame, size_t len)
 #endif
 }
 
+void espnow_rtcm_invalidate_pending(void)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  portENTER_CRITICAL(&s_lock);
+  ++s_tx_epoch;
+  s_dropped += s_queue.count;
+  s_queue.head = s_queue.count = 0;
+  portEXIT_CRITICAL(&s_lock);
+#endif
+}
+
 void espnow_rtcm_ntrip_reset(void)
 {
 #if CONFIG_ESPNOW_RTCM_BASE
@@ -360,6 +414,15 @@ void espnow_rtcm_ntrip_bytes(const uint8_t* data, size_t len)
 #endif
 }
 #else
+esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel)
+{
+  (void)peer_mac;
+  (void)channel;
+  return ESP_ERR_NOT_SUPPORTED;
+}
+void espnow_rtcm_invalidate_pending(void)
+{
+}
 esp_err_t espnow_rtcm_start(void)
 {
   return ESP_ERR_NOT_SUPPORTED;

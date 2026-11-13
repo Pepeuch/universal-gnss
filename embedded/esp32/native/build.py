@@ -1,5 +1,7 @@
-"""Build a native UG firmware in a new external directory. Never fetch or flash."""
+"""Build native UG outside source roots; dependency downloads require --provision. Never flash."""
 import argparse
+import json
+import yaml
 import os
 from pathlib import Path
 import shutil
@@ -11,7 +13,7 @@ sys.path.insert(0, str(ROOT / 'embedded/esp32/integration'))
 from build import merged_defaults, C3_PARTITIONS
 
 
-def build(output, profile, board, gnss):
+def build(output, profile, board, gnss, provision=False, dependency_cache=None):
     work = Path(output).resolve()
     if work.exists() or ROOT == work or ROOT in work.parents:
         raise ValueError('build output must be new and outside source roots')
@@ -20,6 +22,8 @@ def build(output, profile, board, gnss):
     version = subprocess.check_output(['idf.py', '--version'], text=True).strip()
     if version != 'ESP-IDF v6.1':
         raise ValueError('native firmware requires ESP-IDF v6.1')
+    if profile != 'rover' and not provision and dependency_cache is None:
+        raise ValueError('network roles need --provision or a verified --dependency-cache project')
     work.mkdir(parents=True)
     project = work / 'project'
     project.mkdir()
@@ -28,8 +32,22 @@ def build(output, profile, board, gnss):
     shutil.copytree(source / 'main', project / 'main')
     rover = profile == 'rover'
     s3 = board == 'waveshare-s3-eth'
+    if not rover:
+        shutil.copyfile(project / 'main/idf_component.network.yml', project / 'main/idf_component.yml')
+        if dependency_cache:
+            cache = Path(dependency_cache).resolve()
+            lock = yaml.safe_load((cache / 'dependencies.lock').read_text())
+            if lock['target'] != ('esp32s3' if s3 else 'esp32c3'):
+                raise ValueError('dependency cache target mismatch')
+            for name, version in {'espressif/w5500':'2.0.1', 'espressif/wiznet_common':'1.1.0',
+                                  'espressif/mdns':'1.15.1', 'espressif/cjson':'1.7.19~2', 'idf':'6.1.0'}.items():
+                if lock['dependencies'][name]['version'] != version:
+                    raise ValueError('dependency version mismatch: ' + name)
+            shutil.copytree(cache / 'managed_components', project / 'managed_components')
+            shutil.copyfile(cache / 'dependencies.lock', project / 'dependencies.lock')
     defaults = ['''CONFIG_APP_REPRODUCIBLE_BUILD=y
 CONFIG_COMPILER_HIDE_PATHS_MACROS=y
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
@@ -66,7 +84,11 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
                '-D', 'IDF_TARGET=' + ('esp32s3' if s3 else 'esp32c3'),
                '-D', 'SDKCONFIG=' + str(work / 'sdkconfig'),
                '-D', 'SDKCONFIG_DEFAULTS=' + str(work / 'sdkconfig.defaults'), 'build', 'size']
-    env = dict(os.environ, IDF_COMPONENT_MANAGER='0') # Core/radio require no downloads.
+    env = dict(os.environ, IDF_COMPONENT_MANAGER='0' if rover else '1',
+               IDF_COMPONENT_CHECK_NEW_VERSION='0')
+    if not rover:
+        defaults_path = work / 'sdkconfig.defaults'
+        defaults_path.write_text(defaults_path.read_text() + 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y\n' + ('CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y\n' if s3 else 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y\n') + 'CONFIG_ESP_HTTPS_SERVER_ENABLE=y\nCONFIG_MBEDTLS_PEM_WRITE_C=y\n# CONFIG_MDNS_ENABLE_CONSOLE_CLI is not set\nCONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y\n')
     subprocess.run(command, env=env, check=True)
     print('Native build only; hardware qualification pending:', profile, board)
 
@@ -77,5 +99,7 @@ if __name__ == '__main__':
     p.add_argument('--profile', required=True, choices=('gateway', 'relay-ntrip', 'rover'))
     p.add_argument('--board', required=True, choices=('waveshare-s3-eth', 'supermini-c3'))
     p.add_argument('--local-gnss', action='store_true')
+    p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')
+    p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
     a = p.parse_args()
-    build(a.output, a.profile, a.board, a.local_gnss)
+    build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache)

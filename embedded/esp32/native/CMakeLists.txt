@@ -12,10 +12,18 @@ set(EXTRA_COMPONENT_DIRS "${UG_ROOT}/embedded/esp32/components/ug_rtcm"
     "${UG_ROOT}/embedded/esp32/components/espnow_rtcm")
 if(NOT UG_PROFILE STREQUAL "rover")
     list(APPEND EXTRA_COMPONENT_DIRS "${UG_ROOT}/embedded/esp32/components/ug_protocols"
-        "${UG_ROOT}/embedded/esp32/components/ug_gateway")
+        "${UG_ROOT}/embedded/esp32/components/ug_gateway"
+        "${UG_ROOT}/embedded/esp32/components/ug_network"
+        "${UG_ROOT}/embedded/esp32/components/ug_services"
+        "${UG_ROOT}/embedded/esp32/components/ug_web"
+        "${UG_ROOT}/embedded/esp32/components/ug_settings"
+        "${UG_ROOT}/embedded/esp32/components/ug_platform"
+        "${UG_ROOT}/embedded/esp32/components/ug_gateway_service"
+        "${UG_ROOT}/embedded/esp32/components/ug_ethernet")
     if(UG_LOCAL_GNSS)
         list(APPEND EXTRA_COMPONENT_DIRS "${UG_ROOT}/embedded/esp32/components/ug_receiver"
-            "${UG_ROOT}/embedded/esp32/components/ug_receiver_runtime")
+            "${UG_ROOT}/embedded/esp32/components/ug_receiver_runtime"
+            "${UG_ROOT}/embedded/esp32/components/ug_gnss")
     endif()
 endif()
 set(PROJECT_VER "development")
