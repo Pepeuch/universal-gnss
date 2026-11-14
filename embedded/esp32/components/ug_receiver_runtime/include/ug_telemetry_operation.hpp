@@ -18,7 +18,7 @@ BuildTelemetryPlan(const TelemetryOperation&, std::string_view verified_model, b
 bool DecodeDetectionOperation(std::string_view, std::string& error);
 struct ReceiverPlanCapabilities
 {
-  bool telemetry{}, fixed{}, survey_in{}, time_optimization{};
+  bool telemetry{}, fixed{}, survey_in{}, time_optimization{}, disable_base{};
 };
 ReceiverPlanCapabilities InspectReceiverPlans(std::string_view verified_model, bool verified);
 struct GnssOperation
@@ -27,10 +27,12 @@ struct GnssOperation
   {
     kBase,
     kTelemetry,
-    kDetect
+    kDetect,
+    kBaseDisable
   };
   Kind kind{Kind::kBase};
   BaseOperation base{};
   TelemetryOperation telemetry{};
+  BaseDisableOperation disable_base{};
 };
 }  // namespace ug::embedded

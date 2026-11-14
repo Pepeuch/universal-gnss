@@ -1571,7 +1571,8 @@
       "git_object": "804c5bf8ccf04d3eadf4217f296c252b116b36cc",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native UG receiver owner, BASE/telemetry/satellite diagnostics and F9P-only typed BASE disable use verified-model plans, journal and quarantine. Unsupported historical commands/features remain unavailable; physical acceptance and other-model BASE exit remain open."
     },
     {
       "path": "main/include/receiver_types.h",
@@ -1781,7 +1782,8 @@
       "git_object": "0448ccb283616e325cfcba32cd70bc8779bf5d25",
       "group": "main",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native UG receiver owner, BASE/telemetry/satellite diagnostics and F9P-only typed BASE disable use verified-model plans, journal and quarantine. Unsupported historical commands/features remain unavailable; physical acceptance and other-model BASE exit remain open."
     },
     {
       "path": "main/retry.c",
@@ -2808,7 +2810,10 @@
     {
       "path": "/api/gnss/base/stop-survey",
       "method": "HTTP_POST",
-      "handler": "gnss_base_stop_survey_post_handler"
+      "handler": "gnss_base_stop_survey_post_handler",
+      "decision": "ADAPT",
+      "status": "PARTIAL",
+      "native_equivalent": "POST /api/gnss/base/disable: verified F9P only, explicit confirmation/persistence, no optimistic stopped flag; old routes not silently emulated."
     },
     {
       "path": "/api/gnss/base/apply-fixed",
@@ -2818,7 +2823,10 @@
     {
       "path": "/api/gnss/base/clear",
       "method": "HTTP_POST",
-      "handler": "gnss_base_clear_post_handler"
+      "handler": "gnss_base_clear_post_handler",
+      "decision": "ADAPT",
+      "status": "PARTIAL",
+      "native_equivalent": "POST /api/gnss/base/disable: verified F9P only, explicit confirmation/persistence, no optimistic stopped flag; old routes not silently emulated."
     },
     {
       "path": "/api/gnss/profiles",

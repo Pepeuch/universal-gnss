@@ -19,6 +19,7 @@ struct ReceiverStatus
 };
 esp_err_t StartGnssService();
 bool QueueBaseOperation(const BaseOperation&);
+bool QueueBaseDisableOperation(const BaseDisableOperation&);
 bool QueueTelemetryOperation(const TelemetryOperation&);
 bool QueueReceiverDetection();
 ReceiverStatus ReceiverSnapshot();

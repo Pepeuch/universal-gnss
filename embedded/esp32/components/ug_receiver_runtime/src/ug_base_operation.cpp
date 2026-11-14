@@ -5,6 +5,44 @@
 #include <cstring>
 namespace ug::embedded
 {
+bool DecodeBaseDisableOperation(std::string_view body,
+                                BaseDisableOperation& out,
+                                std::string& error)
+{
+  const auto root = ParseBoundedObject(body, error);
+  if (!root)
+    return false;
+  error = "invalid BASE disable request or missing explicit confirmation";
+  if (!OnlyKeys(root.get(), {"confirm", "receiver_port", "persist", "persistent_confirmation"}))
+    return false;
+  const auto text = [&](const char* key, const char* expected) {
+    const auto* value = cJSON_GetObjectItemCaseSensitive(root.get(), key);
+    return cJSON_IsString(value) && std::strcmp(value->valuestring, expected) == 0;
+  };
+  if (!text("confirm", "DISABLE_BASE_MODE"))
+    return false;
+  BaseDisableOperation operation;
+  if (const auto* port = cJSON_GetObjectItemCaseSensitive(root.get(), "receiver_port"))
+  {
+    if (!cJSON_IsNumber(port) || (port->valuedouble != 1 && port->valuedouble != 2))
+      return false;
+    operation.receiver_port = static_cast<std::uint8_t>(port->valuedouble);
+  }
+  if (const auto* persist = cJSON_GetObjectItemCaseSensitive(root.get(), "persist"))
+  {
+    if (!cJSON_IsBool(persist))
+      return false;
+    operation.persist = cJSON_IsTrue(persist);
+  }
+  operation.confirm_persistent = text("persistent_confirmation", "SAVE_RECEIVER_CONFIGURATION");
+  if ((operation.persist && !operation.confirm_persistent) ||
+      (cJSON_GetObjectItemCaseSensitive(root.get(), "persistent_confirmation") &&
+       !operation.confirm_persistent))
+    return false;
+  out = operation;
+  error.clear();
+  return true;
+}
 bool DecodeBaseOperation(std::string_view body, BaseOperation& out, std::string& error)
 {
   auto root = ParseBoundedObject(body, error);

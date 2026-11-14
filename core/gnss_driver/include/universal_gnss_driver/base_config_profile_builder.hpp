@@ -44,4 +44,16 @@ struct BaseConfigPlan
 // Uses existing UG vendor models, command safety and UBX frame construction.
 // Does not send commands, fabricate survey completion or mutate runtime state.
 BaseConfigPlan BuildBaseConfigProfile(const BaseConfigRequest& request);
+struct BaseDisableRequest
+{
+  ReceiverVendor vendor{ReceiverVendor::kUnknown};
+  std::string_view model{};
+  bool model_verified{false};
+  std::uint8_t uart_port{1};
+  bool persist{false}, confirm_persistent{false};
+};
+// Verified F9P only: leave static time mode and disable the native BASE profile's
+// RTCM outputs on the selected UART. Does not erase coordinates or other ports.
+// ACK is command acceptance, not physical stop evidence. Unsupported models fail closed.
+BaseConfigPlan BuildBaseDisableProfile(const BaseDisableRequest& request);
 }  // namespace universal_gnss_driver

@@ -14,4 +14,10 @@ struct BaseOperation
   bool rtcm_output{true}, persist{false}, confirm_persistent{false};
 };
 bool DecodeBaseOperation(std::string_view, BaseOperation&, std::string& error);
+struct BaseDisableOperation
+{
+  std::uint8_t receiver_port{1};
+  bool persist{}, confirm_persistent{};
+};
+bool DecodeBaseDisableOperation(std::string_view, BaseDisableOperation&, std::string& error);
 }  // namespace ug::embedded

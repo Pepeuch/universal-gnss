@@ -256,6 +256,18 @@ void Owner(void*)
         const std::string model = identity.identity.model.value_or("");
         if (operation.kind == GnssOperation::Kind::kTelemetry)
           plan = BuildTelemetryPlan(operation.telemetry, model, true);
+        else if (operation.kind == GnssOperation::Kind::kBaseDisable)
+        {
+          BaseDisableRequest request;
+          request.vendor = family == ReceiverDetectedFamily::kUblox ? ReceiverVendor::kUblox
+                                                                    : ReceiverVendor::kUnicore;
+          request.model = model;
+          request.model_verified = true;
+          request.uart_port = operation.disable_base.receiver_port;
+          request.persist = operation.disable_base.persist;
+          request.confirm_persistent = operation.disable_base.confirm_persistent;
+          plan = BuildBaseDisableProfile(request);
+        }
         else if (operation.kind == GnssOperation::Kind::kBase)
         {
           BaseConfigRequest request;
@@ -398,6 +410,13 @@ bool QueueTelemetryOperation(const TelemetryOperation& operation)
   GnssOperation request;
   request.kind = GnssOperation::Kind::kTelemetry;
   request.telemetry = operation;
+  return QueueOperation(request);
+}
+bool QueueBaseDisableOperation(const BaseDisableOperation& operation)
+{
+  GnssOperation request;
+  request.kind = GnssOperation::Kind::kBaseDisable;
+  request.disable_base = operation;
   return QueueOperation(request);
 }
 bool QueueReceiverDetection()

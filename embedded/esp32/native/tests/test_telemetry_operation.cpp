@@ -8,6 +8,10 @@
 using namespace universal_gnss_driver;
 int main()
 {
+  assert(ug::embedded::InspectReceiverPlans("ZED-F9P", true).disable_base);
+  assert(!ug::embedded::InspectReceiverPlans("ZED-F9P", false).disable_base);
+  assert(!ug::embedded::InspectReceiverPlans("UM982", true).disable_base);
+
   ug::embedded::TelemetryOperation op, before;
   std::string error;
   assert(ug::embedded::DecodeDetectionOperation(R"({"confirm":"DETECT_RECEIVER"})", error));

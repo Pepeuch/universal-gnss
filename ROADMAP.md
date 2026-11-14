@@ -31,6 +31,8 @@ explicit TX-only UART1 build option, with bounded writes and no application logs
 Its software tests and builds pass; physical UART acceptance remains pending.
 Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;
 S3 uses 20 sockets, C3 keeps 10, with compile-time rejection of insufficient pools.
+A confirmed F9P-only BASE disable operation now reuses a portable UG plan and
+the native UART owner/journal; command acceptance remains distinct from physical stop.
 Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.

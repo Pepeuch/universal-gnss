@@ -39,6 +39,65 @@ static std::map<std::uint32_t, std::uint32_t> Keys(const BaseConfigPlan& plan)
 }
 int main()
 {
+  BaseDisableRequest disable;
+  assert(!BuildBaseDisableProfile(disable).ok());
+  disable.vendor = ReceiverVendor::kUblox;
+  disable.model = "ZED-F9P";
+  assert(!BuildBaseDisableProfile(disable).ok());
+  disable.model_verified = true;
+  for (std::uint8_t port : {1, 2})
+  {
+    disable.uart_port = port;
+    const auto plan = BuildBaseDisableProfile(disable);
+    const auto stopped = Keys(plan);
+    assert(stopped.size() == 8 && stopped.at(0x20030001u) == 0);
+    assert(stopped.at(port == 1 ? 0x10740004u : 0x10760004u) == 0);
+    assert(stopped.count(port == 1 ? 0x10760004u : 0x10740004u) == 0);
+    assert(stopped.count(0x40030009u) == 0 &&
+           stopped.count(0x40030010u) == 0);  // No coordinate/duration erase.
+    for (const auto& [key, value] : stopped)
+      assert(value == 0);
+    assert(plan.commands[0].payload.binary[7] == 1 && HasSafeDispatchApproval(plan.commands[0]));
+  }
+  disable.persist = true;
+  auto disabled_plan = BuildBaseDisableProfile(disable);
+  assert(disabled_plan.ok() && !HasSafeDispatchApproval(disabled_plan.commands[0]));
+  disable.confirm_persistent = true;
+  disabled_plan = BuildBaseDisableProfile(disable);
+  assert(disabled_plan.commands[0].payload.binary[7] == 7 &&
+         HasSafeDispatchApproval(disabled_plan.commands[0]));
+  disable.uart_port = 0;
+  assert(!BuildBaseDisableProfile(disable).ok());
+  disable.uart_port = 1;
+  disable.vendor = ReceiverVendor::kUnicore;
+  disable.model = "UM982";
+  assert(!BuildBaseDisableProfile(disable).ok());
+  disable.vendor = ReceiverVendor::kUblox;
+  disable.model = "F10";
+  assert(!BuildBaseDisableProfile(disable).ok());
+  ug::embedded::BaseDisableOperation disable_operation;
+  std::string disable_error;
+  assert(ug::embedded::DecodeBaseDisableOperation(
+      R"({"confirm":"DISABLE_BASE_MODE"})", disable_operation, disable_error));
+  assert(!disable_operation.persist && disable_operation.receiver_port == 1);
+  assert(ug::embedded::DecodeBaseDisableOperation(
+      R"({"confirm":"DISABLE_BASE_MODE","receiver_port":2,"persist":true,"persistent_confirmation":"SAVE_RECEIVER_CONFIGURATION"})",
+      disable_operation,
+      disable_error));
+  assert(disable_operation.persist && disable_operation.receiver_port == 2 &&
+         disable_operation.confirm_persistent);
+  for (auto bad : {"{}",
+                   R"({"confirm":"SURVEY STOP"})",
+                   R"({"confirm":"DISABLE_BASE_MODE","persist":true})",
+                   R"({"confirm":"DISABLE_BASE_MODE","receiver_port":1.5})",
+                   R"({"confirm":"DISABLE_BASE_MODE","persist":1})",
+                   R"({"confirm":"DISABLE_BASE_MODE","factory_reset":true})",
+                   R"({"confirm":"DISABLE_BASE_MODE","confirm":"DISABLE_BASE_MODE"})"})
+  {
+    assert(!ug::embedded::DecodeBaseDisableOperation(bad, disable_operation, disable_error));
+    assert(disable_operation.persist &&
+           disable_operation.receiver_port == 2);  // Failed parse does not publish partial output.
+  }
   BaseConfigRequest r;
   assert(!BuildBaseConfigProfile(r).ok());
   r.model_verified = true;

@@ -32,6 +32,11 @@ ReceiverPlanCapabilities InspectReceiverPlans(std::string_view model, bool verif
   request.vendor = model == "ZED-F9P" ? ReceiverVendor::kUblox : ReceiverVendor::kUnicore;
   request.model = model;
   request.model_verified = verified;
+  BaseDisableRequest disable;
+  disable.vendor = request.vendor;
+  disable.model = model;
+  disable.model_verified = verified;
+  out.disable_base = BuildBaseDisableProfile(disable).ok();
   request.confirm_persistent = true;
   request.mode = BaseMode::kFixed;
   out.fixed = BuildBaseConfigProfile(request).ok();

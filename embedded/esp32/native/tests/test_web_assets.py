@@ -35,7 +35,7 @@ class WebAssets(unittest.TestCase):
             if (hold_events && path === '/api/diagnostics/events') return new Promise(resolve => {
               release_events = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"events":[{"private":"old-session"}]}'});
             });
-            const payload = path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
+            const payload = path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true,disable_base:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -47,6 +47,15 @@ class WebAssets(unittest.TestCase):
         calls = json.loads(vm.eval('JSON.stringify(calls)'))
         self.assertTrue(any(c['options']['headers'].get('Authorization') == 'Bearer ' + 'z'*64 for c in calls))
         self.assertFalse(vm.eval("elements['base-submit'].disabled"))
+        self.assertFalse(vm.eval("elements['base-disable'].disabled"))
+        vm.eval("document.getElementById('base-disable-port').value='2'; document.getElementById('base-disable-persist').checked=true; elements['base-disable'].onclick();")
+        self.drain(vm)
+        disable = json.loads(vm.eval("calls.filter(c=>c.path==='/api/gnss/base/disable').pop().options.body"))
+        self.assertEqual(disable, {'confirm':'DISABLE_BASE_MODE','receiver_port':2,'persist':True,'persistent_confirmation':'SAVE_RECEIVER_CONFIGURATION'})
+        vm.eval("receiverPlans.disable_base=false; elements['base-disable'].onclick();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/gnss/base/disable').length"), 1)
+        vm.eval("receiverPlans.disable_base=true;")
         vm.eval('elements.detect.onclick();')
         self.drain(vm)
         detect = json.loads(vm.eval("calls.filter(c=>c.path==='/api/gnss/detect').pop().options.body"))
@@ -128,6 +137,7 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval('token'), '')
         self.assertTrue(vm.eval("elements['base-submit'].disabled"))
         self.assertTrue(vm.eval("elements['telemetry-submit'].disabled"))
+        self.assertTrue(vm.eval("elements['base-disable'].disabled"))
         self.assertNotIn('localStorage', (ASSETS/'app.js').read_text())
         self.assertNotIn('innerHTML', (ASSETS/'app.js').read_text())
         html = (ASSETS/'index.html').read_text()

@@ -34,6 +34,17 @@ ReceiverCommand MakeCommand(const BaseConfigRequest& r, const bool persistent)
   c.explicit_safety_confirmation = r.confirm_persistent;
   return c;
 }
+void AppendUbloxRtcmOutputs(std::vector<universal_gnss_protocols::UbxCfgKeyValue>& values,
+                            std::uint8_t port,
+                            bool enabled)
+{
+  using namespace universal_gnss_protocols;
+  values.push_back({port == 1 ? 0x10740004u : 0x10760004u, UbxCfgValue::Boolean(enabled)});
+  for (const auto key :
+       {0x209102beu, 0x2091035fu, 0x20910364u, 0x20910369u, 0x2091036eu, 0x20910304u})
+    values.push_back(
+        {key + static_cast<std::uint32_t>(port - 1), UbxCfgValue::U1(enabled ? 1 : 0)});
+}
 }  // namespace
 BaseConfigPlan BuildBaseConfigProfile(const BaseConfigRequest& r)
 {
@@ -123,12 +134,7 @@ BaseConfigPlan BuildBaseConfigProfile(const BaseConfigRequest& r)
     values.push_back({0x40030011u, UbxCfgValue::U4(r.accuracy_01mm)});
   }
   // UART1/2 key families are separate and receiver-specific, never an ASCII command.
-  values.push_back(
-      {r.uart_port == 1 ? 0x10740004u : 0x10760004u, UbxCfgValue::Boolean(r.rtcm_output)});
-  for (const auto key :
-       {0x209102beu, 0x2091035fu, 0x20910364u, 0x20910369u, 0x2091036eu, 0x20910304u})
-    values.push_back({key + static_cast<std::uint32_t>(r.uart_port - 1),
-                      UbxCfgValue::U1(r.rtcm_output ? 1 : 0)});
+  AppendUbloxRtcmOutputs(values, r.uart_port, r.rtcm_output);
   std::vector<UbxCfgLayer> layers{UbxCfgLayer::kRam};
   if (r.persist)
   {
@@ -142,5 +148,40 @@ BaseConfigPlan BuildBaseConfigProfile(const BaseConfigRequest& r)
   SetBinaryPayload(c, built.frame);
   p.commands.push_back(std::move(c));
   return p;
+}
+BaseConfigPlan BuildBaseDisableProfile(const BaseDisableRequest& request)
+{
+  BaseConfigPlan plan;
+  if (!request.model_verified || request.vendor != ReceiverVendor::kUblox ||
+      (request.model != "ZED-F9P" && request.model != "F9P") ||
+      (request.uart_port != 1 && request.uart_port != 2))
+  {
+    plan.error = "BASE disable requires a verified F9P and receiver UART1/2";
+    return plan;
+  }
+  using namespace universal_gnss_protocols;
+  // UBX-22008968 R01, section 6.9.28/Table 52: DISABLED = 0.
+  std::vector<UbxCfgKeyValue> values{{0x20030001u, UbxCfgValue::U1(0)}};
+  AppendUbloxRtcmOutputs(values, request.uart_port, false);
+  std::vector<UbxCfgLayer> layers{UbxCfgLayer::kRam};
+  if (request.persist)
+  {
+    layers.push_back(UbxCfgLayer::kBbr);
+    layers.push_back(UbxCfgLayer::kFlash);
+  }
+  const auto built = BuildUbxCfgValsetFrame(layers, values);
+  if (built.status != UbxCfgBuilderStatus::kOk)
+  {
+    plan.error = "UG UBX builder rejected BASE disable";
+    return plan;
+  }
+  BaseConfigRequest target;
+  target.vendor = request.vendor;
+  target.model = request.model;
+  target.confirm_persistent = request.confirm_persistent;
+  auto command = MakeCommand(target, request.persist);
+  SetBinaryPayload(command, built.frame);
+  plan.commands.push_back(std::move(command));
+  return plan;
 }
 }  // namespace universal_gnss_driver

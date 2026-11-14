@@ -945,3 +945,54 @@ passes within the complete 35-case native ASan/UBSan suite. It adds structured
 corruption, loss, duplicate, expiry and split-length properties without changing
 firmware sources, images or protocols. Prior SDK build proofs are retained;
 no redundant firmware compilation or physical test was run for this test-only lot.
+
+
+## Explicit F9P BASE disable
+
+The historical stop handler sent a generic `SURVEY STOP` and cleared its software
+flag before confirming receiver execution. That mechanism is REJECT; the useful
+operator action is ADAPT as authenticated `POST /api/gnss/base/disable`. Its strict
+body requires `{"confirm":"DISABLE_BASE_MODE","receiver_port":1,"persist":false}`.
+This action exits **static BASE time mode**, whether Survey-In or fixed; it is
+not named an emergency stop or silently aliased to the old stop/clear routes.
+Optional `persist:true` additionally requires
+`"persistent_confirmation":"SAVE_RECEIVER_CONFIGURATION"`. The default is RAM
+only; no receiver reset, factory erase or implicit persistent write is added.
+
+An additive portable `BaseDisableRequest`/`BuildBaseDisableProfile` API in the
+existing driver builder supports **verified ZED-F9P/F9P only**. It uses the existing
+UG UBX VALSET builder: CFG-TMODE-MODE `0x20030001` becomes 0 and the native BASE
+profile's RTCM output protocol/message rates are disabled on the chosen receiver
+UART1/2. Coordinate, survey-limit and other-port settings are not erased. RAM
+versus BBR/Flash layers and command safety use the existing common machinery.
+Existing BASE request types, enum values, signatures and behavior are retained.
+The shared output-key helper produces byte-identical previous plans: **768**
+model/mode/port/persistence/output/datum combinations were compared against
+`b118bb7`, including invalid requests.
+
+Primary contract: [u-blox F9 HPG 1.32, UBX-22008968 R01](https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf#page=268),
+section 6.9.28, Table 52. No generic ASCII stop is inferred for Unicore; the new
+operation remains unavailable for UM980/981/982 pending its separate qualified
+exit contract. Existing Unicore BASE and mode-preserving telemetry are unchanged.
+
+The operation enters the same single UART-owner queue as BASE/telemetry and
+rechecks the verified model before dispatch. The persistent interruption journal,
+response fence, source/observation invalidation and timeout quarantine remain
+mandatory. No existing quarantine can be released through this operation. HTTP
+202 means queued; an ACK is acceptance, not proof that physical surveying/output
+has ceased. Previously queued/in-flight serial or RF bytes are not recalled.
+Subsequent receiver reports and physical acceptance remain separate evidence.
+The UI gates the operation by model/busy/quarantine state and clears controls on
+logout or memory-pressure suspension. It explicitly confirms fixed/Survey-In
+impact and persistent writes. Gateway settings rollback still does not undo
+receiver commands. Source routing remains an explicit gateway setting.
+
+Software evidence: 35 native ASan/UBSan tests, 69 Linux CTest cases, the browser
+mock and 200 generator/CI tests pass. Native tests check exact UBX keys/layers,
+other-port/coordinate preservation, unsupported models, unsafe persistence and
+strict JSON/partial-result rejection. S3/relay builds and linked-role checks pass
+(apps **1433328** and **1288656** bytes). The C3 relay gains only the common Web
+asset update and continues to exclude the GNSS driver. The portable builder
+source/header intentionally change ROS2 source payloads; inventories must be
+regenerated, not described as unchanged. No ROSIDL, package, version or existing
+Linux runtime behavior changes, and no device, flash, push or publication occurs.

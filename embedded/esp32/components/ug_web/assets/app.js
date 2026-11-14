@@ -43,7 +43,7 @@ async function refresh() {
       $('status').textContent = 'Rapport détaillé suspendu : pression mémoire';
       $('receiver').textContent = 'Rapport suspendu : pression mémoire';
       satellites({available:false}); receiverPlans = null;
-      $('base-submit').disabled = true; $('telemetry-submit').disabled = true;
+      $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true;
       show('Pression mémoire : opérations Web suspendues. Diagnostic compact disponible ; console locale pour la maintenance.');
       return;
     }
@@ -61,6 +61,7 @@ async function refresh() {
         $('base-submit').disabled = !(plans.fixed || plans.survey_in || plans.time_optimization);
         $('telemetry-submit').disabled = !plans.telemetry;
       }
+      $('base-disable').disabled = !receiverPlans?.disable_base || Boolean(receiver.quarantined || receiver.busy);
       if (resources.satellites_allowed === false) {
         satellites({available:false});
         return;
@@ -87,7 +88,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -176,4 +177,16 @@ $('ntrip-restart').onclick = handle(async () => {
   const result = await call('/api/ntrip/restart', {confirm:'RESTART_NTRIP_SERVICES'});
   if (generation !== sessionGeneration || !token) return;
   show(result); await readNtrip();
+});
+
+$('base-disable').onclick = handle(async () => {
+  if (!receiverPlans?.disable_base) throw new Error('Désactivation BASE indisponible pour ce modèle vérifié');
+  if (!confirm('Quitter le mode BASE statique du F9P, y compris une position fixe ou un Survey-In actif ?')) return;
+  const operation = {confirm:'DISABLE_BASE_MODE', receiver_port:Number($('base-disable-port').value), persist:Boolean($('base-disable-persist').checked)};
+  if (operation.persist) {
+    if (prompt('Sauvegarde persistante : saisir SAVE_RECEIVER_CONFIGURATION') !== 'SAVE_RECEIVER_CONFIGURATION') return;
+    operation.persistent_confirmation = 'SAVE_RECEIVER_CONFIGURATION';
+  }
+  const generation = sessionGeneration, result = await call('/api/gnss/base/disable', operation);
+  if (generation === sessionGeneration && token) show(result);
 });

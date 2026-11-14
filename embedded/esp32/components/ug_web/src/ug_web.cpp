@@ -260,6 +260,7 @@ esp_err_t GnssCapabilitiesReply(httpd_req_t* req)
   cJSON_AddBoolToObject(root.get(), "fixed", plans.fixed);
   cJSON_AddBoolToObject(root.get(), "survey_in", plans.survey_in);
   cJSON_AddBoolToObject(root.get(), "time_optimization", plans.time_optimization);
+  cJSON_AddBoolToObject(root.get(), "disable_base", plans.disable_base);
   cJSON_AddStringToObject(root.get(), "qualification", "software_contract_only");
   auto* options = cJSON_AddArrayToObject(root.get(), "signal_groups");
   if (!options)
@@ -651,6 +652,22 @@ esp_err_t Post(httpd_req_t* req)
     return Fail(req, "200 OK", "configuration saved; radio/Wi-Fi/TLS changes require reboot");
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/base/disable")
+  {
+    BaseDisableOperation operation;
+    if (!DecodeBaseDisableOperation(body, operation, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    const auto receiver = ReceiverSnapshot();
+    if (!receiver.present || !receiver.model_verified || receiver.quarantined ||
+        receiver.model != "ZED-F9P" || !QueueBaseDisableOperation(operation))
+      return Fail(
+          req,
+          "409 Conflict",
+          "BASE disable requires an available verified F9P, without quarantine or pending command");
+    return Fail(req,
+                "202 Accepted",
+                "BASE disable queued; command acceptance does not prove physical stop");
+  }
   if (uri == "/api/gnss/detect")
   {
     if (!DecodeDetectionOperation(body, error))
