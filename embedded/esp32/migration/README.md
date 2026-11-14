@@ -1184,8 +1184,11 @@ is unchanged. SDK S3/relay builds and linked-role/partition checks pass, with
 independent byte-identical apps, bootloaders and tables. Apps: **1441344/3145728**
 and **1294640/1310720** bytes; relay headroom **16080 bytes**. Rover sources and
 profile dependencies are unchanged. No physical receiver, flash or RF was used.
-The portable-source payload changes deliberately; immutable ROS2 distribution
-and Lyrical consumer validation follow the local feature commit.
+The portable-source payload changes deliberately. At commit
+`d59ba1e972780fe1562ba4e2b221ef7775af162f`, eight immutable ROS2 snapshots passed
+integrity/reproduction; isolated Lyrical completed **166 tests** and Lyrical +
+MAVROS **168 tests**, with no failures or skips. Kilted sources were generated
+only. The later native SIGNALGROUP guard preserves those copied payloads.
 
 
 ## SIGNALGROUP native dispatch safety boundary

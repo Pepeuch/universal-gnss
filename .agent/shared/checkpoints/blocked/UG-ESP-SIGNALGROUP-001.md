@@ -5,8 +5,9 @@ Status: BLOCKED
 Scope: RECEIVER (ESP32 native)
 Validation: HARDWARE_REQUIRED, with unfinished software/design prerequisites.
 Canonical status: [TODO.md](../../../../TODO.md).
-Baseline: `d59ba1e972780fe1562ba4e2b221ef7775af162f`; the native rejection guard
-is committed alongside this record. Source/tests remain authoritative.
+Pre-guard baseline: `d59ba1e972780fe1562ba4e2b221ef7775af162f`.
+Native guard and original finding record: `9dab829e7fefd76f0800cd41080bfd72827dd3b9`.
+Source/tests remain authoritative.
 
 ## Contract and evidence
 
