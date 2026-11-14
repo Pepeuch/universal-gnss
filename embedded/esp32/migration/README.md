@@ -882,3 +882,60 @@ compare captured UART bytes/order/CRC with the source, and measure drops/rate pl
 boot/reset behaviour. Any board, pin, baud, firmware, adapter or topology change
 invalidates that physical baseline. No such trial, endurance run, flash or RF
 claim is part of this software result. The full migration remains PARTIAL.
+
+
+## Aggregate native network capacity
+
+The actual IDF 6.1 default was ten sockets on both boards. This was insufficient
+for the S3's permitted concurrent services: one incoming client plus five
+publishers, HTTPS with three client sessions plus three internal sockets, and
+the local caster with a listener plus four clients already require **17 FDs**.
+The caster can accept one extra FD before rejecting an over-limit client. Two
+additional descriptors are reserved, giving a provisioned S3 budget of **20**.
+The C3 relay retains **10**: two NTRIP endpoints, six HTTPS descriptors and two
+reserves. No publisher, caster client or HTTPS session limit was reduced.
+
+The pinned mDNS component is currently configured with its raw-lwIP backend: it
+shares one UDP PCB across interfaces/address families, without a socket
+descriptor. The pinned lwIP DNS resolver can use four source-port PCBs; SNTP
+uses one. Three additional PCBs conservatively cover shared DHCPv4/DHCPv6
+clients and the single Wi-Fi AP DHCP server. Together with two HTTP controls
+and two reserves, the UDP budget is **13**. DNS capacity is derived from the
+effective lwIP options, not assumed to be one request. The optional mDNS socket backend instead uses one dual-stack FD per interface;
+the policy accounts for it and would require a larger socket allocation. It is
+not silently enabled. Caster/HTTPS listeners and active TCP PCBs are checked
+separately (S3 active budget 16, relay 7; listeners 2/1). Current SDK pools remain
+16 for active TCP, listening TCP and UDP.
+
+`ug_network_budget.hpp` owns the three-HTTPS/four-caster client constants used
+by the actual service configurations. The native network source statically
+asserts its aggregate requirements against the effective `sdkconfig.h`; a build
+with a missing reserve or insufficient FD/TCP/listener/UDP pool cannot succeed.
+The recipe explicitly provisions 20/10 sockets, and the verifier reports the
+actual SDK limits. Public capabilities expose these **static** limits, never an
+assertion of current free sockets or available TLS capacity. The minimal rover
+acquires no network budget, service or provisioning change.
+
+This is necessary resource accounting, not a guarantee against allocation failure,
+TCP TIME_WAIT pressure, DNS/reconnect timing, live heap exhaustion or three
+simultaneous TLS handshakes. Existing bounded queues, cancellation/source epochs,
+worker failures, memory admission and service degradation remain in force. Live
+peak heap/stack/network concurrency still needs qualification without changing
+GNSS observations, radio framing or core NTRIP semantics.
+
+Host ASan/UBSan tests cover both board budgets, exact thresholds for all four
+pools, invalid capabilities, varied DNS capacity and optional socket-backed mDNS.
+Native recipe/verifier policy tests preserve the C3 limit and rover exclusion. Fresh
+S3/C3 builds pass with their effective limits, without repartitioning, changing
+SDK dependency versions or using a device.
+
+All 34 native ASan/UBSan cases pass. Compiling the actual SDK network service
+with each insufficient pool in turn (FD 19, active TCP 15, listeners 1, UDP 12)
+fails at the intended static assertion. No guard or test was weakened.
+
+Final apps are S3 **1431152 / 3145728** and C3 relay **1288240 / 1310720**
+bytes, with byte-identical app/bootloader/partition files in two build directories.
+SDK size reports show linker-region occupancy of S3 DIRAM **212300 / 341760**
+and C3 DRAM **159686 / 321296** bytes. These are static link budgets, not measured
+runtime heap headroom after task stacks/TLS/network allocation. Rover images and
+Linux/ROS2 payloads are unaffected by this network-only provisioning change.

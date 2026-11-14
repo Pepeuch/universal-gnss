@@ -3,8 +3,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "lwip/opt.h"
+#include "sdkconfig.h"
 #include "ug_configuration.hpp"
 #include "ug_gateway_service.hpp"
+#include "ug_network_budget.hpp"
 #include "ug_ntrip_connection.hpp"
 #include "ug_ntrip_publisher.hpp"
 #include "ug_observation.hpp"
@@ -18,6 +21,37 @@ namespace ug::embedded
 {
 namespace
 {
+#ifdef CONFIG_MDNS_NETWORKING_SOCKET
+constexpr bool kMdnsSocketMode = true;
+#else
+constexpr bool kMdnsSocketMode = false;
+#endif
+// Same private default-selection rules as the pinned SDK's lwIP core/dns.c.
+// A dependency upgrade must review these rules and mDNS PCB ownership together.
+constexpr std::size_t kDnsSourcePorts =
+#if !LWIP_DNS
+    0;
+#elif (LWIP_DNS_SECURE & LWIP_DNS_SECURE_RAND_SRC_PORT) == 0
+    1;
+#elif defined(DNS_MAX_SOURCE_PORTS)
+    DNS_MAX_SOURCE_PORTS;
+#elif defined(DNS_MAX_REQUESTS) &&                                                                 \
+    ((LWIP_DNS_SECURE & LWIP_DNS_SECURE_NO_MULTIPLE_OUTSTANDING) != 0)
+    DNS_MAX_REQUESTS;
+#else
+    DNS_TABLE_SIZE;
+#endif
+constexpr NetworkCapacity kNetworkCapacity{RequiredNetworkBudget(UG_SERVICE_PUBLISHERS,
+                                                                 UG_SERVICE_CASTER,
+                                                                 CONFIG_MDNS_MAX_INTERFACES,
+                                                                 kMdnsSocketMode,
+                                                                 kDnsSourcePorts),
+                                           CONFIG_LWIP_MAX_SOCKETS,
+                                           CONFIG_LWIP_MAX_ACTIVE_TCP,
+                                           CONFIG_LWIP_MAX_LISTENING_TCP,
+                                           CONFIG_LWIP_MAX_UDP_PCBS};
+static_assert(NetworkBudgetFits(kNetworkCapacity),
+              "native network service limits exceed the configured SDK socket/PCB budget");
 constexpr std::size_t kUpstream = 1, kQueueDepth = 2;
 std::atomic<bool> network_ready{false};
 std::atomic<std::uint64_t> network_generation{1}, upstream_generation{0};
@@ -225,7 +259,7 @@ void CasterWorker(void*)
       if (config->caster_enabled && network_ready.load())
       {
         universal_gnss_ntrip::LocalRtcmCasterPolicy policy;
-        policy.max_clients = 4;
+        policy.max_clients = kCasterClientLimit;
         policy.max_accepts_per_poll = 2;
         policy.request_timeout_ms = 5000;
         policy.disconnect_clients_on_source_change = true;
@@ -288,6 +322,10 @@ void CasterWorker(void*)
 }
 #endif
 }  // namespace
+NetworkCapacity NetworkResourceCapacity()
+{
+  return kNetworkCapacity;
+}
 void NetworkAvailabilityChanged(bool available)
 {
   network_ready = available;

@@ -38,6 +38,20 @@ def check_web_assets(build, source_assets, application):
     return reports
 
 
+def sdk_network_capacity(lines):
+    values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
+    names = {'sockets': 'LWIP_MAX_SOCKETS', 'tcp_active': 'LWIP_MAX_ACTIVE_TCP',
+             'tcp_listeners': 'LWIP_MAX_LISTENING_TCP', 'udp_pcbs': 'LWIP_MAX_UDP_PCBS'}
+    limits = {}
+    for name, key in names.items():
+        text = values.get('CONFIG_' + key, '')
+        if not text.isdecimal() or int(text) <= 0:
+            raise ValueError('missing or invalid SDK network limit: ' + key)
+        limits[name] = int(text)
+    limits['mdns_socket_mode'] = values.get('CONFIG_MDNS_NETWORKING_SOCKET') == 'y'
+    return limits
+
+
 def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200):
     if profile != 'rover' and (rover_uart_tx is not None or rover_uart_baud != 115200):
         raise ValueError('UART output expectation requires the rover profile')
@@ -128,6 +142,8 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
               'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
     result['web_assets'] = web_assets
+    if profile != 'rover':
+        result['network_capacity'] = sdk_network_capacity((work / 'sdkconfig').read_text().splitlines())
     if profile == 'rover':
         result['rover_output'] = {'transport': 'uart1-tx' if rover_uart_tx is not None else 'usb-serial-jtag',
                                   'tx_pin': rover_uart_tx,

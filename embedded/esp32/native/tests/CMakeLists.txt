@@ -172,3 +172,8 @@ target_include_directories(test_rover_uart_driver PRIVATE rover_uart_stubs radio
 target_compile_definitions(test_rover_uart_driver PRIVATE UG_ROVER_UART_TX=4 UG_ROVER_UART_BAUD=230400)
 target_compile_options(test_rover_uart_driver PRIVATE -UNDEBUG)
 add_test(NAME embedded_rover_uart_driver_contract COMMAND test_rover_uart_driver)
+add_executable(test_network_budget test_network_budget.cpp)
+target_include_directories(test_network_budget PRIVATE ../../components/ug_services/include)
+target_compile_features(test_network_budget PRIVATE cxx_std_17)
+target_compile_options(test_network_budget PRIVATE -UNDEBUG)
+add_test(NAME embedded_network_budget_contract COMMAND test_network_budget)

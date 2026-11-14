@@ -14,6 +14,14 @@ sys.path.insert(0, str(ROOT / 'embedded/esp32/integration'))
 from build import merged_defaults, C3_PARTITIONS
 
 
+def network_sdk_defaults(profile, board):
+    if profile == 'rover':
+        return ''
+    if profile not in ('gateway', 'relay-ntrip') or board not in ('waveshare-s3-eth', 'supermini-c3'):
+        raise ValueError('unsupported native network profile/board')
+    return f'CONFIG_LWIP_MAX_SOCKETS={20 if board == "waveshare-s3-eth" else 10}\n'
+
+
 def validate_rover_output(profile, board, tx, baud):
     if tx is None:
         if baud != 115200:
@@ -112,6 +120,8 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
                IDF_COMPONENT_CHECK_NEW_VERSION='0')
     if not rover:
         defaults_path = work / 'sdkconfig.defaults'
+        defaults_path.write_text(defaults_path.read_text() +
+                                 network_sdk_defaults(profile, board))
         defaults_path.write_text(defaults_path.read_text() + 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y\n' + ('CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y\n' if s3 else 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y\n') + 'CONFIG_ESP_HTTPS_SERVER_ENABLE=y\nCONFIG_MBEDTLS_PEM_WRITE_C=y\n# CONFIG_MDNS_ENABLE_CONSOLE_CLI is not set\nCONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y\n')
     subprocess.run(command, env=env, check=True)
     print('Native build only; hardware qualification pending:', profile, board)

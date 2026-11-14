@@ -15,6 +15,22 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_network_defaults_preserve_small_relay_and_exclude_rover(self):
+        for role in ('gateway', 'relay-ntrip'):
+            self.assertEqual(builder.network_sdk_defaults(role, 'waveshare-s3-eth'), 'CONFIG_LWIP_MAX_SOCKETS=20\n')
+            self.assertEqual(builder.network_sdk_defaults(role, 'supermini-c3'), 'CONFIG_LWIP_MAX_SOCKETS=10\n')
+        self.assertEqual(builder.network_sdk_defaults('rover', 'supermini-c3'), '')
+        with self.assertRaises(ValueError):
+            builder.network_sdk_defaults('unknown', 'supermini-c3')
+        config = ['CONFIG_LWIP_MAX_SOCKETS=20', 'CONFIG_LWIP_MAX_ACTIVE_TCP=16',
+                  'CONFIG_LWIP_MAX_LISTENING_TCP=16', 'CONFIG_LWIP_MAX_UDP_PCBS=16']
+        self.assertEqual(module.sdk_network_capacity(config),
+                         {'sockets':20,'tcp_active':16,'tcp_listeners':16,'udp_pcbs':16,'mdns_socket_mode':False})
+        self.assertTrue(module.sdk_network_capacity(config + ['CONFIG_MDNS_NETWORKING_SOCKET=y'])['mdns_socket_mode'])
+        for missing in range(len(config)):
+            with self.assertRaises(ValueError):
+                module.sdk_network_capacity(config[:missing] + config[missing+1:])
+
     def test_rover_uart_requires_explicit_reviewed_pins_role_and_baud(self):
         builder.validate_rover_output('rover', 'supermini-c3', None, 115200)
         for pin in (4, 5, 6, 7, 10):

@@ -13,6 +13,7 @@ extern "C" {
 #include "ug_gateway_service.hpp"
 #include "ug_http_encoding.hpp"
 #include "ug_json.hpp"
+#include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
@@ -233,6 +234,14 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
     if (caps.gnss_pin_mask & (UINT64_C(1) << pin))
       cJSON_AddItemToArray(pins, cJSON_CreateNumber(pin));
   cJSON_AddNumberToObject(root.get(), "publishers", caps.publisher_slots);
+  const auto capacity = NetworkResourceCapacity();
+  auto* limits = cJSON_AddObjectToObject(root.get(), "network_limits");
+  if (!limits || !cJSON_AddNumberToObject(limits, "provisioned_sockets", capacity.sockets) ||
+      !cJSON_AddNumberToObject(limits, "budgeted_sockets", capacity.required.sockets) ||
+      !cJSON_AddNumberToObject(limits, "https_clients", kHttpsClientLimit) ||
+      !cJSON_AddNumberToObject(limits, "caster_clients", caps.caster ? kCasterClientLimit : 0) ||
+      !cJSON_AddBoolToObject(limits, "budget_fits", NetworkBudgetFits(capacity)))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
   cJSON_AddBoolToObject(root.get(), "fixed_channel_espnow", true);
   cJSON_AddBoolToObject(root.get(), "radio_wifi_changes_require_reboot", true);
   return Json(req, root.get());
@@ -738,7 +747,7 @@ esp_err_t StartWebService()
   config.httpd.task_priority = 2;  // Below correction routing (5) and UART/radio owners (4).
   config.httpd.stack_size = 24576;
   config.httpd.max_uri_handlers = 10;
-  config.httpd.max_open_sockets = 3;
+  config.httpd.max_open_sockets = kHttpsClientLimit;
   config.httpd.lru_purge_enable = true;
   config.httpd.recv_wait_timeout = 3;
   config.httpd.send_wait_timeout = 3;
