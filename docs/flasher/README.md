@@ -157,3 +157,45 @@ Les tests logiciels ne qualifient ni RF/CCMP, ni cycle USB réel, ni W5500/UART,
 ni RTK FIX. Ils ne lèvent aucune quarantaine GNSS et n’effacent pas les dettes
 historiques. Les rapports natifs et le [contrat d’appairage](../../embedded/esp32/PAIRING.md)
 distinguent les budgets statiques, les tests host et l’acceptation matérielle.
+
+## Qualification logicielle locale de ce lot
+
+Source exacte du portail et des exports :
+`aa130f0d252940035cffbaacf7307cbc621889e2`.
+Les commandes `ci.py --bundle-output` ont été réellement exécutées pour S3 et C3
+USB dans deux conteneurs jetables indépendants, sans montage hôte ni périphérique.
+Chaque run a compilé deux fois et comparé les quatre segments, puis exporté le
+bundle avant nettoyage. Les deux runs et leur nettoyage ont réussi.
+
+| Variante | App `.bin` / slot (octets) | Mémoire liée (octets, pas le heap libre) | Preuve |
+| --- | --- | --- | --- |
+| S3 Gateway | 1 451 296 / 3 145 728 | DIRAM 215 004 + IRAM 16 384 | Build/reconstruction/export rejoués sur le SHA ci-dessus |
+| C3 Rover USB | 687 648 / 1 310 720 | DRAM 111 114 | Build/reconstruction/export rejoués sur le SHA ci-dessus |
+| C3 Rover UART | 699 136 / 1 310 720 | DRAM 111 776 | Deux builds validés au commit d’appairage `7182f5b4d408fdd9219678130484c50cbc308a09`, code firmware inchangé depuis |
+| C3 relais interne | 1 305 760 / 1 310 720 | DRAM 160 534 | Même preuve conservée ; marge de slot **4 960 octets**, absent du catalogue |
+
+Offsets réels vérifiés dans ces exports : bootloader `0`, table `0x8000`,
+otadata/application `0xf000`/`0x20000` sur S3 et `0xe000`/`0x10000` sur C3.
+Ces chiffres ne sont pas des offsets à substituer à la lecture des futurs builds.
+
+Contrôles effectivement rejoués :
+
+- 235 tests du générateur et de politique CI, 55 tests Python existants.
+- 40 CTests natifs ASan/UBSan dans le run S3, 8 tests des outils de capture,
+  1 test WebUI et 8 tests JavaScript du portail public.
+- Acceptation des véritables octets des deux bundles par le vérificateur JS,
+  dans une VM avec une approbation **fictive en mémoire pour le test uniquement**.
+  Le registre public reste vide ; cette vérification n’autorise aucune publication.
+- Intégrité SHA256 et identité des 11 entrées de chaque ZIP avec ses fichiers.
+- Huit combinaisons ROS2 générées deux fois, intègres et reproductibles ;
+  inventaires, octets copiés et modes identiques à la référence avant ce lot.
+- 50 cibles de liens Markdown locaux, parsing Python/YAML, staging Pages vide,
+  dashboard, checkpoint audit et `git diff --check`.
+
+La VM de test n’exerce pas Web Serial ni les dialogues réels d’ESP Web Tools.
+Le SDK, le CRC UG unique et les standards C17/C++17 sont vérifiés dans les ELF.
+Aucun build Lyrical/Kilted, scénario matériel, flash ou contrôle GitHub distant
+n’a été ajouté pour ce lot du portail. Les résultats CI distants de l’ancien
+commit ne deviennent pas verts par l’effet d’un commit local. Autorisation de
+push, intégration à la branche par défaut, approbations, stockage durable et
+acceptation matérielle restent nécessaires avant mise à disposition publique.
