@@ -1,10 +1,10 @@
-# Universal GNSS ESP32 Web Flasher — prototype statique
+# Universal GNSS ESP32 Web Flasher — integration and hosting
 
 ## À placer dans le dépôt UG
 
 - `docs/flasher.html` : interface et intégration ESP Web Tools v10.4.0.
 - `docs/flasher/catalog.json` : catalogue public initialement **vide**.
-- Adapter le bloc ESP32 RTK Gateway du `README.md` avec `README-badge-snippet.md`.
+- Le badge du README pointe vers [le portail source](../flasher.html), sans présumer un déploiement Pages.
 - Activer GitHub Pages sur `docs/` seulement lorsque le lot est autorisé à être publié.
 - La nouvelle URL `https://pepeuch.github.io/universal-gnss/flasher.html` est un **emplacement envisagé**, pas une page actuellement publiée.
 
