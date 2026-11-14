@@ -212,10 +212,16 @@ pas le futur répéteur radio `repeater-espnow`.
 
 ## Portail officiel UG Build & Flash — lot futur
 
-Le portail sera intégré à Universal GNSS. La page historique `flasher.html` et
-ses fonctionnalités pertinentes seront auditées, migrées et modernisées après
-revue des licences et notices. Le présent lot ne copie ni ne développe ce portail,
-ne configure pas GitHub Pages et ne crée aucun workflow de publication.
+Le [portail source UG](../../docs/flasher.html) est maintenant intégré avec
+normalisation des trois profils S3 Gateway/C3 USB/C3 UART, vérification des octets,
+manifestes issus des offsets IDF et installation complète uniquement. Le
+[guide du portail](../../docs/flasher/README.md) décrit les commandes réelles,
+l’approbation, le workflow manuel, les licences et les limites. Son registre et
+son catalogue restent vides. Aucun site Pages ni firmware n’est publié ; la
+mise à jour conservant NVS et le déclenchement public restent non qualifiés.
+
+Le plan ci-dessous conserve les exigences des lots futurs : les fonctions déjà
+implémentées dans les sources ne constituent pas une autorisation de déploiement.
 
 La distribution future reste unique : `esp32`. Le portail propose des profils
 validés, pas des distributions supplémentaires. Les rôles affichés correspondent
@@ -321,7 +327,7 @@ Aucun build ROS2/MAVROS supplémentaire, CI distante, flash ou endurance n'a ét
    Flash dans UG avec sa matrice CI ciblée, ses vrais builds autorisés, ses
    artefacts/manifeste ESP Web Tools et ses protections installation/mise à jour.
    Dépend des profils, tables et schémas NVS validés dans les lots précédents.
-7. Fiabilité complémentaire et portée sur le terrain ; C6, LoRa, appairage,
+7. Fiabilité complémentaire et portée sur le terrain ; C6, LoRa, découverte radio,
    `repeater-espnow` et multirobot restent des chantiers ultérieurs.
 
 GO pour revue du premier commit UG, uniquement sur ce périmètre. Aucun commit UG,

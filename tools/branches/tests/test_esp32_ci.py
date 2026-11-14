@@ -37,7 +37,7 @@ class NativeCI(unittest.TestCase):
                     events.append('firmware-build')
                 elif '/build.py --output /tmp/ug-ci-b' in script:
                     events.append('reconstruction')
-                output=b'{"sha256":"same-app"}' if '/verify.py' in script else b'libssl-dev 3.0'
+                output=b'{"sha256":"same-app"}' if '/verify.py' in script else json.dumps({'part_sha256':{p:'a'*64 for p in ('bootloader/bootloader.bin','partition_table/partition-table.bin','ota_data_initial.bin','universal-gnss-esp32.bin')},'flash_offsets':{p:0 for p in ('bootloader/bootloader.bin','partition_table/partition-table.bin','ota_data_initial.bin','universal-gnss-esp32.bin')}}).encode() if 'hashlib.sha256' in script else b'libssl-dev 3.0'
                 return subprocess.CompletedProcess([],0,output)
             with patch.object(ci,'sdk_container',return_value=nullcontext('owned')), \
                  patch.object(ci,'run',side_effect=execute), patch.object(ci,'sdk',side_effect=sdk_execute):

@@ -1,76 +1,159 @@
-# Universal GNSS ESP32 Web Flasher — integration and hosting
+# Universal GNSS ESP32 Web Flasher
 
-## À placer dans le dépôt UG
+Le [portail source](../flasher.html) et son badge README sont intégrés à UG.
+Le catalogue et le registre d’approbation sont volontairement vides : aucune
+image installable, URL Pages active ou publication n’est annoncée. Le portail
+nécessite HTTPS (ou localhost), WebCrypto et, pour le flash, un navigateur avec
+Web Serial. Les téléchargements restent indépendants du support Web Serial.
 
-- `docs/flasher.html` : interface et intégration ESP Web Tools v10.4.0.
-- `docs/flasher/catalog.json` : catalogue public initialement **vide**.
-- Le badge du README pointe vers [le portail source](../flasher.html), sans présumer un déploiement Pages.
-- Activer GitHub Pages sur `docs/` seulement lorsque le lot est autorisé à être publié.
-- La nouvelle URL `https://pepeuch.github.io/universal-gnss/flasher.html` est un **emplacement envisagé**, pas une page actuellement publiée.
+## Profils et configuration
 
-## Périmètre V1
+| Variante de ROM | Matériel fixé | Configuration à l’exécution |
+| --- | --- | --- |
+| `s3-gateway` | Waveshare ESP32-S3 ETH, W5500, Flash 16 MB, PSRAM 8 MB | BASE GNSS ou relais NTRIP sans GNSS actif, moteur commun ; GNSS et NTRIP dans la WebUI |
+| `c3-rover-usb` | SuperMini ESP32-C3, Flash 4 MB, sans PSRAM/Ethernet | Pair, canal et clé privée par maintenance USB locale |
+| `c3-rover-uart` | Même C3, sortie UART1 TX | Même maintenance USB ; broche TX et débit sont des options de compilation |
 
-- S3 Waveshare W5500: firmware Gateway avec GNSS local ou source NTRIP (mode à sélectionner à l'exécution).
-- C3 SuperMini: rover USB ou UART1 TX explicite GPIO4/5/6/7/10 (115200–921600 baud).
-- Canal ESP-NOW 1–11 et MAC unicast pair sont actuellement gravés au build native.
-- Types GNSS u-blox/Unicore choisis dans l'interface, mais le firmware est multiconstructeur : la sélection relève de la configuration à l'exécution, pas d'un build de ROM distinct.
-- Pas de C6, LoRa, Mammotion, autre carte ou firmware historique.
+UART : GPIO4/5/6/7/10, 115200/230400/460800/921600 baud. Une sélection ne
+qualifie pas le câblage. La CI ordinaire conserve ses quatre variantes de référence,
+y compris le C3 relais expérimental ; le catalogue expose seulement les trois
+variantes ci-dessus, sans produit cartésien de GNSS, services, clés ou canaux.
+Aucun profil C6, LoRa ou répéteur radio n’est proposé. La distribution future
+reste unique : `esp32`.
 
-## Ce qui est réellement implémenté dans ce prototype
+Le schéma de profil **2**, défini dans
+[profiles.py](../../embedded/esp32/native/profiles.py), refuse champs inconnus,
+MAC, canal et clés. La clé de build est le SHA256 du commit Git complet, suivi
+d’un saut de ligne et du JSON canonique du profil, tronqué à 20 caractères.
+Le SDK épinglé et les outils font partie de ce commit. Le choix GNSS/NTRIP affiché
+par le portail est une préparation à la configuration après installation, pas
+un paramètre appliqué par le flash. Voir le [contrat d’appairage](../../embedded/esp32/PAIRING.md).
 
-- Sélection des profils, contraintes d'options et URL d'issue préremplie pour demander le build manquant.
-- Lecture d'un catalogue **statique** des images publiées; bouton Web Serial uniquement pour une entrée avec métadonnées minimales cohérentes.
-- Export JSON de la configuration sans secrets.
-- **Aucun firmware n'est fourni. Aucune compilation n'est déclenchée par ce prototype. Aucun flash ni deployment n'a été testé.**
-- Les hash SHA-256 sont des métadonnées de publication, pas une preuve cryptographique côté navigateur; la CI doit les vérifier et les signer/attester avant la publication.
+## Demande de compilation réelle et contrôlée
 
-## CI à la demande : bloc à implémenter séparément
+Une page publique ne contient aucun jeton GitHub. Son lien de demande crée une
+**issue de revue**, pas une compilation. Aucun événement `issues` n’exécute de
+texte utilisateur. Le registre [approved-sources.json](approved-sources.json)
+contient uniquement des SHA complets, arbres Git, références de revue et droits
+de publication explicitement approuvés par le mainteneur.
 
-GitHub Pages est statique. Une page anonyme ne peut pas déclencher directement `workflow_dispatch` sans jeton GitHub `Actions: write`. Ne jamais embarquer un PAT dans le JavaScript.
+Procédure intermédiaire :
 
-Flux proposé:
-1. Le navigateur normalise la sélection et crée un identifiant de build incluant **SHA source validé**, version IDF et options qui modifient les octets binaires (carte, UART, canal, MAC). La source ne peut pas être arbitraire/non revue.
-2. La page consulte le catalogue. Si la ROM existe, afficher la version, les empreintes, la provenance et le bouton Flash.
-3. Sinon, une issue GitHub authentifiée peut solliciter le build. Pour un lancement AUTOMATIQUE, ajouter un workflow de réception de demandes avec contrôles stricts (actor/quota, whitelist, rate-limit, aucune insertion libre dans shell, aucune exécution de code provenant de l'issue). Une validation mainteneur est l'option de départ la plus sûre.
-4. Un workflow distinct utilise le build.py UG officiel dans le SDK6.1 épinglé; il valide la partition, le bin ELF, le rôle, les tests pertinents, la reproductibilité et produit les binaires nécessaires: bootloader, partition-table, otadata si requise, application. **Les offsets proviennent du build ESP-IDF/flash_args, jamais d'un ancien manifeste.**
-5. Après les contrôles, publication des images et manifestes ESP Web Tools depuis un job de publication isolé, avec permissions limitées. Le manifeste doit résoudre depuis Pages et tous les fichiers doivent avoir les bons CORS si distribués depuis une autre origine.
-6. Mise à jour atomique du catalogue. Les builds validés pourront être réutilisés si la clé est identique. Utiliser un stockage durable adapté (GitHub Releases ou stockage externe), pas les artifacts Action comme catalogue permanent : les artifacts publics sont limités à 90 jours.
+1. Le mainteneur examine la demande, le commit et son arbre, puis intègre une
+   approbation dans le registre de la branche par défaut. `not_authorized`
+   permet le build de revue sans autoriser sa publication ; `main_approved`
+   reste une décision explicite distincte et exige une source contenue dans `main`.
+2. Après intégration du [workflow manuel](../../.github/workflows/esp32-request.yml)
+   à la branche par défaut, lancer **ESP32 requested firmware validation**, avec
+   le SHA approuvé et l’une des trois variantes. Le contrôleur valide les entrées
+   avant récupération du commit. Exécuter depuis une autre branche échoue.
+3. Le run Actions constitue l’état vérifiable de la vraie compilation : SDK
+   officiel épinglé, source archivée sans overlay hôte, builds non-root sans
+   réseau après provisionnement, tests et deux reconstructions indépendantes.
+   Le workflow est sérialisé, limité à 40 minutes et `contents: read`.
+4. Le bundle de revue Actions expire après **7 jours**. Il n’est ni une archive
+   durable ni une publication officielle. Une erreur de build, test ou
+   empaquetage empêche sa production ; l’issue ne peut déclarer le build réussi.
 
-**Attention :** les options 'MAC pair' génèrent des images par appareil et une MAC publique peut être sensible du point de vue de l'identification. À terme il serait beaucoup plus efficace de provisionner le MAC/canal dans les réglages locaux NVS par USB/Web après flash, et de garder une seule image générique par carte + rôle + version. Ce n'est pas encore le contrat du firmware natif, donc ne pas le supposer fonctionnel.
+Tant que le workflow n’est pas intégré à la branche par défaut et que le registre
+reste vide, aucun lancement public n’est disponible. Ne pas simuler cet état.
+Pour une validation locale de développement autorisée, depuis la racine du dépôt :
 
-**Attention :** `workflow_dispatch` ne se déclenche que si le workflow est sur la **branche par défaut** (actuellement `main`) ; le frontend seul sur `feat/esp32` ne suffit pas. Déployer ce workflow est un changement distinct, à contrôler et approuver.
+```bash
+SOURCE_SHA=$(git rev-parse HEAD)
+python3 embedded/esp32/native/ci.py --source-ref "$SOURCE_SHA" \
+  --variant c3-rover-usb --bundle-output /tmp/ug-review-c3
+```
 
-## Critères de sécurité avant premier flash réel
+La destination doit être nouvelle et extérieure au dépôt. Pour UART, utiliser
+`--variant c3-rover-uart --uart-tx 4 --uart-baud 115200`. Le script ne publie
+ni ne flashe ; la qualification est liée au commit exact, pas au working tree.
+Le contrôleur `tools/branches/firmware_request.py` sans `--execute` ne fait que
+valider une demande et indique explicitement `build_started: false`.
 
-- Pinout Waveshare S3 W5500 confirmé, pas seulement `GPIO{11,12,13,14,10,9}` compilé ; broches RX/TX GNSS sans conflit octal PSRAM.
-- Référence C3 et brochage UART/USB réels qualifiés.
-- Puce cible, Flash 16MB S3 vs 4MB C3, offsets/partition et mode install vs upgrade explicités.
-- Si NVS/identité existante doit être conservée, ne jamais appeler 'update sûr' un full reflash sans test de compatibilité et sauvegarde.
-- Aucun code non confirmé ne doit être présenté comme 'validated hardware'.
+## Binaires, partitions et contrôle navigateur
 
-## Outil d'empaquetage local (sans publication)
+[package_firmware.py](../../tools/package_firmware.py) exige le rapport CI du
+commit, le profil canonique et `native-verification.json`. Il contrôle les
+véritables métadonnées IDF, le sdkconfig, la cible/Flash/PSRAM, les sorties UART,
+les empreintes des quatre segments, leurs offsets et la table de partitions
+avec son checksum. Application, bootloader, table et otadata sont comparés entre
+les deux builds. Les segments ne peuvent chevaucher NVS ni une autre partition
+protégée. Aucun offset historique n’est réutilisé.
 
-Le script `tools/package_firmware.py` accepte un dossier de build ESP-IDF déjà
-vérifié, son `native-verification.json`, un profil normalisé exporté par la page,
-et un SHA source complet. Il lit `flasher_args.json` pour les vrais offsets,
-vérifie les parties non vides, leur non-chevauchement, les tailles flash, le hash
-et la taille de l'application, puis produit des bins, un manifest ESP Web Tools,
-une provenance et une entrée à incorporer manuellement dans le catalogue.
-
-Exemple (chemins fournis par une CI contrôlée) :
+Exemple d’empaquetage d’un build **déjà qualifié**, depuis la racine :
 
 ```bash
 python3 tools/package_firmware.py \
-  --build /tmp/ug-ci-a/build \
-  --verified /tmp/ug-ci-a/native-verification.json \
-  --profile-json /tmp/config.json \
-  --source-sha 0123456789012345678901234567890123456789 \
-  --output docs/flasher
+  --build /tmp/ug-ci-a/build --verified /tmp/ug-ci-a/native-verification.json \
+  --profile-json /tmp/ug-profile.json --source-sha "$SOURCE_SHA" \
+  --qualification /tmp/ug-qualification.json --output /tmp/ug-packaged
 ```
 
-La page relit le manifeste et la provenance, puis vérifie en navigateur les SHA-256 de tous les segments avant d’activer ESP Web Tools. Ces contrôles vérifient la cohérence des octets avec le catalogue publié par le dépôt ; ce n’est pas une attestation de matériel ni une signature indépendante.
+Le résultat est `published/<build_key>/` : quatre bins, manifeste ESP Web Tools,
+provenance, rapport, notices, référence source et ZIP déterministe. Le runner
+écrit aussi `catalog-entry.json`. Cet outil ne compile ni ne signe les images.
+Le rapport lie les empreintes et offsets mais n’est pas une attestation signée
+indépendante ; la chaîne de confiance reste le dépôt et sa procédure de revue.
 
-Le script **ne vérifie pas encore indépendamment** dans `sdkconfig` que la MAC,
-le canal, la broche UART et le débit compilés correspondent au JSON. Cette
-vérification est indispensable dans la CI AVANT publication ; elle n'est pas
-annoncée comme acquise. Le script ne déclenche aucun build à la demande.
+Avant d’activer le bouton de flash, le navigateur contrôle la source approuvée,
+la cohérence catalogue/provenance/rapport, le profil, les partitions et tous les
+SHA256 des segments. Il borne les téléchargements et refuse les chemins hors
+du portail. Les octets vérifiés sont figés en Blob URLs, y compris le manifeste
+transmis à ESP Web Tools : pas de seconde lecture distante mutable pendant le
+flash. Un changement de sélection annule les lectures et révoque les anciennes
+URLs. Une entrée ambiguë, corrompue ou non approuvée reste refusée.
+
+**Installation complète uniquement** : confirmation explicite de l’utilisateur,
+avertissement d’effacement et sauvegarde préalable. Le navigateur distingue la
+famille de puce via ESP Web Tools ; il ne prouve pas le modèle de carte, son
+câblage, sa PSRAM ni le contenu NVS existant. Aucune mise à jour conservant la
+configuration n’est proposée tant que partitions et schémas ne sont pas qualifiés.
+La compatibilité effective Web Serial/Blob manifeste reste à accepter sur matériel.
+
+## Conservation durable et préparation Pages
+
+La politique reste `dev → main → distributions générées`. Avant toute publication,
+le mainteneur doit accepter les limites matérielles/licences, approuver la source
+contenue dans `main`, puis autoriser une **opération séparée** de stockage durable
+(assets d’une GitHub Release ou stockage versionné approprié). Aucun workflow de
+ce lot ne crée de Release, tag, branche spécialisée ou déploiement Pages.
+L’archive durable doit conserver le bundle, sa référence source exacte, les
+notices et les empreintes. Une archive Actions temporaire ne la remplace pas.
+
+[prepare_esp32_site.py](../../tools/branches/prepare_esp32_site.py) prépare un
+répertoire statique local, sans déployer. Sans bundle, il produit un site source
+au catalogue vide. Avec des bundles, il exige l’approbation `main_approved`,
+l’ascendance Git réelle dans `origin/main` et l’identité de l’arbre. Il vérifie
+les fichiers et le ZIP, refuse doublons et écrasements ; le miroir Pages est
+borné à 512 images/512 MiB, sans se substituer au stockage durable.
+
+```bash
+python3 tools/branches/prepare_esp32_site.py --output /tmp/ug-pages-review
+# Après autorisation de publication et archivage durable seulement :
+# ajouter --bundle /chemin/du/bundle-revu (répétable).
+```
+
+Déployer **ce répertoire préparé** après autorisation distincte, pas tout le dépôt.
+Les ressources sont relatives et `.nojekyll` est inclus. Le chemin envisagé est
+`https://pepeuch.github.io/universal-gnss/flasher.html` ; il n’est pas déclaré actif.
+Aucune intégration avec le workflow Release Docker n’est ajoutée.
+
+## Licences et limites
+
+- Adaptation `ADAPT` de l’expérience de sélection historique au commit
+  `7a1ec69f5e9d07522c0284ec2dbae380f72c7e85` de `esp32-rtk-gateway`, GPLv3.
+  Anciennes variantes radio compilées et anciens offsets : `SUPERSEDED`.
+  Le portail UG et son JS portent conservativement `GPL-3.0-only`.
+- ESP Web Tools **10.4.0**, chargé séparément depuis un CDN :
+  [Apache-2.0](https://github.com/esphome/esp-web-tools/blob/10.4.0/LICENSE).
+  Le navigateur nécessite cet accès ; ce n’est pas un portail entièrement hors ligne.
+- Le bundle combiné conserve GPLv3 pour les composants historiques et LGPLv3
+  pour les bibliothèques UG, avec les notices SDK/dépendances et référence source.
+  L’acceptation juridique de publication, y compris la disponibilité du code source
+  correspondant et des notices tierces, reste distincte de la validation logicielle.
+
+Les tests logiciels ne qualifient ni RF/CCMP, ni cycle USB réel, ni W5500/UART,
+ni RTK FIX. Ils ne lèvent aucune quarantaine GNSS et n’effacent pas les dettes
+historiques. Les rapports natifs et le [contrat d’appairage](../../embedded/esp32/PAIRING.md)
+distinguent les budgets statiques, les tests host et l’acceptation matérielle.

@@ -11,8 +11,8 @@ protections. GitHub execution remains unqualified until an authorized push/PR.
 | `c3-rover-usb` | rover / SuperMini C3 | excluded | USB Serial/JTAG |
 | `c3-rover-uart` | rover / SuperMini C3 | excluded | UART1 TX GPIO4, 115200, compile-only fixture |
 
-GPIO4 and the fictitious compile peers are test inputs, not a hardware wiring or
-flash recommendation. C6, other boards, repeater, LoRa and hardware tests are
+GPIO4 is a compile fixture, not a hardware wiring or flash recommendation.
+No fictitious peer or channel is compiled. C6, other boards, repeater, LoRa and hardware tests are
 outside this matrix. This is not a firmware distribution/publication matrix.
 
 Run as the normal project user with Docker, from the repository root:
@@ -56,7 +56,7 @@ cannot be guaranteed by a process handler.
 S3 runs the native ASan/UBSan suite, browser mock and capture-tool tests before
 firmware compilation. Each variant then builds and verifies the actual linked
 image, roles, single UG CRC, C17/C++17 settings, web assets and existing partitions.
-A second fresh build checks app, bootloader and partition-table byte identity.
+A second fresh build checks app, bootloader, partition-table and otadata byte identity.
 The ephemeral compiler cache belongs to that container; no persistent CI cache
 or preinstalled UG library is reused.
 
@@ -85,3 +85,16 @@ settings exist; no test peer is compiled. The new C3 boot-maintenance owner and
 S3 timed window are covered by host contracts. See [PAIRING.md](../PAIRING.md).
 The catalogue profile normalizer offers only S3 gateway and C3 USB/UART rover;
 the existing C3 relay CI configuration is retained without expanding the catalogue.
+
+## Explicit local bundle export
+
+`--bundle-output /tmp/new-directory` exports a qualified bundle only for an
+immutable commit and one of the three catalogue variants. The source remains
+archived/read-only, the actual four part hashes/offsets enter the qualification
+report, and packaging runs inside the disconnected non-root SDK before cleanup.
+UART overrides are bounded by `--uart-tx` and `--uart-baud`; other variants refuse
+them. Normal matrix runs keep their existing jobs and do not export/upload images.
+S3 additionally runs the public flasher's JavaScript contract tests with the
+same host-only QuickJS dependency. The separate manual requested-build workflow
+requires a default-branch approval register and uploads a seven-day review bundle;
+it does not grant publication. See the [portal procedure](../../../docs/flasher/README.md).

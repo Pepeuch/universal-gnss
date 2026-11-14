@@ -61,16 +61,17 @@ Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
 historical checklists and completion metrics are unchanged.
 
-A future official UG Build & Flash portal will migrate the relevant historical
-`flasher.html` functionality after license review. It will select supported boards,
-roles and capabilities, retrieve versioned CI images, publish validated ESP Web
-Tools manifests, flash/download binaries, and distinguish full installation from
-compatible configuration-preserving updates. Build must invoke a real authorized
-compilation, with a bounded supported-profile CI matrix and incompatible-profile/
-partition rejection. Architecture and dependencies are detailed in the
-[ESP32 portal migration plan](embedded/esp32/README.md#portail-officiel-ug-build--flash--lot-futur).
-No portal, Pages deployment, firmware publication or CI change belongs to the
-current RTCM application-integration lot.
+The [UG Build & Flash portal source](docs/flasher.html) now uses bounded generic
+S3 Gateway and C3 USB/UART Rover profiles. Runtime pairing is separate from ROM
+identity. Local packaging verifies actual IDF offsets, partitions and qualified
+binary hashes; the browser freezes verified bytes before offering installation.
+A manual, read-only controlled-build workflow and local Pages staging are prepared.
+The approval register and public catalogue remain empty: no deployed Pages site,
+installable published firmware or public build automation is claimed. Durable
+storage, default-branch integration, explicit source/publication approval and
+hardware acceptance remain separate gates. Configuration-preserving updates are
+not offered. See the [portal procedure and limits](docs/flasher/README.md).
+Existing UG release/backlog completion metrics are unaffected.
 
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.

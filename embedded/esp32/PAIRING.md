@@ -52,6 +52,8 @@ UGCFG/1 RUN CONFIRM_RTCM
 
 Replies are one `UGCFG/1 ` prefix followed by bounded JSON and LF. GET returns
 identity, pairing state, channel, key presence and storage status, never the LMK.
+The `ttl_ms` field reports the configured 120-second control-window limit, not
+a continuously updated remaining time.
 SET/CLEAR commit and verify storage before acknowledgement. RUN requires a valid
 pair; it emits `{"mode":"closed"}` and drains control TX before the data plane
 starts. At timeout a paired valid device does the same; an unpaired device returns
