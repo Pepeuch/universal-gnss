@@ -202,6 +202,7 @@ def validate_container(repo, identity, inventory, base_image, image, variant, bu
                      'ctest --test-dir /tmp/ug-host-build --output-on-failure; '
                      f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_web_assets.py; '
                      f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_flasher_browser.py; '
+                     f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_portable_browser.py; '
                      f'python {NATIVE}/tests/test_capture_tools.py')
             host_tests = 'pass'
         sdk(cid, 'idf.py -C /tmp/ug-ci-a/project -B /tmp/ug-ci-a/build build size')

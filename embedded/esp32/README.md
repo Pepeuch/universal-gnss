@@ -30,8 +30,14 @@ aucun binaire ; son exécution GitHub reste à qualifier après un push autoris�
 Le [contrat d’appairage et de maintenance USB](PAIRING.md) remplace les pairs
 fictifs compilés : configuration persistante locale, clé privée ESP-NOW, fenêtre
 Web volontaire S3 et mode USB C3 séparé du RTCM. Une image générique par profil
-suffit ; seul le backend UART reste une variante de compilation. Les preuves
+suffit ; les deux sorties USB/UART du C3 sont maintenant sélectionnables en NVS. Les preuves
 matérielles historiques ci-dessous ne qualifient pas ce nouveau mécanisme.
+
+La [configuration portable anonyme](PORTABLE_CONFIG.md) relie maintenant WebUI,
+portail et maintenance USB : validation sans écriture, aperçu et application
+confirmée. Aucun réglage utilisateur n’entre dans une image publique. Les
+anciennes valeurs UART de compilation restent des fixtures CI, sans multiplier
+les ROM proposées par le portail.
 
 ## Périmètre implémenté
 

@@ -67,6 +67,10 @@ class Flasher(unittest.TestCase):
         files=copy.deepcopy(self.files);path=next(p for p in files if p.endswith('/qualification.json'))
         data=json.loads(bytes(files[path]));data['flash_offsets']['universal-gnss-esp32.bin']=0x9000
         files[path]=list(json.dumps(data).encode());self.assertIn('offset',self.evaluate(files=files)[0]['error'])
+    def test_previous_firmware_without_portable_capability_is_refused(self):
+        files=copy.deepcopy(self.files);path=next(p for p in files if p.endswith('/qualification.json'))
+        data=json.loads(bytes(files[path]));data['binary'].pop('portable_configuration_schema')
+        files[path]=list(json.dumps(data).encode());self.assertIn('error',self.evaluate(files=files)[0])
     def test_profile_contract_matches_python_and_has_no_runtime_fields(self):
         vm=self.vm()
         for variant in f.p.profiles.VARIANTS:

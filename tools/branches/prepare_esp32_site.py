@@ -35,7 +35,7 @@ def inspect_bundle(root,approvals):
         p.profiles.normalize(provenance.get('profile'))!=profile or
         qualification.get('sdk_image')!=pinned or qualification.get('variant')!=profile['variant'] or qualification.get('source_object')!=entry['source_sha'] or
         qualification.get('network_during_build_and_tests')!='disconnected_no_interfaces' or qualification.get('source_mounts') is not False or
-        qualification.get('flash_or_publication') is not False or qualification.get('binary',{}).get('radio_configuration')!='runtime_nvs_encrypted_unicast' or
+        qualification.get('flash_or_publication') is not False or qualification.get('binary',{}).get('radio_configuration')!='runtime_nvs_encrypted_unicast' or qualification.get('binary',{}).get('portable_configuration_schema')!=1 or
         qualification.get('binary',{}).get('sha256')!=entry['sha256'] or
         (profile['variant']=='s3-gateway' and qualification.get('host_tests')!='pass') or
         any(provenance.get(k)!=entry.get(k) for k in ('sdk_image','sha256','manifest','manifest_sha256','partition_sha256','qualification','build_key','nvs_preservation')) or
@@ -109,7 +109,7 @@ def prepare(output,approvals,bundles=(),repo=ROOT):
     output.mkdir(parents=True)
     for name in ('flasher.html','UG_logo.png'):shutil.copyfile(ROOT/'docs'/name,output/name)
     (output/'flasher').mkdir()
-    for name in ('app.js','README.md'):shutil.copyfile(ROOT/'docs/flasher'/name,output/'flasher'/name)
+    for name in ('app.js','portable.js','provision.js','README.md'):shutil.copyfile(ROOT/'docs/flasher'/name,output/'flasher'/name)
     (output/'.nojekyll').write_text('')
     (output/'flasher/approved-sources.json').write_bytes(p.json_bytes(approvals))
     (output/'flasher/catalog.json').write_bytes(p.json_bytes({'schema':2,'images':sorted(entries,key=lambda e:e['build_key'])}))

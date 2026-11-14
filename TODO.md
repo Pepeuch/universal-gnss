@@ -30,9 +30,13 @@ protection. A bounded NTRIP transition history now retains typed client/publishe
 connection, acceptance and failure outcomes with configuration/link provenance;
 it stores no endpoint, credential or raw response. NTRIP endpoint forms now
 configure the input or one supported publisher through the same strict settings
-API, preserving hidden passwords unless replacement or erasure is explicit. The minimal C3 rover retains USB output by default and now offers an
-explicit TX-only UART1 build option, with bounded writes and no application logs.
-Its software tests and builds pass; physical UART acceptance remains pending.
+API, preserving hidden passwords unless replacement or erasure is explicit. The minimal C3 rover now includes USB and TX-only UART1 in the same generic
+firmware, selected by persistent runtime configuration before radio startup.
+A [strict anonymous portable configuration](embedded/esp32/PORTABLE_CONFIG.md)
+now connects S3 WebUI export/preview/apply, C3 USB maintenance, Linux provisioning
+and the Web Flasher. Only board-authorized GPIO/UART/model/channel fields are
+portable; secrets, identities, endpoints and coordinates are absent. Local USB
+restoration is software-tested; physical USB/wiring acceptance remains pending.
 Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;
 S3 uses 20 sockets, C3 keeps 10, with compile-time rejection of insufficient pools.
 A confirmed F9P/UM980/UM982 BASE disable operation now reuses a portable UG plan and

@@ -23,7 +23,7 @@ class Package(unittest.TestCase):
         files={p.PARTS[0]:b'\xe9boot',p.PARTS[1]:self.table,p.PARTS[2]:b'otadata',p.PARTS[3]:b'\xe9app'}
         for name,data in files.items():
             path=self.build/name;path.parent.mkdir(exist_ok=True);path.write_bytes(data)
-        self.verified={'profile':'rover','local_gnss':False,'radio_configuration':'runtime_nvs_encrypted_unicast',
+        self.verified={'portable_configuration_schema':1,'profile':'rover','local_gnss':False,'radio_configuration':'runtime_nvs_encrypted_unicast',
             'rover_output':{'transport':'usb-serial-jtag','tx_pin':None,'baud':None},
             'app_slots':[{'label':'ota_0','offset':0x10000,'size':0x140000},{'label':'ota_1','offset':0x150000,'size':0x140000}],
             'sha256':p.digest(files[p.PARTS[3]]),'app_bytes':len(files[p.PARTS[3]])}
@@ -49,6 +49,9 @@ class Package(unittest.TestCase):
         self.assertEqual([v['offset'] for v in manifest['builds'][0]['parts']],[0,0x8000,0xe000,0x10000])
         self.assertEqual(first['install_mode'],'full');self.assertEqual(first['nvs_preservation'],'not_qualified')
         with self.assertRaisesRegex(ValueError,'overwrite'):self.package()
+    def test_older_images_cannot_claim_portable_runtime_configuration(self):
+        self.verified.pop('portable_configuration_schema')
+        with self.assertRaisesRegex(ValueError,'generic role'):self.package()
     def test_unqualified_and_mismatched_source_rejected(self):
         for field,value in [('source_type','tree'),('source_commit','c'*40),('source_tree',False),('sdk_image','local:image'),
                             ('reproducibility','skipped'),('source_mounts',True),('network_during_build_and_tests','bridge'),('variant','s3-gateway')]:

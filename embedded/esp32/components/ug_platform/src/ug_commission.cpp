@@ -8,6 +8,7 @@
 #include "ug_configuration.hpp"
 #include "ug_credentials.hpp"
 #include "ug_json.hpp"
+#include "ug_portable_settings.hpp"
 #include "ug_supervisor.hpp"
 #include <array>
 #include <cstdio>
@@ -64,6 +65,26 @@ void Handle(std::string_view command)
     }
     ok = true;
   }
+#if CONFIG_IDF_TARGET_ESP32S3
+  else if (command == "portable-export")
+  {
+    std::string json;
+    ok = ExportPortableSettings(*Configuration(), BoardCapabilities(), json, error);
+    if (ok)
+      std::printf("UGPORT/1 JSON %s\n", json.c_str());
+  }
+  else if (command.substr(0, 15) == "portable-check ")
+  {
+    std::string preview;
+    ok = PreviewPortableConfiguration(command.substr(15), preview, error);
+    std::printf("UGPORT/1 %s\n", ok ? "VALID" : "ERROR");
+  }
+  else if (command.substr(0, 23) == "portable-apply CONFIRM ")
+  {
+    ok = ApplyPortableConfiguration(command.substr(23), error);
+    std::printf("UGPORT/1 %s\n", ok ? "SAVED_RESTART_REQUIRED" : "ERROR");
+  }
+#endif
   else if (command.substr(0, 9) == "rollback ")
     ok = RollbackConfiguration(command.substr(9), error);
   else if (command == "history")

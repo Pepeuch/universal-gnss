@@ -23,15 +23,25 @@
  <section class="panel" aria-labelledby="config-heading">
   <h2 id="config-heading">Profil du firmware</h2>
   <div class="fields">
-   <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB</option><option value="c3-rover-uart">ESP32-C3 SuperMini — Rover UART</option></select></div>
+   <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB / UART runtime</option></select></div>
    <div><label for="version">Version du firmware</label><select id="version"><option value="none">Aucune source approuvée chargée</option></select><small>La liste se remplit depuis le registre des sources approuvées.</small></div>
    <div><label for="source">Source de corrections (S3)</label><select id="source"><option value="local">GNSS local — BASE RTK</option><option value="ntrip">NTRIP entrant — mode relais</option></select><small>Mode choisi après installation ; un même firmware S3 peut fournir les deux chemins.</small></div>
    <div><label for="receiver">Récepteur GNSS (S3)</label><select id="receiver"><option value="unicore">Unicore UM980 / UM982</option><option value="ublox">u-blox ZED-F9P</option></select><small>Choix de configuration à l'exécution : même moteur UG.</small></div>
    <div id="tx-block" class="hidden"><label for="tx">Broche TX UART (C3 rover)</label><select id="tx"><option value="4">GPIO4</option><option value="5">GPIO5</option><option value="6">GPIO6</option><option value="7">GPIO7</option><option value="10">GPIO10</option></select></div>
    <div id="baud-block" class="hidden"><label for="baud">Débit UART</label><select id="baud"><option value="115200">115200</option><option value="230400">230400</option><option value="460800">460800</option><option value="921600">921600</option></select></div>
   </div>
-  <div class="actions"><button id="check" type="button">Chercher le firmware</button><button id="download-profile" class="secondary" type="button">Télécharger le profil</button></div>
+  <div class="actions"><button id="check" type="button">Chercher le firmware</button><button id="download-profile" class="secondary" type="button">Profil de compilation générique</button></div>
   <p class="notice"><strong>Ne pas flasher un autre modèle.</strong> C6 et LoRa ne sont pas proposés. Les GPIO Ethernet et GNSS doivent être vérifiés physiquement avant utilisation.</p>
+ </section>
+ <section class="panel"><h2>Configuration portable locale</h2><p>Préparer les réglages après installation : ils ne sont ni intégrés à la ROM ni envoyés à GitHub. Aucun secret ni identifiant n’est accepté.</p>
+ <label>Importer un fichier UG <input id="portable-import" type="file" accept="application/json"></label>
+ <label>Sortie <select id="portable-output"><option value="gnss">GNSS S3</option><option value="usb">RTCM USB C3</option><option value="uart">RTCM UART C3</option></select></label>
+ <label>UART TX <select id="portable-tx"></select></label><label>UART RX <select id="portable-rx"></select></label>
+ <label>Vitesse UART <select id="portable-baud"><option>9600</option><option>38400</option><option>115200</option><option>230400</option><option>460800</option><option>921600</option></select></label>
+ <label>Modèle GNSS <select id="portable-model"><option>none</option><option>auto</option><option>NMEA</option><option>UM980</option><option>UM981</option><option>UM982</option><option>ZED-F9P</option></select></label>
+ <label>Canal souhaité <select id="portable-channel"></select></label>
+ <pre id="portable-info" class="status"></pre><div class="actions"><button id="portable-export" type="button">Exporter le profil portable</button><button id="portable-restore" type="button">Restaurer localement par USB</button></div>
+ <p>W5500 S3 : câblage soudé fixe. C3 : USB et UART sont disponibles dans la même ROM générique, USB par défaut. Pour le C3, préparer la connexion USB puis effectuer un reset manuel pour ouvrir la maintenance avant le RTCM. Le S3 utilise sa console USB indépendante du réseau. Aperçu et confirmation avant écriture ; aucun reset ni démarrage RTCM automatique. Transport logiciel testé, comportement physique USB à qualifier.</p>
  </section>
  <section class="panel" aria-labelledby="flash-heading">
   <h2 id="flash-heading">Flash USB</h2>
@@ -47,12 +57,14 @@
 </div>
 <aside>
  <section class="panel"><h2>État de la sélection</h2><div id="status" class="status" role="status" aria-live="polite">Chargement du catalogue…</div><div class="actions"><a id="request" class="button secondary hidden" href="https://github.com/Pepeuch/universal-gnss/issues/new" rel="noopener noreferrer" target="_blank">Demander ce build sur GitHub</a></div><p class="muted">Cette demande crée une issue suivie par le mainteneur ; elle ne compile pas. Après approbation d’un SHA, le workflow manuel effectue une vraie compilation isolée. Il doit être intégré à la branche par défaut avant utilisation. Aucun jeton GitHub dans cette page.</p></section>
- <section class="panel"><h2>Configuration normalisée</h2><dl id="summary"></dl><p class="muted">Les paramètres d'exécution (modèle GNSS, SOURCE NTRIP) ne multiplient pas inutilement les ROM. Le canal et le pair ESP-NOW sont configurés localement en NVS après installation. Seule la sortie UART spécifique reste une option de compilation. Ces choix GNSS/NTRIP ne sont pas appliqués par le flash.</p></section>
+ <section class="panel"><h2>Configuration normalisée</h2><dl id="summary"></dl><p class="muted">Les paramètres d'exécution (modèle GNSS, SOURCE NTRIP) ne multiplient pas inutilement les ROM. Le canal et le pair ESP-NOW sont configurés localement en NVS après installation. La sortie UART et ses paramètres sont configurés après installation dans la ROM C3 générique. Ces choix GNSS/NTRIP ne sont pas appliqués par le flash.</p></section>
  <section class="panel"><h2>État du projet</h2><p>Priorité : <strong>S3 BASE / Relais + C3 Rover</strong> par ESP-NOW.</p><p>Les images ne doivent être publiées qu'après contrôles CI, vérification des partitions et validation de la cible matérielle.</p><a href="https://github.com/Pepeuch/universal-gnss/pull/33">Suivre la migration ESP32 (PR #33)</a></section>
 </aside>
 </div>
 <footer>Universal GNSS · Portail prototype · Aucun firmware historique ESP32 RTK Gateway n'est proposé comme image UG.</footer>
 </main>
+<script defer src="flasher/portable.js"></script>
+<script defer src="flasher/provision.js"></script>
 <script defer src="flasher/app.js"></script>
 </body>
 </html>

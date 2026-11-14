@@ -17,6 +17,7 @@ extern "C" {
 #include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
 #include "ug_pairing_window.hpp"
+#include "ug_portable_settings.hpp"
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
@@ -803,6 +804,17 @@ esp_err_t Get(httpd_req_t* req)
     cJSON_AddBoolToObject(root.get(), "writable", ConfigurationWritable());
     return Json(req, root.get());
   }
+#if UG_LOCAL_GNSS
+  if (uri == "/api/config/portable")
+  {
+    std::string json, error;
+    if (!ExportPortableSettings(*Configuration(), BoardCapabilities(), json, error))
+      return Fail(req, "409 Conflict", error.c_str());
+    Headers(req);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, json.data(), json.size());
+  }
+#endif
   if (uri == "/api/config" || uri == "/config" || uri == "/api/ntrip")
   {
     std::string json;
@@ -836,6 +848,39 @@ esp_err_t Post(httpd_req_t* req)
   std::string body, error;
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");
+#if UG_LOCAL_GNSS
+  if (uri == "/api/config/portable/preview")
+  {
+    std::string preview;
+    if (!PreviewPortableConfiguration(body, preview, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    Headers(req);
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, preview.data(), preview.size());
+  }
+  if (uri == "/api/config/portable/apply")
+  {
+    auto root = ParseBoundedObject(body, error);
+    if (!root || !OnlyKeys(root.get(), {"confirm", "configuration"}))
+      return Fail(req, "400 Bad Request", "explicit portable confirmation required");
+    const auto* confirm = cJSON_GetObjectItemCaseSensitive(root.get(), "confirm");
+    auto* config = cJSON_GetObjectItemCaseSensitive(root.get(), "configuration");
+    if (!cJSON_IsString(confirm) || strcmp(confirm->valuestring, "APPLY_PORTABLE_CONFIGURATION") ||
+        !cJSON_IsObject(config))
+      return Fail(req, "400 Bad Request", "explicit portable confirmation required");
+    char* text = cJSON_PrintUnformatted(config);
+    if (!text)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    const bool ok = ApplyPortableConfiguration(text, error);
+    cJSON_free(text);
+    if (!ok)
+      return Fail(req, "409 Conflict", error.c_str());
+    return Fail(req,
+                "200 OK",
+                "portable settings saved; GNSS disabled; review and restart explicitly; secrets "
+                "and pairing retained");
+  }
+#endif
   if (uri == "/api/radio/pairing/window" || uri == "/api/radio/pairing/apply" ||
       uri == "/api/radio/pairing/remove")
     return PairingMutation(req, uri, body);

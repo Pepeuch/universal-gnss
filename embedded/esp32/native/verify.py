@@ -27,14 +27,16 @@ def project_standards(commands, source_root, main_root):
     return {key: sorted(values) for key, values in found.items()}
 
 
-def check_web_assets(build, source_assets, application):
+def check_web_assets(build, source_assets, application, portable_source=None):
     reports = []
     for name in ('index.html', 'app.js', 'style.css'):
         packed = (Path(build) / 'esp-idf/ug_web/web_assets' / (name + '.gz')).read_bytes()
         source = Path(source_assets) / name
-        if gzip.decompress(packed) != source.read_bytes() or application.count(packed) != 1:
+        raw=source.read_bytes()
+        if name=='app.js':raw=(Path(portable_source) if portable_source else Path(__file__).resolve().parents[3]/'docs/flasher/portable.js').read_bytes()+b'\n'+raw
+        if gzip.decompress(packed) != raw or application.count(packed) != 1:
             raise ValueError('stale or missing linked Web asset: ' + name)
-        reports.append({'name': name, 'source_bytes': source.stat().st_size, 'gzip_bytes': len(packed)})
+        reports.append({'name': name, 'source_bytes': len(raw), 'gzip_bytes': len(packed)})
     return reports
 
 
@@ -139,9 +141,9 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
         if rover_uart_tx is None and rover_uart_baud != 115200:
             raise ValueError('UART baud expectation requires an explicit TX pin')
         uart_inputs = [file for file in production if file.endswith('/main/rover_uart.c')]
-        if bool(uart_inputs) != (rover_uart_tx is not None):
+        if len(uart_inputs)!=1:
             raise ValueError('rover UART backend input mismatch')
-        if rover_uart_tx is not None and (rover_uart_tx not in (4, 5, 6, 7, 10) or
+        if ((rover_uart_tx is not None and rover_uart_tx not in (4, 5, 6, 7, 10)) or
                                          'ug_rover_uart_start' not in symbols or 'uart_tx_chars' not in symbols):
             raise ValueError('reviewed nonblocking UART rover backend not linked')
         if 'espnow_rtcm_output_frame' not in symbols:
@@ -180,6 +182,12 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
               'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'ug_crc_definitions': crc_definitions,
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
               'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
+    portable_supported=profile=='rover' or local_gnss
+    if portable_supported and ('ug_portable_parse' not in symbols or not any(f.endswith('/ug_portable/src/ug_portable.c') for f in production)):
+        raise ValueError('portable configuration parser not linked')
+    if profile=='rover' and 'ug_rover_portable_current' not in symbols:
+        raise ValueError('runtime rover output owner not linked')
+    result['portable_configuration_schema']=1 if portable_supported else 0
     result['radio_configuration'] = 'runtime_nvs_encrypted_unicast'
     result['web_assets'] = web_assets
     if profile != 'rover':
@@ -188,7 +196,7 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
         result['rover_output'] = {'transport': 'uart1-tx' if rover_uart_tx is not None else 'usb-serial-jtag',
                                   'tx_pin': rover_uart_tx,
                                   'baud': rover_uart_baud if rover_uart_tx is not None else None,
-                                  'physical_delivery': 'NOT_TESTED'}
+                                  'physical_delivery': 'NOT_TESTED', 'runtime_selectable': True}
     (work / 'native-verification.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     return result

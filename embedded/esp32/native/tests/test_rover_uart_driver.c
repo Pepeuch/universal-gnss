@@ -2,7 +2,7 @@
 #include "driver/uart.h"
 #include "espnow_rtcm.h"
 #include <assert.h>
-esp_err_t ug_rover_uart_start(void);
+esp_err_t ug_rover_uart_start(int, uint32_t);
 static unsigned step, fail_step, deleted;
 static espnow_rtcm_write_fn writer;
 static int Next(void)
@@ -55,13 +55,13 @@ int uart_tx_chars(int uart, const char* bytes, uint32_t size)
 int main(void)
 {
   const uint8_t binary[] = {0, 0xd3, '\n'};
-  assert(ug_rover_uart_start() == ESP_OK && step == 5 && writer && deleted == 0);
+  assert(ug_rover_uart_start(4, 230400) == ESP_OK && step == 5 && writer && deleted == 0);
   assert(writer(binary, sizeof(binary), 20, NULL) == 2);
   for (fail_step = 1; fail_step <= 5; ++fail_step)
   {
     step = deleted = 0;
     writer = NULL;
-    assert(ug_rover_uart_start() != ESP_OK && step == fail_step && !writer);
+    assert(ug_rover_uart_start(4, 230400) != ESP_OK && step == fail_step && !writer);
     assert(deleted == (fail_step == 1 ? 0 : 1));
   }
 }

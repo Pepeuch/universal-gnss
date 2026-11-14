@@ -8,6 +8,8 @@ bool StartConfiguration(Capabilities capabilities, std::string& error);
 std::shared_ptr<const Settings> Configuration();
 const Capabilities& BoardCapabilities();
 bool ConfigurationWritable();
+bool PreviewPortableConfiguration(std::string_view, std::string& preview, std::string& error);
+bool ApplyPortableConfiguration(std::string_view, std::string& error);
 bool PatchConfiguration(std::string_view json, std::string& error);
 struct ConfigurationHistory
 {

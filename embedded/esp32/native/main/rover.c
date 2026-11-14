@@ -7,11 +7,11 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "ug_pairing.h"
+#include "ug_portable.h"
 #include <stdio.h>
 bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result);
-#if UG_ROVER_UART_TX >= 0
-esp_err_t ug_rover_uart_start(void);
-#endif
+const ug_portable_t* ug_rover_portable_current(void);
+esp_err_t ug_rover_uart_start(int tx, uint32_t baud);
 
 void app_main(void)
 {
@@ -34,10 +34,9 @@ void app_main(void)
     snprintf(key + i * 2, 3, "%02x", pairing.key[i]);
   if (espnow_rtcm_configure_secure(peer, key, pairing.channel) != ESP_OK)
     return;
-#if UG_ROVER_UART_TX >= 0
-  if (ug_rover_uart_start() != ESP_OK)
+  const ug_portable_t* output = ug_rover_portable_current();
+  if (output->output == UG_OUTPUT_UART && ug_rover_uart_start(output->tx, output->baud) != ESP_OK)
     return;
-#endif
   if (esp_netif_init() != ESP_OK || esp_event_loop_create_default() != ESP_OK ||
       espnow_rtcm_start() != ESP_OK)
     return;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 // Maintenance runs before Wi-Fi/radio/UART output. It never shares a live RTCM stream.
 #include "ug_pairing.h"
+#include "ug_portable.h"
 
 // IDF 6.1 USB header requires bool to be declared first in C17.
 #include "driver/usb_serial_jtag.h"
@@ -11,11 +12,55 @@
 #include "nvs.h"
 #include <stdio.h>
 #include <string.h>
+#ifndef UG_ROVER_UART_TX
+#define UG_ROVER_UART_TX -1
+#define UG_ROVER_UART_BAUD 115200
+#endif
+static ug_portable_t portable;
+const ug_portable_t* ug_rover_portable_current(void)
+{
+  return &portable;
+}
+static bool portable_save(nvs_handle_t h, const ug_portable_t* value)
+{
+  uint8_t data[UG_PORTABLE_RECORD_SIZE], check[UG_PORTABLE_RECORD_SIZE];
+  size_t n = sizeof(check);
+  return ug_portable_record(value, data) &&
+         nvs_set_blob(h, "portable", data, sizeof(data)) == ESP_OK && nvs_commit(h) == ESP_OK &&
+         nvs_get_blob(h, "portable", check, &n) == ESP_OK && n == sizeof(data) &&
+         !memcmp(data, check, sizeof(data));
+}
+static int portable_load(nvs_handle_t h)
+{
+  uint8_t data[UG_PORTABLE_RECORD_SIZE];
+  size_t n = sizeof(data);
+  const esp_err_t e = nvs_get_blob(h, "portable", data, &n);
+  if (e == ESP_ERR_NVS_NOT_FOUND)
+    return 0;
+  if (e != ESP_OK)
+    return 2;
+  if (n > 4 && !memcmp(data, "UGPC", 4) && data[4] != 1)
+    return 2;
+  ug_portable_t value;
+  if (!ug_portable_restore(data, n, &value) || value.board != UG_BOARD_C3)
+    return 1;
+  portable = value;
+  return 0;
+}
 static bool reply(const char* text)
 {
   const size_t n = strlen(text);
   return usb_serial_jtag_write_bytes(text, n, pdMS_TO_TICKS(200)) == (int)n &&
          usb_serial_jtag_wait_tx_done(pdMS_TO_TICKS(1000)) == ESP_OK;
+}
+static bool portable_reply(const char* state)
+{
+  char json[UG_PORTABLE_JSON_MAX + 1], response[UG_PORTABLE_JSON_MAX + 96];
+  if (!ug_portable_json(&portable, json, sizeof(json)))
+    return reply("UGCFG/1 {\"error\":\"portable_invalid\"}\n");
+  snprintf(
+      response, sizeof(response), "UGCFG/1 {\"portable\":%s,\"result\":\"%s\"}\n", json, state);
+  return reply(response);
 }
 static bool load(nvs_handle_t handle, ug_pairing_t* pairing)
 {
@@ -80,19 +125,35 @@ bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result)
   ug_pairing_t pairing = {.channel = 1};
   if (writable && !load(handle, &pairing))
     writable = false;
+  portable = ug_portable_default(UG_BOARD_C3);
+  if (UG_ROVER_UART_TX >= 0)
+  {
+    portable.output = UG_OUTPUT_UART;
+    portable.tx = UG_ROVER_UART_TX;
+    portable.baud = UG_ROVER_UART_BAUD;
+  }
+  const int portable_state = writable ? portable_load(handle) : 2;
+  bool portable_ok = portable_state == 0;
+  if (portable_state == 2)
+    writable = false;
+  uint8_t preferred_channel = portable.channel;
+  if (pairing.paired)
+    portable.channel = pairing.channel;
   unsigned polled = 0;
   bool opened = false, overflow = false;
   size_t size = 0;
-  char line[UG_PAIRING_LINE_MAX + 1], nonce[17] = {0};
+  char line[UG_PORTABLE_JSON_MAX + 64], nonce[17] = {0};
   int64_t deadline = esp_timer_get_time() + 8000000;
   for (;;)
   {
     const int64_t now = esp_timer_get_time();
     if (now >= deadline)
     {
-      if (opened && !reply("UGCFG/1 {\"mode\":\"closed\"}\n"))
+      if (opened && !reply((writable && portable_ok && pairing.paired)
+                               ? "UGCFG/1 {\"mode\":\"closed\"}\n"
+                               : "UGCFG/1 {\"error\":\"maintenance_expired_not_running\"}\n"))
         break;
-      if (writable && pairing.paired)
+      if (writable && portable_ok && pairing.paired)
       {
         *result = pairing;
         if (handle)
@@ -111,7 +172,7 @@ bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result)
       vTaskDelay(1);
     if (byte != '\n')
     {
-      if (size < UG_PAIRING_LINE_MAX && !overflow)
+      if (size < sizeof(line) - 1 && !overflow)
         line[size++] = byte;
       else
         overflow = true;
@@ -139,6 +200,62 @@ bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result)
         overflow = false;
         continue;
       }
+      line[size] = 0;
+      const char* check = "UGCFG/1 CONFIG_CHECK ";
+      const char* apply = "UGCFG/1 CONFIG_APPLY CONFIRM ";
+      const bool is_check =
+          !overflow && size > strlen(check) && !memcmp(line, check, strlen(check));
+      const bool is_apply =
+          !overflow && size > strlen(apply) && !memcmp(line, apply, strlen(apply));
+      if (!overflow && !strcmp(line, "UGCFG/1 CONFIG_GET"))
+      {
+        if (!portable_ok)
+        {
+          if (!reply("UGCFG/1 {\"error\":\"portable_invalid\"}\n"))
+            break;
+        }
+        else if (!portable_reply("current"))
+          break;
+        size = 0;
+        memset(line, 0, sizeof(line));
+        continue;
+      }
+      if (is_check || is_apply)
+      {
+        const size_t prefix = strlen(is_check ? check : apply);
+        ug_portable_t candidate;
+        if (!ug_portable_parse(line + prefix, size - prefix, &candidate) ||
+            candidate.board != UG_BOARD_C3 ||
+            (pairing.paired && candidate.channel != pairing.channel))
+        {
+          if (!reply("UGCFG/1 {\"error\":\"portable_incompatible\"}\n"))
+            break;
+        }
+        else if (is_apply && (!writable || !portable_save(handle, &candidate)))
+        {
+          writable = false;
+          if (!reply("UGCFG/1 {\"error\":\"storage_verification_failed\"}\n"))
+            break;
+        }
+        else
+        {
+          const ug_portable_t before = portable;
+          portable = candidate;
+          const bool sent = portable_reply(is_apply ? "saved" : "valid");
+          if (is_apply)
+          {
+            portable_ok = true;
+            preferred_channel = portable.channel;
+          }
+          else
+            portable = before;
+          if (!sent)
+            break;
+        }
+        size = 0;
+        memset(line, 0, sizeof(line));
+        continue;
+      }
       ug_pair_command_t command;
       if (overflow || !ug_pairing_command(line, size, &command))
       {
@@ -152,7 +269,7 @@ bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result)
       }
       else if (command.kind == UG_PAIR_RUN)
       {
-        if (!writable || !pairing.paired)
+        if (!writable || !portable_ok || !pairing.paired)
         {
           if (!reply("UGCFG/1 {\"error\":\"unpaired_or_locked\"}\n"))
             break;
@@ -185,6 +302,7 @@ bool ug_rover_configure(bool nvs_ready, ug_pairing_t* result)
         else
         {
           pairing = next;
+          portable.channel = pairing.paired ? pairing.channel : preferred_channel;
           if (!status(&pairing, writable, mac, nonce))
             break;
         }

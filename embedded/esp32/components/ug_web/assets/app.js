@@ -1,5 +1,7 @@
 'use strict';
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
+let portableCandidate=null;
+function clearPortable(){portableCandidate=null;$('portable-file').value='';$('portable-apply').disabled=true;$('portable-preview').textContent='Aucun import préparé';}
 let wireSelfTestRunning = false, wireSelfTestAllowed = false;
 let ntripConfig = null, ntripSlots = 0, ntripGnss = false, ntripSaving = false, ntripMutationAllowed = false;
 const $ = id => document.getElementById(id);
@@ -121,13 +123,34 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearPortable(); clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
-  const blob = new Blob([print(await call('/api/config'))], {type:'application/json'});
-  const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'ug-config-redacted.json'; link.click(); URL.revokeObjectURL(url);
+  const generation=sessionGeneration;
+  const value=UGPortable.validate(await call('/api/config/portable'),'waveshare-s3-eth');
+  if(generation!==sessionGeneration || !token)return;
+  const url=URL.createObjectURL(new Blob([print(value)+'\n'],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='ug-portable-config.json';link.click();URL.revokeObjectURL(url);
+});
+$('portable-file').onchange=handle(async event=>{
+ const generation=sessionGeneration,file=event.target.files?.[0];clearPortable();
+ if(!token || !file || file.size>512)throw Error('Session et fichier portable de 512 octets maximum requis');
+ const value=UGPortable.parse(await file.text(),'waveshare-s3-eth');
+ if(generation!==sessionGeneration || !token)return;
+ const before=UGPortable.validate(await call('/api/config/portable'),'waveshare-s3-eth');
+ if(generation!==sessionGeneration || !token)return;
+ const after=UGPortable.validate(await call('/api/config/portable/preview',value),'waveshare-s3-eth');
+ if(generation!==sessionGeneration || !token)return;
+ portableCandidate=after;$('portable-preview').textContent=print({avant:before,apres:after,effets:'GNSS/source locale/GGA désactivés ; secrets et association conservés'});$('portable-apply').disabled=false;
+});
+$('portable-apply').onclick=handle(async()=>{
+ if(!token || !portableCandidate || !ntripMutationAllowed)throw Error('Aperçu et session disponibles requis');
+ if(!confirm('Appliquer ces réglages non personnels ? GNSS/source locale/GGA seront désactivés ; vérifier le câblage avant réactivation.'))return;
+ const generation=sessionGeneration,value=portableCandidate;clearPortable();
+ const result=await call('/api/config/portable/apply',{confirm:'APPLY_PORTABLE_CONFIGURATION',configuration:value});
+ if(generation===sessionGeneration && token){show(result);await load();}
 });
 $('import').onchange = handle(async event => { const file = event.target.files[0]; if (!file || file.size > 8192) throw new Error('Fichier JSON : maximum 8192 octets'); const text = await file.text(); JSON.parse(text); $('config').value = text; });
 $('base').onsubmit = handle(async event => {
@@ -162,6 +185,7 @@ $('transport').onsubmit = handle(async () => {
 });
 call('/api/capabilities', undefined, false).then(caps => {
   $('gnss').hidden = !caps.gnss;
+  $('portable-section').hidden=!caps.gnss;$('export').hidden=!caps.gnss;
   ntripGnss = Boolean(caps.gnss);
   ntripSlots = Number.isInteger(caps.publishers) && caps.publishers >= 0 && caps.publishers <= 5 ? caps.publishers : 0;
   for (let slot = 0; slot < ntripSlots; ++slot) {

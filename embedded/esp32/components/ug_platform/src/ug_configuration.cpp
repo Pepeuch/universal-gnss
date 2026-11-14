@@ -2,6 +2,7 @@
 #include "ug_configuration.hpp"
 #include "nvs.h"
 #include "ug_json.hpp"
+#include "ug_portable_settings.hpp"
 #include "ug_settings_store.hpp"
 #include <atomic>
 #include <charconv>
@@ -102,6 +103,34 @@ bool PatchConfiguration(std::string_view json, std::string& error)
   if (!previous || !DecodeSettings(json, *previous, capabilities, next, error))
     return false;
   // Allocate the immutable publication before changing persistent state.
+  auto replacement = std::make_shared<const Settings>(next);
+  if (!store->Save(next, error))
+  {
+    writable = false;
+    return false;
+  }
+  std::atomic_store(&snapshot, std::move(replacement));
+  return true;
+}
+bool PreviewPortableConfiguration(std::string_view json, std::string& preview, std::string& error)
+{
+  const auto before = Configuration();
+  Settings next;
+  return before && ImportPortableSettings(json, *before, capabilities, next, error) &&
+         ExportPortableSettings(next, capabilities, preview, error);
+}
+bool ApplyPortableConfiguration(std::string_view json, std::string& error)
+{
+  std::lock_guard<std::mutex> lock(writer);
+  if (!writable || !store)
+  {
+    error = "persistent configuration locked";
+    return false;
+  }
+  const auto before = Configuration();
+  Settings next;
+  if (!before || !ImportPortableSettings(json, *before, capabilities, next, error))
+    return false;
   auto replacement = std::make_shared<const Settings>(next);
   if (!store->Save(next, error))
   {

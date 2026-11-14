@@ -6,15 +6,31 @@ image installable, URL Pages active ou publication n’est annoncée. Le portail
 nécessite HTTPS (ou localhost), WebCrypto et, pour le flash, un navigateur avec
 Web Serial. Les téléchargements restent indépendants du support Web Serial.
 
+## Configuration portable actuelle
+
+Le [contrat portable v1](../../embedded/esp32/PORTABLE_CONFIG.md) définit le fichier
+anonyme, les GPIO, l’import/export et la restauration locale USB. Le portail
+propose désormais deux choix de ROM : S3 Gateway et C3 générique à défaut USB.
+Ce même C3 sélectionne USB/UART, TX et débit depuis NVS ; ces champs ne sont pas
+ajoutés aux demandes GitHub ni à l’identité de build. L’identifiant historique
+`c3-rover-usb` est conservé. L’ancienne variante `c3-rover-uart` ci-dessous reste
+un profil technique de validation à valeur initiale UART, pas une nécessité pour
+une installation utilisateur. Les builds qualifiés antérieurs au support portable
+v1 ne sont pas acceptés comme images compatibles par le portail actuel.
+
+Le bouton de restauration ouvre uniquement une liaison USB locale autorisée et
+présente un aperçu avant confirmation. Son transport logiciel est testé ; il ne
+prouve pas la restauration physique d’une carte et ne lance ni flash ni reset.
+
 ## Profils et configuration
 
 | Variante de ROM | Matériel fixé | Configuration à l’exécution |
 | --- | --- | --- |
 | `s3-gateway` | Waveshare ESP32-S3 ETH, W5500, Flash 16 MB, PSRAM 8 MB | BASE GNSS ou relais NTRIP sans GNSS actif, moteur commun ; GNSS et NTRIP dans la WebUI |
 | `c3-rover-usb` | SuperMini ESP32-C3, Flash 4 MB, sans PSRAM/Ethernet | Pair, canal et clé privée par maintenance USB locale |
-| `c3-rover-uart` | Même C3, sortie UART1 TX | Même maintenance USB ; broche TX et débit sont des options de compilation |
+| `c3-rover-uart` | Même C3, sortie UART1 TX | Même maintenance USB ; broche TX et débit sont sélectionnables en NVS (ancienne valeur initiale CI conservée) |
 
-UART : GPIO4/5/6/7/10, 115200/230400/460800/921600 baud. Une sélection ne
+UART runtime : GPIO4/5/6/7/10, 115200/230400/460800/921600 baud. Une sélection ne
 qualifie pas le câblage. La CI ordinaire conserve ses quatre variantes de référence,
 y compris le C3 relais expérimental ; le catalogue expose seulement les trois
 variantes ci-dessus, sans produit cartésien de GNSS, services, clés ou canaux.

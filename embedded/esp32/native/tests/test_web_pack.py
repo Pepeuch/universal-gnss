@@ -22,7 +22,7 @@ class AssetPacking(unittest.TestCase):
             for name in module.ASSETS:
                 a = (root / 'a' / (name + '.gz')).read_bytes()
                 self.assertEqual(a, (root / 'b' / (name + '.gz')).read_bytes())
-                raw = (WEB / 'assets' / name).read_bytes()
+                raw = module.source_bytes(WEB/'assets',name)
                 self.assertEqual(gzip.decompress(a), raw)
                 self.assertEqual(a[:4], b'\x1f\x8b\x08\x00') # No filename/extra fields.
                 self.assertEqual(a[4:8], bytes(4)) # No timestamp.

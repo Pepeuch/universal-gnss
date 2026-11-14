@@ -15,6 +15,9 @@ import select
 import termios
 import time
 import tty
+import importlib.util
+_spec=importlib.util.spec_from_file_location('ug_portable_config',Path(__file__).with_name('portable_config.py'))
+portable=importlib.util.module_from_spec(_spec);_spec.loader.exec_module(portable)
 
 
 def exchange(fd, command, timeout=3):
@@ -70,7 +73,13 @@ def main(argv=None):
     parser.add_argument('--s3-ticket',type=Path,help='create private import JSON for the S3 WebUI')
     parser.add_argument('--clear',action='store_true')
     parser.add_argument('--run',action='store_true',help='explicitly close control mode and allow RTCM output')
+    parser.add_argument('--portable-file',type=Path,help='check private-free JSON locally then validate in rover maintenance')
+    parser.add_argument('--apply-portable',action='store_true',help='explicitly persist the checked portable configuration')
+    parser.add_argument('--export-portable',type=Path,help='new portable JSON file; no pairing/identity fields')
     args=parser.parse_args(argv)
+    if args.apply_portable and not args.portable_file:parser.error('apply requires portable-file')
+    try:config=portable.load(args.portable_file,'supermini-c3') if args.portable_file else None
+    except (ValueError,OSError) as error:parser.error(str(error))
     if args.clear and args.set_peer: parser.error('clear and set-peer conflict')
     if args.new_key_file and args.key_file: parser.error('select an existing or a new key file')
     if args.set_peer:
@@ -96,6 +105,15 @@ def main(argv=None):
                 ticket={'confirm':'PAIR_ESPNOW_ROVER','peer':report['sta_mac'],'channel':args.channel,'key':key}
                 private_write(args.s3_ticket,json.dumps(ticket,indent=2)+'\n')
         if args.clear: report=exchange(fd,'UGCFG/1 CLEAR CONFIRM_UNPAIR')
+        if config is not None:
+            encoded=json.dumps(config,separators=(',',':'))
+            report=exchange(fd,'UGCFG/1 CONFIG_CHECK '+encoded)
+            portable.validate(report.get('portable'),'supermini-c3')
+            if args.apply_portable:report=exchange(fd,'UGCFG/1 CONFIG_APPLY CONFIRM '+encoded)
+        if args.export_portable:
+            report=exchange(fd,'UGCFG/1 CONFIG_GET')
+            value=portable.validate(report.get('portable'),'supermini-c3')
+            private_write(args.export_portable,json.dumps(value,indent=2)+'\n')
         if args.run: report=exchange(fd,'UGCFG/1 RUN CONFIRM_RTCM')
         print(json.dumps(report,sort_keys=True))
     finally: os.close(fd)

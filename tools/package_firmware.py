@@ -67,7 +67,7 @@ def package(build, verified, profile, source_sha, output, qualification):
         (profile['variant']=='s3-gateway' and qualification.get('host_tests')!='pass')):
         raise ValueError('matching immutable isolated CI qualification required')
     if (verified.get('profile')!=profile['profile'] or verified.get('local_gnss') is not (profile['profile']=='gateway') or
-        verified.get('radio_configuration')!='runtime_nvs_encrypted_unicast'):
+        verified.get('radio_configuration')!='runtime_nvs_encrypted_unicast' or verified.get('portable_configuration_schema')!=1):
         raise ValueError('verified generic role/radio configuration mismatch')
     expected_output={'transport':'uart1-tx' if profile['output']=='uart' else 'usb-serial-jtag',
                      'tx_pin':profile.get('uart_tx'),'baud':profile.get('uart_baud')}

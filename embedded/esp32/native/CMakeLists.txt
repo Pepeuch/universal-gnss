@@ -6,7 +6,8 @@ if(NOT UG_PROFILE MATCHES "^(gateway|relay-ntrip|rover)$")
     message(FATAL_ERROR "Unsupported ESP32 role")
 endif()
 set(COMPONENTS main)
-set(EXTRA_COMPONENT_DIRS "${UG_ROOT}/embedded/esp32/components/ug_pairing"
+set(EXTRA_COMPONENT_DIRS "${UG_ROOT}/embedded/esp32/components/ug_portable"
+    "${UG_ROOT}/embedded/esp32/components/ug_pairing"
     "${UG_ROOT}/embedded/esp32/components/ug_rtcm"
     "${UG_ROOT}/embedded/esp32/components/rtcm_filter"
     "${UG_ROOT}/embedded/esp32/components/lora_transport"

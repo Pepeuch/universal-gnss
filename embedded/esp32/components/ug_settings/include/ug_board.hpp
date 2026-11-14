@@ -12,8 +12,9 @@ inline std::uint64_t GnssPinsForBoard(std::string_view board)
   if (board != "waveshare-s3-eth")
     return 0;
   std::uint64_t pins = 0;
-  for (const int pin :
-       {1, 2, 4, 5, 6, 7, 8, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 43, 44, 47, 48})
+  // Exposed UART set with no camera module attached: excludes onboard SD, RGB, USB,
+  // flash/PSRAM, strapping and camera power-enable. Debug console/JTAG uses USB.
+  for (const int pin : {1, 2, 15, 16, 17, 18, 38, 39, 40, 41, 42, 43, 44, 47, 48})
     pins |= UINT64_C(1) << pin;
   return pins;
 }

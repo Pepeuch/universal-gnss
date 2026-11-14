@@ -132,6 +132,11 @@ extern "C" void app_main()
                  configured ? ESP_OK : (nvs == ESP_OK ? ESP_FAIL : nvs));
   if (!configured)
     ESP_LOGE("UG", "Configuration locked: %s", error.c_str());
+  // Independent local USB recovery is started before Ethernet/GNSS setup.
+  const auto console = StartLocalCommissioning(RestartNetworkServices);
+  ObserveService(ServiceId::kConsole,
+                 console == ESP_OK ? ServiceState::kRunning : ServiceState::kFailed,
+                 console);
   constexpr auto network = ServiceBit(ServiceId::kNetworkCore);
   constexpr auto routing = ServiceBit(ServiceId::kRouting);
   const bool radio_enabled = Configuration()->radio_enabled;
@@ -152,9 +157,6 @@ extern "C" void app_main()
 #if UG_LOCAL_GNSS
       {ServiceId::kGnss, 0, [](void*) -> std::int32_t { return StartGnssService(); }},
 #endif
-      {ServiceId::kConsole,
-       0,
-       [](void*) -> std::int32_t { return StartLocalCommissioning(RestartNetworkServices); }},
       {ServiceId::kHttps, network, [](void*) -> std::int32_t { return StartWebService(); }}};
   const auto boot = RunBoot(steps, sizeof(steps) / sizeof(steps[0]), ObserveBoot);
   if (!boot.plan_valid)

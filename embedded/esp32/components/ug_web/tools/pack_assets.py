@@ -6,6 +6,12 @@ import io
 from pathlib import Path
 
 ASSETS = ('index.html', 'app.js', 'style.css')
+PORTABLE = Path(__file__).resolve().parents[5] / 'docs/flasher/portable.js'
+
+def source_bytes(source, name):
+    raw=(Path(source)/name).read_bytes()
+    return PORTABLE.read_bytes()+b'\n'+raw if name=='app.js' else raw
+
 
 
 def encode(data):
@@ -20,7 +26,7 @@ def pack(source, output):
     source, output = Path(source).resolve(), Path(output).resolve()
     if output == source or source in output.parents or output in source.parents:
         raise ValueError('generated assets must be separate from the source assets')
-    data = {name: encode((source / name).read_bytes()) for name in ASSETS}
+    data = {name: encode(source_bytes(source,name)) for name in ASSETS}
     output.mkdir(parents=True, exist_ok=True)
     for name, content in data.items():
         (output / (name + '.gz')).write_bytes(content)

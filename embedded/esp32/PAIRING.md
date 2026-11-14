@@ -4,6 +4,8 @@ Status: software implementation; physical S3/C3/CCMP/USB acceptance is pending.
 One peer is supported per device. No C6, LoRa, RF discovery or remote association
 protocol is enabled. A MAC read through local USB is manual identification, not
 an RF discovery result. No firmware variant contains a user's peer or channel.
+[Portable configuration v1](PORTABLE_CONFIG.md) adds private-free CONFIG_GET/CHECK/APPLY
+commands in this same maintenance phase; USB/UART output is selected before data starts.
 
 ## Authorization and persistence
 

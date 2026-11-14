@@ -149,6 +149,7 @@ class NativeBuildContract(unittest.TestCase):
             for name in ('index.html', 'app.js', 'style.css'):
                 raw = ('content-' + name).encode()
                 (source/name).write_bytes(raw)
+                if name=='app.js':raw=(Path(__file__).resolve().parents[4]/'docs/flasher/portable.js').read_bytes()+b'\n'+raw
                 compressed = gzip.compress(raw, mtime=0)
                 (packed/(name+'.gz')).write_bytes(compressed)
                 application += compressed

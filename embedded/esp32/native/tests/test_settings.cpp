@@ -40,12 +40,12 @@ int main()
   assert(DecodeSettings(json, original, base, out, error));
   assert(!out.local_input && !out.gnss_enabled && out.revision == 2);
   assert(!DecodeSettings(R"({"gnss":{"enabled":true}})", original, base, out, error));
-  assert(DecodeSettings(R"({"input":"local","gnss":{"enabled":true,"tx_pin":17,"rx_pin":18}})",
+  assert(DecodeSettings(R"({"input":"local","gnss":{"enabled":true,"tx_pin":17,"rx_pin":16}})",
                         original,
                         base,
                         out,
                         error));
-  assert(out.gnss_enabled && out.gnss_tx_pin == 17 && out.gnss_rx_pin == 18);
+  assert(out.gnss_enabled && out.gnss_tx_pin == 17 && out.gnss_rx_pin == 16);
   assert(!DecodeSettings(R"({"input":"local","gnss":{"enabled":true,"tx_pin":17,"rx_pin":37}})",
                          original,
                          base,

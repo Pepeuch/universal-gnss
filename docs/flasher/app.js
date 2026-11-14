@@ -65,7 +65,7 @@
         qualification.build_and_verify!=='pass' || qualification.reproducibility!=='pass' || qualification.source_mounts!==false ||
         qualification.network_during_build_and_tests!=='disconnected_no_interfaces' || qualification.flash_or_publication!==false ||
         (profile.variant==='s3-gateway' && qualification.host_tests!=='pass') ||
-        qualification.binary?.sha256!==entry.sha256 || qualification.binary?.radio_configuration!=='runtime_nvs_encrypted_unicast' ||
+        qualification.binary?.portable_configuration_schema!==1 || qualification.binary?.sha256!==entry.sha256 || qualification.binary?.radio_configuration!=='runtime_nvs_encrypted_unicast' ||
         qualification.binary?.profile!==profile.profile || qualification.binary?.local_gnss!==(profile.profile==='gateway') ||
         (profile.profile==='rover' && Object.keys(output).some(k=>qualification.binary?.rover_output?.[k]!==output[k]))) throw Error('Provenance ou qualification incompatible');
     if (Object.keys(manifest).sort().join(',')!=='builds,name,new_install_prompt_erase,version' || manifest.new_install_prompt_erase!==true ||
@@ -121,7 +121,7 @@
       $('image-info').textContent='';$('downloads').replaceChildren();$('consent').checked=false;
     }
     function selected() {
-      const variant=$('device').value,input={schema:2,variant,...variants[variant]};
+      const variant=$('device').value==='c3-rover-uart'?'c3-rover-usb':$('device').value,input={schema:2,variant,...variants[variant]};
       if(variant==='c3-rover-uart')Object.assign(input,{uart_tx:Number($('tx').value),uart_baud:Number($('baud').value)});
       return normalize(input);
     }
@@ -142,8 +142,9 @@
     }
     async function render() {
       const version=++generation;clear();const p=selected(),source=$('version').value;
+      portableForm(p.board);
       $('source').disabled=p.profile!=='gateway';$('receiver').disabled=p.profile!=='gateway';
-      $('tx-block').classList.toggle('hidden',p.output!=='uart');$('baud-block').classList.toggle('hidden',p.output!=='uart');summary();request(p,source);
+      $('tx-block').classList.add('hidden');$('baud-block').classList.add('hidden');summary();request(p,source);
       const approval=sources.find(s=>s.source_sha===source);
       const candidates=images.filter(e=>e.source_sha===source && canonical(normalize(e.profile))===canonical(p));
       if(candidates.length!==1){status(candidates.length?'Catalogue ambigu : flash refusé.':'Aucune image publiée pour cette source/profil. La demande GitHub nécessite une approbation mainteneur.');return}
@@ -164,6 +165,60 @@
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
       finally {clearTimeout(timer);}
     }
+    let portableBoard=null;
+    function portableForm(board) {
+      if(portableBoard===board)return;portableBoard=board;
+      const value=UGPortable.defaults(board),s3=board==='waveshare-s3-eth';
+      for(const id of ['portable-tx','portable-rx']){
+        $(id).replaceChildren();
+        for(const pin of [-1,...UGPortable.pins[board]]){const option=document.createElement('option');option.value=String(pin);option.textContent=pin<0?'Non affecté':'GPIO'+pin;$(id).append(option)}
+      }
+      $('portable-output').replaceChildren();
+      for(const output of (s3?['gnss']:['usb','uart'])){const option=document.createElement('option');option.value=output;option.textContent=output;$('portable-output').append(option)}
+      $('portable-model').replaceChildren();
+      for(const model of (s3?UGPortable.models.slice(1):['none'])){const option=document.createElement('option');option.value=model;option.textContent=model;$('portable-model').append(option)}
+      $('portable-baud').replaceChildren();
+      for(const baud of (s3?[9600,38400,115200,230400,460800,921600]:[115200,230400,460800,921600])){const option=document.createElement('option');option.value=String(baud);option.textContent=String(baud);$('portable-baud').append(option)}
+      $('portable-output').value=value.output;$('portable-tx').value='-1';$('portable-rx').value='-1';$('portable-baud').value='115200';$('portable-model').value=value.gnss_model;$('portable-channel').value='1';
+      $('portable-tx').disabled=!s3;$('portable-baud').disabled=!s3;
+      $('portable-output').disabled=s3;$('portable-rx').disabled=!s3;$('portable-model').disabled=!s3;
+      $('portable-import').value='';$('portable-info').textContent=JSON.stringify(value,null,2);
+    }
+    function portableValue(){
+      return UGPortable.validate({...UGPortable.defaults(selected().board),output:$('portable-output').value,uart_tx:Number($('portable-tx').value),uart_rx:Number($('portable-rx').value),uart_baud:Number($('portable-baud').value),gnss_model:$('portable-model').value,radio_channel:Number($('portable-channel').value)},selected().board);
+    }
+    for(let c=1;c<=11;++c){const option=document.createElement('option');option.value=String(c);option.textContent=String(c);$('portable-channel').append(option)}
+    for(const id of ['portable-output','portable-tx','portable-rx','portable-baud','portable-model','portable-channel'])$(id).addEventListener('change',()=>{
+      try{$('portable-tx').disabled=$('portable-output').value==='usb';$('portable-baud').disabled=$('portable-output').value==='usb';if(id==='portable-output' && $('portable-output').value==='usb'){$('portable-tx').value='-1';$('portable-rx').value='-1';$('portable-baud').value='115200';}$('portable-info').textContent=JSON.stringify(portableValue(),null,2)}catch(error){$('portable-info').textContent=error.message}
+    });
+    $('portable-import').addEventListener('change',async event=>{
+      const file=event.target.files?.[0],board=selected().board;event.target.value='';
+      try {
+        if(!file || file.size>512)throw Error('Fichier UG : maximum 512 octets');
+        const value=UGPortable.parse(await file.text(),board);if(selected().board!==board)return;
+        if(!Array.from($('portable-baud').options).some(o=>o.value===String(value.uart_baud))){const option=document.createElement('option');option.value=String(value.uart_baud);option.textContent=String(value.uart_baud);$('portable-baud').append(option)}
+        for(const [field,id] of Object.entries({output:'portable-output',uart_tx:'portable-tx',uart_rx:'portable-rx',uart_baud:'portable-baud',gnss_model:'portable-model',radio_channel:'portable-channel'}))$(id).value=String(value[field]);
+        $('portable-tx').disabled=value.output==='usb';$('portable-baud').disabled=value.output==='usb';
+        $('portable-info').textContent=JSON.stringify(value,null,2);
+      }catch(error){$('portable-info').textContent='Import refusé : '+error.message;}
+    });
+    $('portable-export').addEventListener('click',()=>{
+      try {
+        const value=portableValue(),url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'}));
+        const link=document.createElement('a');link.href=url;link.download='ug-portable-config.json';link.click();URL.revokeObjectURL(url);
+      }catch(error){$('portable-info').textContent=error.message;}
+    });
+    $('portable-restore').addEventListener('click',async()=>{
+      const button=$('portable-restore');if(button.disabled)return;
+      try {
+        const value=portableValue();if(!navigator.serial)throw Error('Web Serial indisponible ; utiliser l’outil Linux local');
+        button.disabled=true;
+        const port=await navigator.serial.requestPort();
+        const result=await UGProvision.restore(port,value,async(before,after)=>confirm('Appliquer localement ces réglages ? Aucun secret ni association ne sera importé. GNSS S3 désactivé avant revue.\nAvant : '+JSON.stringify(before)+'\nAprès : '+JSON.stringify(after)));
+        $('portable-info').textContent=result.applied?'Configuration enregistrée localement. Redémarrage/réactivation explicites requis ; aucun flash effectué.':'Application annulée ; aucune écriture.';
+      }catch(error){$('portable-info').textContent='Restauration refusée : '+error.message;}
+      finally{button.disabled=false;}
+    });
     $('consent').addEventListener('change',()=>{
       const ready=Boolean(current && $('consent').checked);
       $('flash-available').classList.toggle('hidden',!ready);$('flash-unavailable').classList.toggle('hidden',ready);

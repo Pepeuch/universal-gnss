@@ -19,6 +19,8 @@ class WebAssets(unittest.TestCase):
           const elements = {}, calls = [];
           const document = {getElementById(id) {return elements[id] ||= {value:'', textContent:'', hidden:false,children:[],appendChild(child){this.children.push(child);},replaceChildren(){this.children=[];}};},
                             createElement() {return {click(){},children:[],appendChild(child){this.children.push(child);}};}};
+          const blobs=[];class Blob {constructor(parts){this.parts=parts}}
+          const URL={createObjectURL(blob){blobs.push(blob.parts.join(''));return 'blob:fixture'},revokeObjectURL(){}};
           const setInterval = () => {};
           const setTimeout = () => 1, clearTimeout = () => {};
           class AbortController {constructor(){this.signal={};}abort(){}}
@@ -31,6 +33,8 @@ class WebAssets(unittest.TestCase):
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
             calls.push({path,options});
+            if(path==='/api/config/portable' || path==='/api/config/portable/preview')return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(path.endsWith('preview')?JSON.parse(options.body):UGPortable.defaults('waveshare-s3-eth'))};
+            if(path==='/api/config/portable/apply')return {ok:true,status:200,headers:{get:()=> 'text/plain'},text:async()=> 'saved'};
             if (path === '/api/config' && options.method === 'POST') {
               if (hold_config_post) return new Promise(resolve => {
                 release_config_post = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-config-session"}'});
@@ -66,6 +70,7 @@ class WebAssets(unittest.TestCase):
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
         ''')
+        vm.eval((ASSETS.parents[4]/'docs/flasher/portable.js').read_text())
         vm.eval((ASSETS / 'app.js').read_text())
         self.drain(vm)
         vm.eval("document.getElementById('token').value='z'.repeat(64); elements.login.onclick();")
@@ -232,6 +237,25 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         vm.eval("pressure='normal'; refresh();")
         self.drain(vm)
+        vm.eval("elements.export.onclick();")
+        self.drain(vm)
+        exported=json.loads(vm.eval('blobs[blobs.length-1]'))
+        self.assertEqual(exported['format'],'ug-esp32-portable')
+        self.assertNotIn('upstream',exported);self.assertNotIn('peer',exported)
+        vm.eval("elements['portable-file'].onchange({preventDefault(){},target:{files:[{size:300,text:async()=>JSON.stringify({...UGPortable.defaults('waveshare-s3-eth'),uart_tx:17,uart_rx:16})}],value:'file'}});")
+        self.drain(vm)
+        self.assertFalse(vm.eval("elements['portable-apply'].disabled"), vm.eval("elements.notice.textContent"))
+        self.assertIn('avant',vm.eval("elements['portable-preview'].textContent"))
+        vm.eval("elements['portable-apply'].onclick();")
+        self.drain(vm)
+        apply=json.loads(vm.eval("calls.filter(c=>c.path==='/api/config/portable/apply').pop().options.body"))
+        self.assertEqual(apply['confirm'],'APPLY_PORTABLE_CONFIGURATION')
+        self.assertEqual(apply['configuration']['uart_tx'],17)
+        posts=vm.eval('calls.length')
+        vm.eval("elements['portable-file'].onchange({preventDefault(){},target:{files:[{size:300,text:async()=>JSON.stringify({...UGPortable.defaults('waveshare-s3-eth'),password:'private'})}],value:'file'}});")
+        self.drain(vm)
+        self.assertEqual(vm.eval('calls.length'),posts)
+        self.assertTrue(vm.eval("elements['portable-apply'].disabled"))
         vm.eval('hold_status=true; refresh();')
         self.drain(vm)
         before = vm.eval('calls.length')

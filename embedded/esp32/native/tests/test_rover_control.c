@@ -3,11 +3,13 @@
 #include "esp_mac.h"
 #include "nvs.h"
 #include "ug_pairing.h"
+#include "ug_portable.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 bool ug_rover_configure(bool, ug_pairing_t*);
+const ug_portable_t* ug_rover_portable_current(void);
 static char input[1024], output[4096];
 static size_t offset, used, writes;
 static int64_t clock_us;
@@ -16,7 +18,8 @@ void vTaskDelay(unsigned ticks)
 {
   clock_us += (int64_t)ticks * 1000;
 }
-static uint8_t saved[UG_PAIRING_RECORD_SIZE];
+static uint8_t saved[UG_PAIRING_RECORD_SIZE], portable_saved[UG_PORTABLE_RECORD_SIZE];
+static bool portable_present;
 esp_err_t usb_serial_jtag_driver_install(usb_serial_jtag_driver_config_t* p)
 {
   assert(p->rx_buffer_size >= 128);
@@ -67,7 +70,17 @@ esp_err_t nvs_open(const char* name, int mode, nvs_handle_t* h)
 }
 esp_err_t nvs_get_blob(nvs_handle_t h, const char* name, void* p, size_t* n)
 {
-  assert(h == 1 && !strcmp(name, "pairing"));
+  assert(h == 1);
+  if (!strcmp(name, "portable"))
+  {
+    if (!portable_present)
+      return ESP_ERR_NVS_NOT_FOUND;
+    assert(*n >= sizeof(portable_saved));
+    memcpy(p, portable_saved, sizeof(portable_saved));
+    *n = sizeof(portable_saved);
+    return ESP_OK;
+  }
+  assert(!strcmp(name, "pairing"));
   if (!present)
     return ESP_ERR_NVS_NOT_FOUND;
   assert(*n >= sizeof(saved));
@@ -77,7 +90,16 @@ esp_err_t nvs_get_blob(nvs_handle_t h, const char* name, void* p, size_t* n)
 }
 esp_err_t nvs_set_blob(nvs_handle_t h, const char* name, const void* p, size_t n)
 {
-  assert(h == 1 && !strcmp(name, "pairing") && n == sizeof(saved));
+  assert(h == 1);
+  if (!strcmp(name, "portable"))
+  {
+    assert(n == sizeof(portable_saved));
+    memcpy(portable_saved, p, n);
+    portable_present = true;
+    ++writes;
+    return ESP_OK;
+  }
+  assert(!strcmp(name, "pairing") && n == sizeof(saved));
   memcpy(saved, p, n);
   present = true;
   ++writes;
@@ -115,6 +137,74 @@ int main(void)
   fail_drain = true;
   assert(!ug_rover_configure(true, &p));
   fail_drain = false;
+  char config[513], commands[1024];
+  ug_portable_t output_config = ug_portable_default(UG_BOARD_C3);
+  output_config.output = UG_OUTPUT_UART;
+  output_config.tx = 4;
+  output_config.baud = 230400;
+  assert(ug_portable_json(&output_config, config, sizeof(config)));
+  snprintf(commands,
+           sizeof(commands),
+           "UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 CONFIG_CHECK %s\nUGCFG/1 CONFIG_APPLY CONFIRM "
+           "%s\nUGCFG/1 CONFIG_GET\nUGCFG/1 RUN CONFIRM_RTCM\n",
+           config,
+           config);
+  script(commands);
+  assert(ug_rover_configure(true, &p));
+  assert(writes == 2 && portable_present);
+  assert(ug_rover_portable_current()->output == UG_OUTPUT_UART &&
+         ug_rover_portable_current()->tx == 4);
+  assert(strstr(output, "\"result\":\"valid\"") && strstr(output, "\"result\":\"saved\""));
+  script("");
+  assert(ug_rover_configure(true, &p) && !used && writes == 2);
+  assert(ug_rover_portable_current()->baud == 230400);
+  // Invalid portable content can be replaced only by an explicitly confirmed valid record.
+  portable_saved[0] ^= 1;
+  snprintf(
+      commands,
+      sizeof(commands),
+      "UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 CONFIG_APPLY CONFIRM %s\nUGCFG/1 RUN CONFIRM_RTCM\n",
+      config);
+  script(commands);
+  assert(ug_rover_configure(true, &p) && writes == 3);
+  // Rejected pin/channel requests retain the prior output and private pairing.
+  snprintf(
+      commands,
+      sizeof(commands),
+      "UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 CONFIG_APPLY CONFIRM %s\nUGCFG/1 RUN CONFIRM_RTCM\n",
+      config);
+  char* pin = strstr(commands, "\"uart_tx\":4");
+  assert(pin);
+  pin[strlen("\"uart_tx\":")] = '8';
+  script(commands);
+  assert(ug_rover_configure(true, &p) && writes == 3 && strstr(output, "portable_incompatible"));
+  assert(ug_rover_portable_current()->tx == 4);
+  // Clearing a private association restores the separately persisted channel preference.
+  output_config.channel = 2;
+  assert(ug_portable_json(&output_config, config, sizeof(config)));
+  snprintf(commands,
+           sizeof(commands),
+           "UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 SET 02:00:00:00:00:02 2 "
+           "0123456789abcdef0123456789abcdef CONFIRM_PAIR\nUGCFG/1 CONFIG_APPLY CONFIRM "
+           "%s\nUGCFG/1 CLEAR CONFIRM_UNPAIR\nUGCFG/1 CONFIG_GET\nUGCFG/1 SET 02:00:00:00:00:02 1 "
+           "0123456789abcdef0123456789abcdef CONFIRM_PAIR\nUGCFG/1 RUN CONFIRM_RTCM\n",
+           config);
+  script(commands);
+  assert(ug_rover_configure(true, &p));
+  assert(strstr(output, "\"radio_channel\":2},\"result\":\"current\""));
+  writes = 3;
+  output_config.channel = 1;
+  assert(ug_portable_json(&output_config, config, sizeof(config)));
+  // A future schema is preserved and cannot be overwritten by this firmware.
+  portable_saved[4] = 2;
+  snprintf(commands,
+           sizeof(commands),
+           "UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 CONFIG_APPLY CONFIRM %s\n",
+           config);
+  script(commands);
+  assert(!ug_rover_configure(true, &p) && writes == 3 && portable_saved[4] == 2);
+  portable_present = false;
+  writes = 1;
   // Invalid persisted records lock writes and refuse the data plane; no erase.
   saved[0] ^= 1;
   script("UGCFG/1 OPEN 0123456789abcdef\nUGCFG/1 SET 02:00:00:00:00:02 1 "

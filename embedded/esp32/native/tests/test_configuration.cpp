@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "nvs.h"
 #include "ug_configuration.hpp"
+#include "ug_portable_settings.hpp"
 #include <cassert>
 #include <cstring>
 #include <map>
@@ -76,6 +77,8 @@ int main(int argc, char** argv)
   if (mode == "interrupted")
     records["gnss_dirty"] = {1};
   ug::embedded::Capabilities caps{true, true, false, 5, "test-s3", "gateway"};
+  if (mode == "portable")
+    caps.board = "waveshare-s3-eth";
   std::string error;
   const bool expected = !open_fail && !read_fail && mode != "corrupt";
   assert(ug::embedded::StartConfiguration(caps, error) == expected);
@@ -123,6 +126,28 @@ int main(int argc, char** argv)
           R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"4"})", error));
       assert(Configuration()->device_name == "second" && !ConfigurationWritable() &&
              ReceiverJournalBlocked());
+      return 0;
+    }
+    if (mode == "portable")
+    {
+      using namespace ug::embedded;
+      assert(
+          PatchConfiguration(R"({"name":"private-device","wifi":{"ssid":"private-ssid"}})", error));
+      std::string portable, preview;
+      assert(ExportPortableSettings(*Configuration(), caps, portable, error));
+      const auto before_records = records;
+      const auto revision = Configuration()->revision;
+      assert(PreviewPortableConfiguration(portable, preview, error));
+      assert(records == before_records && Configuration()->revision == revision);
+      assert(!ApplyPortableConfiguration("{}", error) && records == before_records);
+      assert(ApplyPortableConfiguration(portable, error));
+      assert(Configuration()->device_name == "private-device" &&
+             Configuration()->wifi_ssid == "private-ssid");
+      assert(!ReceiverJournalBlocked());
+      commit_fail = true;
+      const auto before = Configuration();
+      assert(!ApplyPortableConfiguration(portable, error));
+      assert(Configuration() == before && !ConfigurationWritable());
       return 0;
     }
     assert(ug::embedded::PatchConfiguration(R"({"name":"updated"})", error));
