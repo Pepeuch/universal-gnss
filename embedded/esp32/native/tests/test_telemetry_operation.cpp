@@ -52,6 +52,7 @@ int main()
         assert(command.payload.text.find("MODE ") == std::string::npos);
         assert(command.payload.text.find("RESET") == std::string::npos);
         assert(command.payload.text.find("CONFIG COM") == std::string::npos);
+        assert(command.payload.text.find("CONFIG SIGNALGROUP") == std::string::npos);
         assert(command.payload.text.find("SAVECONFIG") == std::string::npos);
       }
     }
@@ -75,10 +76,18 @@ int main()
   }
   op.signal_groups[0] = 2;
   op.signal_group_count = 1;
-  assert(ug::embedded::BuildTelemetryPlan(op, "UM980", true).ok());
-  assert(
-      !ug::embedded::BuildTelemetryPlan(op, "UM981", true).ok());  // Model has no qualified groups.
-  assert(!ug::embedded::BuildTelemetryPlan(op, "ZED-F9P", true).ok());
+  for (const auto* model : {"UM980", "UM981", "UM982", "ZED-F9P"})
+    for (bool persist : {false, true})
+    {
+      op.persist = persist;
+      op.confirm_persistent = true;
+      auto blocked = ug::embedded::BuildTelemetryPlan(op, model, true);
+      assert(!blocked.ok() && blocked.commands.empty());
+      assert(blocked.error.find("automatic persistence/reset") != std::string::npos);
+      universal_gnss_transport::MemoryByteSink sink;
+      ug::embedded::Receiver receiver(sink);
+      assert(!receiver.Start(blocked.commands, 1) && sink.written_bytes().empty());
+    }
   op.signal_groups[0] = 255;
   assert(!ug::embedded::BuildTelemetryPlan(op, "UM980", true).ok());
   op = before;

@@ -1186,3 +1186,40 @@ and **1294640/1310720** bytes; relay headroom **16080 bytes**. Rover sources and
 profile dependencies are unchanged. No physical receiver, flash or RF was used.
 The portable-source payload changes deliberately; immutable ROS2 distribution
 and Lyrical consumer validation follow the local feature commit.
+
+
+## SIGNALGROUP native dispatch safety boundary
+
+The [N4 R1.6 manual, §4.23, p.40](https://en.unicore.com/uploads/file/Unicore%20Reference%20Commands%20Manual%20For%20N4%20High%20Precision%20Products_V2_EN_R1.6.pdf#page=58)
+states that changing SIGNALGROUP automatically persists the selection and resets
+the module. Saving other settings first is also required by that contract.
+Consequently this cannot be treated as ordinary telemetry or approved only by
+an optional SAVECONFIG checkbox.
+
+The native planner now rejects every nonempty `signal_groups` request before
+constructing any command prefix, even if persistence was confirmed. The owner
+reuses that planner, so bypassing the Web precheck cannot dispatch it either.
+Capabilities expose `signal_groups_configurable:false`; `signal_groups` remains a
+read-only model catalogue, not observed active state or permission to apply it.
+The UI states the limitation. Normal telemetry and explicit F9P constellation
+selection remain unchanged. No reset, persistent write or quarantine release
+was introduced.
+
+`UG-ESP-SIGNALGROUP-001` remains BLOCKED. Software prerequisites are an explicit
+operation approving both persistence and reset, an interrupted-operation journal
+contract and a qualified receiver-incarnation/recovery provider. Physical evidence
+must then establish the stated provider contract for each model/firmware/UART
+combination. A model query, parser reset, delay or port reopen alone cannot release
+quarantine. The [blocked contract](../../../.agent/shared/checkpoints/blocked/UG-ESP-SIGNALGROUP-001.md)
+records the exact continuation conditions. The shared driver builder still
+classifies SIGNALGROUP as runtime; changing its public safety contract is a
+separate core review. This native guard does not claim to repair Linux/ROS2 use.
+
+Validation: 37 native ASan/UBSan CTests and the browser mock pass; supported and
+unsupported models, persistence-confirmed requests and empty dispatch are covered.
+SDK S3/relay builds, linked contracts, existing partitions and independent
+app/bootloader/table identity pass. App sizes are **1441248/3145728** and
+**1294656/1310720** bytes. No portable source or ROS2 payload changed in this guard;
+the preceding 69 Linux and 166/168 isolated Lyrical tests remain applicable.
+No physical group change was performed. Earlier signal-group selection tests
+proved software construction only and did not qualify automatic persistence/reset.

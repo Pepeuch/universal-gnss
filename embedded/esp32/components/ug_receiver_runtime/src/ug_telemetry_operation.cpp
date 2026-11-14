@@ -144,10 +144,14 @@ BuildTelemetryPlan(const TelemetryOperation& op, std::string_view model, bool ve
       op.receiver_port < 1 || op.receiver_port > 2 || op.signal_group_count > 2 ||
       (op.persist && !op.confirm_persistent))
     return fail("unverified model or invalid telemetry parameters");
+  // N4 R1.6 section 4.23: changed SIGNALGROUP values persist and reset the
+  // module automatically. A telemetry/persist confirmation does not authorize
+  // that reset or establish a trusted post-reset receiver incarnation.
+  if (op.signal_group_count)
+    return fail("native SIGNALGROUP configuration unavailable: automatic persistence/reset "
+                "requires a qualified lifecycle");
   if (model == "ZED-F9P")
   {
-    if (op.signal_group_count)
-      return fail("Unicore signal groups are not u-blox constellations");
     using namespace universal_gnss_protocols;
     using namespace ubx_cfg_keys;
     UbloxConfigProfile profile;
@@ -199,15 +203,6 @@ BuildTelemetryPlan(const TelemetryOperation& op, std::string_view model, bool ve
     profile.config_kind = ReceiverConfigProfileKind::kDiagnosticsOutput;
     // Deliberately not BuildUnicoreDiagnosticsProfile: that convenience preset
     // derives from a ROVER profile and would silently leave a configured BASE.
-    if (op.signal_group_count)
-    {
-      std::vector<std::uint8_t> groups(op.signal_groups.begin(),
-                                       op.signal_groups.begin() + op.signal_group_count);
-      const auto* option = FindUnicoreSignalGroupSelection(model_profile, groups);
-      if (!option || option->base_mode_only || option->low_power_mode)
-        return fail("Unicore signal group is unavailable or requires separately verified mode");
-      profile.signal_config = UnicoreSignalConfig{std::move(groups)};
-    }
     profile.output_messages = {{UnicoreOutputMessageKind::kGpgga, 1.0 / op.rate_hz},
                                {UnicoreOutputMessageKind::kGpgsv, 1.0},
                                {UnicoreOutputMessageKind::kGpgst, 1.0 / op.rate_hz},

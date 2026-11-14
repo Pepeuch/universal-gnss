@@ -39,6 +39,8 @@ An authenticated, explicitly confirmed offline self-test now exercises the real 
 CRC and shared wire codec in private buffers, without transmitting corrections.
 Native wire helpers now omit routine per-fragment INFO console output while
 retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
+Native Unicore SIGNALGROUP mutation is now refused: it can persist and reset
+automatically. Ordinary telemetry and F9P constellation requests remain available.
 The native ESP32 CI recipe now validates four bounded variants with disconnected
 non-root builds, host tests and independent reconstruction; GitHub qualification
 is pending an authorized push/PR. No firmware is published.

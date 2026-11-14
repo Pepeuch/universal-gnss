@@ -262,6 +262,10 @@ esp_err_t GnssCapabilitiesReply(httpd_req_t* req)
   cJSON_AddBoolToObject(root.get(), "survey_in", plans.survey_in);
   cJSON_AddBoolToObject(root.get(), "time_optimization", plans.time_optimization);
   cJSON_AddBoolToObject(root.get(), "disable_base", plans.disable_base);
+  cJSON_AddBoolToObject(root.get(), "signal_groups_configurable", false);
+  cJSON_AddStringToObject(root.get(),
+                          "signal_groups_scope",
+                          "catalogue_only; automatic persistence/reset not qualified");
   cJSON_AddStringToObject(root.get(), "qualification", "software_contract_only");
   auto* options = cJSON_AddArrayToObject(root.get(), "signal_groups");
   if (!options)

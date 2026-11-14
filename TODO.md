@@ -39,6 +39,8 @@ An authenticated, explicitly confirmed offline self-test now exercises the real 
 CRC and shared wire codec in private buffers, without transmitting corrections.
 Native wire helpers now omit routine per-fragment INFO console output while
 retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
+Native Unicore SIGNALGROUP mutation is now refused: it can persist and reset
+automatically. Ordinary telemetry and F9P constellation requests remain available.
 The native ESP32 CI recipe now validates four bounded variants with disconnected
 non-root builds, host tests and independent reconstruction; GitHub qualification
 is pending an authorized push/PR. No firmware is published.
@@ -48,6 +50,16 @@ by maintainer priority; ESP-NOW comes first. This is not a completed firmware cl
 Nominal historical ESP-NOW validation is accepted for development; further
 endurance and range tests belong to field validation. Existing release versions,
 historical checklists and completion metrics are unchanged.
+
+ESP32 safety finding `UG-ESP-SIGNALGROUP-001` is **BLOCKED** (RECEIVER,
+HARDWARE_REQUIRED): enabling signal-group reconfiguration requires both an
+explicit persistent/reset operation and a qualified post-reset incarnation /
+response boundary, plus device validation. The native rejection guard is
+implemented; that is not completion of this feature. The shared driver's
+`CONFIG SIGNALGROUP` runtime classification also requires separate review;
+Linux/ROS2 callers are not repaired or qualified by this native-only guard.
+See the [blocked resumption contract](.agent/shared/checkpoints/blocked/UG-ESP-SIGNALGROUP-001.md).
+This ESP32 finding changes no existing UG release-gate metric.
 
 A future official UG Build & Flash portal will migrate the relevant historical
 `flasher.html` functionality after license review. It will select supported boards,
