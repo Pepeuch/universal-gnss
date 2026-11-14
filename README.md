@@ -25,8 +25,8 @@
   <img src="https://img.shields.io/badge/Unicore-Validated-success">
   <img src="https://img.shields.io/badge/Quectel-Planned-yellow">
   <img src="https://img.shields.io/badge/Septentrio-Planned-yellow">
-    <a href="https://github.com/Pepeuch/esp32-rtk-gateway">
-    <img src="https://img.shields.io/badge/ESP32%20RTK%20Gateway-Migration%20Planned-orange">
+    <a href="docs/flasher.html">
+    <img src="https://img.shields.io/badge/ESP32-Web%20Flasher-orange" alt="ESP32 Web Flasher">
   </a>
 </p>
 # Universal GNSS
@@ -34,6 +34,10 @@
 Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded systems, and RTK base stations.
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
+
+The [ESP32 Web Flasher](docs/flasher.html) is available as repository source;
+[hosting and qualification](docs/flasher/README.md) remain pending. No active
+GitHub Pages deployment or published firmware is claimed.
 
 ## Local source distributions
 

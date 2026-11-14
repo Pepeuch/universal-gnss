@@ -1,13 +1,16 @@
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
 
+#include "universal_gnss_ntrip/ntrip_request.hpp"
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(ESP_PLATFORM)
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -19,6 +22,11 @@ namespace universal_gnss_ntrip
 {
 namespace
 {
+#if defined(MSG_NOSIGNAL)
+constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+constexpr int kSendFlags = 0;
+#endif
 constexpr char kIcyResponse[] = "ICY 200 OK\r\n\r\n";
 
 std::string NormalizeMountpoint(std::string value)
@@ -38,8 +46,10 @@ struct LocalRtcmCaster::Impl
     std::vector<std::uint8_t> pending{};
     std::size_t pending_offset{0u};
     bool ready{false};
+    std::chrono::steady_clock::time_point accepted_at{std::chrono::steady_clock::now()};
   };
   LocalRtcmCasterConfig config{};
+  LocalRtcmCasterPolicy policy{};
   LocalRtcmCasterMetrics metrics{};
   int listener{-1};
   std::uint16_t bound_port{0u};
@@ -48,10 +58,58 @@ struct LocalRtcmCaster::Impl
   std::vector<std::uint8_t> cached_1005{};
   std::vector<std::uint8_t> cached_1006{};
   std::vector<Client> clients{};
+  std::string authorization{};
+  void InvalidateClients()
+  {
+    if (!policy.disconnect_clients_on_source_change)
+      return;
+    for (auto& client : clients)
+      Close(client);
+    clients.clear();
+  }
+  bool Authorized(const std::string& request) const
+  {
+    if (authorization.empty())
+      return true;
+    std::size_t offset = request.find("\r\n");
+    unsigned count = 0;
+    bool accepted = false;
+    while (offset != std::string::npos)
+    {
+      offset += 2;
+      const auto end = request.find("\r\n", offset);
+      if (end == std::string::npos || end == offset)
+        break;
+      const auto colon = request.find(':', offset);
+      if (colon < end)
+      {
+        std::string key = request.substr(offset, colon - offset);
+        std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
+          return static_cast<char>(std::tolower(c));
+        });
+        if (key == "authorization")
+        {
+          ++count;
+          auto start = colon + 1;
+          while (start < end && (request[start] == ' ' || request[start] == '\t'))
+            ++start;
+          const auto size = end - start;
+          volatile unsigned difference = static_cast<unsigned>(size ^ authorization.size());
+          for (std::size_t i = 0; i < authorization.size(); ++i)
+            difference =
+                difference | (static_cast<unsigned char>(authorization[i]) ^
+                              static_cast<unsigned char>(i < size ? request[start + i] : 0));
+          accepted = difference == 0;
+        }
+      }
+      offset = end;
+    }
+    return count == 1 && accepted;
+  }
 
   void Close(Client& client)
   {
-#if defined(__linux__)
+#if defined(__linux__) || defined(ESP_PLATFORM)
     if (client.fd >= 0)
       ::close(client.fd);
 #endif
@@ -96,13 +154,25 @@ LocalRtcmCaster::~LocalRtcmCaster()
   delete impl_;
 }
 
+bool LocalRtcmCaster::SetPolicy(LocalRtcmCasterPolicy policy)
+{
+  if (running() || policy.username.empty() != policy.password.empty())
+    return false;
+  impl_->authorization =
+      policy.username.empty()
+          ? ""
+          : "Basic " + BuildBasicAuthorizationValue(policy.username, policy.password);
+  impl_->policy = std::move(policy);
+  return true;
+}
+
 bool LocalRtcmCaster::Start(LocalRtcmCasterConfig config)
 {
   Stop();
   config.mountpoint = NormalizeMountpoint(std::move(config.mountpoint));
   if (config.mountpoint.empty() || config.client_buffer_bytes < sizeof(kIcyResponse))
     return false;
-#if !defined(__linux__)
+#if !defined(__linux__) && !defined(ESP_PLATFORM)
   (void)config;
   return false;
 #else
@@ -136,7 +206,7 @@ bool LocalRtcmCaster::Start(LocalRtcmCasterConfig config)
 
 void LocalRtcmCaster::Stop()
 {
-#if defined(__linux__)
+#if defined(__linux__) || defined(ESP_PLATFORM)
   for (auto& client : impl_->clients)
     impl_->Close(client);
   if (impl_->listener >= 0)
@@ -164,6 +234,8 @@ bool LocalRtcmCaster::ActivateSource(LocalRtcmSourceIdentity source)
        impl_->previous_source->source_id == source.source_id &&
        impl_->previous_source->incarnation == source.incarnation))
     return false;
+  if (impl_->source.has_value())
+    impl_->InvalidateClients();
   impl_->ClearCaches();
   impl_->source = std::move(source);
   impl_->previous_source = impl_->source;
@@ -171,6 +243,8 @@ bool LocalRtcmCaster::ActivateSource(LocalRtcmSourceIdentity source)
 }
 void LocalRtcmCaster::EndSource()
 {
+  if (impl_->source.has_value())
+    impl_->InvalidateClients();
   impl_->source.reset();
   impl_->ClearCaches();
 }
@@ -198,15 +272,23 @@ bool LocalRtcmCaster::PublishFrame(const universal_gnss_protocols::RtcmFrame& fr
 
 void LocalRtcmCaster::Poll()
 {
-#if defined(__linux__)
+#if defined(__linux__) || defined(ESP_PLATFORM)
   if (!running())
     return;
-  while (true)
+  std::size_t accepts = 0;
+  while (impl_->policy.max_accepts_per_poll == 0 || accepts < impl_->policy.max_accepts_per_poll)
   {
     const int fd = ::accept(impl_->listener, nullptr, nullptr);
     if (fd < 0)
       break;
-    (void)::fcntl(fd, F_SETFL, O_NONBLOCK);
+    ++accepts;
+    if ((impl_->policy.max_clients && impl_->clients.size() >= impl_->policy.max_clients) ||
+        ::fcntl(fd, F_SETFL, O_NONBLOCK) != 0)
+    {
+      ::close(fd);
+      ++impl_->metrics.rejected_requests;
+      continue;
+    }
     impl_->clients.push_back({fd, {}, {}, 0u, false});
   }
   for (auto& client : impl_->clients)
@@ -215,6 +297,14 @@ void LocalRtcmCaster::Poll()
       continue;
     if (!client.ready)
     {
+      if (impl_->policy.request_timeout_ms &&
+          std::chrono::steady_clock::now() - client.accepted_at >=
+              std::chrono::milliseconds(impl_->policy.request_timeout_ms))
+      {
+        ++impl_->metrics.rejected_requests;
+        impl_->Close(client);
+        continue;
+      }
       char buffer[512];
       const ssize_t count = ::recv(client.fd, buffer, sizeof(buffer), 0);
       if (count > 0)
@@ -225,10 +315,13 @@ void LocalRtcmCaster::Poll()
         continue;
       }
       const std::size_t line_end = client.request.find("\r\n");
-      if (line_end != std::string::npos)
+      const bool complete =
+          impl_->authorization.empty() || client.request.find("\r\n\r\n") != std::string::npos;
+      if (line_end != std::string::npos && complete)
       {
         const std::string expected = "GET /" + impl_->config.mountpoint + " ";
-        if (client.request.compare(0u, expected.size(), expected) != 0)
+        if (client.request.compare(0u, expected.size(), expected) != 0 ||
+            !impl_->Authorized(client.request))
         {
           ++impl_->metrics.rejected_requests;
           impl_->Close(client);
@@ -251,7 +344,7 @@ void LocalRtcmCaster::Poll()
       const ssize_t count = ::send(client.fd,
                                    client.pending.data() + client.pending_offset,
                                    client.pending.size() - client.pending_offset,
-                                   MSG_NOSIGNAL);
+                                   kSendFlags);
       if (count > 0)
       {
         client.pending_offset += static_cast<std::size_t>(count);

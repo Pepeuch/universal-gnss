@@ -14,6 +14,7 @@ VALIDATIONS = {
     'distributions.yml': 'Distribution validation',
     'docker.yml': 'Docker image validation',
     'format.yml': 'C/C++ Format',
+    'esp32.yml': 'ESP32 native validation',
     'ros2-lyrical.yml': 'ROS 2 Lyrical validation',
 }
 MANUAL_VALIDATIONS = {'ros2-kilted.yml': 'ROS 2 Kilted validation'}

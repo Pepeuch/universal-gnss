@@ -1,4 +1,5 @@
 #include "universal_gnss_tools/config_apply.hpp"
+#include "universal_gnss_driver/receiver_response_causality.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1575,40 +1576,7 @@ void UpdateExecutionSummary(ConfigApplyResult& result, const ReceiverConfigAppli
   result.execution_summary.responses_applied = application.metrics().responses_applied;
 }
 
-class ResponseCausalityFence
-{
-public:
-  std::uint64_t BeginCapture()
-  {
-    return ++last_capture_generation_;
-  }
-
-  void NoteDispatch(const ReceiverConfigApplicationResult& application_result)
-  {
-    if (!application_result.engine_result.has_value())
-    {
-      return;
-    }
-
-    const auto status = application_result.engine_result->status;
-    if (status == universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::kDispatched ||
-        status ==
-            universal_gnss_driver::ReceiverCommandTransactionEngineStepStatus::kRetryDispatched)
-    {
-      minimum_eligible_capture_generation_ = last_capture_generation_;
-    }
-  }
-
-  bool IsEligible(const ReceiverCommandResponse& response) const
-  {
-    return response.capture_generation.has_value() &&
-           *response.capture_generation > minimum_eligible_capture_generation_;
-  }
-
-private:
-  std::uint64_t last_capture_generation_{0u};
-  std::uint64_t minimum_eligible_capture_generation_{0u};
-};
+using universal_gnss_driver::ResponseCausalityFence;
 
 bool ApplyQueuedUbloxResponses(ConfigApplyResult& result,
                                const ConfigPlanResult& plan,

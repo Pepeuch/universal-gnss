@@ -326,6 +326,42 @@ ParserResult<UbxRxmRtcmRecord> ParseUbxRxmRtcm(const UbxFrame& frame)
   return ParserResult<UbxRxmRtcmRecord>::RecordReady(std::move(record));
 }
 
+ParserResult<UbxNavSvinRecord> ParseUbxNavSvin(const UbxFrame& frame)
+{
+  if (frame.class_id != kUbxNavClass || frame.message_id != 0x3bu)
+    return ParserResult<UbxNavSvinRecord>::Skipped();
+  if (frame.checksum_status != ChecksumStatus::kValid || frame.payload.size() != 40u)
+    return ParserResult<UbxNavSvinRecord>::InvalidData();
+  const auto& p = frame.payload;
+  auto signed_byte = [&](std::size_t offset) {
+    return p[offset] < 128u ? int(p[offset]) : int(p[offset]) - 256;
+  };
+  if (p[0] != 0u || ReadLeU4(p, 4) >= 604800000u || signed_byte(24) < -99 || signed_byte(24) > 99 ||
+      signed_byte(25) < -99 || signed_byte(25) > 99 || signed_byte(26) < -99 ||
+      signed_byte(26) > 99 || p[36] > 1u || p[37] > 1u)
+    return ParserResult<UbxNavSvinRecord>::InvalidData();
+  // Use explicit unsigned-to-signed extension rather than implementation-defined
+  // narrowing, then widen before combining cm and high-precision residuals.
+  auto coordinate = [&](std::size_t base, std::size_t hp) {
+    const auto raw = ReadLeU4(p, base);
+    const std::int64_t cm =
+        raw < 0x80000000u ? std::int64_t(raw) : std::int64_t(raw) - 0x100000000LL;
+    return cm * 100 + signed_byte(hp);
+  };
+  UbxNavSvinRecord record;
+  record.timestamp_ns = frame.timestamp_ns;
+  record.i_tow_ms = ReadLeU4(p, 4);
+  record.duration_s = ReadLeU4(p, 8);
+  record.mean_x_01mm = coordinate(12, 24);
+  record.mean_y_01mm = coordinate(16, 25);
+  record.mean_z_01mm = coordinate(20, 26);
+  record.mean_accuracy_01mm = ReadLeU4(p, 28);
+  record.observations = ReadLeU4(p, 32);
+  record.valid = p[36] == 1u;
+  record.active = p[37] == 1u;
+  return ParserResult<UbxNavSvinRecord>::RecordReady(std::move(record));
+}
+
 ParserResult<UbxNavStatusRecord> ParseUbxNavStatus(const UbxFrame& frame)
 {
   if (frame.class_id != kUbxNavClass || frame.message_id != kUbxNavStatusId)

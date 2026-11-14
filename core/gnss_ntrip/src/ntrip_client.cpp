@@ -1,6 +1,7 @@
 #include "universal_gnss_ntrip/ntrip_client.hpp"
 
-#if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
+#if (defined(__linux__) || defined(ESP_PLATFORM)) &&                                               \
+    defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 
 #include <algorithm>
 #include <chrono>
@@ -180,6 +181,8 @@ MapTransportErrorToGgaSendError(const universal_gnss_transport::TransportError e
     case TransportError::kOverflow:
     case TransportError::kUnsupported:
     case TransportError::kUnknown:
+    case TransportError::kTlsHandshakeFailure:
+    case TransportError::kTlsVerificationFailure:
       return NtripGgaSendError::kWriteFailure;
   }
 
@@ -233,6 +236,8 @@ NtripClientError MapTransportError(const universal_gnss_transport::TransportErro
     case TransportError::kOverflow:
     case TransportError::kUnsupported:
     case TransportError::kUnknown:
+    case TransportError::kTlsHandshakeFailure:
+    case TransportError::kTlsVerificationFailure:
       return NtripClientError::kUnknown;
   }
 
@@ -806,6 +811,11 @@ const NtripRequest& NtripClient::request() const
 const std::string& NtripClient::response_header() const
 {
   return response_header_;
+}
+
+const universal_gnss_transport::TransportMetrics& NtripClient::transport_metrics() const
+{
+  return transport_.metrics();
 }
 
 const NtripConnectionMetrics& NtripClient::metrics() const

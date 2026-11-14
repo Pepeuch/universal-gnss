@@ -23,7 +23,8 @@
 namespace universal_gnss_ntrip
 {
 
-#if defined(__linux__) && defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
+#if (defined(__linux__) || defined(ESP_PLATFORM)) &&                                               \
+    defined(UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT)
 
 enum class NtripClientState : std::uint8_t
 {
@@ -134,6 +135,7 @@ public:
   const NtripRequest& request() const;
   const std::string& response_header() const;
   const NtripConnectionMetrics& metrics() const;
+  const universal_gnss_transport::TransportMetrics& transport_metrics() const;
   const universal_gnss_protocols::RtcmCorrectionMonitor& correction_monitor() const;
 
 private:

@@ -1,0 +1,58 @@
+name: ESP32 native validation
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esp32-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: ESP32 native (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - s3-gateway
+          - c3-relay
+          - c3-rover-usb
+          - c3-rover-uart
+    steps:
+      - name: Check out immutable validation source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Provision, isolate, compile, test and reproduce native firmware
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          PYTHONDONTWRITEBYTECODE=1 python3 embedded/esp32/native/ci.py \
+            --source-ref "$SOURCE_SHA" --variant "$VARIANT"
+
+  gate:
+    name: ESP32 native validation gate
+    if: always()
+    needs: [firmware]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every native configuration
+        env:
+          FIRMWARE_RESULT: ${{ needs.firmware.result }}
+        run: |
+          set -euo pipefail
+          test "$FIRMWARE_RESULT" = success

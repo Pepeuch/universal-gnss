@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <charconv>
 #include <cmath>
 #include <optional>
 #include <sstream>
@@ -1524,19 +1525,14 @@ std::optional<std::uint32_t> ParseUnicoreCorrectionAgeTimeout(const std::string_
     return std::nullopt;
   }
 
-  try
-  {
-    const unsigned long value = std::stoul(std::string(timeout_s), nullptr, 10);
-    if (value < kUnicoreCorrectionAgeTimeoutMinS || value > kUnicoreCorrectionAgeTimeoutMaxS)
-    {
-      return std::nullopt;
-    }
-    return static_cast<std::uint32_t>(value);
-  }
-  catch (...)
+  unsigned long value = 0;
+  const auto parsed = std::from_chars(timeout_s.data(), timeout_s.data() + timeout_s.size(), value);
+  if (parsed.ec != std::errc{} || parsed.ptr != timeout_s.data() + timeout_s.size() ||
+      value < kUnicoreCorrectionAgeTimeoutMinS || value > kUnicoreCorrectionAgeTimeoutMaxS)
   {
     return std::nullopt;
   }
+  return static_cast<std::uint32_t>(value);
 }
 
 std::optional<std::vector<std::uint8_t>>

@@ -1,0 +1,18 @@
+menu "Experimental ESP-NOW RTCM bridge"
+config ESPNOW_RTCM_BASE
+    bool "Forward existing NTRIP client RTCM over ESP-NOW (Ethernet BASE only)"
+    default n
+config ESPNOW_RTCM_ROVER
+    bool "Minimal ESP-NOW to USB Serial/JTAG ROVER"
+    default n
+    depends on SOC_USB_SERIAL_JTAG_SUPPORTED && !ESPNOW_RTCM_BASE
+if ESPNOW_RTCM_BASE || ESPNOW_RTCM_ROVER
+config ESPNOW_RTCM_PEER_MAC
+    string "Other board's Wi-Fi STA MAC (unicast)"
+    default "00:00:00:00:00:00"
+config ESPNOW_RTCM_CHANNEL
+    int "Common test channel"
+    range 1 11
+    default 1
+endif
+endmenu

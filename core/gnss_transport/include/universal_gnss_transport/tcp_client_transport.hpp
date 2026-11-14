@@ -10,11 +10,14 @@
 
 struct ssl_ctx_st;
 struct ssl_st;
+#if defined(ESP_PLATFORM)
+struct esp_tls;
+#endif
 
 namespace universal_gnss_transport
 {
 
-#if defined(__linux__)
+#if defined(__linux__) || defined(ESP_PLATFORM)
 
 struct TcpClientConfig
 {
@@ -33,7 +36,10 @@ struct TcpClientConfig
   // Empty selects host. A distinct value is useful only for a documented TLS
   // endpoint name; custom trust roots remain outside this transport contract.
   std::string tls_server_name{};
-  // Optional PEM trust bundle loaded in addition to the system trust store.
+  // Optional PEM trust bundle loaded in addition to the Linux system trust store.
+  // IDF: an explicit file selects a private trust bundle; an empty file setting
+  // uses the SDK certificate bundle. The native IDF adapter also resolves private
+  // nvs://ug_tls/<name> objects. IDF never allows tls_verify_peer=false.
   std::string tls_ca_file{};
   std::string tls_client_certificate_file{};
   std::string tls_client_private_key_file{};
@@ -72,8 +78,13 @@ public:
 private:
   int fd_{-1};
   bool use_generic_fd_io_{false};
+#if defined(ESP_PLATFORM)
+  ::esp_tls* idf_tls_{nullptr};
+  std::string ca_pem_{}, client_pem_{}, key_pem_{};
+#else
   ::ssl_ctx_st* tls_context_{nullptr};
   ::ssl_st* tls_session_{nullptr};
+#endif
   TcpClientConfig config_{};
   TransportMetrics metrics_{};
 };
