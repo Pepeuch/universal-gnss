@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "ug_gateway.hpp"
+#include "ug_ntrip_trace.hpp"
 #include "universal_gnss_ntrip/ntrip_config.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 namespace ug::embedded
@@ -20,6 +21,10 @@ public:
   void Tick(std::int64_t now_ns);
   bool Send(const Gateway::Frame&, std::int64_t now_ns);
   void Stop();
+  void SetTrace(NtripTraceSink sink)
+  {
+    trace_ = sink;
+  }
   bool streaming() const
   {
     return state_ == State::kStreaming;
@@ -38,7 +43,8 @@ private:
     kResponse,
     kStreaming
   };
-  void Fail(std::int64_t now_ns);
+  void Fail(std::int64_t now_ns, NtripTraceError error);
+  NtripTraceSink trace_;
   bool WriteAll(const std::uint8_t*, std::size_t);
   State state_{State::kStopped};
   universal_gnss_transport::TcpClientTransport transport_;

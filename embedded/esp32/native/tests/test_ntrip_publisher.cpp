@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_ntrip_publisher.hpp"
 #include "ug_rtcm.h"
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <netinet/in.h>
@@ -62,6 +63,17 @@ int main()
     close(fd);
   });
   ug::embedded::NtripPublisher publisher;
+  struct Trace
+  {
+    ug::embedded::NtripTraceKind kind;
+    ug::embedded::NtripTraceError error;
+  };
+  std::vector<Trace> events;
+  publisher.SetTrace({[](auto kind, auto error, auto code, void* context) {
+                        assert(code == 0);
+                        static_cast<std::vector<Trace>*>(context)->push_back({kind, error});
+                      },
+                      &events});
   universal_gnss_ntrip::NtripConfig config;
   config.host = "127.0.0.1";
   config.port = ntohs(addr.sin_port);
@@ -72,6 +84,13 @@ int main()
   while (!publisher.streaming() && Now() < deadline)
     publisher.Tick(Now());
   assert(publisher.streaming());
+  using K = ug::embedded::NtripTraceKind;
+  using E = ug::embedded::NtripTraceError;
+  const std::vector<K> expected{
+      K::kEnabled, K::kConnectAttempt, K::kConnected, K::kRequestSent, K::kAccepted};
+  assert(events.size() == expected.size());
+  for (std::size_t i = 0; i < events.size(); ++i)
+    assert(events[i].kind == expected[i] && events[i].error == E::kNone);
   frame.receipt_ns = Now() - 4000000000LL;
   assert(!publisher.Send(frame, Now()));
   frame.receipt_ns = Now();
@@ -80,14 +99,55 @@ int main()
   server.join();
   publisher.Tick(Now());
   assert(!publisher.streaming());
+  assert(events.back().kind == K::kFailure && events.back().error == E::kRead);
   assert(publisher.metrics().frames == 2 && publisher.metrics().expired == 1);
   publisher.Stop();
+  assert(events.back().kind == K::kStopped);
+  const auto stopped_size = events.size();
   auto invalid = config;
   invalid.password = "bad\r\nheader";
   assert(!publisher.Configure(invalid, true));
+  assert(events.size() == stopped_size);
+  for (bool timeout_case : {false, true})
+  {
+    events.clear();
+    std::atomic<bool> release{false};
+    std::thread rejected([&] {
+      const int fd = accept(listener, nullptr, nullptr);
+      assert(fd >= 0);
+      timeval timeout{2, 0};
+      setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+      char data[1024];
+      assert(recv(fd, data, sizeof(data), 0) > 0);
+      if (!timeout_case)
+      {
+        const std::string denied = "ERROR - Bad Password\r\n";
+        assert(send(fd, denied.data(), denied.size(), 0) == static_cast<ssize_t>(denied.size()));
+      }
+      const auto end = Now() + 2000000000LL;
+      while (!release && Now() < end)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      close(fd);
+    });
+    assert(publisher.Configure(config, true));
+    const auto end = Now() + 1500000000LL;
+    while ((events.empty() || events.back().kind != K::kRequestSent) && Now() < end)
+      publisher.Tick(Now());
+    assert(events.back().kind == K::kRequestSent);
+    while (events.back().kind != K::kFailure && Now() < end)
+      publisher.Tick(Now() + (timeout_case ? 6000000000LL : 0));
+    release = true;
+    rejected.join();
+    assert(events.back().kind == K::kFailure &&
+           events.back().error == (timeout_case ? E::kTimeout : E::kProtocol));
+    for (const auto& event : events)
+      assert(event.kind != K::kAccepted);
+    publisher.Stop();
+  }
   bool cancelled = true;
   assert(publisher.Configure(config, true, [&] { return cancelled; }));
   publisher.Tick(Now());
   assert(!publisher.streaming());
+  assert(events.back().kind == K::kFailure && events.back().error == E::kCancelled);
   close(listener);
 }

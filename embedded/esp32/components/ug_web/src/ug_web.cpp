@@ -526,6 +526,46 @@ esp_err_t NtripRuntimeReply(httpd_req_t* req)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
   return Json(req, root.get());
 }
+esp_err_t NetworkHistoryReply(httpd_req_t* req)
+{
+  const auto snapshot = NetworkHistory();
+  const auto now = esp_timer_get_time() * 1000;
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root ||
+      !cJSON_AddStringToObject(root.get(), "scope", "volatile_ntrip_transitions_this_boot") ||
+      !cJSON_AddBoolToObject(root.get(), "proves_correction_flow", false) ||
+      !cJSON_AddStringToObject(
+          root.get(), "overwritten", std::to_string(snapshot.overwritten).c_str()) ||
+      !cJSON_AddStringToObject(root.get(), "rejected", std::to_string(snapshot.rejected).c_str()) ||
+      !cJSON_AddStringToObject(root.get(), "coalesced", std::to_string(snapshot.coalesced).c_str()))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  auto* list = cJSON_AddArrayToObject(root.get(), "events");
+  if (!list)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < snapshot.count; ++i)
+  {
+    const auto& event = snapshot.events[i];
+    auto* value = cJSON_CreateObject();
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddItemToArray(list, value);
+    if (!cJSON_AddStringToObject(value, "sequence", std::to_string(event.sequence).c_str()) ||
+        !cJSON_AddStringToObject(value, "service", ServiceName(event.service)) ||
+        !cJSON_AddStringToObject(value, "kind", NtripTraceName(event.kind)) ||
+        !cJSON_AddStringToObject(value, "error", NtripTraceErrorName(event.error)) ||
+        !cJSON_AddNumberToObject(value, "ug_client_error", event.client_error) ||
+        !cJSON_AddStringToObject(value,
+                                 "configuration_revision",
+                                 std::to_string(event.configuration_revision).c_str()) ||
+        !cJSON_AddStringToObject(
+            value, "link_generation", std::to_string(event.link_generation).c_str()) ||
+        !cJSON_AddStringToObject(value, "attempt", std::to_string(event.attempt).c_str()) ||
+        !cJSON_AddNumberToObject(
+            value, "age_ms", now >= event.receipt_ns ? (now - event.receipt_ns) / 1000000 : -1))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+  }
+  return Json(req, root.get());
+}
 esp_err_t EventReply(httpd_req_t* req)
 {
   const auto snapshot = ServiceEvents();
@@ -620,7 +660,7 @@ esp_err_t Get(httpd_req_t* req)
   if (uri == "/api/resources")
     return Resources(req);
   const auto work = uri == "/api/gnss/satellites" || uri == "/api/diagnostics/events" ||
-                            uri == "/api/gnss/commands"
+                            uri == "/api/gnss/commands" || uri == "/api/ntrip/history"
                         ? WebWork::kDetailedDiagnostics
                         : WebWork::kSnapshot;
   if (!AdmitWebWork(AssessResources(CurrentMemory()), work))
@@ -635,6 +675,8 @@ esp_err_t Get(httpd_req_t* req)
     return EventReply(req);
   if (uri == "/api/ntrip/runtime")
     return NtripRuntimeReply(req);
+  if (uri == "/api/ntrip/history")
+    return NetworkHistoryReply(req);
   if (uri == "/api/config/history")
   {
     const auto history = ConfigurationBanks();

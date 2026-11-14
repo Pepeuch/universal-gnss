@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
+#include "ug_ntrip_trace.hpp"
 #include "universal_gnss_ntrip/ntrip_client.hpp"
 #include <array>
 #include <functional>
@@ -18,6 +19,10 @@ public:
                  std::function<bool()> cancelled = {});
   void Tick(std::int64_t now_ns, const universal_gnss::GnssRuntimeState* gga_state = nullptr);
   void Stop();
+  void SetTrace(NtripTraceSink sink)
+  {
+    trace_ = sink;
+  }
   const universal_gnss_ntrip::NtripClient& client() const
   {
     return client_;
@@ -29,6 +34,7 @@ public:
 
 private:
   void EndSession();
+  NtripTraceSink trace_;
   universal_gnss_ntrip::NtripClient client_;
   FrameSink sink_;
   SessionBoundary boundary_;

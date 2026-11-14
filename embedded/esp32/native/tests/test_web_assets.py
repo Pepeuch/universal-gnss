@@ -24,7 +24,7 @@ class WebAssets(unittest.TestCase):
           class AbortController {constructor(){this.signal={};}abort(){}}
           let hold_selftest = false, release_selftest;
           let hold_commands = false, release_commands;
-          let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events;
+          let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events, hold_ntrip_history = false, release_ntrip_history;
           const confirm = () => true;
           const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
@@ -39,6 +39,12 @@ class WebAssets(unittest.TestCase):
                 release_selftest = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-selftest-session"}'});
               });
               return {ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"ok":true,"scope":"offline_private_codec_buffers","checks":{"crc_vectors":true}}'};
+            }
+            if (path === '/api/ntrip/history') {
+              if (hold_ntrip_history) return new Promise(resolve => {
+                release_ntrip_history = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-ntrip-session"}'});
+              });
+              return {ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"scope":"volatile_ntrip_transitions_this_boot","events":[{"service":"publisher_0","kind":"failure","error":"response_protocol"}]}'};
             }
             if (path === '/api/gnss/commands') {
               if (hold_commands) return new Promise(resolve => {
@@ -116,6 +122,9 @@ class WebAssets(unittest.TestCase):
         vm.eval("elements['ntrip-read'].onclick();")
         self.drain(vm)
         self.assertIn('sample_current', vm.eval("elements['ntrip-runtime'].textContent"))
+        vm.eval("elements['ntrip-history-read'].onclick();")
+        self.drain(vm)
+        self.assertIn('response_protocol', vm.eval("elements['ntrip-history'].textContent"))
         vm.eval("elements['ntrip-restart'].onclick();")
         self.drain(vm)
         restart = json.loads(vm.eval("calls.filter(c=>c.path==='/api/ntrip/restart').pop().options.body"))
@@ -170,7 +179,9 @@ class WebAssets(unittest.TestCase):
         vm.eval("elements['wire-selftest'].onclick();")
         self.drain(vm)
         self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/diagnostics/wire-selftest').length"), count)
-        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands(); release_selftest();')
+        vm.eval("hold_ntrip_history=true; elements['ntrip-history-read'].onclick();")
+        self.drain(vm)
+        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands(); release_selftest(); release_ntrip_history();')
         self.drain(vm)
         self.assertEqual(vm.eval('elements.receiver.textContent'), 'Session fermée')
         self.assertEqual(vm.eval('elements.events.textContent'), 'Session fermée')
@@ -178,6 +189,7 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval("elements['wire-selftest-result'].textContent"), 'Session fermée')
         self.assertTrue(vm.eval("elements['wire-selftest'].disabled"))
         self.assertEqual(vm.eval("elements['ntrip-runtime'].textContent"), 'Session fermée')
+        self.assertEqual(vm.eval("elements['ntrip-history'].textContent"), 'Session fermée')
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')

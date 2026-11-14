@@ -91,7 +91,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -213,4 +213,10 @@ $('wire-selftest').onclick = handle(async () => {
     wireSelfTestRunning = false;
     if (generation === sessionGeneration) $('wire-selftest').disabled = !wireSelfTestAllowed || !token;
   }
+});
+
+$('ntrip-history-read').onclick = handle(async () => {
+  const generation = sessionGeneration, report = await call('/api/ntrip/history');
+  if (generation !== sessionGeneration || !token) return;
+  $('ntrip-history').textContent = print(report);
 });

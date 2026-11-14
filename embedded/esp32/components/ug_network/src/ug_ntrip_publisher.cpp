@@ -44,21 +44,26 @@ bool NtripPublisher::Configure(const universal_gnss_ntrip::NtripConfig& config,
   session_frames_ = 0;
   if (enabled)
     state_ = State::kConnect;
+  trace_.Emit(enabled ? NtripTraceKind::kEnabled : NtripTraceKind::kDisabled);
   return true;
 }
 void NtripPublisher::Stop()
 {
+  const bool was_enabled = state_ != State::kStopped;
   transport_.Close();
   state_ = State::kStopped;
   response_size_ = 0;
+  if (was_enabled)
+    trace_.Emit(NtripTraceKind::kStopped);
 }
-void NtripPublisher::Fail(const std::int64_t now_ns)
+void NtripPublisher::Fail(const std::int64_t now_ns, NtripTraceError error)
 {
   transport_.Close();
   ++metrics_.failures;
   state_ = State::kConnect;
   response_size_ = 0;
   config_.reconnect_policy.OnFailure(reconnect_, now_ns);
+  trace_.Emit(NtripTraceKind::kFailure, error);
 }
 bool NtripPublisher::WriteAll(const std::uint8_t* data, std::size_t size)
 {
@@ -83,7 +88,7 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
     return;
   if (cancelled_ && cancelled_())
   {
-    Fail(now_ns);
+    Fail(now_ns, NtripTraceError::kCancelled);
     return;
   }
   if (state_ == State::kConnect)
@@ -92,13 +97,15 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
       return;
     attempted_ = true;
     session_frames_ = 0;
+    trace_.Emit(NtripTraceKind::kConnectAttempt);
     if (transport_.Open(tcp_) != universal_gnss_transport::TransportError::kNone)
     {
-      Fail(now_ns);
+      Fail(now_ns, NtripTraceError::kConnect);
       return;
     }
     ++metrics_.connects;
     state_ = State::kRequest;
+    trace_.Emit(NtripTraceKind::kConnected);
     return;
   }
   if (state_ == State::kRequest)
@@ -109,11 +116,12 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
                          "\r\nSource-Agent: NTRIP " + config_.user_agent + "\r\n\r\n";
     if (!WriteAll(reinterpret_cast<const std::uint8_t*>(request.data()), request.size()))
     {
-      Fail(now_ns);
+      Fail(now_ns, NtripTraceError::kWrite);
       return;
     }
     response_started_ = now_ns;
     state_ = State::kResponse;
+    trace_.Emit(NtripTraceKind::kRequestSent);
     return;
   }
   if (state_ == State::kResponse)
@@ -121,7 +129,10 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
     if (now_ns < response_started_ || now_ns - response_started_ > 5000000000LL ||
         response_size_ >= response_.size() - 1)
     {
-      Fail(now_ns);
+      Fail(now_ns,
+           now_ns < response_started_ || now_ns - response_started_ > 5000000000LL
+               ? NtripTraceError::kTimeout
+               : NtripTraceError::kProtocol);
       return;
     }
     std::uint8_t bytes[128];
@@ -131,14 +142,14 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
     if (read.status != universal_gnss_transport::TransportStatus::kOk ||
         read.bytes_read > sizeof(bytes))
     {
-      Fail(now_ns);
+      Fail(now_ns, NtripTraceError::kRead);
       return;
     }
     for (std::size_t i = 0; i < read.bytes_read; ++i)
     {
       if (response_size_ == response_.size() - 1 || bytes[i] == 0)
       {
-        Fail(now_ns);
+        Fail(now_ns, NtripTraceError::kProtocol);
         return;
       }
       response_[response_size_++] = bytes[i];
@@ -148,10 +159,11 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
         // SOURCE-v1 acknowledges with ICY; HTTP upload/chunking is not silently invented.
         if (line != "ICY 200 OK\r\n" && line != "ICY 200 OK\n")
         {
-          Fail(now_ns);
+          Fail(now_ns, NtripTraceError::kProtocol);
           return;
         }
         state_ = State::kStreaming;
+        trace_.Emit(NtripTraceKind::kAccepted);
         return;
       }
     }
@@ -162,7 +174,7 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
     std::uint8_t bytes[64];
     const auto read = transport_.Read(bytes, sizeof(bytes));
     if (read.status != universal_gnss_transport::TransportStatus::kOk)
-      Fail(now_ns);
+      Fail(now_ns, NtripTraceError::kRead);
   }
 }
 bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns)
@@ -178,7 +190,7 @@ bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns
     return false;
   if (!WriteAll(frame.bytes.data(), frame.size))
   {
-    Fail(now_ns);
+    Fail(now_ns, NtripTraceError::kWrite);
     return false;
   }
   ++metrics_.frames;

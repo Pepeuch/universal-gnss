@@ -26,7 +26,9 @@ receiver commands. Native Web resource admission distinguishes internal RAM from
 PSRAM and retains compact diagnostics under memory pressure. A bounded typed
 service event history is available without capturing raw SDK logs. Per-owner NTRIP
 metrics and explicitly confirmed connection restart are exposed with stale-sample
-protection. The minimal C3 rover retains USB output by default and now offers an
+protection. A bounded NTRIP transition history now retains typed client/publisher
+connection, acceptance and failure outcomes with configuration/link provenance;
+it stores no endpoint, credential or raw response. The minimal C3 rover retains USB output by default and now offers an
 explicit TX-only UART1 build option, with bounded writes and no application logs.
 Its software tests and builds pass; physical UART acceptance remains pending.
 Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;

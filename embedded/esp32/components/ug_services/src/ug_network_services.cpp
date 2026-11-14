@@ -60,10 +60,32 @@ universal_gnss::GnssRuntimeState gnss_snapshot;
 std::optional<std::int64_t> position_receipt_ns;
 portMUX_TYPE metrics_guard = portMUX_INITIALIZER_UNLOCKED;
 NetworkServiceStats stats;
+NetworkTraceRing history;
 std::int64_t Now()
 {
   return esp_timer_get_time() * 1000;
 }
+struct TraceContext
+{
+  ServiceId service;
+  const std::uint64_t& revision;
+  const std::uint64_t& link;
+  std::uint64_t attempt{};
+  static void Observe(NtripTraceKind kind, NtripTraceError error, std::uint8_t code, void* context)
+  {
+    auto& owner = *static_cast<TraceContext*>(context);
+    if (kind == NtripTraceKind::kConnectAttempt && owner.attempt != UINT64_MAX)
+      ++owner.attempt;
+    portENTER_CRITICAL(&metrics_guard);
+    history.Append(
+        {0, owner.revision, owner.link, owner.attempt, Now(), owner.service, kind, error, code});
+    portEXIT_CRITICAL(&metrics_guard);
+  }
+  NtripTraceSink Sink()
+  {
+    return {Observe, this};
+  }
+};
 bool Current(const Gateway::Frame& f)
 {
   return CorrectionSourceCurrent(f.source, f.incarnation) && Now() >= f.receipt_ns &&
@@ -104,6 +126,8 @@ void InputWorker(void*)
       [](bool active) {
         upstream_generation = BeginCorrectionSource(kUpstream, active && network_ready.load());
       });
+  TraceContext trace{ServiceId::kNtripInput, config_generation, link_generation};
+  input.SetTrace(trace.Sink());
   for (;;)
   {
     const auto config = Configuration();
@@ -160,6 +184,10 @@ void PublisherWorker(void* context)
   NtripPublisher publisher;
   Gateway::Frame frame;
   std::uint64_t config_generation = 0, link_generation = 0;
+  TraceContext trace{static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
+                     config_generation,
+                     link_generation};
+  publisher.SetTrace(trace.Sink());
   std::size_t source = Gateway::kSources;
   std::uint64_t incarnation = 0;
   for (;;)
@@ -362,6 +390,13 @@ NetworkServiceStats NetworkStats()
   portEXIT_CRITICAL(&metrics_guard);
   return ProjectNetworkStats(
       out, Configuration()->revision, network_generation.load(), network_ready.load(), Now());
+}
+NetworkTraceSnapshot NetworkHistory()
+{
+  portENTER_CRITICAL(&metrics_guard);
+  const auto out = history.Snapshot();
+  portEXIT_CRITICAL(&metrics_guard);
+  return out;
 }
 esp_err_t StartNetworkServices()
 {

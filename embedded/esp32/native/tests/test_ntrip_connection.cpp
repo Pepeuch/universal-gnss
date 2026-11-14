@@ -60,6 +60,17 @@ int main()
   std::vector<bool> boundaries;
   ug::embedded::NtripConnection connection([&](const auto& f) { received.push_back(f.raw_bytes); },
                                            [&](bool open) { boundaries.push_back(open); });
+  struct Trace
+  {
+    ug::embedded::NtripTraceKind kind;
+    ug::embedded::NtripTraceError error;
+    std::uint8_t code;
+  };
+  std::vector<Trace> events;
+  connection.SetTrace({[](auto kind, auto error, auto code, void* context) {
+                         static_cast<std::vector<Trace>*>(context)->push_back({kind, error, code});
+                       },
+                       &events});
   universal_gnss_ntrip::NtripConfig config;
   config.host = "127.0.0.1";
   config.port = ntohs(address.sin_port);
@@ -67,6 +78,7 @@ int main()
   auto invalid = config;
   invalid.mountpoint = "MOUNT\r\nInjected: yes";
   assert(!connection.Configure(invalid, true));
+  assert(events.empty());  // Invalid configuration never mutates the running owner.
   assert(connection.Configure(config, true));
   const auto deadline = Now() + 1500000000LL;
   while (received.size() < 2 && Now() < deadline)
@@ -75,13 +87,54 @@ int main()
   assert(connection.client().IsCorrectionFlowing());
   assert(connection.client().metrics().rtcm_frames_received == 2);
   assert(boundaries.size() == 1 && boundaries[0]);
+  using K = ug::embedded::NtripTraceKind;
+  const std::vector<K> expected{
+      K::kEnabled, K::kConnectAttempt, K::kConnected, K::kRequestSent, K::kAccepted};
+  assert(events.size() == expected.size());
+  for (std::size_t i = 0; i < events.size(); ++i)
+    assert(events[i].kind == expected[i] &&
+           events[i].error == ug::embedded::NtripTraceError::kNone);
   done = true;
   server.join();
   connection.Tick(Now());
   assert(!connection.client().IsConnected());
   assert(boundaries.size() == 2 && !boundaries.back());
   assert(connection.client().reconnect_state().attempt_count > 0);
+  assert(events.back().kind == K::kFailure &&
+         events.back().code ==
+             static_cast<unsigned>(universal_gnss_ntrip::NtripClientError::kDisconnected));
+  const auto failures = events.size();
+  connection.Tick(Now());
+  assert(events.size() == failures);  // Backoff polling emits no fake attempt.
   connection.Stop();
   assert(!connection.enabled());
+  assert(events.back().kind == K::kStopped);
+  assert(connection.Configure(config, false));
+  assert(events.back().kind == K::kDisabled);
+  events.clear();
+  std::thread rejected([&] {
+    const int fd = accept(listener, nullptr, nullptr);
+    assert(fd >= 0);
+    timeval timeout{2, 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    char data[1024];
+    assert(recv(fd, data, sizeof(data), 0) > 0);
+    const std::string denied = "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n";
+    assert(send(fd, denied.data(), denied.size(), 0) == static_cast<ssize_t>(denied.size()));
+    close(fd);
+  });
+  assert(connection.Configure(config, true));
+  const auto reject_deadline = Now() + 1500000000LL;
+  while ((events.empty() || events.back().kind != K::kFailure) && Now() < reject_deadline)
+    connection.Tick(Now());
+  rejected.join();
+  assert(events.back().kind == K::kFailure &&
+         events.back().code ==
+             static_cast<unsigned>(
+                 universal_gnss_ntrip::NtripClientError::kHttp));  // Preserve the UG client's
+                                                                   // existing HTTP classification.
+  for (const auto& event : events)
+    assert(event.kind != K::kAccepted);
+  connection.Stop();
   close(listener);
 }

@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_network_diagnostics.hpp"
+#include "ug_network_history.hpp"
 #include "ug_network_operations.hpp"
 #include <cassert>
+#include <type_traits>
 using namespace ug::embedded;
+static_assert(sizeof(NetworkTraceRing) <= 1024);
+static_assert(std::is_trivially_copyable<NetworkTraceEvent>::value);
 int main()
 {
   NetworkServiceStats raw;
@@ -39,4 +43,59 @@ int main()
                               R"({"confirm":"RESTART_NTRIP_SERVICES","slot":0})",
                               R"({"confirm":"RESTART_NTRIP_SERVICES","confirm":"RESET"})"})
     assert(!DecodeNetworkRestart(invalid, error));
+
+  NetworkTraceRing history;
+  NetworkTraceEvent event{0,
+                          7,
+                          3,
+                          1,
+                          1000,
+                          ServiceId::kNtripInput,
+                          NtripTraceKind::kFailure,
+                          NtripTraceError::kClient,
+                          2};
+  assert(history.Append(event));
+  event.receipt_ns = 9000;
+  assert(history.Append(event));
+  auto trace = history.Snapshot();
+  assert(trace.count == 1 && trace.events[0].receipt_ns == 1000 && trace.coalesced == 1);
+  for (unsigned i = 0; i < kNetworkTraceCapacity + 3; ++i)
+  {
+    ++event.attempt;
+    ++event.receipt_ns;
+    event.service = i % 2 ? ServiceId::kPublisher4 : ServiceId::kNtripInput;
+    assert(history.Append(event));
+  }
+  trace = history.Snapshot();
+  assert(trace.count == kNetworkTraceCapacity && trace.overwritten == 4);
+  assert(trace.events[0].sequence == 5 && trace.events.back().sequence == 20);
+  assert(trace.events.back().configuration_revision == 7 &&
+         trace.events.back().link_generation == 3);
+  assert(history.Snapshot().count == trace.count);  // Read is not consumption.
+  ++event.configuration_revision;
+  assert(history.Append(event));  // New configuration is a distinct event.
+  ++event.link_generation;
+  assert(history.Append(event));
+  for (unsigned i = 0; i < 8; ++i)
+  {
+    auto bad = event;
+    if (i == 0)
+      bad.service = ServiceId::kGnss;
+    if (i == 1)
+      bad.kind = static_cast<NtripTraceKind>(255);
+    if (i == 2)
+      bad.error = static_cast<NtripTraceError>(255);
+    if (i == 3)
+      bad.receipt_ns = -1;
+    if (i == 4)
+      bad.client_error = 255;
+    if (i == 5)
+      bad.error = NtripTraceError::kNone;
+    if (i == 6)
+      bad.client_error = 0;
+    if (i == 7)
+      bad.kind = NtripTraceKind::kEnabled;
+    assert(!history.Append(bad));
+  }
+  assert(history.Snapshot().rejected == 8);
 }

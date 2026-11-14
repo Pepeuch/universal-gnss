@@ -39,6 +39,7 @@ bool NtripConnection::Configure(const universal_gnss_ntrip::NtripConfig& config,
   client_.set_tcp_config(transport);
   enabled_ = enabled;
   attempted_ = false;
+  trace_.Emit(enabled ? NtripTraceKind::kEnabled : NtripTraceKind::kDisabled);
   return true;
 }
 void NtripConnection::EndSession()
@@ -52,10 +53,13 @@ void NtripConnection::EndSession()
 }
 void NtripConnection::Stop()
 {
+  const bool was_enabled = enabled_;
   client_.Disconnect();
   EndSession();
   enabled_ = false;
   frames_.clear();
+  if (was_enabled)
+    trace_.Emit(NtripTraceKind::kStopped);
 }
 void NtripConnection::Tick(const std::int64_t now_ns, const universal_gnss::GnssRuntimeState* state)
 {
@@ -64,13 +68,24 @@ void NtripConnection::Tick(const std::int64_t now_ns, const universal_gnss::Gnss
     return;
   if (!client_.IsConnected())
   {
+    if (session_open_)
+      trace_.Emit(NtripTraceKind::kFailure,
+                  NtripTraceError::kClient,
+                  static_cast<std::uint8_t>(client_.metrics().last_error));
     EndSession();
     if (attempted_ &&
         !client_.config().reconnect_policy.ShouldReconnect(client_.reconnect_state(), now_ns))
       return;
     attempted_ = true;
-    if (client_.Connect(now_ns) != NtripClientError::kNone)
+    trace_.Emit(NtripTraceKind::kConnectAttempt);
+    const auto error = client_.Connect(now_ns);
+    if (error != NtripClientError::kNone)
+    {
+      trace_.Emit(
+          NtripTraceKind::kFailure, NtripTraceError::kClient, static_cast<std::uint8_t>(error));
       return;
+    }
+    trace_.Emit(NtripTraceKind::kConnected);
     session_open_ = true;
     if (boundary_)
       boundary_(true);
@@ -79,17 +94,32 @@ void NtripConnection::Tick(const std::int64_t now_ns, const universal_gnss::Gnss
   }
   if (!client_.metrics().request_sent)
   {
-    if (client_.SendRequest(now_ns) != NtripClientError::kNone)
+    const auto error = client_.SendRequest(now_ns);
+    if (error != NtripClientError::kNone)
+    {
+      trace_.Emit(
+          NtripTraceKind::kFailure, NtripTraceError::kClient, static_cast<std::uint8_t>(error));
       EndSession();
+    }
+    else
+      trace_.Emit(NtripTraceKind::kRequestSent);
     return;
   }
   frames_.clear();
+  const bool accepted = client_.correction_flow_state().response_accepted;
   const auto read = client_.Read(bytes_.data(), bytes_.size(), now_ns, &frames_);
+  if (!accepted && client_.correction_flow_state().response_accepted)
+    trace_.Emit(NtripTraceKind::kAccepted);
   for (const auto& frame : frames_)
     if (frame.checksum_status == universal_gnss_protocols::ChecksumStatus::kValid && sink_)
       sink_(frame);
   if (read.client_error != NtripClientError::kNone || !client_.IsConnected())
   {
+    trace_.Emit(NtripTraceKind::kFailure,
+                NtripTraceError::kClient,
+                static_cast<std::uint8_t>(read.client_error != NtripClientError::kNone
+                                              ? read.client_error
+                                              : NtripClientError::kDisconnected));
     EndSession();
     return;
   }

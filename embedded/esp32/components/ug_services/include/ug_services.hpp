@@ -2,6 +2,7 @@
 #pragma once
 #include "esp_err.h"
 #include "ug_network_diagnostics.hpp"
+#include "ug_network_history.hpp"
 #include "universal_gnss/gnss_runtime_state.hpp"
 namespace ug::embedded
 {
@@ -19,4 +20,5 @@ struct GnssObservationSnapshot
 };
 GnssObservationSnapshot GnssObservation();
 NetworkServiceStats NetworkStats();
+NetworkTraceSnapshot NetworkHistory();
 }  // namespace ug::embedded

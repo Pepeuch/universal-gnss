@@ -1226,3 +1226,35 @@ app/bootloader/table identity pass. App sizes are **1441248/3145728** and
 the preceding 69 Linux and 166/168 isolated Lyrical tests remain applicable.
 No physical group change was performed. Earlier signal-group selection tests
 proved software construction only and did not qualify automatic persistence/reset.
+
+
+## Bounded NTRIP connection history
+
+The native client and SOURCE-v1 publishers now emit synchronous typed transitions
+into one 16-entry boot-local history. Each record retains service, configuration
+revision, link generation, owner attempt and monotonic observation time;
+completion events are timestamped after blocking operations. Stops retain the old context; reconfiguration never relabels earlier
+records. Identical consecutive failures within one attempt are coalesced without
+refreshing their first receipt time. Reads do not consume or clear the ring;
+overwrite/coalescing/rejection counters make its finite scope explicit.
+
+Authenticated `GET /api/ntrip/history` and the HTTPS operator page expose this
+history under the existing detailed-diagnostics memory admission policy. It stores
+no host, mountpoint, password, response text, position or RTCM payload. A transport
+connection, request write or accepted response is not proof of correction flow or
+RTK operation. Existing runtime metrics remain authoritative for flow. This is not
+a complete wire audit: individual GGA/frame writes and caster client transactions
+are outside this ring. Reboot clears it. Logout discards late browser responses.
+
+The 37 native ASan/UBSan CTests and browser mock pass. Actual loopback scenarios
+cover incoming HTTP success/rejection (UG preserves its `kHttp` classification for
+401), SOURCE acceptance/rejection, response timeout, EOF, cancellation, backoff,
+invalid configuration and unchanged RTCM bytes. The ring rejects invalid typed
+records, preserves provenance, bounds overwrite and does not refresh coalesced
+failures. S3/relay IDF 6.1 builds and role/partition checks pass; applications,
+bootloaders and partition tables reproduce byte-for-byte in two build directories.
+Applications are **1443600 / 3145728 bytes** (S3) and **1297632 / 1310720 bytes**
+(C3 relay, **13088 bytes spare**); the linked static ring occupies **808 bytes**
+on each target. No partition was expanded. Runtime TLS/heap peaks and scheduling
+remain unqualified. Rover inputs, portable engines and Linux/ROS2 contracts are
+unchanged; no physical port, flash, publication or remote CI run was used.
