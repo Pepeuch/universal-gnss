@@ -1,5 +1,6 @@
 add_library(
   universal_gnss_driver
+  src/base_config_profile_builder.cpp
   src/nmea_driver.cpp
   src/receiver_auto_config.cpp
   src/nmea_session.cpp

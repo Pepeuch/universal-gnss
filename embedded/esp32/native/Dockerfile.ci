@@ -1,0 +1,10 @@
+# Dependency image only: empty build context, no Universal GNSS source or overlay.
+ARG SDK_IMAGE
+FROM ${SDK_IMAGE}
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libssl-dev \
+    && dpkg-query -W libssl-dev > /opt/ug-native-host-dependencies.txt \
+    && rm -rf /var/lib/apt/lists/*
+# Project steps also explicitly select the actual runner's non-root UID/GID.
+USER 1000:1000

@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/Pepeuch/esp32-rtk-gateway.git",
+  "branch": "feat/espnow-rtcm-usb",
+  "commit": "7a1ec69f5e9d07522c0284ec2dbae380f72c7e85",
+  "license": "GPL-3.0 (retain per-file notices)",
+  "nested_submodule": {
+    "path": "external/sx126x_driver",
+    "repository": "https://github.com/Lora-net/sx126x_driver.git",
+    "commit": "a10c5dfdf89788c6ac805e9fe98889de44175aa2"
+  }
+}

@@ -4,7 +4,9 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#if !defined(ESP_PLATFORM)
 #include <filesystem>
+#endif
 #include <map>
 #include <optional>
 #include <sstream>
@@ -28,7 +30,9 @@ namespace universal_gnss_driver
 namespace
 {
 
+#if !defined(ESP_PLATFORM)
 namespace fs = std::filesystem;
+#endif
 
 using universal_gnss_protocols::ChecksumStatus;
 using universal_gnss_protocols::NmeaSentence;
@@ -43,8 +47,10 @@ using universal_gnss_protocols::UnicoreBinaryFrameFramer;
 using universal_gnss_protocols::UnicoreFrame;
 using universal_gnss_protocols::UnicoreFrameFramer;
 using universal_gnss_transport::ByteDuplex;
+#if defined(__linux__)
 using universal_gnss_transport::PosixSerialConfig;
 using universal_gnss_transport::PosixSerialTransport;
+#endif
 using universal_gnss_transport::TransportError;
 using universal_gnss_transport::TransportStatus;
 
@@ -310,6 +316,7 @@ void PopulateObservedUnicoreIdentity(ReceiverProbeResult& result,
   }
 }
 
+#if !defined(ESP_PLATFORM)
 std::string CanonicalKey(const std::string& path)
 {
   try
@@ -370,6 +377,8 @@ std::vector<std::string> ListMatchingDevicePaths(const std::string& dev_dir,
   return matches;
 }
 
+#endif
+
 int SourcePriority(const ReceiverPortSource source)
 {
   switch (source)
@@ -389,6 +398,7 @@ int SourcePriority(const ReceiverPortSource source)
   return 5;
 }
 
+#if !defined(ESP_PLATFORM)
 void MaybeInsertPreferredCandidate(std::map<std::string, ReceiverPortCandidate>& deduplicated,
                                    const ReceiverPortCandidate& candidate)
 {
@@ -408,6 +418,8 @@ void MaybeInsertPreferredCandidate(std::map<std::string, ReceiverPortCandidate>&
     existing->second = candidate;
   }
 }
+
+#endif
 
 bool IsKnownGnssNmeaTalker(const std::string_view talker)
 {
@@ -794,6 +806,13 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverDiscoveryPa
 std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig& config,
                                                        const ReceiverDiscoveryPaths& paths)
 {
+#if defined(ESP_PLATFORM)
+  // IDF has no /dev enumeration. The board owner supplies a UART ByteDuplex to
+  // ProbeReceiverTransportAtBaud/QueryReceiverModel instead.
+  (void)config;
+  (void)paths;
+  return {};
+#else
   std::map<std::string, ReceiverPortCandidate> deduplicated;
 
   for (const auto& by_id_path : ListDirectoryPaths(paths.serial_by_id_dir))
@@ -879,6 +898,7 @@ std::vector<ReceiverPortCandidate> DiscoverSerialPorts(const ReceiverProbeConfig
               return lhs.path < rhs.path;
             });
   return candidates;
+#endif
 }
 
 ReceiverPortCandidate MakeExplicitReceiverPortCandidate(const std::string& path,
@@ -889,12 +909,18 @@ ReceiverPortCandidate MakeExplicitReceiverPortCandidate(const std::string& path,
   candidate.transport_type = ReceiverTransportType::kSerial;
   candidate.source = ReceiverPortSource::kExplicitPath;
 
+#if !defined(ESP_PLATFORM)
   const fs::path by_id_dir(paths.serial_by_id_dir);
   const fs::path candidate_path(path);
   if (candidate_path.has_parent_path() && candidate_path.parent_path() == by_id_dir)
   {
     candidate.stable_id = candidate_path.filename().string();
   }
+
+#else
+  (void)paths;
+  candidate.source = ReceiverPortSource::kPlatformUart;
+#endif
 
   return candidate;
 }

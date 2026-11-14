@@ -66,6 +66,17 @@ struct UbxRxmRtcmRecord
   std::uint16_t message_type{0};
 };
 
+// UBX-NAV-SVIN v0 (F9 HPG 1.32, UBX-22008968 section 3.15.21).
+// Receipt timestamp is not iTOW; no conversion between their clock domains.
+struct UbxNavSvinRecord
+{
+  std::optional<ProtocolTimestampNs> timestamp_ns{};
+  std::uint32_t i_tow_ms{}, duration_s{}, mean_accuracy_01mm{}, observations{};
+  // Integer 0.1-mm ECEF coordinates retain the complete cm + HP wire precision.
+  std::int64_t mean_x_01mm{}, mean_y_01mm{}, mean_z_01mm{};
+  bool valid{}, active{};
+};
+
 struct UbxNavStatusRecord
 {
   std::optional<ProtocolTimestampNs> timestamp_ns{};

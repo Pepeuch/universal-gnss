@@ -2,6 +2,91 @@
 
 ## Current status
 
+A single future `esp32` distribution is planned with compilation profiles
+`gateway`, `relay-ntrip`, `rover` and, later, `repeater-espnow`. The BASE gateway
+and GNSS-free NTRIP relay share one gateway engine; local GNSS is optional for
+`gateway`. The [portable RTCM pilot and migration plan](embedded/esp32/README.md)
+are implemented on `feat/esp32`. The [transitional application integration](embedded/esp32/integration/README.md)
+now builds the real historical S3 Gateway/C3 Rover with UG CRC, with software
+validation and two-build reproducibility; definitive profiles remain to migrate.
+The overlay remains transitional; native service migration is described below.
+No new hardware qualification is claimed.
+[Native ESP32 reconstruction](embedded/esp32/migration/README.md) is now in progress:
+UG receiver/routing/BASE plans, native NTRIP services, strict persistence and a
+first HTTPS operator surface compile under IDF 6.1, including private NTRIP TLS
+credential provisioning and native ESP-NOW replay diagnostics. The C3 relay uses
+its declared one-publisher capacity without unused caster queues. Guarded receiver
+telemetry/signals and fresh F9P Survey-In reports are available;
+service supervision, degraded startup and bounded satellite-report diagnostics
+are implemented in the native profiles.
+Offline legacy JSON conversion now prepares a disabled, schema-validated candidate
+with an explicit review report. Explicit previous-bank settings restore now validates
+both banks and preserves admin identity and GNSS quarantine; it does not undo
+receiver commands. Native Web resource admission distinguishes internal RAM from
+PSRAM and retains compact diagnostics under memory pressure. A bounded typed
+service event history is available without capturing raw SDK logs. Per-owner NTRIP
+metrics and explicitly confirmed connection restart are exposed with stale-sample
+protection. A bounded NTRIP transition history now retains typed client/publisher
+connection, acceptance and failure outcomes with configuration/link provenance;
+it stores no endpoint, credential or raw response. NTRIP endpoint forms now
+configure the input or one supported publisher through the same strict settings
+API, preserving hidden passwords unless replacement or erasure is explicit. The minimal C3 rover now includes USB and TX-only UART1 in the same generic
+firmware, selected by persistent runtime configuration before radio startup.
+A [strict anonymous portable configuration](embedded/esp32/PORTABLE_CONFIG.md)
+now connects S3 WebUI export/preview/apply, C3 USB maintenance, Linux provisioning
+and the Web Flasher. Only board-authorized GPIO/UART/model/channel fields are
+portable; secrets, identities, endpoints and coordinates are absent. Local USB
+restoration is software-tested; physical USB/wiring acceptance remains pending.
+Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;
+S3 uses 20 sockets, C3 keeps 10, with compile-time rejection of insufficient pools.
+A confirmed F9P/UM980/UM982 BASE disable operation now reuses a portable UG plan and
+the native UART owner/journal; command acceptance remains distinct from physical stop.
+A bounded, volatile GNSS command-result history now retains typed dispatch, response
+and failure outcomes across observation resets, without raw payload capture.
+An authenticated, explicitly confirmed offline self-test now exercises the real UG
+CRC and shared wire codec in private buffers, without transmitting corrections.
+Native wire helpers now omit routine per-fragment INFO console output while
+retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
+Native Unicore SIGNALGROUP mutation is now refused: it can persist and reset
+automatically. Ordinary telemetry and F9P constellation requests remain available.
+The native ESP32 CI recipe now validates four bounded variants with disconnected
+non-root builds, host tests and independent reconstruction; GitHub qualification
+is pending an authorized push/PR. No firmware is published.
+Native ESP-NOW now defaults to unpaired/off and stores an explicit peer/channel/
+private LMK at runtime. S3 pairing uses an authenticated 120-second manual window;
+C3 uses nonce-checked boot USB maintenance, separated from its binary data plane.
+Settings rollback preserves the current radio identity. Software tests/builds pass;
+CCMP/RF, USB lifecycle and board wiring remain hardware acceptance tasks. See the
+[pairing and future ROS2 control contract](embedded/esp32/PAIRING.md).
+Remaining useful legacy features, device recovery,
+OTA/runtime qualification and final qualification remain open. LoRa is deferred
+by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
+Nominal historical ESP-NOW validation is accepted for development; further
+endurance and range tests belong to field validation. Existing release versions,
+historical checklists and completion metrics are unchanged.
+
+ESP32 safety finding `UG-ESP-SIGNALGROUP-001` is **BLOCKED** (RECEIVER,
+HARDWARE_REQUIRED): enabling signal-group reconfiguration requires both an
+explicit persistent/reset operation and a qualified post-reset incarnation /
+response boundary, plus device validation. The native rejection guard is
+implemented; that is not completion of this feature. The shared driver's
+`CONFIG SIGNALGROUP` runtime classification also requires separate review;
+Linux/ROS2 callers are not repaired or qualified by this native-only guard.
+See the [blocked resumption contract](.agent/shared/checkpoints/blocked/UG-ESP-SIGNALGROUP-001.md).
+This ESP32 finding changes no existing UG release-gate metric.
+
+The [UG Build & Flash portal source](docs/flasher.html) now uses bounded generic
+S3 Gateway and C3 USB/UART Rover profiles. Runtime pairing is separate from ROM
+identity. Local packaging verifies actual IDF offsets, partitions and qualified
+binary hashes; the browser freezes verified bytes before offering installation.
+A manual, read-only controlled-build workflow and local Pages staging are prepared.
+The approval register and public catalogue remain empty: no deployed Pages site,
+installable published firmware or public build automation is claimed. Durable
+storage, default-branch integration, explicit source/publication approval and
+hardware acceptance remain separate gates. Configuration-preserving updates are
+not offered. See the [portal procedure and limits](docs/flasher/README.md).
+Existing UG release/backlog completion metrics are unaffected.
+
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 

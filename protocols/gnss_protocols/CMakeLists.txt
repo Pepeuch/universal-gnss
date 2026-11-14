@@ -242,3 +242,9 @@ if(BUILD_TESTING)
     COMMAND gnss_protocols_test_unicore_binary_pvtsln
   )
 endif()
+
+if(BUILD_TESTING)
+  add_executable(gnss_protocols_test_ubx_nav_svin tests/test_ubx_nav_svin.cpp)
+  target_link_libraries(gnss_protocols_test_ubx_nav_svin PRIVATE universal_gnss_protocols)
+  add_test(NAME gnss_protocols_test_ubx_nav_svin COMMAND gnss_protocols_test_ubx_nav_svin)
+endif()

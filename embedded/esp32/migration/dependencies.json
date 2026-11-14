@@ -1,0 +1,61 @@
+{
+  "sdk": {
+    "version": "6.1",
+    "image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c"
+  },
+  "managed": {
+    "espressif/mdns": {
+      "version": "1.15.1",
+      "component_hash": "2fa43caa78cc170842255bc7bf71f306bc815cae12e9496bfb12372423019ac7",
+      "source": {
+        "registry_url": "https://components.espressif.com/",
+        "type": "service"
+      },
+      "license": "Apache-2.0"
+    },
+    "espressif/w5500": {
+      "version": "2.0.1",
+      "component_hash": "f76a95ce7a6029cf93aa39d47067588b24263852031f11c71e5d192ad915ec07",
+      "source": {
+        "registry_url": "https://components.espressif.com/",
+        "type": "service"
+      },
+      "license": "Apache-2.0"
+    },
+    "espressif/wiznet_common": {
+      "version": "1.1.0",
+      "component_hash": "c32814cb872f0dca09f0c97ab231f9264a65bacc13fab6baf65f71959269a73d",
+      "source": {
+        "registry_url": "https://components.espressif.com/",
+        "type": "service"
+      },
+      "license": "Apache-2.0"
+    },
+    "idf": {
+      "version": "6.1.0",
+      "component_hash": null,
+      "source": {
+        "type": "idf"
+      },
+      "license": "Apache-2.0"
+    },
+    "espressif/cjson": {
+      "version": "1.7.19~2",
+      "component_hash": "e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469",
+      "source": {
+        "registry_url": "https://components.espressif.com/",
+        "type": "service"
+      },
+      "license": "MIT"
+    }
+  },
+  "scope": "Native SDK/network dependencies only. Complete linked firmware/SX126x inventory remains open.",
+  "host_test_only": {
+    "quickjs": {
+      "version": "1.19.4",
+      "purpose": "execute embedded browser JavaScript against deterministic DOM/fetch mocks",
+      "license": "MIT",
+      "firmware_dependency": false
+    }
+  }
+}

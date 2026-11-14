@@ -507,6 +507,14 @@
     {
       "path": "universal-gnss-validation/",
       "reason": "Immutable historical campaign material"
+    },
+    {
+      "path": "embedded/esp32/",
+      "reason": "Experimental ESP-IDF-only sources and pinned historical reference; never a ROS2 payload dependency"
+    },
+    {
+      "path": "tools/package_firmware.py",
+      "reason": "Local ESP32 Web Flasher packaging tool; not a ROS2 runtime dependency"
     }
   ],
   "references": [
