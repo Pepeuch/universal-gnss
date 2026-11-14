@@ -52,8 +52,11 @@ struct BaseDisableRequest
   std::uint8_t uart_port{1};
   bool persist{false}, confirm_persistent{false};
 };
-// Verified F9P only: leave static time mode and disable the native BASE profile's
-// RTCM outputs on the selected UART. Does not erase coordinates or other ports.
+// Verified F9P or UM980/UM982: leave BASE mode and disable the native profile's
+// RTCM outputs on the selected UART. Receiver mode is global; no other port's
+// logging rules are explicitly rewritten. F9P coordinate keys are not written.
+// Unicore uses generic MODE ROVER without an explicit reset/erase command, not
+// restoration of an earlier BASE/rover configuration. Persistence requires approval.
 // ACK is command acceptance, not physical stop evidence. Unsupported models fail closed.
 BaseConfigPlan BuildBaseDisableProfile(const BaseDisableRequest& request);
 }  // namespace universal_gnss_driver

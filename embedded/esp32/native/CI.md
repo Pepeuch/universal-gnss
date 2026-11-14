@@ -65,11 +65,11 @@ entire matrix: failure, cancellation, skip and missing result remain non-green.
 The existing ROS2/distribution gates and Release workflows are unchanged. Merely
 adding this gate does not make it required by GitHub branch protections.
 
-Local qualification: 37 native CTests, one browser test, eight capture tests,
+Local qualification at the CI recipe milestone: 37 native CTests, one browser test, eight capture tests,
 211 generator/CI tests and eight native build-policy tests pass. Four actual
 variant runs passed their build/verification/reconstruction checks; earlier C3
 results were retained where subsequent changes affected only S3 host setup.
-SDK dependencies were fetched from their public sources. Current app sizes:
+SDK dependencies were fetched from their public sources. App sizes at that milestone:
 S3 1440512, relay 1294432, USB rover 682816, UART rover 694288 bytes.
 
 Reproducibility is scoped to the declared SDK and normalized CI source/build

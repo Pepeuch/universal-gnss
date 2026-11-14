@@ -31,7 +31,7 @@ explicit TX-only UART1 build option, with bounded writes and no application logs
 Its software tests and builds pass; physical UART acceptance remains pending.
 Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;
 S3 uses 20 sockets, C3 keeps 10, with compile-time rejection of insufficient pools.
-A confirmed F9P-only BASE disable operation now reuses a portable UG plan and
+A confirmed F9P/UM980/UM982 BASE disable operation now reuses a portable UG plan and
 the native UART owner/journal; command acceptance remains distinct from physical stop.
 A bounded, volatile GNSS command-result history now retains typed dispatch, response
 and failure outcomes across observation resets, without raw payload capture.

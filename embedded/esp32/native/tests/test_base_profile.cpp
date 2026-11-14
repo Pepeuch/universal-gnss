@@ -1,7 +1,9 @@
 #include "ug_base_operation.hpp"
+#include "ug_receiver_runtime.hpp"
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "universal_gnss_driver/base_config_profile_builder.hpp"
 #include "universal_gnss_protocols/ubx_framer.hpp"
+#include "universal_gnss_transport/memory_stream.hpp"
 #include <cassert>
 #include <cmath>
 #include <limits>
@@ -70,8 +72,68 @@ int main()
   assert(!BuildBaseDisableProfile(disable).ok());
   disable.uart_port = 1;
   disable.vendor = ReceiverVendor::kUnicore;
-  disable.model = "UM982";
+  disable.model = "UM981";
   assert(!BuildBaseDisableProfile(disable).ok());
+  for (const char* model : {"UM980", "UM982"})
+    for (std::uint8_t port : {1, 2})
+      for (bool persist : {false, true})
+      {
+        BaseDisableRequest request;
+        request.vendor = ReceiverVendor::kUnicore;
+        request.model = model;
+        request.model_verified = true;
+        request.uart_port = port;
+        request.persist = persist;
+        auto plan = BuildBaseDisableProfile(request);
+        assert(plan.ok() && plan.commands.size() == (persist ? 8u : 7u));
+        assert(plan.commands[0].payload.text == "MODE ROVER\r\n");
+        const unsigned messages[] = {1006, 1074, 1084, 1094, 1124, 1230};
+        for (std::size_t i = 0; i < 6; ++i)
+          assert(plan.commands[i + 1].payload.text == "UNLOG COM" + std::to_string(port) + " RTCM" +
+                                                          std::to_string(messages[i]) + "\r\n");
+        for (std::size_t i = 0; i < 7; ++i)
+        {
+          const auto& command = plan.commands[i];
+          assert(command.target.model == model &&
+                 command.target.vendor == ReceiverVendor::kUnicore);
+          assert(command.safety_level == ReceiverCommandSafetyLevel::kRuntime);
+          assert(command.expected_response == ReceiverResponseKind::kTextPayload);
+          assert(command.failure_policy == ReceiverCommandFailurePolicy::kAbortOnFailure);
+          assert(HasSafeDispatchApproval(command));
+          assert(command.payload.text.find("RESET") == std::string::npos &&
+                 command.payload.text.find("SURVEY STOP") == std::string::npos);
+        }
+        universal_gnss_transport::MemoryByteSink sink;
+        ug::embedded::Receiver receiver(sink);
+        if (persist)
+        {
+          assert(plan.commands.back().payload.text == "SAVECONFIG\r\n");
+          assert(!HasSafeDispatchApproval(plan.commands.back()));
+          assert(!receiver.Start(plan.commands, 1) && sink.written_bytes().empty());
+          request.confirm_persistent = true;
+          plan = BuildBaseDisableProfile(request);
+          assert(HasSafeDispatchApproval(plan.commands.back()));
+        }
+        std::string expected;
+        for (const auto& command : plan.commands)
+          expected += command.payload.text;
+        assert(receiver.Start(plan.commands, 1));
+        std::int64_t now = 1;
+        const std::string ack = "<OK\r\n";
+        for (std::size_t i = 0; i < plan.commands.size(); ++i)
+        {
+          assert(
+              receiver.Feed(reinterpret_cast<const std::uint8_t*>(ack.data()), ack.size(), ++now));
+          receiver.Step(++now);
+        }
+        assert(receiver.application().state() == ReceiverConfigApplicationState::kCompleted);
+        assert(std::string(sink.written_bytes().begin(), sink.written_bytes().end()) == expected);
+        request.model_verified = false;
+        assert(!BuildBaseDisableProfile(request).ok());
+        request.model_verified = true;
+        request.uart_port = 3;
+        assert(!BuildBaseDisableProfile(request).ok());
+      }
   disable.vendor = ReceiverVendor::kUblox;
   disable.model = "F10";
   assert(!BuildBaseDisableProfile(disable).ok());

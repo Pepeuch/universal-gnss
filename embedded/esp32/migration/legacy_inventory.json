@@ -2813,7 +2813,7 @@
       "handler": "gnss_base_stop_survey_post_handler",
       "decision": "ADAPT",
       "status": "PARTIAL",
-      "native_equivalent": "POST /api/gnss/base/disable: verified F9P only, explicit confirmation/persistence, no optimistic stopped flag; old routes not silently emulated."
+      "native_equivalent": "POST /api/gnss/base/disable: verified F9P or UM980/UM982 only; explicit confirmation/persistence, generic MODE ROVER for Unicore, no reset or optimistic stopped flag. UM981 and the old routes remain unsupported."
     },
     {
       "path": "/api/gnss/base/apply-fixed",
@@ -2826,7 +2826,7 @@
       "handler": "gnss_base_clear_post_handler",
       "decision": "ADAPT",
       "status": "PARTIAL",
-      "native_equivalent": "POST /api/gnss/base/disable: verified F9P only, explicit confirmation/persistence, no optimistic stopped flag; old routes not silently emulated."
+      "native_equivalent": "POST /api/gnss/base/disable: verified F9P or UM980/UM982 only; explicit confirmation/persistence, generic MODE ROVER for Unicore, no reset or optimistic stopped flag. UM981 and the old routes remain unsupported."
     },
     {
       "path": "/api/gnss/profiles",

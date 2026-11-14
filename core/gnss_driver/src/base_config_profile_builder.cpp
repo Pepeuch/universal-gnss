@@ -152,11 +152,37 @@ BaseConfigPlan BuildBaseConfigProfile(const BaseConfigRequest& r)
 BaseConfigPlan BuildBaseDisableProfile(const BaseDisableRequest& request)
 {
   BaseConfigPlan plan;
-  if (!request.model_verified || request.vendor != ReceiverVendor::kUblox ||
-      (request.model != "ZED-F9P" && request.model != "F9P") ||
-      (request.uart_port != 1 && request.uart_port != 2))
+  if (!request.model_verified || (request.uart_port != 1 && request.uart_port != 2))
   {
-    plan.error = "BASE disable requires a verified F9P and receiver UART1/2";
+    plan.error = "BASE disable requires a verified supported model and receiver UART1/2";
+    return plan;
+  }
+  if (request.vendor == ReceiverVendor::kUnicore &&
+      (request.model == "UM980" || request.model == "UM982"))
+  {
+    BaseConfigRequest target;
+    target.vendor = request.vendor;
+    target.model = request.model;
+    target.confirm_persistent = request.confirm_persistent;
+    auto text = [&](const std::string& line, bool persistent = false) {
+      auto command = MakeCommand(target, persistent);
+      SetTextPayload(command, line + "\r\n");
+      plan.commands.push_back(std::move(command));
+    };
+    // N4 R1.6 section 3: generic MODE ROVER exits BASE and starts RTK
+    // initialization. Do not select the firmware-scoped scenarios of section 3.6.
+    text("MODE ROVER");
+    const auto port = " COM" + std::to_string(request.uart_port);
+    for (const unsigned message : {1006u, 1074u, 1084u, 1094u, 1124u, 1230u})
+      text("UNLOG" + port + " RTCM" + std::to_string(message));
+    if (request.persist)
+      text("SAVECONFIG", true);
+    return plan;
+  }
+  if (request.vendor != ReceiverVendor::kUblox ||
+      (request.model != "ZED-F9P" && request.model != "F9P"))
+  {
+    plan.error = "BASE disable model contract is not supported";
     return plan;
   }
   using namespace universal_gnss_protocols;

@@ -960,7 +960,7 @@ Optional `persist:true` additionally requires
 only; no receiver reset, factory erase or implicit persistent write is added.
 
 An additive portable `BaseDisableRequest`/`BuildBaseDisableProfile` API in the
-existing driver builder supports **verified ZED-F9P/F9P only**. It uses the existing
+existing driver builder initially supported **verified ZED-F9P/F9P only**. It uses the existing
 UG UBX VALSET builder: CFG-TMODE-MODE `0x20030001` becomes 0 and the native BASE
 profile's RTCM output protocol/message rates are disabled on the chosen receiver
 UART1/2. Coordinate, survey-limit and other-port settings are not erased. RAM
@@ -972,8 +972,9 @@ model/mode/port/persistence/output/datum combinations were compared against
 
 Primary contract: [u-blox F9 HPG 1.32, UBX-22008968 R01](https://content.u-blox.com/sites/default/files/documents/u-blox-F9-HPG-1.32_InterfaceDescription_UBX-22008968.pdf#page=268),
 section 6.9.28, Table 52. No generic ASCII stop is inferred for Unicore; the new
-operation remains unavailable for UM980/981/982 pending its separate qualified
-exit contract. Existing Unicore BASE and mode-preserving telemetry are unchanged.
+operation at that milestone remained unavailable for UM980/981/982. The
+UM980/982 extension is described below; UM981 remains unsupported. Existing
+Unicore BASE and mode-preserving telemetry are unchanged.
 
 The operation enters the same single UART-owner queue as BASE/telemetry and
 rechecks the verified model before dispatch. The persistent interruption journal,
@@ -1139,3 +1140,49 @@ The source archive remains read-only while only a fresh generated copy gets its
 network manifest replaced. These integration failures were fixed rather than
 skipped. Public host APT/pip dependencies are not completely frozen. GitHub
 execution, physical operation and official firmware publication remain unqualified.
+
+
+## Unicore BASE disable
+
+The existing typed `/api/gnss/base/disable` operation now supports verified
+**UM980 and UM982**, alongside F9P. It uses generic `MODE ROVER`, followed by
+six port-specific `UNLOG` commands for the native BASE profile's RTCM messages
+(1006/1074/1084/1094/1124/1230). It changes the receiver's global operating mode;
+it does not restore an earlier rover scenario. No MOW/UAV/application-specific
+parameter, broad UNLOG, baud/datum change, reset or factory erasure is generated.
+UM981 and unknown/unverified models remain rejected. Receiver UART1/2 selection
+remains explicit.
+
+The primary [N4 R1.6 manual](https://en.unicore.com/uploads/file/Unicore%20Reference%20Commands%20Manual%20For%20N4%20High%20Precision%20Products_V2_EN_R1.6.pdf#page=25)
+§3 p.7 documents generic MODE ROVER leaving BASE and beginning RTK initialization
+on these models. §3.6 p.13 concerns parameterized scenarios with firmware floors;
+those forms are not used. §8.1 p.331 defines port/message UNLOG; §8.4 p.333 defines
+SAVECONFIG. Reviewed PDF SHA256:
+`4dcecd02e696fa3cfe030e362fcbe4308c18df0793cd5c67df8067b366a33a49`.
+
+`persist:false` does not request SAVECONFIG; a reboot may restore an earlier
+persisted BASE setting. `persist:true` adds a persistent command requiring the
+existing second confirmation. SAVECONFIG saves the entire current receiver
+configuration, not just this operation. An unapproved plan is rejected before
+any prefix is dispatched. F9P coordinate keys remain untouched. For Unicore,
+no explicit erasure command is sent, but retention of a previous BASE/coordinate
+configuration after MODE/SAVECONFIG is not qualified. Keep a separately reviewed
+configuration when restoration matters.
+
+The existing single UART owner, verified model recheck, persistent interruption
+journal, source invalidation and response fence remain authoritative. The same
+quarantine cannot be cleared by this operation. HTTP 202 is queued and a successful
+plan is command acceptance; neither proves physical mode, stopped RTCM or finished
+RTK initialization. The UI explicitly presents the global/generic-mode effect.
+
+Software evidence: native **37/37** ASan/UBSan and Linux **69/69** CTests pass;
+browser mock passes for the supported Unicore operation and UM981 rejection.
+Tests cover both models/ports, seven/eight-command plans, exact text/targets,
+persistence approval, no partial dispatch without approval and full serialized
+ACK fixture execution. Existing BASE and valid F9P-disable command construction
+is unchanged. SDK S3/relay builds and linked-role/partition checks pass, with
+independent byte-identical apps, bootloaders and tables. Apps: **1441344/3145728**
+and **1294640/1310720** bytes; relay headroom **16080 bytes**. Rover sources and
+profile dependencies are unchanged. No physical receiver, flash or RF was used.
+The portable-source payload changes deliberately; immutable ROS2 distribution
+and Lyrical consumer validation follow the local feature commit.

@@ -740,11 +740,12 @@ esp_err_t Post(httpd_req_t* req)
       return Fail(req, "400 Bad Request", error.c_str());
     const auto receiver = ReceiverSnapshot();
     if (!receiver.present || !receiver.model_verified || receiver.quarantined ||
-        receiver.model != "ZED-F9P" || !QueueBaseDisableOperation(operation))
-      return Fail(
-          req,
-          "409 Conflict",
-          "BASE disable requires an available verified F9P, without quarantine or pending command");
+        !InspectReceiverPlans(receiver.model, receiver.model_verified).disable_base ||
+        !QueueBaseDisableOperation(operation))
+      return Fail(req,
+                  "409 Conflict",
+                  "BASE disable requires an available verified F9P/UM980/UM982, without quarantine "
+                  "or pending command");
     return Fail(req,
                 "202 Accepted",
                 "BASE disable queued; command acceptance does not prove physical stop");

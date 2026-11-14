@@ -184,7 +184,7 @@ $('ntrip-restart').onclick = handle(async () => {
 
 $('base-disable').onclick = handle(async () => {
   if (!receiverPlans?.disable_base) throw new Error('Désactivation BASE indisponible pour ce modèle vérifié');
-  if (!confirm('Quitter le mode BASE statique du F9P, y compris une position fixe ou un Survey-In actif ?')) return;
+  if (!confirm('Quitter BASE sur le récepteur vérifié ? F9P : désactiver le mode statique et son profil RTCM ; UM980/UM982 : MODE ROVER générique et arrêt du profil RTCM sur le port choisi. Le mode concerne tout le récepteur, sans restitution d’un ancien profil rover.')) return;
   const operation = {confirm:'DISABLE_BASE_MODE', receiver_port:Number($('base-disable-port').value), persist:Boolean($('base-disable-persist').checked)};
   if (operation.persist) {
     if (prompt('Sauvegarde persistante : saisir SAVE_RECEIVER_CONFIGURATION') !== 'SAVE_RECEIVER_CONFIGURATION') return;

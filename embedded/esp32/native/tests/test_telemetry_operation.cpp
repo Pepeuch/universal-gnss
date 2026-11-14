@@ -10,7 +10,11 @@ int main()
 {
   assert(ug::embedded::InspectReceiverPlans("ZED-F9P", true).disable_base);
   assert(!ug::embedded::InspectReceiverPlans("ZED-F9P", false).disable_base);
-  assert(!ug::embedded::InspectReceiverPlans("UM982", true).disable_base);
+  assert(ug::embedded::InspectReceiverPlans("UM982", true).disable_base);
+  assert(ug::embedded::InspectReceiverPlans("UM980", true).disable_base);
+  assert(!ug::embedded::InspectReceiverPlans("UM982", false).disable_base);
+  assert(!ug::embedded::InspectReceiverPlans("UM981", true).disable_base);
+  assert(!ug::embedded::InspectReceiverPlans("NMEA", true).disable_base);
 
   ug::embedded::TelemetryOperation op, before;
   std::string error;
