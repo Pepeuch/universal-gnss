@@ -177,3 +177,8 @@ target_include_directories(test_network_budget PRIVATE ../../components/ug_servi
 target_compile_features(test_network_budget PRIVATE cxx_std_17)
 target_compile_options(test_network_budget PRIVATE -UNDEBUG)
 add_test(NAME embedded_network_budget_contract COMMAND test_network_budget)
+add_executable(test_wire_corpus test_wire_corpus.cpp)
+target_link_libraries(test_wire_corpus PRIVATE ug_embedded_radio)
+target_compile_options(test_wire_corpus PRIVATE -UNDEBUG)
+add_test(NAME embedded_wire_corpus_contract COMMAND test_wire_corpus)
+set_tests_properties(embedded_wire_corpus_contract PROPERTIES TIMEOUT 15)

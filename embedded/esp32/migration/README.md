@@ -939,3 +939,9 @@ SDK size reports show linker-region occupancy of S3 DIRAM **212300 / 341760**
 and C3 DRAM **159686 / 321296** bytes. These are static link budgets, not measured
 runtime heap headroom after task stacks/TLS/network allocation. Rover images and
 Linux/ROS2 payloads are unaffected by this network-only provisioning change.
+
+The subsequent host-only [wire mutation corpus](../native/tests/README.md)
+passes within the complete 35-case native ASan/UBSan suite. It adds structured
+corruption, loss, duplicate, expiry and split-length properties without changing
+firmware sources, images or protocols. Prior SDK build proofs are retained;
+no redundant firmware compilation or physical test was run for this test-only lot.
