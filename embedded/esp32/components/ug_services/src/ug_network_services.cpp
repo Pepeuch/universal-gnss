@@ -204,12 +204,12 @@ void PublisherWorker(void* context)
       config_generation = config->revision;
       link_generation = link;
       const bool enabled = config->publishers[slot].enabled && network_ready.load();
-      publisher.Configure(
+      const bool configured = publisher.Configure(
           config->publishers[slot].endpoint, enabled, [config_generation, link_generation] {
             return !network_ready.load() || network_generation.load() != link_generation ||
                    Configuration()->revision != config_generation;
           });
-      if (enabled)
+      if (enabled && configured)
         SetCorrectionDestination(1 + slot, Outbox::Enqueue, &box);
     }
     if (source < Gateway::kSources && !CorrectionSourceCurrent(source, incarnation))

@@ -102,6 +102,19 @@ int main()
   assert(out.wifi_password == slots.wifi_password &&
          out.admin_token_sha256 == slots.admin_token_sha256);
   const auto active_slot = out;
+  // A SOURCE without a mountpoint must be rejected before it reaches the worker.
+  assert(!DecodeSettings(R"({"publishers":[{"slot":1,"endpoint":{"mountpoint":""}}]})",
+                         active_slot,
+                         base,
+                         out,
+                         error));
+  assert(out.publishers[1].endpoint.mountpoint == "OUT");
+  assert(DecodeSettings(R"({"publishers":[{"slot":1,"enabled":false,"endpoint":{"mountpoint":""}}]})",
+                        active_slot,
+                        base,
+                        out,
+                        error));
+  assert(!out.publishers[1].enabled && out.publishers[1].endpoint.mountpoint.empty());
   assert(!DecodeSettings(R"({"publishers":[{"slot":1,"endpoint":{"password":""}}]})",
                          active_slot,
                          base,

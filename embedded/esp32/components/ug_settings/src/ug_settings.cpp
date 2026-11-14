@@ -287,8 +287,8 @@ bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& err
   {
     const auto& p = s.publishers[i];
     if (!Endpoint(p.endpoint, p.enabled) ||
-        (p.enabled && (i >= c.publisher_slots || p.endpoint.password.empty() ||
-                       !Text(p.endpoint.password, 128, false))))
+        (p.enabled && (i >= c.publisher_slots || p.endpoint.mountpoint.empty() ||
+                       p.endpoint.password.empty() || !Text(p.endpoint.password, 128, false))))
       return fail("invalid publisher slot or profile limit");
   }
   if (s.caster_enabled && (!c.caster || !s.caster_port || s.caster_mountpoint.empty()))
