@@ -1258,3 +1258,31 @@ Applications are **1443600 / 3145728 bytes** (S3) and **1297632 / 1310720 bytes*
 on each target. No partition was expanded. Runtime TLS/heap peaks and scheduling
 remain unqualified. Rover inputs, portable engines and Linux/ROS2 contracts are
 unchanged; no physical port, flash, publication or remote CI run was used.
+
+
+## Native NTRIP endpoint forms
+
+The authenticated operator page edits the input or one SOURCE-v1 publisher via
+partial patches to the existing strict settings API. Five S3 slots or one C3
+slot are offered from board capabilities; no new connection, service or engine
+is added. TLS keeps peer verification and accepts the existing private trust
+object references. GGA controls belong only to the input and require a local
+GNSS capability; the backend additionally requires an enabled receiver and the
+existing sender still requires fresh observed position. Saving an endpoint does
+not change the selected correction source. Caster settings retain the JSON editor.
+
+Blank password input omits the field, preserving the stored credential.
+Replacement and explicit erasure are distinct; conflicting selections fail.
+Secrets clear on target/session change and before submission, including rejected
+submissions. Repeated saves while pending are blocked; stale session responses
+cannot reload private data. Resource reports gate the form; server admission,
+validation, storage and owner reconfiguration remain authoritative.
+
+Browser tests exercise owner-specific patches, slot limits, hidden/replaced/
+erased credentials, server rejection, pressure, duplicate submits and delayed
+logout completion. Two affected settings CTests pass under ASan/UBSan, including
+actual partial decode, other-owner preservation and refusal to clear an enabled
+publisher credential. IDF 6.1 builds/ELF/asset checks and independent binary
+reconstruction pass: S3 app **1445360 / 3145728 bytes**, C3 relay **1299392 /
+1310720 bytes**, leaving **11328 bytes** in its unchanged app partition. No new
+runtime/hardware, browser-TLS interoperability or remote CI qualification is claimed.

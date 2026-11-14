@@ -68,6 +68,35 @@ int main()
       R"({"name":"unit","upstream":{"endpoint":{"port":2102}}})", configured, base, out, error));
   assert(out.device_name == "unit" && out.upstream.password == configured.upstream.password);
   assert(out.upstream.port == 2102 && configured.upstream.port != 2102);
+  // The endpoint form sends one partial owner patch, never a redacted full snapshot.
+  auto slots = configured;
+  slots.publishers[0].endpoint.password = "first-test-secret";
+  slots.publishers[1].endpoint.password = "second-test-secret";
+  assert(DecodeSettings(
+      R"({"publishers":[{"slot":1,"enabled":true,"endpoint":{"host":"caster.test","port":2101,"mountpoint":"OUT","username":"","tls":true,"ca_file":"","client_cert_file":"","client_key_file":""}}]})",
+      slots,
+      base,
+      out,
+      error));
+  assert(out.publishers[1].enabled && out.publishers[1].endpoint.host == "caster.test");
+  assert(out.publishers[1].endpoint.password == "second-test-secret");
+  assert(out.publishers[0].endpoint.password == "first-test-secret" && !out.publishers[0].enabled);
+  assert(out.upstream.password == slots.upstream.password && out.local_input == slots.local_input);
+  assert(out.wifi_password == slots.wifi_password &&
+         out.admin_token_sha256 == slots.admin_token_sha256);
+  const auto active_slot = out;
+  assert(!DecodeSettings(R"({"publishers":[{"slot":1,"endpoint":{"password":""}}]})",
+                         active_slot,
+                         base,
+                         out,
+                         error));  // Enabled SOURCE cannot lose its credential.
+  assert(DecodeSettings(R"({"publishers":[{"slot":1,"enabled":false,"endpoint":{"password":""}}]})",
+                        active_slot,
+                        base,
+                        out,
+                        error));
+  assert(!out.publishers[1].enabled && out.publishers[1].endpoint.password.empty());
+  assert(out.publishers[0].endpoint.password == "first-test-secret");
   for (const std::string bad :
        {"",
         "[]",

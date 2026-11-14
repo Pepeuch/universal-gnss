@@ -24,13 +24,19 @@ class WebAssets(unittest.TestCase):
           class AbortController {constructor(){this.signal={};}abort(){}}
           let hold_selftest = false, release_selftest;
           let hold_commands = false, release_commands;
-          let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events, hold_ntrip_history = false, release_ntrip_history;
+          let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events, hold_ntrip_history = false, release_ntrip_history, hold_config_post = false, release_config_post, reject_config_post = false;
           const confirm = () => true;
           const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
             calls.push({path,options});
+            if (path === '/api/config' && options.method === 'POST') {
+              if (hold_config_post) return new Promise(resolve => {
+                release_config_post = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-config-session"}'});
+              });
+              if (reject_config_post) return {ok:false,status:400,headers:{get:()=> 'application/json'},text:async()=>'{"error":"invalid endpoint"}'};
+            }
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
@@ -55,8 +61,8 @@ class WebAssets(unittest.TestCase):
             if (hold_events && path === '/api/diagnostics/events') return new Promise(resolve => {
               release_events = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"events":[{"private":"old-session"}]}'});
             });
-            const payload = path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true,disable_base:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18]} : path === '/api/config' ?
-              {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{endpoint:{password_set:true}}} : {};
+            const payload = path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true,disable_base:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:true,gnss_allowed_pins:[17,18],publishers:1} : path === '/api/config' ?
+              {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{enabled:false,endpoint:{host:'caster.test',port:2101,mountpoint:'IN',username:'reader',password_set:true,tls:true,ca_file:'nvs://ug_tls/ca',send_gga:false,gga_interval_s:5}},publishers:[{slot:0,enabled:false,endpoint:{host:'output.test',port:2101,mountpoint:'OUT',password_set:true}}]} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
         ''')
@@ -66,6 +72,53 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         calls = json.loads(vm.eval('JSON.stringify(calls)'))
         self.assertTrue(any(c['options']['headers'].get('Authorization') == 'Bearer ' + 'z'*64 for c in calls))
+        self.assertFalse(vm.eval("elements['ntrip-save'].disabled"))
+        self.assertEqual(vm.eval("elements['ntrip-target'].children.length"), 1)
+        self.assertEqual(vm.eval("elements['ntrip-host'].value"), 'caster.test')
+        vm.eval("elements['ntrip-enabled'].checked=true; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        endpoint_patch = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').pop().options.body"))
+        self.assertEqual(set(endpoint_patch), {'upstream'})
+        self.assertTrue(endpoint_patch['upstream']['enabled'])
+        self.assertTrue(endpoint_patch['upstream']['endpoint']['tls'])
+        self.assertEqual(endpoint_patch['upstream']['endpoint']['host'], 'caster.test')
+        self.assertEqual(endpoint_patch['upstream']['endpoint']['ca_file'], 'nvs://ug_tls/ca')
+        self.assertNotIn('password', endpoint_patch['upstream']['endpoint'])
+        self.assertNotIn('password_set', endpoint_patch['upstream']['endpoint'])
+        vm.eval("elements['ntrip-password'].value='discard-on-selection'; elements['ntrip-target'].value='0'; elements['ntrip-target'].onchange();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        self.assertTrue(vm.eval("elements['ntrip-gga'].hidden"))
+        vm.eval("elements['ntrip-enabled'].checked=true; elements['ntrip-password'].value='new-test-secret'; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        endpoint_patch = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').pop().options.body"))
+        self.assertEqual(set(endpoint_patch), {'publishers'})
+        self.assertEqual(len(endpoint_patch['publishers']), 1)
+        self.assertEqual(endpoint_patch['publishers'][0]['slot'], 0)
+        self.assertEqual(endpoint_patch['publishers'][0]['endpoint']['password'], 'new-test-secret')
+        self.assertNotIn('send_gga', endpoint_patch['publishers'][0]['endpoint'])
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        vm.eval("elements['ntrip-enabled'].checked=false; elements['ntrip-password-clear'].checked=true; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        endpoint_patch = json.loads(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').pop().options.body"))
+        self.assertFalse(endpoint_patch['publishers'][0]['enabled'])
+        self.assertEqual(endpoint_patch['publishers'][0]['endpoint']['password'], '')
+        posts = vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').length")
+        vm.eval("elements['ntrip-password'].value='conflicting-test-secret'; elements['ntrip-password-clear'].checked=true; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').length"), posts)
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        vm.eval("elements['ntrip-target'].value='1'; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').length"), posts)
+        vm.eval("elements['ntrip-target'].value='upstream'; elements['ntrip-target'].onchange(); ntripGnss=false; renderNtrip();")
+        self.drain(vm)
+        self.assertTrue(vm.eval("elements['ntrip-send_gga'].disabled"))
+        vm.eval("ntripGnss=true; reject_config_post=true; elements['ntrip-password'].value='failed-test-secret'; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        self.assertIn('invalid endpoint', vm.eval('elements.notice.textContent'))
+        vm.eval('reject_config_post=false;')
         self.assertFalse(vm.eval("elements['base-submit'].disabled"))
         self.assertFalse(vm.eval("elements['base-disable'].disabled"))
         vm.eval("document.getElementById('base-disable-port').value='2'; document.getElementById('base-disable-persist').checked=true; elements['base-disable'].onclick();")
@@ -158,7 +211,11 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         self.assertEqual(vm.eval('calls.length'), 1)
         self.assertEqual(vm.eval('calls[0].path'), '/api/resources')
+        self.assertTrue(vm.eval("elements['ntrip-save'].disabled"))
         self.assertIn('Pression mémoire', vm.eval('elements.notice.textContent'))
+        vm.eval("elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        self.assertEqual(vm.eval('calls.length'), 1)
         self.assertTrue(vm.eval("elements['base-submit'].disabled"))
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         vm.eval("pressure='normal'; refresh();")
@@ -181,7 +238,15 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/diagnostics/wire-selftest').length"), count)
         vm.eval("hold_ntrip_history=true; elements['ntrip-history-read'].onclick();")
         self.drain(vm)
-        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands(); release_selftest(); release_ntrip_history();')
+        vm.eval("hold_config_post=true; elements['ntrip-password'].value='pending-test-secret'; elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        posts = vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').length")
+        vm.eval("elements['ntrip-endpoint'].onsubmit();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/config' && c.options.method==='POST').length"), posts)
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands(); release_selftest(); release_ntrip_history(); release_config_post();')
+
         self.drain(vm)
         self.assertEqual(vm.eval('elements.receiver.textContent'), 'Session fermée')
         self.assertEqual(vm.eval('elements.events.textContent'), 'Session fermée')
@@ -190,6 +255,10 @@ class WebAssets(unittest.TestCase):
         self.assertTrue(vm.eval("elements['wire-selftest'].disabled"))
         self.assertEqual(vm.eval("elements['ntrip-runtime'].textContent"), 'Session fermée')
         self.assertEqual(vm.eval("elements['ntrip-history'].textContent"), 'Session fermée')
+        self.assertEqual(vm.eval("elements['ntrip-host'].value"), '')
+        self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
+        self.assertTrue(vm.eval("elements['ntrip-save'].disabled"))
+        self.assertNotIn('old-config-session', vm.eval('elements.notice.textContent'))
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')
         self.assertEqual(vm.eval('token'), '')
@@ -201,6 +270,8 @@ class WebAssets(unittest.TestCase):
         html = (ASSETS/'index.html').read_text()
         self.assertIn('src="/app.js"', html)
         self.assertNotIn('<script>', html)
+        for key in ['target','endpoint','enabled','password','password-clear','password-status','tls','port','send_gga','gga_interval_s','gga','save','host','mountpoint','username','ca_file','client_cert_file','client_key_file']:
+            self.assertEqual(html.count('id="ntrip-' + key + '"'), 1)
 
     @staticmethod
     def drain(vm):

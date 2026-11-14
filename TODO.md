@@ -28,7 +28,9 @@ service event history is available without capturing raw SDK logs. Per-owner NTR
 metrics and explicitly confirmed connection restart are exposed with stale-sample
 protection. A bounded NTRIP transition history now retains typed client/publisher
 connection, acceptance and failure outcomes with configuration/link provenance;
-it stores no endpoint, credential or raw response. The minimal C3 rover retains USB output by default and now offers an
+it stores no endpoint, credential or raw response. NTRIP endpoint forms now
+configure the input or one supported publisher through the same strict settings
+API, preserving hidden passwords unless replacement or erasure is explicit. The minimal C3 rover retains USB output by default and now offers an
 explicit TX-only UART1 build option, with bounded writes and no application logs.
 Its software tests and builds pass; physical UART acceptance remains pending.
 Native network budgets now account for NTRIP, caster, HTTPS and SDK resources;

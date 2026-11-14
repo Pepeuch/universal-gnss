@@ -1,9 +1,36 @@
 'use strict';
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
 let wireSelfTestRunning = false, wireSelfTestAllowed = false;
+let ntripConfig = null, ntripSlots = 0, ntripGnss = false, ntripSaving = false, ntripMutationAllowed = false;
 const $ = id => document.getElementById(id);
 const show = value => { $('notice').textContent = String(value); };
 const print = value => JSON.stringify(value, null, 2);
+const ntripTextFields = ['host','mountpoint','username','ca_file','client_cert_file','client_key_file'];
+function ntripTarget() {
+  const target = $('ntrip-target').value;
+  if (target === 'upstream') return null;
+  if (!/^[0-4]$/.test(target) || Number(target) >= ntripSlots) throw new Error('Publication indisponible sur cette carte');
+  return Number(target);
+}
+function clearNtripSecret() {
+  $('ntrip-password').value = ''; $('ntrip-password-clear').checked = false;
+}
+function renderNtrip() {
+  clearNtripSecret();
+  const slot = ntripTarget(), owner = slot === null ? ntripConfig?.upstream : ntripConfig?.publishers?.find(p => p.slot === slot);
+  const endpoint = owner?.endpoint || {};
+  for (const key of ntripTextFields) $('ntrip-' + key).value = endpoint[key] || '';
+  $('ntrip-enabled').checked = Boolean(owner?.enabled);
+  $('ntrip-tls').checked = Boolean(endpoint.tls);
+  $('ntrip-port').value = String(endpoint.port || 2101);
+  $('ntrip-send_gga').checked = Boolean(endpoint.send_gga);
+  $('ntrip-send_gga').disabled = !ntripGnss;
+  $('ntrip-gga_interval_s').value = String(endpoint.gga_interval_s || 5);
+  $('ntrip-gga').hidden = slot !== null;
+  $('ntrip-password-status').textContent = endpoint.password_set ? 'Mot de passe enregistré ; valeur masquée.' : 'Aucun mot de passe enregistré.';
+  $('ntrip-save').disabled = !token || !ntripConfig || ntripSaving || !ntripMutationAllowed;
+}
+function clearNtripForm() { ntripMutationAllowed = false; ntripConfig = null; $('ntrip-target').value = 'upstream'; renderNtrip(); }
 async function call(path, body, authorized = true) {
   const headers = {};
   if (authorized && token) headers.Authorization = `Bearer ${token}`;
@@ -40,6 +67,8 @@ async function refresh() {
     const resources = await call('/api/resources', undefined, false);
     if (generation !== sessionGeneration) return;
     $('resources').textContent = print(resources);
+    ntripMutationAllowed = Boolean(token) && resources.pressure !== 'critical' && resources.web_mutations_allowed !== false;
+    $('ntrip-save').disabled = !ntripMutationAllowed || !ntripConfig || ntripSaving;
     wireSelfTestAllowed = Boolean(token) && resources.pressure === 'normal';
     $('wire-selftest').disabled = !wireSelfTestAllowed || wireSelfTestRunning;
     if (resources.pressure === 'critical') {
@@ -73,7 +102,7 @@ async function refresh() {
       if (generation !== sessionGeneration || !token) return;
       satellites(report);
     }
-  } catch (e) { if (generation === sessionGeneration) show(e.message); }
+  } catch (e) { if (generation === sessionGeneration) { ntripMutationAllowed = false; $('ntrip-save').disabled = true; show(e.message); } }
   finally { refreshing = false; }
 }
 
@@ -82,6 +111,7 @@ async function load() {
   const config = await call('/api/config');
   if (generation !== sessionGeneration || !token) return;
   $('config').value = print(config);
+  ntripConfig = config; renderNtrip();
   if (config.gnss) {
     $('gnss-enabled').checked = config.gnss.enabled;
     $('gnss-tx').value = String(config.gnss.tx_pin); $('gnss-rx').value = String(config.gnss.rx_pin);
@@ -90,8 +120,8 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -131,6 +161,12 @@ $('transport').onsubmit = handle(async () => {
 });
 call('/api/capabilities', undefined, false).then(caps => {
   $('gnss').hidden = !caps.gnss;
+  ntripGnss = Boolean(caps.gnss);
+  ntripSlots = Number.isInteger(caps.publishers) && caps.publishers >= 0 && caps.publishers <= 5 ? caps.publishers : 0;
+  for (let slot = 0; slot < ntripSlots; ++slot) {
+    const option = document.createElement('option'); option.value = String(slot); option.textContent = `Publication ${slot + 1} (SOURCE v1)`; $('ntrip-target').appendChild(option);
+  }
+  renderNtrip();
   for (const pin of (caps.gnss_allowed_pins || [])) for (const id of ['gnss-tx','gnss-rx']) {
     const option = document.createElement('option'); option.value = String(pin); option.textContent = String(pin); $(id).appendChild(option);
   }
@@ -219,4 +255,36 @@ $('ntrip-history-read').onclick = handle(async () => {
   const generation = sessionGeneration, report = await call('/api/ntrip/history');
   if (generation !== sessionGeneration || !token) return;
   $('ntrip-history').textContent = print(report);
+});
+
+$('ntrip-target').value = 'upstream';
+$('ntrip-target').onchange = handle(async () => { renderNtrip(); });
+$('ntrip-endpoint').onsubmit = handle(async () => {
+  if (ntripSaving) return;
+  const password = $('ntrip-password').value, erase = $('ntrip-password-clear').checked;
+  clearNtripSecret();
+  if (!token || !ntripConfig || !ntripMutationAllowed) throw new Error('Session, configuration et mémoire disponibles requises');
+  const slot = ntripTarget(), generation = sessionGeneration, endpoint = {};
+  for (const key of ntripTextFields) endpoint[key] = $('ntrip-' + key).value;
+  if (password && erase) throw new Error('Choisir le remplacement ou l’effacement du mot de passe');
+  if (password || erase) endpoint.password = erase ? '' : password;
+  endpoint.port = Number($('ntrip-port').value);
+  endpoint.tls = $('ntrip-tls').checked;
+  if (slot === null) {
+    endpoint.send_gga = $('ntrip-send_gga').checked;
+    endpoint.gga_interval_s = Number($('ntrip-gga_interval_s').value);
+  }
+  const owner = {enabled:$('ntrip-enabled').checked, endpoint};
+  const patch = slot === null ? {upstream:owner} : {publishers:[{slot,...owner}]};
+  if (!confirm('Sauvegarder cette connexion NTRIP ? Les connexions seront reconfigurées et les corrections peuvent être interrompues. La source RTCM choisie reste inchangée.')) return;
+  ntripSaving = true; $('ntrip-save').disabled = true;
+  try {
+    const result = await call('/api/config', patch);
+    if (generation !== sessionGeneration || !token) return;
+    show(result); await load();
+  } catch (error) {
+    if (generation === sessionGeneration && token) throw error;
+  } finally {
+    ntripSaving = false; $('ntrip-save').disabled = !token || !ntripConfig || !ntripMutationAllowed;
+  }
 });

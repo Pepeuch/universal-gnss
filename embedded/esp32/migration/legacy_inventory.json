@@ -2694,7 +2694,8 @@
       "git_object": "7fdc4363cd2d30657145dd2208e28444cc307627",
       "group": "www",
       "decision": "ADAPT",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "evidence": "Native HTTPS input/selected SOURCE-v1 publisher editor, bounded by board slots (S3 five, C3 one); partial strict-settings patches, TLS trust references, fresh local GGA only for input, preserved/replaced/explicitly erased passwords. Browser/session/concurrency tests and real native DecodeSettings tests pass. Caster configuration still uses the validated JSON editor; runtime and hardware qualification remain open."
     },
     {
       "path": "www/c/runtime.js",
