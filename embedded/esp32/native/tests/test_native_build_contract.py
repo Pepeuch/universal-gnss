@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 """Regression for the actual native compile-command language gate."""
 import importlib.util
+import copy
 import gzip
+import json
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -15,6 +18,53 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_readonly_source_keeps_its_modes_while_network_copy_gets_its_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root/'source'
+            source.mkdir()
+            for name, content in (('idf_component.yml','minimal'),
+                                  ('idf_component.network.yml','pinned-network'),
+                                  ('gateway.cpp','unchanged-source')):
+                (source/name).write_text(content)
+                (source/name).chmod(0o444)
+            source.chmod(0o555)
+            try:
+                destination = root/'network'
+                builder.copy_main(source, destination, True)
+                self.assertEqual((destination/'idf_component.yml').read_text(), 'pinned-network')
+                self.assertEqual((destination/'gateway.cpp').read_text(), 'unchanged-source')
+                (destination/'idf_component.yml').write_text('generated-only-change')
+                self.assertEqual((source/'idf_component.yml').read_text(), 'minimal')
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o555)
+                self.assertTrue(all(stat.S_IMODE(p.stat().st_mode) == 0o444 for p in source.iterdir()))
+                builder.copy_main(source, root/'rover', False)
+                self.assertEqual((root/'rover/idf_component.yml').read_text(), 'minimal')
+            finally:
+                # Only this test's temporary copies; never the repository.
+                for directory in (source, root/'network', root/'rover'):
+                    if directory.exists(): directory.chmod(0o755)
+
+    def test_dependency_locks_reject_inventory_version_hash_and_source_drift(self):
+        pins = json.loads((Path(__file__).resolve().parents[2]/'migration/dependencies.json').read_text())['managed']
+        good = {'target':'esp32s3','dependencies':copy.deepcopy(pins)}
+        builder.validate_dependency_lock(good, 'esp32s3')
+        for name in pins:
+            for field, bad in (('version','999.0'), ('component_hash','0'*64)):
+                changed = copy.deepcopy(good)
+                changed['dependencies'][name][field] = bad
+                with self.assertRaises(ValueError):
+                    builder.validate_dependency_lock(changed, 'esp32s3')
+            changed = copy.deepcopy(good)
+            changed['dependencies'][name]['source']['type'] = 'git'
+            with self.assertRaises(ValueError):
+                builder.validate_dependency_lock(changed, 'esp32s3')
+        for changed in ({**good,'target':'esp32c3'},
+                        {**good,'dependencies':{}},
+                        {**good,'dependencies':{**good['dependencies'],'unexpected':{}}}):
+            with self.assertRaises(ValueError):
+                builder.validate_dependency_lock(changed, 'esp32s3')
+
     def test_wire_logging_keeps_warnings_and_runtime_channel_messages(self):
         def entry(name, flags):
             return {'file':f'/ug/embedded/esp32/components/{name}/src/{name}.c',

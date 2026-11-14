@@ -1117,3 +1117,25 @@ changed. Warnings can still incur console cost under malformed-input floods;
 this does not claim rate limiting, a measured CPU gain or a hard timing guarantee.
 Independent gateway and relay app/bootloader/partition reconstructions remain
 byte-identical after this logging-only build change.
+
+
+## Native CI recipe
+
+[Native CI](../native/CI.md) now covers S3 gateway/GNSS, C3 relay, C3 USB rover
+and C3 UART rover in four bounded jobs, plus an `always()` fail-closed gate.
+Source comes from an immutable Git archive, with no host-source/device/socket
+mount. SDK/host provisioning precedes network disconnection and non-root builds.
+S3 additionally runs the 37 native sanitizer cases, browser mock and eight capture
+tests. All four local variant validations passed build/link/role/partition checks
+and independent app/bootloader/partition reconstruction. Existing C3 results were
+reused where later changes touched only S3 host setup. Eleven new CI-policy cases
+and eight native build-policy tests protect these boundaries; the generator/CI
+suite now passes 211 tests. No ROS2 payload, public interface, functional version,
+Release workflow, branch protection or hardware firmware was modified.
+
+The image's OpenSSL host development package was missing, and the managed cJSON
+source is under its `cJSON/` subdirectory; both are explicitly provisioned/selected.
+The source archive remains read-only while only a fresh generated copy gets its
+network manifest replaced. These integration failures were fixed rather than
+skipped. Public host APT/pip dependencies are not completely frozen. GitHub
+execution, physical operation and official firmware publication remain unqualified.

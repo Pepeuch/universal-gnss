@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -33,8 +34,35 @@ def validate_rover_output(profile, board, tx, baud):
         raise ValueError('unsupported rover UART baud')
 
 
+def validate_dependency_lock(lock, target):
+    expected = json.loads((ROOT / 'embedded/esp32/migration/dependencies.json').read_text())['managed']
+    if (not isinstance(lock, dict) or not isinstance(lock.get('dependencies'), dict) or
+            lock.get('target') != target or set(lock['dependencies']) != set(expected)):
+        raise ValueError('dependency cache target or inventory mismatch')
+    for name, pin in expected.items():
+        actual = lock['dependencies'][name]
+        if (actual.get('version') != pin['version'] or
+                actual.get('component_hash') != pin['component_hash']):
+            raise ValueError('dependency version/hash mismatch: ' + name)
+        source = actual.get('source', {})
+        if (source.get('type') != pin['source']['type'] or
+                source.get('registry_url', '').rstrip('/') != pin['source'].get('registry_url', '').rstrip('/')):
+            raise ValueError('dependency source mismatch: ' + name)
+
+
+def copy_main(source, destination, network):
+    shutil.copytree(source, destination)
+    if network:
+        # Archives may be deliberately read-only. Only this new generated copy
+        # needs a writable directory and a replacement network manifest.
+        destination.chmod(destination.stat().st_mode | stat.S_IWUSR)
+        manifest = destination / 'idf_component.yml'
+        manifest.unlink(missing_ok=True)
+        shutil.copyfile(destination / 'idf_component.network.yml', manifest)
+
+
 def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=1,
-          rover_uart_tx=None, rover_uart_baud=115200):
+          rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False):
     validate_rover_output(profile, board, rover_uart_tx, rover_uart_baud)
     if peer_mac is not None:
         if not re.fullmatch(r'(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', peer_mac):
@@ -59,20 +87,14 @@ def build(output, profile, board, gnss, provision=False, dependency_cache=None, 
     project.mkdir()
     source = ROOT / 'embedded/esp32/native'
     shutil.copyfile(source / 'CMakeLists.txt', project / 'CMakeLists.txt')
-    shutil.copytree(source / 'main', project / 'main')
     rover = profile == 'rover'
     s3 = board == 'waveshare-s3-eth'
+    copy_main(source / 'main', project / 'main', not rover)
     if not rover:
-        shutil.copyfile(project / 'main/idf_component.network.yml', project / 'main/idf_component.yml')
         if dependency_cache:
             cache = Path(dependency_cache).resolve()
             lock = yaml.safe_load((cache / 'dependencies.lock').read_text())
-            if lock['target'] != ('esp32s3' if s3 else 'esp32c3'):
-                raise ValueError('dependency cache target mismatch')
-            for name, version in {'espressif/w5500':'2.0.1', 'espressif/wiznet_common':'1.1.0',
-                                  'espressif/mdns':'1.15.1', 'espressif/cjson':'1.7.19~2', 'idf':'6.1.0'}.items():
-                if lock['dependencies'][name]['version'] != version:
-                    raise ValueError('dependency version mismatch: ' + name)
+            validate_dependency_lock(lock, 'esp32s3' if s3 else 'esp32c3')
             shutil.copytree(cache / 'managed_components', project / 'managed_components')
             shutil.copyfile(cache / 'dependencies.lock', project / 'dependencies.lock')
     defaults = ['''CONFIG_APP_REPRODUCIBLE_BUILD=y
@@ -115,7 +137,8 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
                *output_defines,
                '-D', 'IDF_TARGET=' + ('esp32s3' if s3 else 'esp32c3'),
                '-D', 'SDKCONFIG=' + str(work / 'sdkconfig'),
-               '-D', 'SDKCONFIG_DEFAULTS=' + str(work / 'sdkconfig.defaults'), 'build', 'size']
+               '-D', 'SDKCONFIG_DEFAULTS=' + str(work / 'sdkconfig.defaults')]
+    command += ['reconfigure'] if prepare_only else ['build', 'size']
     env = dict(os.environ, IDF_COMPONENT_MANAGER='0' if rover else '1',
                IDF_COMPONENT_CHECK_NEW_VERSION='0')
     if not rover:
@@ -124,7 +147,11 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
                                  network_sdk_defaults(profile, board))
         defaults_path.write_text(defaults_path.read_text() + 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y\n' + ('CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y\n' if s3 else 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y\n') + 'CONFIG_ESP_HTTPS_SERVER_ENABLE=y\nCONFIG_MBEDTLS_PEM_WRITE_C=y\n# CONFIG_MDNS_ENABLE_CONSOLE_CLI is not set\nCONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y\n')
     subprocess.run(command, env=env, check=True)
-    print('Native build only; hardware qualification pending:', profile, board)
+    if not rover:
+        validate_dependency_lock(yaml.safe_load((project / 'dependencies.lock').read_text()),
+                                 'esp32s3' if s3 else 'esp32c3')
+    print('Native prepare only;' if prepare_only else 'Native build only;',
+          'hardware qualification pending:', profile, board)
 
 
 if __name__ == '__main__':
@@ -138,7 +165,8 @@ if __name__ == '__main__':
     p.add_argument('--rover-uart-tx', type=int, help='explicit reviewed C3 TX-only GPIO; omitted keeps USB')
     p.add_argument('--rover-uart-baud', type=int, default=115200, help='UART 8N1 baud (only with explicit TX)')
     p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')
+    p.add_argument('--prepare-only', action='store_true', help='configure/download only; do not compile firmware')
     p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
     a = p.parse_args()
     build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel,
-          a.rover_uart_tx, a.rover_uart_baud)
+          a.rover_uart_tx, a.rover_uart_baud, a.prepare_only)

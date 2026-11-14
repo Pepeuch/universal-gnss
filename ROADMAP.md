@@ -39,6 +39,9 @@ An authenticated, explicitly confirmed offline self-test now exercises the real 
 CRC and shared wire codec in private buffers, without transmitting corrections.
 Native wire helpers now omit routine per-fragment INFO console output while
 retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
+The native ESP32 CI recipe now validates four bounded variants with disconnected
+non-root builds, host tests and independent reconstruction; GitHub qualification
+is pending an authorized push/PR. No firmware is published.
 Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.

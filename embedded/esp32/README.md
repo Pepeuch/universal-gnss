@@ -21,6 +21,10 @@ Le rover natif C3 propose désormais USB par défaut ou une sortie UART1 TX seul
 explicitement configurée ; [construction, budgets et limites](migration/README.md#optional-c3-rover-uart-output)
 restent distincts des preuves matérielles historiques.
 
+La [validation CI native](native/CI.md) couvre quatre variantes compilables, avec
+provisionnement séparé, tests isolés et reconstruction indépendante. Elle ne publie
+aucun binaire ; son exécution GitHub reste à qualifier après un push autorisé.
+
 ## Périmètre implémenté
 
 `components/ug_rtcm` compile **le fichier UG existant**
