@@ -22,6 +22,7 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = () => 1, clearTimeout = () => {};
           class AbortController {constructor(){this.signal={};}abort(){}}
+          let hold_commands = false, release_commands;
           let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events;
           const confirm = () => true;
           const prompt = text => text.includes('REPLACE_TLS_OBJECT') ? 'REPLACE_TLS_OBJECT' : text.includes('DELETE_TLS_OBJECT') ? 'DELETE_TLS_OBJECT' : text.includes('ROLLBACK_CONFIGURATION') ? 'ROLLBACK_CONFIGURATION' : 'SAVE_RECEIVER_CONFIGURATION';
@@ -32,6 +33,12 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
+            if (path === '/api/gnss/commands') {
+              if (hold_commands) return new Promise(resolve => {
+                release_commands = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-command-session"}'});
+              });
+              return {ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"scope":"volatile_gnss_command_results_this_boot","events":[{"purpose":"base_disable","indeterminate":true}]}'};
+            }
             if (hold_events && path === '/api/diagnostics/events') return new Promise(resolve => {
               release_events = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"events":[{"private":"old-session"}]}'});
             });
@@ -98,6 +105,10 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         restart = json.loads(vm.eval("calls.filter(c=>c.path==='/api/ntrip/restart').pop().options.body"))
         self.assertEqual(restart, {'confirm':'RESTART_NTRIP_SERVICES'})
+        vm.eval("elements['commands-read'].onclick();")
+        self.drain(vm)
+        self.assertIn('base_disable', vm.eval("elements['command-history'].textContent"))
+        self.assertIn('indeterminate', vm.eval("elements['command-history'].textContent"))
         vm.eval("elements['events-read'].onclick();")
         self.drain(vm)
         self.assertIn('rtcm_router', vm.eval('elements.events.textContent'))
@@ -127,10 +138,13 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval('calls.length'), before)
         vm.eval("hold_events=true; elements['events-read'].onclick();")
         self.drain(vm)
-        vm.eval('elements.logout.onclick(); release_status(); release_events();')
+        vm.eval("hold_commands=true; elements['commands-read'].onclick();")
+        self.drain(vm)
+        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands();')
         self.drain(vm)
         self.assertEqual(vm.eval('elements.receiver.textContent'), 'Session fermée')
         self.assertEqual(vm.eval('elements.events.textContent'), 'Session fermée')
+        self.assertEqual(vm.eval("elements['command-history'].textContent"), 'Session fermée')
         self.assertEqual(vm.eval("elements['ntrip-runtime'].textContent"), 'Session fermée')
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')

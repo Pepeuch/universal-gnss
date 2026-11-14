@@ -29,6 +29,7 @@ Receiver receiver(uart);
 std::mutex status_guard;
 ReceiverStatus status;
 ReceiverSatelliteReport satellite_snapshot;
+CommandHistorySnapshot command_snapshot;
 QueueHandle_t operations;
 StaticQueue_t operations_control;
 std::array<std::uint8_t, sizeof(GnssOperation)> operations_memory{};
@@ -308,7 +309,14 @@ void Owner(void*)
           local = false;
           epoch = BeginCorrectionSource(0, false);
           receiver.InvalidateObservations();
-          transaction = receiver.Start(std::move(plan.commands), Now());
+          auto purpose = CommandPurpose::kTelemetry;
+          if (operation.kind == GnssOperation::Kind::kBaseDisable)
+            purpose = CommandPurpose::kBaseDisable;
+          else if (operation.kind == GnssOperation::Kind::kBase)
+            purpose = operation.base.mode == BaseMode::kFixed      ? CommandPurpose::kBaseFixed
+                      : operation.base.mode == BaseMode::kSurveyIn ? CommandPurpose::kBaseSurvey
+                                                                   : CommandPurpose::kBaseTime;
+          transaction = receiver.Start(std::move(plan.commands), Now(), purpose);
           if (!transaction)
           {
             Error("configuration dispatch failed; journal retained");
@@ -362,6 +370,7 @@ void Owner(void*)
       status.busy = pending;
       status.quarantined = ReceiverJournalBlocked() || receiver.indeterminate();
       status.operation_state = static_cast<unsigned>(state);
+      command_snapshot = receiver.command_history();
       status.uart_overflows = uart.overflows;
       status.uart_line_errors = uart.line_errors;
       status.uart_event_saturations = uart.event_saturations;
@@ -429,6 +438,11 @@ ReceiverSatelliteReport ReceiverSatellites()
 {
   std::lock_guard<std::mutex> lock(status_guard);
   return pending.load() ? ReceiverSatelliteReport{} : satellite_snapshot;
+}
+CommandHistorySnapshot ReceiverCommands()
+{
+  std::lock_guard<std::mutex> lock(status_guard);
+  return command_snapshot;
 }
 ReceiverStatus ReceiverSnapshot()
 {

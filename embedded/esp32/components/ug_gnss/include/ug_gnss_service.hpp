@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "esp_err.h"
+#include "ug_command_history.hpp"
 #include "ug_satellite_reports.hpp"
 #include "ug_telemetry_operation.hpp"
 #include "universal_gnss_protocols/ubx_records.hpp"
@@ -23,6 +24,7 @@ bool QueueBaseDisableOperation(const BaseDisableOperation&);
 bool QueueTelemetryOperation(const TelemetryOperation&);
 bool QueueReceiverDetection();
 ReceiverStatus ReceiverSnapshot();
+CommandHistorySnapshot ReceiverCommands();
 struct ReceiverSatelliteReport
 {
   SatelliteReport report{};

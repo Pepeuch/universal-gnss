@@ -11,12 +11,16 @@ Receiver::Receiver(universal_gnss_transport::ByteSink& uart, ReceiverSessionConf
 {
 }
 
-void Receiver::Note(const ReceiverConfigApplicationResult& result)
+void Receiver::Note(const ReceiverConfigApplicationResult& result,
+                    std::optional<std::int64_t> receipt_ns)
 {
   fence_.NoteDispatch(result);
+  history_.Record(result, incarnation_, receipt_ns);
 }
 
-bool Receiver::Start(std::vector<ReceiverCommand> commands, const std::int64_t now_ns)
+bool Receiver::Start(std::vector<ReceiverCommand> commands,
+                     const std::int64_t now_ns,
+                     CommandPurpose purpose)
 {
   if (commands.empty() || commands.size() > 32 || now_ns < last_receipt_ns_ || indeterminate())
     return false;
@@ -29,8 +33,9 @@ bool Receiver::Start(std::vector<ReceiverCommand> commands, const std::int64_t n
         command.payload.text.size() > 512)
       return false;
   survey_.reset();  // Earlier status never qualifies a newly requested BASE operation.
+  history_.Begin(purpose);
   const auto result = application_.Start(std::move(commands), now_ns);
-  Note(result);
+  Note(result, now_ns);
   return result.state != ReceiverConfigApplicationState::kFailed;
 }
 
@@ -84,7 +89,7 @@ bool Receiver::Feed(const std::uint8_t* bytes,
       UbloxRoutedResponse response;
       while (ublox_.PopResponse(response))
         if (fence_.IsEligible(response.response))
-          Note(application_.ApplyResponse(response.response, {response.ubx_target}));
+          Note(application_.ApplyResponse(response.response, {response.ubx_target}), receipt_ns);
       ubx_generation_.reset();
     }
     else if (framed.status != universal_gnss_protocols::ParserStatus::kNeedMoreData)
@@ -99,7 +104,7 @@ bool Receiver::Feed(const std::uint8_t* bytes,
         ReceiverCommandResponse response;
         while (unicore_.PopResponse(response))
           if (fence_.IsEligible(response))
-            Note(application_.ApplyResponse(response));
+            Note(application_.ApplyResponse(response), receipt_ns);
       }
       line_size_ = 0;
       line_overflow_ = false;
@@ -116,9 +121,9 @@ void Receiver::Step(const std::int64_t now_ns)
 {
   if (now_ns < last_receipt_ns_ || now_ns < 0)
     return;
-  Note(application_.CheckTimeout(now_ns));
+  Note(application_.CheckTimeout(now_ns), now_ns);
   if (application_.state() == ReceiverConfigApplicationState::kRunning)
-    Note(application_.Step(now_ns));
+    Note(application_.Step(now_ns), now_ns);
 }
 
 void Receiver::ConfigureTelemetry(ReceiverSessionConfig config)

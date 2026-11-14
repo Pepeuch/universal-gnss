@@ -555,6 +555,58 @@ esp_err_t EventReply(httpd_req_t* req)
   }
   return Json(req, root.get());
 }
+#if UG_LOCAL_GNSS
+esp_err_t CommandHistoryReply(httpd_req_t* req)
+{
+  const auto snapshot = ReceiverCommands();
+  const auto now = esp_timer_get_time() * 1000;
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root ||
+      !cJSON_AddStringToObject(root.get(), "scope", "volatile_gnss_command_results_this_boot") ||
+      !cJSON_AddStringToObject(root.get(),
+                               "current_receiver_incarnation",
+                               std::to_string(snapshot.current_receiver_incarnation).c_str()) ||
+      !cJSON_AddStringToObject(
+          root.get(), "overwritten", std::to_string(snapshot.overwritten).c_str()) ||
+      !cJSON_AddStringToObject(root.get(), "rejected", std::to_string(snapshot.rejected).c_str()))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  auto* list = cJSON_AddArrayToObject(root.get(), "events");
+  if (!list)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  for (std::size_t i = 0; i < snapshot.count; ++i)
+  {
+    const auto& event = snapshot.events[i];
+    auto* value = cJSON_CreateObject();
+    if (!value)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    cJSON_AddItemToArray(list, value);
+    if (!cJSON_AddStringToObject(value, "sequence", std::to_string(event.sequence).c_str()) ||
+        !cJSON_AddStringToObject(value, "plan", std::to_string(event.plan).c_str()) ||
+        !cJSON_AddStringToObject(
+            value, "receiver_incarnation", std::to_string(event.receiver_incarnation).c_str()) ||
+        !cJSON_AddStringToObject(value, "purpose", CommandPurposeName(event.purpose)) ||
+        !cJSON_AddNumberToObject(value, "application_index", event.application_index) ||
+        !cJSON_AddNumberToObject(value, "state", static_cast<unsigned>(event.state)) ||
+        (event.engine_status_present &&
+         !cJSON_AddNumberToObject(
+             value, "engine_status", static_cast<unsigned>(event.engine_status))) ||
+        !cJSON_AddBoolToObject(value, "started", event.started) ||
+        !cJSON_AddBoolToObject(value, "finished", event.finished) ||
+        !cJSON_AddBoolToObject(value, "succeeded", event.succeeded) ||
+        !cJSON_AddBoolToObject(value, "failed", event.failed) ||
+        !cJSON_AddBoolToObject(value, "response_applied", event.response_applied) ||
+        !cJSON_AddBoolToObject(value, "retry", event.retry) ||
+        !cJSON_AddBoolToObject(value, "indeterminate", event.indeterminate) ||
+        !cJSON_AddBoolToObject(value, "failure_ignored", event.failure_ignored) ||
+        !cJSON_AddBoolToObject(
+            value, "clock_valid", event.clock_valid && now >= event.receipt_ns) ||
+        (event.clock_valid && now >= event.receipt_ns &&
+         !cJSON_AddNumberToObject(value, "age_ms", (now - event.receipt_ns) / 1000000)))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+  }
+  return Json(req, root.get());
+}
+#endif
 esp_err_t Get(httpd_req_t* req)
 {
   if (req->content_len)
@@ -562,7 +614,8 @@ esp_err_t Get(httpd_req_t* req)
   const std::string_view uri(req->uri);
   if (uri == "/api/resources")
     return Resources(req);
-  const auto work = uri == "/api/gnss/satellites" || uri == "/api/diagnostics/events"
+  const auto work = uri == "/api/gnss/satellites" || uri == "/api/diagnostics/events" ||
+                            uri == "/api/gnss/commands"
                         ? WebWork::kDetailedDiagnostics
                         : WebWork::kSnapshot;
   if (!AdmitWebWork(AssessResources(CurrentMemory()), work))
@@ -600,6 +653,8 @@ esp_err_t Get(httpd_req_t* req)
     return httpd_resp_send(req, json.data(), json.size());
   }
 #if UG_LOCAL_GNSS
+  if (uri == "/api/gnss/commands")
+    return CommandHistoryReply(req);
   if (uri == "/api/gnss/capabilities")
     return GnssCapabilitiesReply(req);
   if (uri == "/api/gnss/satellites")

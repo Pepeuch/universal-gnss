@@ -88,7 +88,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -189,4 +189,10 @@ $('base-disable').onclick = handle(async () => {
   }
   const generation = sessionGeneration, result = await call('/api/gnss/base/disable', operation);
   if (generation === sessionGeneration && token) show(result);
+});
+
+$('commands-read').onclick = handle(async () => {
+  const generation = sessionGeneration, report = await call('/api/gnss/commands');
+  if (generation !== sessionGeneration || !token) return;
+  $('command-history').textContent = print(report);
 });

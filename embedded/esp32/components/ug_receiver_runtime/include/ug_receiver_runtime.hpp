@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
+#include "ug_command_history.hpp"
 #include "ug_satellite_reports.hpp"
 #include "universal_gnss_driver/receiver_config_application.hpp"
 #include "universal_gnss_driver/receiver_response_causality.hpp"
@@ -22,7 +23,9 @@ public:
   explicit Receiver(universal_gnss_transport::ByteSink& uart,
                     universal_gnss_driver::ReceiverSessionConfig config = {});
   bool Feed(const std::uint8_t* bytes, std::size_t size, std::int64_t receipt_ns);
-  bool Start(std::vector<universal_gnss_driver::ReceiverCommand> commands, std::int64_t now_ns);
+  bool Start(std::vector<universal_gnss_driver::ReceiverCommand> commands,
+             std::int64_t now_ns,
+             CommandPurpose purpose = CommandPurpose::kUnspecified);
   void Step(std::int64_t now_ns);
   void ConfigureTelemetry(universal_gnss_driver::ReceiverSessionConfig config);
   void InvalidateObservations();  // Does not clear a command quarantine.
@@ -54,9 +57,17 @@ public:
   {
     return incarnation_;
   }
+  CommandHistorySnapshot command_history() const
+  {
+    auto snapshot = history_.Snapshot();
+    snapshot.current_receiver_incarnation = incarnation_;
+    return snapshot;
+  }
 
 private:
-  void Note(const universal_gnss_driver::ReceiverConfigApplicationResult& result);
+  void Note(const universal_gnss_driver::ReceiverConfigApplicationResult& result,
+            std::optional<std::int64_t> receipt_ns = std::nullopt);
+  CommandHistory history_{};
   universal_gnss_driver::ReceiverSession session_;
   universal_gnss_driver::ReceiverConfigApplication application_;
   universal_gnss_driver::ResponseCausalityFence fence_;

@@ -2670,7 +2670,7 @@
       "group": "www",
       "decision": "ADAPT",
       "status": "PARTIAL",
-      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
+      "evidence": "Native typed 32-entry service-event ring and 16-entry GNSS command-result history, authenticated read-only APIs/UI; actual receiver ACK/rejection/timeout/partial-write, incarnation retention and browser session tests. No raw SDK/GNSS payload capture or destructive /log; complete NTRIP transaction history remains open."
     },
     {
       "path": "www/c/lora.js",
@@ -2743,7 +2743,7 @@
       "group": "www",
       "decision": "ADAPT",
       "status": "PARTIAL",
-      "evidence": "Native typed 32-entry service-event ring plus authenticated /api/diagnostics/events and local events; boot/watchdog/exit tests and browser session guards. Raw SDK printf capture/destructive old /log is intentionally replaced; complete GNSS/NTRIP transaction history remains open."
+      "evidence": "Native typed 32-entry service-event ring and 16-entry GNSS command-result history, authenticated read-only APIs/UI; actual receiver ACK/rejection/timeout/partial-write, incarnation retention and browser session tests. No raw SDK/GNSS payload capture or destructive /log; complete NTRIP transaction history remains open."
     }
   ],
   "http_contracts": [

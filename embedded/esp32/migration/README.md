@@ -996,3 +996,53 @@ asset update and continues to exclude the GNSS driver. The portable builder
 source/header intentionally change ROS2 source payloads; inventories must be
 regenerated, not described as unchanged. No ROSIDL, package, version or existing
 Linux runtime behavior changes, and no device, flash, push or publication occurs.
+
+
+## Bounded GNSS command-result history
+
+Authenticated GET `/api/gnss/commands` returns the 16 latest typed results from
+this boot, oldest first. The receiver UART owner records actual UG application
+results: dispatch, response, command completion/failure and retry. Idle ticks,
+unmatched replies and rejected preflight/queue requests do not create entries.
+No command payload, coordinates, receiver response text, credentials or raw SDK
+logs are retained. This supplements the service-event ring; it is not a complete
+NTRIP transaction log or a persistent audit trail.
+
+Each entry has boot-local sequence/plan IDs, purpose, receiver incarnation,
+post-result application index, application/engine states and explicit flags.
+IDs are JSON strings, preserving integer precision. `application_index` is the
+UG application's index after that result; it is not an inferred receiver wire
+transaction ID. A command completed without an expected reply can have
+`succeeded:true` and `response_applied:false`. Neither success nor an ACK proves
+physical application, Survey-In completion, RTCM output or persistent storage.
+
+Observation reset/detection never clears history or quarantine. The snapshot's
+`current_receiver_incarnation` distinguishes earlier events from the current
+observation source. Time is the owner's monotonic receipt/step time; invalidation
+without a supplied timestamp records `clock_valid:false`, with no invented age.
+Reading never refreshes an event. Ring overwrite/rejection counters are diagnostic
+only and cannot alter dispatch. All history disappears at reboot.
+
+The ring uses fixed storage and allocates nothing; only the GNSS-enabled S3
+links it. The service owner publishes its copy under the existing snapshot lock.
+The HTTPS endpoint uses the existing detailed-diagnostics memory admission and
+bearer authentication; the UI requests it explicitly and discards late responses
+after logout. No raw console command API or quarantine reset was added.
+
+Validation: **36 native ASan/UBSan tests**, including real receiver two-command
+ACK fencing, rejection, timeout, partial write, no-response completion, retention
+across incarnation changes and ring wrap; browser mock **1 PASS**. IDF 6.1 builds
+and linked-symbol/role/partition checks pass for S3 and GNSS-free C3 relay. Apps:
+**1435440 / 3145728** and **1288848 / 1310720** bytes. Static linked S3 DIRAM is
+**214156 / 341760** bytes; relay DRAM remains **159686 / 321296**. These are linker
+budgets, not measured runtime heap or simultaneous TLS qualification. USB/UART
+rover code is unaffected; no physical trial or flash was performed. Independent
+S3 and relay reconstructions have byte-identical apps, bootloaders and partition
+tables.
+
+The preceding F9P disable commit `d64dce3372464f599bbfc48d624dcf553fd67929`
+was additionally qualified through eight deterministic, integral ROS2 snapshots,
+**166 Lyrical** and **168 Lyrical + MAVROS** isolated tests with zero skips.
+Kilted snapshots were generated only; no new Kilted build was performed. The
+portable driver addition intentionally changes those source payloads; existing
+BASE command plans remained byte-identical across 768 before/after cases.
