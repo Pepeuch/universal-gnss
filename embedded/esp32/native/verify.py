@@ -38,7 +38,9 @@ def check_web_assets(build, source_assets, application):
     return reports
 
 
-def verify(work, profile, local_gnss=False):
+def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200):
+    if profile != 'rover' and (rover_uart_tx is not None or rover_uart_baud != 115200):
+        raise ValueError('UART output expectation requires the rover profile')
     work = Path(work).resolve()
     build = work / 'build'
     commands = json.loads((build / 'compile_commands.json').read_text())
@@ -80,6 +82,23 @@ def verify(work, profile, local_gnss=False):
                       'CONFIG_LOG_DEFAULT_LEVEL=0', 'CONFIG_LOG_MAXIMUM_LEVEL=0'):
             if value not in lines:
                 raise ValueError('binary USB log isolation missing: ' + value)
+        main_c, = [entry for entry in commands if entry['file'].endswith('/main/rover.c')]
+        expected_tx = str(rover_uart_tx if rover_uart_tx is not None else -1)
+        if '-DUG_ROVER_UART_TX=' + expected_tx not in shlex.split(main_c['command']):
+            raise ValueError('rover output selection does not match expected build')
+        if rover_uart_baud not in (115200, 230400, 460800, 921600) or (
+                '-DUG_ROVER_UART_BAUD=' + str(rover_uart_baud)) not in shlex.split(main_c['command']):
+            raise ValueError('rover UART baud does not match expected build')
+        if rover_uart_tx is None and rover_uart_baud != 115200:
+            raise ValueError('UART baud expectation requires an explicit TX pin')
+        uart_inputs = [file for file in production if file.endswith('/main/rover_uart.c')]
+        if bool(uart_inputs) != (rover_uart_tx is not None):
+            raise ValueError('rover UART backend input mismatch')
+        if rover_uart_tx is not None and (rover_uart_tx not in (4, 5, 6, 7, 10) or
+                                         'ug_rover_uart_start' not in symbols or 'uart_tx_chars' not in symbols):
+            raise ValueError('reviewed nonblocking UART rover backend not linked')
+        if 'espnow_rtcm_output_frame' not in symbols:
+            raise ValueError('bounded rover frame writer not linked')
     else:
         for value in ('universal_gnss_ntrip::NtripClient::Read(',
                       'universal_gnss_transport::TcpClientTransport::Open(', 'ug::embedded::NtripPublisher::Send('):
@@ -109,6 +128,11 @@ def verify(work, profile, local_gnss=False):
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
               'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
     result['web_assets'] = web_assets
+    if profile == 'rover':
+        result['rover_output'] = {'transport': 'uart1-tx' if rover_uart_tx is not None else 'usb-serial-jtag',
+                                  'tx_pin': rover_uart_tx,
+                                  'baud': rover_uart_baud if rover_uart_tx is not None else None,
+                                  'physical_delivery': 'NOT_TESTED'}
     (work / 'native-verification.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result, indent=2))
     return result
@@ -119,5 +143,7 @@ if __name__ == '__main__':
     parser.add_argument('--work', required=True)
     parser.add_argument('--profile', required=True, choices=('gateway','relay-ntrip','rover'))
     parser.add_argument('--local-gnss', action='store_true')
+    parser.add_argument('--rover-uart-tx', type=int)
+    parser.add_argument('--rover-uart-baud', type=int, default=115200)
     args = parser.parse_args()
-    verify(args.work,args.profile,args.local_gnss)
+    verify(args.work,args.profile,args.local_gnss,args.rover_uart_tx,args.rover_uart_baud)

@@ -33,7 +33,8 @@ static esp_now_send_status_t s_send_status;
 static bool s_tx_halted;
 static uint32_t s_tx_epoch = 1, s_message_epoch;
 #else
-
+static espnow_rtcm_write_fn s_output_writer;
+static void* s_output_context;
 #endif
 static bool s_started;
 static espnow_rtcm_stats_t s_stats;
@@ -145,28 +146,50 @@ static void received(const esp_now_recv_info_t* info, const uint8_t* data, int l
   queue_push(data, (size_t)len);
 }
 
-static void usb_frame(const uint8_t* frame, size_t len)
+static int usb_write(const uint8_t* bytes, size_t size, uint32_t wait_ms, void* context)
 {
-  size_t offset = 0;
-  uint32_t start = now_ms();
-  while (offset < len && (uint32_t)(now_ms() - start) < 200)
+  (void)context;
+  return usb_serial_jtag_write_bytes(bytes, size, pdMS_TO_TICKS(wait_ms));
+}
+static uint32_t output_clock(void* context)
+{
+  (void)context;
+  return now_ms();
+}
+static void output_idle(void* context)
+{
+  (void)context;
+  vTaskDelay(1);
+}
+static void output_frame(const uint8_t* frame, size_t len)
+{
+  const espnow_rtcm_output_ops_t ops = {
+      s_output_writer ? s_output_writer : usb_write, output_clock, output_idle, s_output_context};
+  const espnow_rtcm_output_result_t result = espnow_rtcm_output_frame(&ops, frame, len);
+  counter_add(&s_stats.output_bytes, result.accepted);
+  counter_add(result.complete ? &s_stats.output_frames : &s_stats.output_errors, 1);
+  // Driver acceptance is not physical USB/UART delivery; stalls can truncate.
+  if (!s_output_writer)
   {
-    int written = usb_serial_jtag_write_bytes(frame + offset, len - offset, pdMS_TO_TICKS(20));
-    if (written < 0)
-      break;
-    if (written > 0)
-      counter_add(&s_stats.usb_bytes, (uint64_t)written);
-    offset += (size_t)written;
-    if (!written)
-      vTaskDelay(1);
+    counter_add(&s_stats.usb_bytes, result.accepted);
+    counter_add(result.complete ? &s_stats.usb_frames : &s_stats.usb_errors, 1);
   }
-  /* USB disconnect/stall can truncate a stream; no invented padding or logs. */
-  if (offset != len)
-    counter_add(&s_stats.usb_errors, 1);
-  else
-    counter_add(&s_stats.usb_frames, 1);
 }
 #endif
+esp_err_t espnow_rtcm_set_rover_writer(espnow_rtcm_write_fn writer, void* context)
+{
+#if CONFIG_ESPNOW_RTCM_ROVER
+  if (s_started || s_worker || !writer)
+    return ESP_ERR_INVALID_STATE;
+  s_output_writer = writer;
+  s_output_context = context;
+  return ESP_OK;
+#else
+  (void)writer;
+  (void)context;
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
 
 static void worker(void* arg)
 {
@@ -196,7 +219,7 @@ static void worker(void* arg)
       else if (result.complete)
       {
         counter_add(&s_stats.rx_frames, 1);
-        usb_frame(result.frame, result.frame_len);
+        output_frame(result.frame, result.frame_len);
       }
       portENTER_CRITICAL(&s_lock);
       s_stats.rx_crc16_errors = s_radio.crc16_errors;
@@ -269,10 +292,14 @@ esp_err_t espnow_rtcm_start(void)
     return ESP_ERR_NO_MEM;
 #endif
 #if CONFIG_ESPNOW_RTCM_ROVER
-  usb_serial_jtag_driver_config_t usb = {.tx_buffer_size = 2048, .rx_buffer_size = 256};
-  esp_err_t err = usb_serial_jtag_driver_install(&usb);
-  if (err != ESP_OK)
-    return err;
+  esp_err_t err = ESP_OK;
+  if (!s_output_writer)
+  {
+    usb_serial_jtag_driver_config_t usb = {.tx_buffer_size = 2048, .rx_buffer_size = 256};
+    err = usb_serial_jtag_driver_install(&usb);
+    if (err != ESP_OK)
+      return err;
+  }
 #else
   esp_err_t err;
 #endif

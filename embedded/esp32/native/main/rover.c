@@ -6,6 +6,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#if UG_ROVER_UART_TX >= 0
+esp_err_t ug_rover_uart_start(void);
+#endif
 
 void app_main(void)
 {
@@ -13,6 +16,10 @@ void app_main(void)
   // Never erase persistent configuration automatically, including on version errors.
   (void)nvs_flash_init();  // Wi-Fi uses RAM-only configuration; persistent failure does not erase
                            // data.
+#if UG_ROVER_UART_TX >= 0
+  if (ug_rover_uart_start() != ESP_OK)
+    return;
+#endif
   if (esp_netif_init() != ESP_OK || esp_event_loop_create_default() != ESP_OK ||
       espnow_rtcm_start() != ESP_OK)
     return;

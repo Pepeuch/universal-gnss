@@ -4,10 +4,12 @@ import os
 from pathlib import Path
 import pty
 import sys
+import termios
 import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools'))
 from check_rtcm_usb import RtcmReader, crc24q, main, read_port
 from check_rtcm_capture import compare, load_frames
@@ -19,6 +21,63 @@ def frame(payload):
 
 
 class CaptureTests(unittest.TestCase):
+    def test_explicit_uart_baud_8n1_order_and_restoration(self):
+        for baud in (115200, 230400, 460800, 921600):
+            with self.subTest(baud=baud):
+                master, slave = pty.openpty()
+                saved = termios.tcgetattr(slave)
+                payload = frame(b'\x00\xd3\x13\x11\r\n\xff') + frame(bytes(range(64)))
+                capture, failures = io.BytesIO(), []
+                def writer():
+                    try:
+                        deadline = time.monotonic() + 1
+                        while True:
+                            current = termios.tcgetattr(slave)
+                            if current[4] == current[5] == getattr(termios, f'B{baud}'):
+                                break
+                            if time.monotonic() > deadline:
+                                raise AssertionError('UART baud never applied')
+                            time.sleep(0.001)
+                        self.assertEqual(current[2] & termios.CSIZE, termios.CS8)
+                        self.assertFalse(current[2] & (termios.PARENB | termios.CSTOPB | getattr(termios, 'CRTSCTS', 0)))
+                        self.assertFalse(current[0] & (termios.IXON | termios.IXOFF | termios.IXANY))
+                        for start in range(0, len(payload), 7):
+                            os.write(master, payload[start:start+7])
+                    except Exception as error:
+                        failures.append(error)
+                thread = threading.Thread(target=writer)
+                thread.start()
+                try:
+                    result = read_port(os.ttyname(slave), frames=2, timeout=2, output=capture, baud=baud)
+                    self.assertEqual(result['host_baud'], baud)
+                    self.assertEqual(result['noise_bytes'], 0)
+                    self.assertEqual(capture.getvalue(), payload)
+                    self.assertEqual(termios.tcgetattr(slave), saved)
+                finally:
+                    thread.join(timeout=2)
+                    os.close(slave)
+                    os.close(master)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(failures, [])
+
+    def test_invalid_uart_baud_never_opens_a_device(self):
+        with patch('check_rtcm_usb.os.open') as opened:
+            for baud in (-1, 0, 9600, True, '115200'):
+                with self.assertRaises(ValueError):
+                    read_port('/must/not/open', baud=baud)
+            opened.assert_not_called()
+
+    def test_uart_settings_restored_on_timeout(self):
+        master, slave = pty.openpty()
+        saved = termios.tcgetattr(slave)
+        try:
+            with self.assertRaises(TimeoutError):
+                read_port(os.ttyname(slave), frames=1, timeout=0.02, baud=230400)
+            self.assertEqual(termios.tcgetattr(slave), saved)
+        finally:
+            os.close(slave)
+            os.close(master)
+
     def test_arbitrary_splits_and_crc(self):
         original = frame(bytes(range(255))) + frame(b'\0\r\n\xff')
         reader, frames = RtcmReader(), []

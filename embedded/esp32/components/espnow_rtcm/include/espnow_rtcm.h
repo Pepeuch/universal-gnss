@@ -4,6 +4,7 @@
  */
 #pragma once
 #include "esp_err.h"
+#include "espnow_rtcm_output.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +12,8 @@
 /* Before start only; NULL/empty peer retains the explicit compile-time test peer. */
 esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel);
 esp_err_t espnow_rtcm_start(void);
+/* ROVER only, before start. Overrides USB; caller owns a pre-initialized bounded writer. */
+esp_err_t espnow_rtcm_set_rover_writer(espnow_rtcm_write_fn, void* context);
 /* BASE only: one NTRIP task owns this streaming parser. Never waits for radio. */
 void espnow_rtcm_ntrip_reset(void);
 void espnow_rtcm_ntrip_response(bool icy);
@@ -34,5 +37,6 @@ typedef struct
   uint64_t rx_packets, rx_frames, rx_crc16_errors, rx_crc24q_errors, reassembly_expired,
       reassembly_abandoned;
   uint64_t usb_bytes, usb_frames, usb_errors;
+  uint64_t output_bytes, output_frames, output_errors;
 } espnow_rtcm_stats_t;
 void espnow_rtcm_get_stats(espnow_rtcm_stats_t* result);

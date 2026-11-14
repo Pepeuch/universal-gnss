@@ -14,7 +14,20 @@ sys.path.insert(0, str(ROOT / 'embedded/esp32/integration'))
 from build import merged_defaults, C3_PARTITIONS
 
 
-def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=1):
+def validate_rover_output(profile, board, tx, baud):
+    if tx is None:
+        if baud != 115200:
+            raise ValueError('UART baud without an explicit rover TX pin')
+        return
+    if profile != 'rover' or board != 'supermini-c3' or tx not in (4, 5, 6, 7, 10):
+        raise ValueError('TX-only UART currently requires a reviewed C3 rover GPIO: 4,5,6,7,10')
+    if baud not in (115200, 230400, 460800, 921600):
+        raise ValueError('unsupported rover UART baud')
+
+
+def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=1,
+          rover_uart_tx=None, rover_uart_baud=115200):
+    validate_rover_output(profile, board, rover_uart_tx, rover_uart_baud)
     if peer_mac is not None:
         if not re.fullmatch(r'(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', peer_mac):
             raise ValueError('peer must be an explicit unicast STA MAC')
@@ -86,9 +99,12 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
 ''']
     (project / 'partitions.csv').write_text(partitions)
     (work / 'sdkconfig.defaults').write_text(merged_defaults(defaults))
+    output_defines = (['-D', 'UG_ROVER_UART_TX=' + str(rover_uart_tx if rover_uart_tx is not None else -1),
+                       '-D', 'UG_ROVER_UART_BAUD=' + str(rover_uart_baud)] if rover else [])
     command = ['idf.py', '-C', str(project), '-B', str(work / 'build'),
                '-D', 'UG_ROOT=' + str(ROOT), '-D', 'UG_PROFILE=' + profile,
                '-D', 'UG_LOCAL_GNSS=' + ('ON' if gnss else 'OFF'),
+               *output_defines,
                '-D', 'IDF_TARGET=' + ('esp32s3' if s3 else 'esp32c3'),
                '-D', 'SDKCONFIG=' + str(work / 'sdkconfig'),
                '-D', 'SDKCONFIG_DEFAULTS=' + str(work / 'sdkconfig.defaults'), 'build', 'size']
@@ -109,7 +125,10 @@ if __name__ == '__main__':
     p.add_argument('--local-gnss', action='store_true')
     p.add_argument('--peer-mac', help='explicit peer Wi-Fi STA MAC; omitted means a fictitious compile-only peer')
     p.add_argument('--channel', type=int, default=1, help='fixed common ESP-NOW channel; no automatic selection')
+    p.add_argument('--rover-uart-tx', type=int, help='explicit reviewed C3 TX-only GPIO; omitted keeps USB')
+    p.add_argument('--rover-uart-baud', type=int, default=115200, help='UART 8N1 baud (only with explicit TX)')
     p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')
     p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
     a = p.parse_args()
-    build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel)
+    build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel,
+          a.rover_uart_tx, a.rover_uart_baud)

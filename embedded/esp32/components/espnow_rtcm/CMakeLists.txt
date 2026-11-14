@@ -3,7 +3,7 @@ if(CONFIG_ESPNOW_RTCM_BASE OR CONFIG_ESPNOW_RTCM_ROVER)
     if(CONFIG_ESPNOW_RTCM_PEER_MAC STREQUAL "00:00:00:00:00:00")
         message(FATAL_ERROR "Configure the other board's Wi-Fi STA MAC before building ESP-NOW")
     endif()
-    list(APPEND bridge_sources "src/espnow_rtcm_codec.c" "src/espnow_rtcm.c")
+    list(APPEND bridge_sources "src/espnow_rtcm_codec.c" "src/espnow_rtcm.c" "src/espnow_rtcm_output.c")
 endif()
 idf_component_register(
     SRCS ${bridge_sources}

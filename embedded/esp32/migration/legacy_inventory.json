@@ -155,7 +155,8 @@
       "decision": "ADAPT",
       "status": "IMPLEMENTED",
       "validation": "HARDWARE_PENDING",
-      "native_path": "embedded/esp32/components/espnow_rtcm/CMakeLists.txt"
+      "native_path": "embedded/esp32/components/espnow_rtcm/CMakeLists.txt",
+      "evidence": "Native USB-default rover plus optional C3 UART1 TX-only backend; bounded shared output pump, actual adapter failure tests, 33 native sanitizer cases, software capture tests, two-directory rover build identity. Wire/CRC16/UG CRC24Q unchanged. Physical UART/IDF6.1 acceptance pending."
     },
     {
       "path": "components/espnow_rtcm/Kconfig",
@@ -175,7 +176,8 @@
       "decision": "ADAPT",
       "status": "IMPLEMENTED",
       "validation": "HARDWARE_PENDING",
-      "native_path": "embedded/esp32/components/espnow_rtcm/include/espnow_rtcm.h"
+      "native_path": "embedded/esp32/components/espnow_rtcm/include/espnow_rtcm.h",
+      "evidence": "Native USB-default rover plus optional C3 UART1 TX-only backend; bounded shared output pump, actual adapter failure tests, 33 native sanitizer cases, software capture tests, two-directory rover build identity. Wire/CRC16/UG CRC24Q unchanged. Physical UART/IDF6.1 acceptance pending."
     },
     {
       "path": "components/espnow_rtcm/include/espnow_rtcm_codec.h",
@@ -195,7 +197,8 @@
       "decision": "ADAPT",
       "status": "IMPLEMENTED",
       "validation": "HARDWARE_PENDING",
-      "native_path": "embedded/esp32/components/espnow_rtcm/src/espnow_rtcm.c"
+      "native_path": "embedded/esp32/components/espnow_rtcm/src/espnow_rtcm.c",
+      "evidence": "Native USB-default rover plus optional C3 UART1 TX-only backend; bounded shared output pump, actual adapter failure tests, 33 native sanitizer cases, software capture tests, two-directory rover build identity. Wire/CRC16/UG CRC24Q unchanged. Physical UART/IDF6.1 acceptance pending."
     },
     {
       "path": "components/espnow_rtcm/src/espnow_rtcm_codec.c",

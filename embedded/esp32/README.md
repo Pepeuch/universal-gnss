@@ -17,6 +17,9 @@ La [reconstruction native complète](migration/README.md) est maintenant engagé
 avec inventaire conservatoire et applications IDF 6.1 directement construites
 depuis UG. Les résultats ci-dessous restent ceux des lots RTCM précédents ; ils
 ne qualifient pas par anticipation les fonctionnalités du nouveau firmware.
+Le rover natif C3 propose désormais USB par défaut ou une sortie UART1 TX seule
+explicitement configurée ; [construction, budgets et limites](migration/README.md#optional-c3-rover-uart-output)
+restent distincts des preuves matérielles historiques.
 
 ## Périmètre implémenté
 

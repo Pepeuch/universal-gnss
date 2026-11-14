@@ -9,9 +9,27 @@ import unittest
 spec = importlib.util.spec_from_file_location('native_verify', Path(__file__).resolve().parents[1]/'verify.py')
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+build_spec = importlib.util.spec_from_file_location('native_builder', Path(__file__).resolve().parents[1]/'build.py')
+builder = importlib.util.module_from_spec(build_spec)
+build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_rover_uart_requires_explicit_reviewed_pins_role_and_baud(self):
+        builder.validate_rover_output('rover', 'supermini-c3', None, 115200)
+        for pin in (4, 5, 6, 7, 10):
+            builder.validate_rover_output('rover', 'supermini-c3', pin, 921600)
+        for role, board, pin, baud in (
+                ('gateway', 'supermini-c3', 4, 115200),
+                ('rover', 'waveshare-s3-eth', 4, 115200),
+                ('rover', 'supermini-c3', None, 921600),
+                ('rover', 'supermini-c3', 4, 9600)):
+            with self.assertRaises(ValueError):
+                builder.validate_rover_output(role, board, pin, baud)
+        for pin in (-1, 0, 2, 3, 8, 9, 11, 18, 19, 20, 100):
+            with self.assertRaises(ValueError):
+                builder.validate_rover_output('rover', 'supermini-c3', pin, 115200)
+
     def test_linked_web_assets_cannot_be_stale_missing_or_duplicated(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

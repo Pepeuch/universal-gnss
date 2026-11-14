@@ -814,3 +814,71 @@ margin rises to **22912** bytes. The 31 native ASan/UBSan cases pass. App,
 bootloader and partition binaries are byte-identical in two independent build
 directories for both affected roles; the unchanged minimal rover retains its
 previous reproducibility proof. No hardware/browser deployment is claimed.
+
+
+## Optional C3 rover UART output
+
+USB Serial/JTAG remains the rover default. A native C3 rover can instead select
+UART1 TX only at build time, with an explicit GPIO from the conservative
+`4,5,6,7,10` allowlist and baud `115200,230400,460800,921600`, 8N1 and no flow
+control. Strapping pins, flash pins and USB GPIO18/19 are not selectable. This
+is a software pin policy, **not** approval of a connected board, peripheral or
+voltage. Wiring and receiver-level compatibility require physical review.
+
+```bash
+python3 embedded/esp32/native/build.py --output /tmp/ug-rover-uart --profile rover --board supermini-c3 --rover-uart-tx 4 --rover-uart-baud 115200
+python3 embedded/esp32/native/verify.py --work /tmp/ug-rover-uart --profile rover --rover-uart-tx 4 --rover-uart-baud 115200
+```
+
+The recipe rejects invalid board/role/pin/baud combinations before creating
+output; native CMake also checks the UART selection. The UART driver uses no TX
+ring, disables unused RX interrupts, assigns no RX/RTS/CTS pins and uses the
+SDK's nonblocking `uart_tx_chars`. A pre-start-only writer registration selects
+the backend before ESP-NOW initialization. The custom backend does not install
+the USB Serial/JTAG output driver. No runtime Web/NVS/GNSS service is added to
+the rover. Radio framing, fragment CRC16, reassembly, TTL and the single actual
+UG CRC24Q implementation remain unchanged.
+
+USB and UART share the same borrowed-buffer output pump, with a 200-ms enqueue
+budget, at most 20-ms requested waits and an additional 4096-call guard for a
+faulty clock/yield implementation. Partial writes preserve byte order; invalid
+writer counts and errors terminate the attempt. No padding, logging or retry
+of an already accepted prefix is introduced. Driver acceptance is **not physical
+delivery**; scheduler stalls or an unavailable output can still truncate a byte
+stream, including bytes already queued in a hardware FIFO. This is not a hard
+real-time or end-to-end atomic-frame guarantee. `output_bytes/frames/errors`
+count driver acceptance for either backend; existing `usb_*` counters retain
+USB-only meaning. No counters are printed into RTCM.
+
+For an explicitly identified external USB-UART adapter on Linux, the existing
+strict capture tool now offers an optional host-side baud:
+
+```bash
+python3 embedded/esp32/tools/check_rtcm_usb.py /dev/serial/by-id/<identified-adapter> --baud 115200 --frames 100 --timeout 60 --output /tmp/new-private-uart-capture.rtcm
+```
+
+Without `--baud`, its existing USB behaviour is retained. With it, termios sets
+the selected speed, 8N1 and no hardware/software flow control, and restores the
+original attributes on success or failure. Unsupported baud is rejected before
+opening a device. These examples were not executed against physical ports.
+Adapter modem-control/reset effects remain part of separate hardware
+qualification; no physical port was opened in this software-only migration.
+
+Validation: the previously completed **33 native ASan/UBSan cases** include pump
+partial/stalled/error/oversized-return/clock-wrap/frozen-clock tests and the actual
+UART adapter's setup, nonblocking call and failure cleanups. **Eight capture-tool
+tests** now pass, including four PTY baud variants, order/CRC/noise, restoration
+on timeout and no open for invalid baud. SDK 6.1 builds and linked-backend/role/
+partition/log checks pass for USB rover, UART rover, S3 gateway and C3 relay.
+Independent USB and UART builds have byte-identical apps, bootloaders and partition
+tables. Final app sizes at this milestone: S3 **1430896 / 3145728**, C3 relay
+**1287808 / 1310720**, C3 USB rover **682816 / 1310720**, C3 UART rover
+**694288 / 1310720** bytes. No partitions or SDK dependencies changed.
+
+Physical acceptance remains HARDWARE_PENDING: identify the exact C3 and adapter,
+verify 3.3-V UART compatibility/common ground and selected free GPIO before any
+wiring or authorized flash, then replay finite valid RTCM over S3 Ethernet/ESP-NOW,
+compare captured UART bytes/order/CRC with the source, and measure drops/rate plus
+boot/reset behaviour. Any board, pin, baud, firmware, adapter or topology change
+invalidates that physical baseline. No such trial, endurance run, flash or RF
+claim is part of this software result. The full migration remains PARTIAL.

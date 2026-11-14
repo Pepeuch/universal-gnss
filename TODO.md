@@ -26,8 +26,10 @@ receiver commands. Native Web resource admission distinguishes internal RAM from
 PSRAM and retains compact diagnostics under memory pressure. A bounded typed
 service event history is available without capturing raw SDK logs. Per-owner NTRIP
 metrics and explicitly confirmed connection restart are exposed with stale-sample
-protection. Remaining useful
-legacy features, device recovery,
+protection. The minimal C3 rover retains USB output by default and now offers an
+explicit TX-only UART1 build option, with bounded writes and no application logs.
+Its software tests and builds pass; physical UART acceptance remains pending.
+Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.
 Nominal historical ESP-NOW validation is accepted for development; further
