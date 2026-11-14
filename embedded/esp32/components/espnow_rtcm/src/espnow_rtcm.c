@@ -4,6 +4,7 @@
  */
 #include "espnow_rtcm.h"
 #include "sdkconfig.h"
+#include "ug_pairing.h"
 
 #if CONFIG_ESPNOW_RTCM_BASE || CONFIG_ESPNOW_RTCM_ROVER
 #include "driver/usb_serial_jtag.h"
@@ -25,8 +26,9 @@ static espnow_rtcm_message_t s_message; /* Worker-owned, not on the small task s
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t s_worker;
 static uint8_t s_peer[6];
-static char s_peer_text[18] = CONFIG_ESPNOW_RTCM_PEER_MAC;
-static uint8_t s_channel = CONFIG_ESPNOW_RTCM_CHANNEL;
+static uint8_t s_key[16], s_local_mac[6];
+static uint8_t s_channel;
+static bool s_configured;
 #if CONFIG_ESPNOW_RTCM_BASE
 static SemaphoreHandle_t s_sent;
 static esp_now_send_status_t s_send_status;
@@ -139,7 +141,7 @@ static esp_err_t enqueue_frame(const uint8_t* frame, size_t len, void* ctx)
 static void received(const esp_now_recv_info_t* info, const uint8_t* data, int len)
 {
   if (!info || !data || len <= 0 || len > ESPNOW_RTCM_PACKET_SIZE ||
-      memcmp(info->src_addr, s_peer, sizeof(s_peer)))
+      !ug_pairing_sender(s_peer, info->src_addr, info->des_addr, s_local_mac))
     return;
   counter_add(&s_stats.rx_packets, 1);
   /* Wi-Fi callback only copies one bounded packet; never performs USB I/O. */
@@ -232,57 +234,23 @@ static void worker(void* arg)
   }
 }
 
-esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel)
+esp_err_t espnow_rtcm_configure_secure(const char* peer_mac, const char* key, uint8_t channel)
 {
-  if (s_started || channel < 1 || channel > 11)
+  if (s_started || s_worker)
     return ESP_ERR_INVALID_STATE;
-  if (peer_mac && *peer_mac)
-  {
-    if (strlen(peer_mac) != 17)
-      return ESP_ERR_INVALID_ARG;
-    unsigned mac[6];
-    int end = 0;
-    if (sscanf(peer_mac,
-               "%2x:%2x:%2x:%2x:%2x:%2x%n",
-               &mac[0],
-               &mac[1],
-               &mac[2],
-               &mac[3],
-               &mac[4],
-               &mac[5],
-               &end) != 6 ||
-        end != 17 || (mac[0] & 1) || !(mac[0] | mac[1] | mac[2] | mac[3] | mac[4] | mac[5]))
-      return ESP_ERR_INVALID_ARG;
-    memcpy(s_peer_text, peer_mac, 18);
-  }
-  s_channel = channel;
+  ug_pairing_t pairing;
+  if (!ug_pairing_from_text(peer_mac, key, channel, &pairing))
+    return ESP_ERR_INVALID_ARG;
+  memcpy(s_peer, pairing.peer, sizeof(s_peer));
+  memcpy(s_key, pairing.key, sizeof(s_key));
+  s_channel = pairing.channel;
+  s_configured = true;
   return ESP_OK;
 }
 esp_err_t espnow_rtcm_start(void)
 {
-  if (s_started)
+  if (s_started || !s_configured)
     return ESP_ERR_INVALID_STATE;
-  unsigned mac[6];
-  int end = 0;
-  if (sscanf(s_peer_text,
-             "%2x:%2x:%2x:%2x:%2x:%2x%n",
-             &mac[0],
-             &mac[1],
-             &mac[2],
-             &mac[3],
-             &mac[4],
-             &mac[5],
-             &end) != 6 ||
-      s_peer_text[end] != '\0')
-    return ESP_ERR_INVALID_ARG;
-  unsigned any = 0;
-  for (size_t i = 0; i < 6; ++i)
-  {
-    s_peer[i] = mac[i];
-    any |= mac[i];
-  }
-  if (!any || (s_peer[0] & 1))
-    return ESP_ERR_INVALID_ARG;
   espnow_rtcm_codec_init(&s_stream);
   espnow_rtcm_codec_init(&s_radio);
   s_radio.transport.next_frame_seq = (uint16_t)esp_random();
@@ -293,7 +261,7 @@ esp_err_t espnow_rtcm_start(void)
 #endif
 #if CONFIG_ESPNOW_RTCM_ROVER
   esp_err_t err = ESP_OK;
-  if (!s_output_writer)
+  if (!s_output_writer && !usb_serial_jtag_is_driver_installed())
   {
     usb_serial_jtag_driver_config_t usb = {.tx_buffer_size = 2048, .rx_buffer_size = 256};
     err = usb_serial_jtag_driver_install(&usb);
@@ -404,7 +372,14 @@ esp_err_t espnow_rtcm_start(void)
 #endif
     return err;
   }
-  esp_now_peer_info_t peer = {.channel = s_channel, .ifidx = WIFI_IF_STA, .encrypt = false};
+  uint8_t pmk[16];
+  esp_fill_random(pmk, sizeof(pmk));
+  if ((err = esp_now_set_pmk(pmk)) != ESP_OK ||
+      (err = esp_wifi_get_mac(WIFI_IF_STA, s_local_mac)) != ESP_OK)
+    return err;
+  memset(pmk, 0, sizeof(pmk));
+  esp_now_peer_info_t peer = {.channel = s_channel, .ifidx = WIFI_IF_STA, .encrypt = true};
+  memcpy(peer.lmk, s_key, sizeof(s_key));
   memcpy(peer.peer_addr, s_peer, sizeof(s_peer));
   if ((err = esp_now_add_peer(&peer)) != ESP_OK)
   {
@@ -455,6 +430,28 @@ esp_err_t espnow_rtcm_send_frame_at(const uint8_t* frame, size_t len, uint32_t r
   (void)len;
   (void)receipt_ms;
   return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+bool espnow_rtcm_configuration_matches(const char* peer, const char* key, uint8_t channel)
+{
+  ug_pairing_t candidate;
+  if (!ug_pairing_from_text(peer, key, channel, &candidate))
+    return false;
+  portENTER_CRITICAL(&s_lock);
+  const bool matches = s_started && s_channel == channel && !memcmp(candidate.peer, s_peer, 6) &&
+                       !memcmp(candidate.key, s_key, 16);
+  portEXIT_CRITICAL(&s_lock);
+  return matches;
+}
+void espnow_rtcm_stop_until_reboot(void)
+{
+#if CONFIG_ESPNOW_RTCM_BASE
+  portENTER_CRITICAL(&s_lock);
+  s_tx_halted = true;
+  s_stats.dropped += s_queue.count;
+  s_queue.head = s_queue.count = 0;
+  portEXIT_CRITICAL(&s_lock);
 #endif
 }
 
@@ -510,11 +507,22 @@ void espnow_rtcm_get_stats(espnow_rtcm_stats_t* out)
     *out = empty;
   }
 }
-esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel)
+esp_err_t espnow_rtcm_configure_secure(const char* peer_mac, const char* key, uint8_t channel)
 {
   (void)peer_mac;
+  (void)key;
   (void)channel;
   return ESP_ERR_NOT_SUPPORTED;
+}
+bool espnow_rtcm_configuration_matches(const char* peer, const char* key, uint8_t channel)
+{
+  (void)peer;
+  (void)key;
+  (void)channel;
+  return false;
+}
+void espnow_rtcm_stop_until_reboot(void)
+{
 }
 void espnow_rtcm_invalidate_pending(void)
 {

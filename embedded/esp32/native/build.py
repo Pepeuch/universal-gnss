@@ -61,17 +61,11 @@ def copy_main(source, destination, network):
         shutil.copyfile(destination / 'idf_component.network.yml', manifest)
 
 
-def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=1,
+def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=None,
           rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False):
     validate_rover_output(profile, board, rover_uart_tx, rover_uart_baud)
-    if peer_mac is not None:
-        if not re.fullmatch(r'(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', peer_mac):
-            raise ValueError('peer must be an explicit unicast STA MAC')
-        octets = bytes.fromhex(peer_mac.replace(':',''))
-        if octets[0] & 1 or not any(octets):
-            raise ValueError('peer must be a nonzero unicast MAC')
-    if not 1 <= channel <= 11:
-        raise ValueError('fixed ESP-NOW channel must be between 1 and 11')
+    if peer_mac is not None or channel is not None:
+        raise ValueError('peer and channel are runtime settings, never firmware variants')
     work = Path(output).resolve()
     if work.exists() or ROOT == work or ROOT in work.parents:
         raise ValueError('build output must be new and outside source roots')
@@ -103,9 +97,7 @@ CONFIG_COMPILER_OPTIMIZATION_SIZE=y
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
-''', 'CONFIG_ESPNOW_RTCM_ROVER=y' if rover else 'CONFIG_ESPNOW_RTCM_BASE=y',
-                f'CONFIG_ESPNOW_RTCM_CHANNEL={channel}',
-                'CONFIG_ESPNOW_RTCM_PEER_MAC="' + (peer_mac or ('02:00:00:00:00:01' if rover else '02:00:00:00:00:02')) + '"']
+''', 'CONFIG_ESPNOW_RTCM_ROVER=y' if rover else 'CONFIG_ESPNOW_RTCM_BASE=y']
     if s3:
         defaults += ['''CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
@@ -160,8 +152,8 @@ if __name__ == '__main__':
     p.add_argument('--profile', required=True, choices=('gateway', 'relay-ntrip', 'rover'))
     p.add_argument('--board', required=True, choices=('waveshare-s3-eth', 'supermini-c3'))
     p.add_argument('--local-gnss', action='store_true')
-    p.add_argument('--peer-mac', help='explicit peer Wi-Fi STA MAC; omitted means a fictitious compile-only peer')
-    p.add_argument('--channel', type=int, default=1, help='fixed common ESP-NOW channel; no automatic selection')
+    p.add_argument('--peer-mac', help='obsolete; rejected: provision the peer locally at runtime')
+    p.add_argument('--channel', type=int, help='obsolete override; channels are provisioned at runtime')
     p.add_argument('--rover-uart-tx', type=int, help='explicit reviewed C3 TX-only GPIO; omitted keeps USB')
     p.add_argument('--rover-uart-baud', type=int, default=115200, help='UART 8N1 baud (only with explicit TX)')
     p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')

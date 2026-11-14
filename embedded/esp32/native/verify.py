@@ -151,6 +151,12 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
                       'universal_gnss_transport::TcpClientTransport::Open(', 'ug::embedded::NtripPublisher::Send('):
             if value not in symbols:
                 raise ValueError('actual UG network engine not linked: ' + value)
+    if any(line.startswith(('CONFIG_ESPNOW_RTCM_PEER_MAC=', 'CONFIG_ESPNOW_RTCM_CHANNEL=')) for line in lines):
+        raise ValueError('compiled peer/channel settings are forbidden in generic native firmware')
+    if 'espnow_rtcm_configure_secure' not in symbols or 'ug_pairing_from_text' not in symbols:
+        raise ValueError('runtime authenticated-pair configuration is not linked')
+    if profile == 'rover' and ('ug_rover_configure' not in symbols or 'ug_pairing_decode' not in symbols):
+        raise ValueError('persistent rover maintenance owner is missing')
     driver_inputs = [file for file in production if '/core/gnss_driver/src/' in file]
     if local_gnss != bool(driver_inputs):
         raise ValueError('GNSS driver presence does not match local-GNSS capability')
@@ -174,6 +180,7 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
               'sha256': hashlib.sha256(binary.read_bytes()).hexdigest(), 'ug_crc_definitions': crc_definitions,
               'driver_source_count': len(driver_inputs), 'compile_units': len(commands),
               'project_language_standards': standards, 'hardware': 'NOT_TESTED', 'rover_ROM_bytes': 'not qualified' if profile == 'rover' else 'not applicable'}
+    result['radio_configuration'] = 'runtime_nvs_encrypted_unicast'
     result['web_assets'] = web_assets
     if profile != 'rover':
         result['network_capacity'] = sdk_network_capacity((work / 'sdkconfig').read_text().splitlines())

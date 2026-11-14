@@ -77,3 +77,11 @@ paths. Workspace-independent diagnostic/debug strings are not qualified. APT
 host dependencies and pip transitives are not fully frozen; public package/image
 availability is not guaranteed by this configuration. No hardware execution,
 RTK/RF/USB delivery, OTA, production image or Build & Flash portal is qualified.
+
+
+Native radio configuration is now runtime-only: no peer MAC/channel Kconfig value
+is allowed by the verifier. All variants boot unpaired unless valid local NVS
+settings exist; no test peer is compiled. The new C3 boot-maintenance owner and
+S3 timed window are covered by host contracts. See [PAIRING.md](../PAIRING.md).
+The catalogue profile normalizer offers only S3 gateway and C3 USB/UART rover;
+the existing C3 relay CI configuration is retained without expanding the catalogue.

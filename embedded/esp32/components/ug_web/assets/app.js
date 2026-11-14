@@ -30,6 +30,7 @@ function renderNtrip() {
   $('ntrip-password-status').textContent = endpoint.password_set ? 'Mot de passe enregistré ; valeur masquée.' : 'Aucun mot de passe enregistré.';
   $('ntrip-save').disabled = !token || !ntripConfig || ntripSaving || !ntripMutationAllowed;
 }
+function clearPairingForm() { $('pairing-key').value = ''; $('pairing-ticket').value = ''; $('pairing-peer').value = ''; $('pairing-info').textContent = 'Session fermée'; }
 function clearNtripForm() { ntripMutationAllowed = false; ntripConfig = null; $('ntrip-target').value = 'upstream'; renderNtrip(); }
 async function call(path, body, authorized = true) {
   const headers = {};
@@ -120,8 +121,8 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -287,4 +288,46 @@ $('ntrip-endpoint').onsubmit = handle(async () => {
   } finally {
     ntripSaving = false; $('ntrip-save').disabled = !token || !ntripConfig || !ntripMutationAllowed;
   }
+});
+
+async function readPairing() {
+  const generation=sessionGeneration, report=await call('/api/radio/pairing');
+  if (generation!==sessionGeneration || !token) return;
+  $('pairing-info').textContent=print(report);
+  $('pairing-peer').value=report.peer || '';
+  $('pairing-channel').value=String(report.configured_channel || 1);
+}
+$('pairing-read').onclick=handle(readPairing);
+$('pairing-open').onclick=handle(async () => {
+  if (!confirm('Ouvrir pendant 120 secondes la configuration manuelle d’un pair local ? Aucun appairage radio automatique.')) return;
+  const generation=sessionGeneration, result=await call('/api/radio/pairing/window',{confirm:'OPEN_LOCAL_PAIRING'});
+  if (generation===sessionGeneration && token) $('pairing-info').textContent=print(result);
+});
+$('pairing-form').onsubmit=handle(async () => {
+  const key=$('pairing-key').value; $('pairing-key').value='';
+  if (!token || !ntripMutationAllowed) throw Error('Session et mémoire disponibles requises');
+  if (!confirm('Associer ce rover avec la clé privée partagée ? La sortie radio sera coupée jusqu’au redémarrage.')) return;
+  const generation=sessionGeneration, result=await call('/api/radio/pairing/apply',{
+    confirm:'PAIR_ESPNOW_ROVER',peer:$('pairing-peer').value,channel:Number($('pairing-channel').value),key});
+  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(); }
+});
+$('pairing-remove').onclick=handle(async () => {
+  if (!confirm('Supprimer l’association persistante et couper cette sortie radio ? Le C3 doit être reconfiguré séparément par USB.')) return;
+  const generation=sessionGeneration, result=await call('/api/radio/pairing/remove',{confirm:'UNPAIR_ESPNOW_ROVER'});
+  $('pairing-key').value='';
+  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(); }
+});
+
+$('pairing-ticket').onchange=handle(async event => {
+  const generation=sessionGeneration, file=event.target.files[0];
+  if (!token || !file || file.size>1024) throw Error('Session et ticket privé de 1024 octets maximum requis');
+  const ticket=JSON.parse(await file.text());
+  if (generation!==sessionGeneration || !token) return;
+  if (!ticket || typeof ticket!=='object' || Array.isArray(ticket) ||
+      Object.keys(ticket).sort().join(',')!=='channel,confirm,key,peer' || ticket.confirm!=='PAIR_ESPNOW_ROVER' ||
+      typeof ticket.key!=='string' || !/^[a-fA-F0-9]{32}$/.test(ticket.key) ||
+      typeof ticket.peer!=='string' || !/^(?:[a-fA-F0-9]{2}:){5}[a-fA-F0-9]{2}$/.test(ticket.peer) ||
+      !Number.isInteger(ticket.channel) || ticket.channel<1 || ticket.channel>11) throw Error('Ticket privé incompatible');
+  $('pairing-peer').value=ticket.peer; $('pairing-channel').value=String(ticket.channel); $('pairing-key').value=ticket.key;
+  event.target.value=''; show('Ticket chargé localement ; ouvrir la fenêtre puis confirmer l’association.');
 });

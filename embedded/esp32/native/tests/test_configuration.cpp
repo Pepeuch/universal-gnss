@@ -91,8 +91,10 @@ int main(int argc, char** argv)
       assert(PatchConfiguration(
           "{\"name\":\"first\",\"admin_token_sha256\":\"" + first_hash + "\"}", error));
       assert(PatchConfiguration(R"({"name":"second"})", error));
-      assert(PatchConfiguration(
-          "{\"name\":\"third\",\"admin_token_sha256\":\"" + current_hash + "\"}", error));
+      assert(PatchConfiguration("{\"name\":\"third\",\"admin_token_sha256\":\"" + current_hash +
+                                    "\",\"radio\":{\"enabled\":true,\"peer\":\"02:00:00:00:00:02\","
+                                    "\"key\":\"0123456789abcdef0123456789abcdef\",\"channel\":1}}",
+                                error));
       assert(BeginReceiverJournal());
       const auto immutable = Configuration();
       const auto before_records = records;
@@ -110,6 +112,10 @@ int main(int argc, char** argv)
           R"({"confirm":"ROLLBACK_CONFIGURATION","expected_generation":"3"})", error));
       assert(Configuration()->device_name == "second" && immutable->device_name == "third");
       assert(Configuration()->admin_token_sha256 == current_hash && ReceiverJournalBlocked());
+      assert(Configuration()->radio_enabled &&
+             Configuration()->radio_peer == immutable->radio_peer &&
+             Configuration()->radio_key == immutable->radio_key &&
+             Configuration()->radio_channel == immutable->radio_channel);
       assert(records["gnss_dirty"] == std::vector<std::uint8_t>{1});
       assert(ConfigurationBanks().generation == 4);
       commit_fail = true;

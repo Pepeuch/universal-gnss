@@ -19,6 +19,23 @@ int main()
   std::string error, json;
   Settings original = DefaultSettings(base), out;
   assert(ValidateSettings(original, base, error));
+  assert(!original.radio_enabled && original.radio_peer.empty() && original.radio_key.empty());
+  assert(DecodeSettings(R"({"wifi":{"sta":true,"ssid":"test"}})", original, base, out, error));
+  const char* key = "0123456789abcdef0123456789abcdef";
+  auto paired = original;
+  paired.radio_enabled = true;
+  paired.radio_peer = "02:00:00:00:00:02";
+  paired.radio_key = key;
+  assert(ValidateSettings(paired, base, error));
+  assert(EncodeSettings(paired, json) && json.find(key) == std::string::npos &&
+         json.find("key_set") != std::string::npos);
+  assert(DecodeSettings(json, paired, base, out, error) && out.radio_key == key);
+  assert(!DecodeSettings(json, original, base, out, error));
+  assert(EncodeSettings(paired, json, true) && DecodeSettings(json, original, base, out, error) &&
+         out.radio_key == key);
+  assert(!DecodeSettings(R"({"wifi":{"sta":true,"ssid":"test"}})", paired, base, out, error));
+  assert(!DecodeSettings(R"({"radio":{"enabled":true}})", original, base, out, error));
+
   assert(EncodeSettings(original, json, true));
   assert(DecodeSettings(json, original, base, out, error));
   assert(!out.local_input && !out.gnss_enabled && out.revision == 2);
@@ -127,7 +144,7 @@ int main()
         R"({"radio":{"channel":12}})",
         R"({"radio":{"peer":"ff:ff:ff:ff:ff:ff"}})",
         R"({"radio":{"peer":"00:00:00:00:00:00"}})",
-        R"({"wifi":{"sta":true,"ssid":"test"}})",
+
         R"({"wifi":{"ap":true,"ap_password":"short"}})",
         R"({"lora":{"enabled":true}})",
         R"({"lora":{"sf":13}})",

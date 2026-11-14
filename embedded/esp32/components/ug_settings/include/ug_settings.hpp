@@ -35,9 +35,10 @@ struct Settings
   bool wifi_sta_enabled{false}, wifi_ap_enabled{false};
   std::string wifi_ssid{}, wifi_password{}, ap_ssid{"UG-RTK"}, ap_password{};
   std::string ntp_server{"pool.ntp.org"};
-  bool radio_enabled{true};
+  bool radio_enabled{false};
   std::uint8_t radio_channel{1};
-  std::string radio_peer{};          // Empty uses the compile-time development peer only.
+  std::string radio_peer{},
+      radio_key{};                   // Runtime unicast peer and private LMK; empty is unpaired.
   std::string admin_token_sha256{};  // Blank locks administration; never a plaintext token.
   bool lora_enabled{false};
   std::string lora_region{"EU868"};

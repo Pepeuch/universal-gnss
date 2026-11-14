@@ -5,6 +5,7 @@ extern "C" {
 }
 #include "esp_heap_caps.h"
 #include "esp_https_server.h"
+#include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "ug_admin.hpp"
@@ -15,6 +16,7 @@ extern "C" {
 #include "ug_json.hpp"
 #include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
+#include "ug_pairing_window.hpp"
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
@@ -34,6 +36,7 @@ namespace
 {
 WebIdentity identity;
 httpd_handle_t server;
+PairingWindow pairing_window;
 extern "C" {
 extern const std::uint8_t index_start[] asm("_binary_ug_web_index_gz_start"),
     index_end[] asm("_binary_ug_web_index_gz_end");
@@ -526,6 +529,114 @@ esp_err_t NtripRuntimeReply(httpd_req_t* req)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
   return Json(req, root.get());
 }
+bool Confirmed(const cJSON* root, const char* expected)
+{
+  const auto* value = cJSON_GetObjectItemCaseSensitive(root, "confirm");
+  return cJSON_IsString(value) && std::strcmp(value->valuestring, expected) == 0;
+}
+esp_err_t PairingReply(httpd_req_t* req)
+{
+  const auto config = Configuration();
+  std::uint8_t mac[6];
+  if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK)
+    return Fail(req, "503 Service Unavailable", "identity unavailable");
+  char identity[18];
+  std::snprintf(identity,
+                sizeof(identity),
+                "%02x:%02x:%02x:%02x:%02x:%02x",
+                mac[0],
+                mac[1],
+                mac[2],
+                mac[3],
+                mac[4],
+                mac[5]);
+  espnow_rtcm_stats_t stats{};
+  espnow_rtcm_get_stats(&stats);
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  if (!root ||
+      !cJSON_AddStringToObject(root.get(), "identification", "manual_USB; no RF discovery") ||
+      !cJSON_AddStringToObject(root.get(), "sta_mac", identity) ||
+      !cJSON_AddBoolToObject(
+          root.get(), "window_open", pairing_window.Active(esp_timer_get_time())) ||
+      !cJSON_AddNumberToObject(root.get(), "peer_limit", 1) ||
+      !cJSON_AddStringToObject(root.get(), "peer", config->radio_peer.c_str()) ||
+      !cJSON_AddBoolToObject(root.get(), "key_set", !config->radio_key.empty()) ||
+      !cJSON_AddBoolToObject(root.get(), "enabled", config->radio_enabled) ||
+      !cJSON_AddBoolToObject(root.get(), "started", stats.started) ||
+      !cJSON_AddNumberToObject(root.get(), "configured_channel", config->radio_channel) ||
+      !cJSON_AddNumberToObject(root.get(), "effective_channel", stats.effective_channel) ||
+      !cJSON_AddBoolToObject(root.get(),
+                             "restart_required",
+                             config->radio_enabled &&
+                                 (stats.tx_quarantined ||
+                                  !espnow_rtcm_configuration_matches(config->radio_peer.c_str(),
+                                                                     config->radio_key.c_str(),
+                                                                     config->radio_channel))) ||
+      !cJSON_AddBoolToObject(root.get(), "tx_quarantined", stats.tx_quarantined) ||
+      !cJSON_AddStringToObject(
+          root.get(), "mac_ack_packets", std::to_string(stats.tx_packets_acknowledged).c_str()) ||
+      !cJSON_AddBoolToObject(root.get(), "proves_rover_delivery", false))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  return Json(req, root.get());
+}
+esp_err_t PairingMutation(httpd_req_t* req, std::string_view uri, const std::string& body)
+{
+  std::string error;
+  auto root = ParseBoundedObject(body, error);
+  if (!root)
+    return Fail(req, "400 Bad Request", "invalid pairing request");
+  if (uri == "/api/radio/pairing/window")
+  {
+    if (!OnlyKeys(root.get(), {"confirm"}) || !Confirmed(root.get(), "OPEN_LOCAL_PAIRING") ||
+        !pairing_window.Open(esp_timer_get_time()))
+      return Fail(req, "400 Bad Request", "explicit pairing window confirmation required");
+    return PairingReply(req);
+  }
+  const bool remove = uri == "/api/radio/pairing/remove";
+  if (remove)
+  {
+    if (!OnlyKeys(root.get(), {"confirm"}) || !Confirmed(root.get(), "UNPAIR_ESPNOW_ROVER"))
+      return Fail(req, "400 Bad Request", "explicit unpair confirmation required");
+  }
+  else if (!pairing_window.Active(esp_timer_get_time()) ||
+           !OnlyKeys(root.get(), {"confirm", "peer", "channel", "key"}) ||
+           !Confirmed(root.get(), "PAIR_ESPNOW_ROVER"))
+    return Fail(
+        req, "409 Conflict", "open local pairing window and explicit confirmation required");
+  JsonDocument patch(cJSON_CreateObject(), cJSON_Delete);
+  auto* radio = patch ? cJSON_AddObjectToObject(patch.get(), "radio") : nullptr;
+  if (!radio || !cJSON_AddBoolToObject(radio, "enabled", !remove))
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  if (remove)
+  {
+    if (!cJSON_AddStringToObject(radio, "peer", "") || !cJSON_AddStringToObject(radio, "key", ""))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+  }
+  else
+  {
+    for (const auto* key : {"peer", "channel", "key"})
+    {
+      auto* item = cJSON_GetObjectItemCaseSensitive(root.get(), key);
+      auto* copy = item ? cJSON_Duplicate(item, true) : nullptr;
+      if (!copy || !cJSON_AddItemToObject(radio, key, copy))
+      {
+        cJSON_Delete(copy);
+        return Fail(req, "400 Bad Request", "incomplete pairing request");
+      }
+    }
+  }
+  char* raw = cJSON_PrintUnformatted(patch.get());
+  if (!raw)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  const bool ok = PatchConfiguration(raw, error);
+  cJSON_free(raw);
+  if (!ok)
+    return Fail(req, "409 Conflict", error.c_str());
+  // Persisted change must not keep routing to the previous boot's recipient.
+  espnow_rtcm_stop_until_reboot();
+  pairing_window.Close();
+  return PairingReply(req);
+}
 esp_err_t NetworkHistoryReply(httpd_req_t* req)
 {
   const auto snapshot = NetworkHistory();
@@ -677,6 +788,8 @@ esp_err_t Get(httpd_req_t* req)
     return NtripRuntimeReply(req);
   if (uri == "/api/ntrip/history")
     return NetworkHistoryReply(req);
+  if (uri == "/api/radio/pairing")
+    return PairingReply(req);
   if (uri == "/api/config/history")
   {
     const auto history = ConfigurationBanks();
@@ -723,6 +836,9 @@ esp_err_t Post(httpd_req_t* req)
   std::string body, error;
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");
+  if (uri == "/api/radio/pairing/window" || uri == "/api/radio/pairing/apply" ||
+      uri == "/api/radio/pairing/remove")
+    return PairingMutation(req, uri, body);
   if (uri == "/api/diagnostics/wire-selftest")
   {
     if (!DecodeWireSelfTest(body))
@@ -774,8 +890,23 @@ esp_err_t Post(httpd_req_t* req)
   }
   if (uri == "/api/config" || uri == "/config")
   {
+    const auto before = Configuration();
+    Settings candidate;
+    if (!DecodeSettings(body, *before, BoardCapabilities(), candidate, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    const bool changed = candidate.radio_peer != before->radio_peer ||
+                         candidate.radio_key != before->radio_key ||
+                         candidate.radio_channel != before->radio_channel ||
+                         candidate.radio_enabled != before->radio_enabled;
+    if (changed && !pairing_window.Active(esp_timer_get_time()))
+      return Fail(req, "409 Conflict", "open pairing window before radio changes");
     if (!PatchConfiguration(body, error))
       return Fail(req, "409 Conflict", error.c_str());
+    if (changed)
+    {
+      espnow_rtcm_stop_until_reboot();
+      pairing_window.Close();
+    }
     return Fail(req, "200 OK", "configuration saved; radio/Wi-Fi/TLS changes require reboot");
   }
 #if UG_LOCAL_GNSS

@@ -48,6 +48,12 @@ automatically. Ordinary telemetry and F9P constellation requests remain availabl
 The native ESP32 CI recipe now validates four bounded variants with disconnected
 non-root builds, host tests and independent reconstruction; GitHub qualification
 is pending an authorized push/PR. No firmware is published.
+Native ESP-NOW now defaults to unpaired/off and stores an explicit peer/channel/
+private LMK at runtime. S3 pairing uses an authenticated 120-second manual window;
+C3 uses nonce-checked boot USB maintenance, separated from its binary data plane.
+Settings rollback preserves the current radio identity. Software tests/builds pass;
+CCMP/RF, USB lifecycle and board wiring remain hardware acceptance tasks. See the
+[pairing and future ROS2 control contract](embedded/esp32/PAIRING.md).
 Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.

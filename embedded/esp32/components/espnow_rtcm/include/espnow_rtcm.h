@@ -9,8 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Before start only; NULL/empty peer retains the explicit compile-time test peer. */
-esp_err_t espnow_rtcm_configure(const char* peer_mac, uint8_t channel);
+/* Before start only. Explicit runtime peer and private 16-byte LMK, no fallback. */
+esp_err_t espnow_rtcm_configure_secure(const char* peer_mac, const char* key_hex, uint8_t channel);
 esp_err_t espnow_rtcm_start(void);
 /* ROVER only, before start. Overrides USB; caller owns a pre-initialized bounded writer. */
 esp_err_t espnow_rtcm_set_rover_writer(espnow_rtcm_write_fn, void* context);
@@ -40,3 +40,6 @@ typedef struct
   uint64_t output_bytes, output_frames, output_errors;
 } espnow_rtcm_stats_t;
 void espnow_rtcm_get_stats(espnow_rtcm_stats_t* result);
+/* Permanent software TX stop for a pairing change; only a new boot can release it. */
+void espnow_rtcm_stop_until_reboot(void);
+bool espnow_rtcm_configuration_matches(const char* peer, const char* key, uint8_t channel);

@@ -34,10 +34,17 @@ void NetworkEvent(void*, esp_event_base_t base, std::int32_t event, void*)
   if (base == IP_EVENT && event == IP_EVENT_ETH_GOT_IP)
     ug::embedded::SetNetworkLink(ug::embedded::NetworkLink::kEthernet, true);
 }
+std::shared_ptr<const ug::embedded::Settings> radio_boot;
+bool RadioCurrent()
+{
+  const auto config = ug::embedded::Configuration();
+  return radio_boot && config->radio_enabled && config->radio_peer == radio_boot->radio_peer &&
+         config->radio_key == radio_boot->radio_key &&
+         config->radio_channel == radio_boot->radio_channel;
+}
 bool RadioDestination(const ug::embedded::Gateway::Frame& frame, void*)
 {
-  return ug::embedded::Configuration()->radio_enabled &&
-         ug::embedded::CorrectionSourceCurrent(frame.source, frame.incarnation) &&
+  return RadioCurrent() && ug::embedded::CorrectionSourceCurrent(frame.source, frame.incarnation) &&
          espnow_rtcm_send_frame_at(frame.bytes.data(),
                                    frame.size,
                                    static_cast<uint32_t>(frame.receipt_ns / 1000000)) == ESP_OK;
@@ -49,12 +56,12 @@ void RadioControl(void*)
   bool active = true;
   for (;;)
   {
-    const bool desired = radio_initialized && ug::embedded::Configuration()->radio_enabled;
+    const bool desired = radio_initialized && RadioCurrent();
     if (desired != active)
     {
       ug::embedded::SetCorrectionDestination(0, desired ? RadioDestination : nullptr, nullptr);
       if (!desired)
-        espnow_rtcm_invalidate_pending();
+        espnow_rtcm_stop_until_reboot();
       active = desired;
     }
     health.Progress();
@@ -81,11 +88,13 @@ std::int32_t StartRadio(void*)
 {
   using namespace ug::embedded;
   const auto config = Configuration();
-  auto result = espnow_rtcm_configure(config->radio_peer.c_str(), config->radio_channel);
+  auto result = espnow_rtcm_configure_secure(
+      config->radio_peer.c_str(), config->radio_key.c_str(), config->radio_channel);
   if (result == ESP_OK)
     result = espnow_rtcm_start();
   if (result != ESP_OK)
     return result;
+  radio_boot = config;
   radio_initialized = true;
   return SetCorrectionDestination(0, RadioDestination, nullptr) ? ESP_OK : ESP_FAIL;
 }

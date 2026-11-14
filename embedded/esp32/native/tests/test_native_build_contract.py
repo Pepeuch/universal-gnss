@@ -45,6 +45,12 @@ class NativeBuildContract(unittest.TestCase):
                 for directory in (source, root/'network', root/'rover'):
                     if directory.exists(): directory.chmod(0o755)
 
+    def test_pair_and_channel_are_runtime_settings_not_build_parameters(self):
+        for peer, channel in [('02:00:00:00:00:02',1), (None,1), (None,6)]:
+            with self.assertRaisesRegex(ValueError, 'runtime settings'):
+                builder.build('/tmp/not-created-ug-radio-test', 'rover', 'supermini-c3', False,
+                              peer_mac=peer, channel=channel)
+
     def test_dependency_locks_reject_inventory_version_hash_and_source_drift(self):
         pins = json.loads((Path(__file__).resolve().parents[2]/'migration/dependencies.json').read_text())['managed']
         good = {'target':'esp32s3','dependencies':copy.deepcopy(pins)}

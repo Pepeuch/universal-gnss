@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_settings.hpp"
+extern "C" {
+#include "ug_pairing.h"
+}
 #include "cJSON.h"
 #include "ug_certificate_uri.hpp"
 #include "ug_json.hpp"
@@ -295,6 +298,12 @@ bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& err
     return fail("invalid caster credentials");
   if (s.radio_channel < 1 || s.radio_channel > 11 || !Text(s.radio_peer, 17, false))
     return fail("invalid fixed radio settings");
+  if (s.radio_enabled || !s.radio_key.empty())
+  {
+    ug_pairing_t pairing;
+    if (!ug_pairing_from_text(s.radio_peer.c_str(), s.radio_key.c_str(), s.radio_channel, &pairing))
+      return fail("radio requires an explicit unicast peer and private 16-byte key");
+  }
   if (!s.radio_peer.empty())
   {
     unsigned mac[6];
@@ -479,11 +488,16 @@ bool DecodeSettings(std::string_view json,
   if (auto* node = r.Get("radio"))
   {
     Reader a{node, error};
-    if (!a.Keys({"enabled", "channel", "peer"}))
+    if (!a.Keys({"enabled", "channel", "peer", "key", "key_set"}))
       return false;
     a.Bool("enabled", s.radio_enabled);
     a.Integer("channel", s.radio_channel, 1, 11);
     a.String("peer", s.radio_peer, 17);
+    a.String("key", s.radio_key, 32);
+    bool key_set = false;
+    a.Bool("key_set", key_set);
+    if (key_set && !a.Get("key") && s.radio_key.empty())
+      return false;
     if (!a.ok)
       return false;
   }
@@ -588,6 +602,10 @@ bool EncodeSettings(const Settings& s, std::string& output, const bool secrets)
   b.Bool(a, "enabled", s.radio_enabled);
   b.Number(a, "channel", s.radio_channel);
   b.String(a, "peer", s.radio_peer);
+  if (secrets)
+    b.String(a, "key", s.radio_key);
+  else
+    b.Bool(a, "key_set", !s.radio_key.empty());
   auto* l = b.Object(n, "lora");
   b.Bool(l, "enabled", s.lora_enabled);
   b.String(l, "region", s.lora_region);

@@ -168,6 +168,11 @@ bool RollbackConfiguration(std::string_view request, std::string& error)
   // Recovery must not revive an old administrative credential. Receiver journal
   // and HTTPS identity are separate and are never altered by configuration undo.
   next.admin_token_sha256 = current->admin_token_sha256;
+  // A settings undo is not fresh authorization to resurrect an old radio peer.
+  next.radio_enabled = current->radio_enabled;
+  next.radio_peer = current->radio_peer;
+  next.radio_key = current->radio_key;
+  next.radio_channel = current->radio_channel;
   next.revision = current->revision + 1;
   auto replacement = std::make_shared<const Settings>(next);
   if (!store->Save(next, error))

@@ -25,6 +25,14 @@ La [validation CI native](native/CI.md) couvre quatre variantes compilables, ave
 provisionnement séparé, tests isolés et reconstruction indépendante. Elle ne publie
 aucun binaire ; son exécution GitHub reste à qualifier après un push autorisé.
 
+## Appairage natif actuel
+
+Le [contrat d’appairage et de maintenance USB](PAIRING.md) remplace les pairs
+fictifs compilés : configuration persistante locale, clé privée ESP-NOW, fenêtre
+Web volontaire S3 et mode USB C3 séparé du RTCM. Une image générique par profil
+suffit ; seul le backend UART reste une variante de compilation. Les preuves
+matérielles historiques ci-dessous ne qualifient pas ce nouveau mécanisme.
+
 ## Périmètre implémenté
 
 `components/ug_rtcm` compile **le fichier UG existant**

@@ -1,10 +1,10 @@
 idf_build_get_property(UG_PROFILE UG_PROFILE)
 idf_build_get_property(UG_LOCAL_GNSS UG_LOCAL_GNSS)
-set(deps espnow_rtcm esp_driver_uart nvs_flash esp_netif esp_event esp_timer)
+set(deps ug_pairing esp_driver_usb_serial_jtag esp_hw_support espnow_rtcm esp_driver_uart nvs_flash esp_netif esp_event esp_timer)
 if(UG_PROFILE STREQUAL "rover")
     set(UG_ROVER_UART_TX -1 CACHE STRING "Explicit C3 rover TX-only GPIO, -1 for USB")
     set(UG_ROVER_UART_BAUD 115200 CACHE STRING "C3 rover UART 8N1 baud")
-    set(rover_sources "rover.c")
+    set(rover_sources "rover.c" "rover_config.c")
     if(NOT UG_ROVER_UART_TX STREQUAL "-1")
         if(NOT CONFIG_IDF_TARGET_ESP32C3 OR NOT UG_ROVER_UART_TX MATCHES "^(4|5|6|7|10)$" OR
                 NOT UG_ROVER_UART_BAUD MATCHES "^(115200|230400|460800|921600)$")

@@ -1286,3 +1286,35 @@ publisher credential. IDF 6.1 builds/ELF/asset checks and independent binary
 reconstruction pass: S3 app **1445360 / 3145728 bytes**, C3 relay **1299392 /
 1310720 bytes**, leaving **11328 bytes** in its unchanged app partition. No new
 runtime/hardware, browser-TLS interoperability or remote CI qualification is claimed.
+
+
+## Runtime ESP-NOW pairing and separated C3 maintenance
+
+[PAIRING.md](../PAIRING.md) is the current authorization, persistence and USB
+control contract. Native build overrides for MAC/channel are rejected, no radio
+test peer is compiled and unpaired devices do not accept/transmit corrections.
+The actual radio codec/framing/CRC16 and shared UG CRC24Q remain unchanged.
+The S3 requires a timed authenticated manual window; C3 configuration runs before
+its data plane, with a fresh nonce handshake and bounded, drained control replies.
+No RF discovery, Internet dependency, live binary-stream command channel or ROS2
+implementation is claimed. Pair changes stop/invalidate S3 TX until reboot;
+configuration rollback retains current radio identity and GNSS quarantine.
+
+Forty native sanitizer CTests, the extended browser mock and 217 generator/policy
+tests pass. Tests exercise validated persistent records, non-peer/destination
+rejection, strict command/nonce parsing, NVS failure locks, reboot restoration,
+control-vs-data separation, private files, PTY exchange and rollback identity.
+All four variants build/verify under pinned IDF 6.1 and reproduce application,
+bootloader, partition-table and otadata binaries in independent directories:
+
+| Variant | Application / app slot, bytes | Linked RAM region use, bytes |
+| --- | ---: | ---: |
+| S3 gateway/GNSS | 1451296 / 3145728 | DIRAM 215004; IRAM 16384 |
+| C3 relay (existing CI) | 1305760 / 1310720 | DRAM 160534 |
+| C3 rover USB | 687648 / 1310720 | DRAM 111114 |
+| C3 rover UART | 699136 / 1310720 | DRAM 111776 |
+
+The relay has only 4960 app-slot bytes spare; partitions were not expanded.
+Link-map RAM is not live free heap, TLS peak use or task-stack qualification.
+Actual CCMP/USB/RF behaviour and Waveshare Ethernet/GNSS pinout acceptance remain
+pending. No device, flash, push or publication was used for these software results.
