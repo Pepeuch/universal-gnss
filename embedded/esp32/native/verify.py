@@ -59,16 +59,41 @@ def check_wire_selftest_boundary(production, symbols, profile):
         raise ValueError('offline self-test presence does not match the firmware role')
 
 
+def check_wire_logging(commands, profile, maximum_level):
+    found = set()
+    for entry in commands:
+        path = Path(entry['file']).as_posix()
+        wire = next((name for name in ('lora_transport', 'rtcm_filter')
+                     if '/components/' + name + '/src/' in path), None)
+        runtime = path.endswith('/espnow_rtcm/src/espnow_rtcm.c')
+        if wire or runtime:
+            flags = [flag for flag in shlex.split(entry['command'])
+                     if flag.startswith(('-DLOG_LOCAL_LEVEL', '-ULOG_LOCAL_LEVEL'))]
+            expected = ['-DLOG_LOCAL_LEVEL=ESP_LOG_WARN'] if wire and profile != 'rover' and maximum_level > 2 else []
+            if flags != expected:
+                raise ValueError('native wire/runtime log boundary mismatch: ' + path)
+        if wire:
+            found.add(wire)
+    if found != {'lora_transport', 'rtcm_filter'}:
+        raise ValueError('native wire logging inputs missing')
+
+
 def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200):
     if profile != 'rover' and (rover_uart_tx is not None or rover_uart_baud != 115200):
         raise ValueError('UART output expectation requires the rover profile')
     work = Path(work).resolve()
     build = work / 'build'
     commands = json.loads((build / 'compile_commands.json').read_text())
+    lines = (work / 'sdkconfig').read_text().splitlines()
+    log_level = next((line.split('=', 1)[1] for line in lines
+                      if line.startswith('CONFIG_LOG_MAXIMUM_LEVEL=')), '')
+    if not log_level.isdecimal() or int(log_level) > 5:
+        raise ValueError('missing/invalid SDK logging maximum')
     source_main = Path(__file__).resolve().parent / 'main'
     if (work / 'project/CMakeLists.txt').read_bytes() != (source_main.parent / 'CMakeLists.txt').read_bytes():
         raise ValueError('stale copied native project CMake input')
     standards = project_standards(commands, Path(__file__).resolve().parents[3], work / 'project/main')
+    check_wire_logging(commands, profile, int(log_level))
     generated_main = work / 'project/main'
     selected_main = [Path(entry['file']) for entry in commands
                      if Path(entry['file']).parent == generated_main]

@@ -15,6 +15,29 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_wire_logging_keeps_warnings_and_runtime_channel_messages(self):
+        def entry(name, flags):
+            return {'file':f'/ug/embedded/esp32/components/{name}/src/{name}.c',
+                    'command':'cc -c ' + flags}
+        good = [entry('lora_transport', '-DLOG_LOCAL_LEVEL=ESP_LOG_WARN'),
+                entry('rtcm_filter', '-DLOG_LOCAL_LEVEL=ESP_LOG_WARN'),
+                entry('espnow_rtcm', '')]
+        module.check_wire_logging(good, 'gateway', 3)
+        for profile, maximum in (('rover', 0), ('gateway', 0), ('relay-ntrip', 2)):
+            quiet = [entry('lora_transport', ''), entry('rtcm_filter', ''), entry('espnow_rtcm', '')]
+            module.check_wire_logging(quiet, profile, maximum)
+            with self.assertRaises(ValueError):
+                module.check_wire_logging(good, profile, maximum)
+        for flags in ('', '-DLOG_LOCAL_LEVEL=ESP_LOG_NONE', '-DLOG_LOCAL_LEVEL=ESP_LOG_INFO',
+                      '-DLOG_LOCAL_LEVEL=ESP_LOG_WARN -ULOG_LOCAL_LEVEL',
+                      '-DLOG_LOCAL_LEVEL=ESP_LOG_WARN -DLOG_LOCAL_LEVEL=ESP_LOG_INFO'):
+            with self.assertRaises(ValueError):
+                module.check_wire_logging([entry('lora_transport', flags), *good[1:]], 'gateway', 3)
+        with self.assertRaises(ValueError):
+            module.check_wire_logging(good[:2] + [entry('espnow_rtcm', '-DLOG_LOCAL_LEVEL=ESP_LOG_WARN')], 'gateway', 3)
+        with self.assertRaises(ValueError):
+            module.check_wire_logging(good[:1], 'gateway', 3)
+
     def test_wire_selftest_is_linked_only_in_admin_profiles(self):
         unit = '/ug/embedded/esp32/components/ug_selftest/src/ug_wire_selftest.cpp'
         symbol = '001 T ug::embedded::RunWireSelfTest()'

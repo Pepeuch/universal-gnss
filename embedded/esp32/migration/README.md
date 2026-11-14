@@ -1093,3 +1093,27 @@ unchanged: S3 DIRAM **214156 / 341760**, relay DRAM **159686 / 321296**. These
 are compile/link results; no firmware was executed on physical devices. Two
 independent gateway/relay builds also have identical apps, bootloaders and
 partition tables.
+
+
+## Wire-path console policy
+
+Native non-rover builds cap `lora_transport` and `rtcm_filter` at WARN when the
+SDK maximum is INFO or higher. Their protocol/filter/CRC sources are unchanged.
+The active fragment/reassembly helper previously emitted an INFO line for each
+fragment and completed frame; those calls and format strings are now absent from
+the compiled gateway/relay. Filter INFO strings were already absent from those
+linked baselines, so no additional runtime saving is claimed for that helper.
+Warnings/errors and typed codec counters remain. `espnow_rtcm` runtime logging
+is independent, preserving initialization/effective-channel diagnostics.
+
+The SDK's `LOG_LOCAL_LEVEL` can override even a global NONE setting. Therefore
+no local override is added to the rover or any globally quieter configuration;
+the actual C3 USB rover app remains byte-identical. Six build-policy tests reject
+competing defines/undefines, missing helper inputs and altered runtime log levels.
+Actual IDF compile commands and linked strings confirm the policy on both chips.
+The gateway/relay apps each shrink by **320 bytes**, to **1440512** and
+**1294432** bytes. No source protocol, filtering rule, partition or SDK dependency
+changed. Warnings can still incur console cost under malformed-input floods;
+this does not claim rate limiting, a measured CPU gain or a hard timing guarantee.
+Independent gateway and relay app/bootloader/partition reconstructions remain
+byte-identical after this logging-only build change.

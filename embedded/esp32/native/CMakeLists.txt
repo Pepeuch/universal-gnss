@@ -45,5 +45,12 @@ foreach(component IN LISTS native_components)
         target_compile_options(${component_lib} PRIVATE
             "$<$<COMPILE_LANGUAGE:C>:-std=gnu17>"
             "$<$<COMPILE_LANGUAGE:CXX>:-std=gnu++17>")
+        # Historical wire helpers logged every successful frame/fragment. Keep
+        # warnings/errors without console work in the ordinary RTCM hot path.
+        # The ESP-NOW runtime's startup/channel messages remain independent.
+        if(NOT UG_PROFILE STREQUAL "rover" AND CONFIG_LOG_MAXIMUM_LEVEL GREATER 2 AND
+           (component STREQUAL "lora_transport" OR component STREQUAL "rtcm_filter"))
+            target_compile_definitions(${component_lib} PRIVATE LOG_LOCAL_LEVEL=ESP_LOG_WARN)
+        endif()
     endif()
 endforeach()
