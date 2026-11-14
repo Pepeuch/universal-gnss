@@ -128,6 +128,21 @@ int main(int argc, char** argv)
              ReceiverJournalBlocked());
       return 0;
     }
+    if (mode == "publisher-rejection")
+    {
+      using namespace ug::embedded;
+      assert(PatchConfiguration(
+          R"({"publishers":[{"slot":0,"enabled":true,"endpoint":{"host":"caster.test","port":2101,"mountpoint":"RTCM","password":"test-secret"}}]})",
+          error));
+      const auto before = Configuration();
+      const auto before_records = records;
+      assert(!PatchConfiguration(
+          R"({"publishers":[{"slot":0,"endpoint":{"mountpoint":""}}]})", error));
+      assert(Configuration() == before && records == before_records);
+      assert(Configuration()->publishers[0].enabled &&
+             Configuration()->publishers[0].endpoint.mountpoint == "RTCM");
+      return 0;
+    }
     if (mode == "portable")
     {
       using namespace ug::embedded;
