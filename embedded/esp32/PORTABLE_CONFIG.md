@@ -195,3 +195,17 @@ package, ROSIDL ou numéro de version n’a été modifié. La CI distante en co
 n’est pas qualifiée par ces essais locaux ; aucune publication n’est effectuée.
 Les mesures de heap/stack en fonctionnement, RF, USB, niveaux électriques,
 reboot/hotplug et pinout réel restent des acceptations matérielles distinctes.
+
+Référence locale immuable : `24bcd15235ab9581b220102e4fffa3132b56f1bd`.
+Le runner `native/ci.py` a aussi réellement reconstruit le C3 USB depuis l’archive
+Git de ce commit, dans un conteneur jetable non-root sans réseau pendant les
+builds, ni montage hôte/périphérique. Les deux reconstructions et l’export local
+du bundle ont réussi ; ses quatre segments et les onze entrées du ZIP sont
+intègres. Le vérificateur JavaScript accepte ses véritables octets dans une VM,
+avec une approbation de test uniquement en mémoire. Registre et catalogue publics
+restent vides. Aucun transfert Web Serial physique n’a été effectué.
+
+Les huit combinaisons ROS2 ont été générées deux fois depuis ce commit : intégrité
+et reproductibilité réussies, inventaires/octets copiés/modes inchangés par rapport
+à la référence antérieure. Les treize composants du manifeste sont préservés ;
+ce lot n’ajoute aucun payload ESP32 aux distributions ROS2.
