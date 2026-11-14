@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101c30">
+<title>Universal GNSS — ESP32 Web Flasher</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+:root{color-scheme:dark;--bg:#0c1424;--panel:#15223a;--panel2:#1b2d48;--stroke:#304460;--text:#eef5ff;--muted:#a9b9d0;--blue:#3fa8ff;--green:#65ddb9;--yellow:#ffcb7a}
+*{box-sizing:border-box}body{background:radial-gradient(circle at 8% 4%,#16345e,transparent 35%),var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif;margin:0}main{max-width:1090px;margin:0 auto;padding:26px 16px 56px}header{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:28px}header img{width:88px;height:72px;object-fit:contain}h1{font-size:clamp(1.6rem,3vw,2.4rem);line-height:1.2;margin:0}h2{font-size:1.12rem;margin:0 0 16px}p{margin:8px 0;color:var(--muted)}a{color:#8acbff}.eyebrow{color:var(--green);font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-size:.72rem}.grid{display:grid;grid-template-columns:1.35fr 1fr;gap:18px}.panel{background:var(--panel);border:1px solid var(--stroke);border-radius:16px;padding:22px;margin-bottom:18px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:block;font-weight:650;margin-bottom:6px}select,input{background:#0b192b;color:var(--text);border:1px solid #4b6687;border-radius:9px;padding:11px;width:100%;font:inherit}input:focus,select:focus,button:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}small{display:block;color:var(--muted);margin-top:5px}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}button,.button{display:inline-block;background:var(--blue);color:#062039;padding:10px 15px;border-radius:9px;border:0;text-decoration:none;font:inherit;font-weight:750;cursor:pointer}.button.secondary,button.secondary{background:#304964;color:var(--text)}button:disabled{opacity:.5;cursor:not-allowed}.notice{padding:12px;border-left:3px solid var(--yellow);background:#2c2d34;border-radius:7px;color:#ffe5b5;margin-top:12px}.status{padding:12px;border:1px solid var(--stroke);border-radius:10px;background:#0b1a2e;white-space:pre-wrap;overflow-wrap:anywhere}.status.ready{border-color:#2c8d76;color:var(--green)}.status.warn{border-color:#af8244;color:#ffdca1}dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;margin:0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}.muted{font-size:.87rem;color:var(--muted)}.hidden{display:none!important}esp-web-install-button{display:block;margin:12px 0}footer{padding-top:18px;border-top:1px solid var(--stroke);color:var(--muted);font-size:.9rem}@media(max-width:800px){.grid{grid-template-columns:1fr}.fields{grid-template-columns:1fr}header img{width:56px;height:56px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+ <div><div class="eyebrow">Universal GNSS / Embedded</div><h1>ESP32 Web Flasher</h1><p>BASE ou relais S3 · Rover C3 · ESP-NOW en priorité</p></div>
+ <a href="https://github.com/Pepeuch/universal-gnss" aria-label="Ouvrir le dépôt Universal GNSS"><img src="UG_logo.png" alt="Logo Universal GNSS"></a>
+</header>
+<div class="grid">
+<div>
+ <section class="panel" aria-labelledby="config-heading">
+  <h2 id="config-heading">Profil du firmware</h2>
+  <div class="fields">
+   <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB</option><option value="c3-rover-uart">ESP32-C3 SuperMini — Rover UART</option></select></div>
+   <div><label for="version">Version du firmware</label><select id="version"><option value="latest">Dernière image publiée</option></select><small>La liste se remplit depuis le catalogue des builds validés.</small></div>
+   <div><label for="source">Source de corrections (S3)</label><select id="source"><option value="local">GNSS local — BASE RTK</option><option value="ntrip">NTRIP entrant — mode relais</option></select><small>Mode choisi après installation ; un même firmware S3 peut fournir les deux chemins.</small></div>
+   <div><label for="receiver">Récepteur GNSS (S3)</label><select id="receiver"><option value="unicore">Unicore UM980 / UM982</option><option value="ublox">u-blox ZED-F9P</option></select><small>Choix de configuration à l'exécution : même moteur UG.</small></div>
+   <div><label for="channel">Canal ESP-NOW</label><select id="channel"></select><small>Doit être identique sur la BASE et le rover.</small></div>
+   <div><label for="peer">MAC Wi-Fi du pair ESP-NOW</label><input id="peer" type="text" maxlength="17" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off" spellcheck="false"><small>Actuellement requis lors du build. Ne jamais renseigner un secret.</small></div>
+   <div id="tx-block" class="hidden"><label for="tx">Broche TX UART (C3 rover)</label><select id="tx"><option value="4">GPIO4</option><option value="5">GPIO5</option><option value="6">GPIO6</option><option value="7">GPIO7</option><option value="10">GPIO10</option></select></div>
+   <div id="baud-block" class="hidden"><label for="baud">Débit UART</label><select id="baud"><option value="115200">115200</option><option value="230400">230400</option><option value="460800">460800</option><option value="921600">921600</option></select></div>
+  </div>
+  <div class="actions"><button id="check" type="button">Chercher le firmware</button><button id="download-profile" class="secondary" type="button">Télécharger le profil</button></div>
+  <p class="notice"><strong>Ne pas flasher un autre modèle.</strong> C6 et LoRa ne sont pas proposés. Les GPIO Ethernet et GNSS doivent être vérifiés physiquement avant utilisation.</p>
+ </section>
+ <section class="panel" aria-labelledby="flash-heading">
+  <h2 id="flash-heading">Flash USB</h2>
+  <div id="flash-available" class="hidden">
+   <p>Image publiée et validée correspondant exactement aux paramètres sélectionnés.</p>
+   <esp-web-install-button id="installer"><span slot="unsupported">Web Serial indisponible. Utiliser Chrome ou Edge sur HTTPS.</span></esp-web-install-button>
+   <div id="image-info" class="muted"></div>
+  </div>
+  <div id="flash-unavailable"><p>Aucune image vérifiée n'est actuellement répertoriée pour ce profil. Le flash reste désactivé.</p></div>
+  <p class="muted">Le navigateur ne compile pas ESP-IDF. Il ne flashe que des manifestes pointant vers des images déjà construites, vérifiées et publiées.</p>
+ </section>
+</div>
+<aside>
+ <section class="panel"><h2>État de la sélection</h2><div id="status" class="status" role="status" aria-live="polite">Chargement du catalogue…</div><div class="actions"><a id="request" class="button secondary hidden" href="https://github.com/Pepeuch/universal-gnss/issues/new" rel="noopener noreferrer" target="_blank">Demander ce build sur GitHub</a></div><p class="muted">Cette demande préremplit une issue GitHub. Elle ne lance pas automatiquement de CI tant qu'un workflow de demandes contrôlées n'a pas été déployé.</p></section>
+ <section class="panel"><h2>Configuration normalisée</h2><dl id="summary"></dl><p class="muted">Les paramètres d'exécution (modèle GNSS, SOURCE NTRIP) ne multiplient pas inutilement les ROM. Le canal, le pair ESP-NOW et l'UART sont actuellement des paramètres de compilation.</p></section>
+ <section class="panel"><h2>État du projet</h2><p>Priorité : <strong>S3 BASE / Relais + C3 Rover</strong> par ESP-NOW.</p><p>Les images ne doivent être publiées qu'après contrôles CI, vérification des partitions et validation de la cible matérielle.</p><a href="https://github.com/Pepeuch/universal-gnss/pull/33">Suivre la migration ESP32 (PR #33)</a></section>
+</aside>
+</div>
+<footer>Universal GNSS · Portail prototype · Aucun firmware historique ESP32 RTK Gateway n'est proposé comme image UG.</footer>
+</main>
+<script>
+(() => {
+ 'use strict';
+ const $ = id => document.getElementById(id);
+ const devices = { 's3-gateway': {chip:'ESP32-S3',board:'waveshare-s3-eth',profile:'gateway',output:'espnow'},'c3-rover-usb':{chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'usb'},'c3-rover-uart':{chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'uart'}};
+ const allowedMac = /^(?:[\da-f]{2}:){5}[\da-f]{2}$/i;
+ const githubIssues = 'https://github.com/Pepeuch/universal-gnss/issues/new';
+ let catalogue = [];
+ let catalogError = '';
+ let selectionGeneration = 0;
+ for (let i=1;i<=11;i++){const opt=document.createElement('option');opt.value=String(i);opt.textContent=`Canal ${i}`;$('channel').append(opt)}
+ function normalized(){
+   const variant = $('device').value;
+   const meta=devices[variant];
+   if(!meta)throw Error('Matériel non pris en charge');
+   const mac=$('peer').value.trim().toUpperCase();
+   if(!allowedMac.test(mac)) throw Error('Renseigner une adresse MAC ESP-NOW valide du pair.');
+   const bytes=mac.split(':').map(x=>parseInt(x,16));
+   if ((bytes[0] & 1)||bytes.every(x=>x===0)) throw Error('Le pair doit avoir une adresse MAC unicast non nulle.');
+   const out={schema:1,variant,board:meta.board,profile:meta.profile,chip:meta.chip,output:meta.output,channel:Number($('channel').value),peer_mac:mac};
+   if(meta.output==='uart'){out.uart_tx=Number($('tx').value);out.uart_baud=Number($('baud').value)}
+   return out;
+ }
+ function readUi(){try{return normalized()}catch{return null}}
+ function clearFlash(){ $('flash-available').classList.add('hidden');$('flash-unavailable').classList.remove('hidden');$('installer').removeAttribute('manifest');$('image-info').textContent=''; }
+ function result(msg,ready=false){$('status').textContent=msg;$('status').className='status '+(ready?'ready':'warn')}
+ function summary(){const map={device:'Profil',version:'Version',source:'Flux S3',receiver:'GNSS S3',channel:'Canal ESP-NOW',peer:'MAC pair',tx:'TX UART',baud:'UART baud'};$('summary').replaceChildren();for (const [name,label] of Object.entries(map)){if((name==='source'||name==='receiver')&&!$('device').value.startsWith('s3'))continue;if((name==='tx'||name==='baud')&&$('device').value!=='c3-rover-uart')continue;const d=document.createElement('dt');d.textContent=label;const v=document.createElement('dd');v.textContent=$(''+name).selectedOptions?.[0]?.textContent??$(name).value;$('summary').append(d,v)}}
+ function requestUrl(p){const requestedVersion=$('version').value;const title=`[ESP32 firmware request] ${p.variant} / canal ${p.channel}`;const body=['Demande de compilation Universal GNSS native','', '```json',JSON.stringify(p,null,2),'```','','Source demandée : '+(requestedVersion==='latest'?'dernier SHA approuvé par le mainteneur':requestedVersion),'Source Git à approuver par le mainteneur. Aucun secret ni identifiant NTRIP.','', 'Attention : image non qualifiée sur matériel.'];return githubIssues+'?'+new URLSearchParams({title,body}).toString()}
+ function isValidCatalogueEntry(e,p){
+  if(!e||typeof e!=='object'||!e.profile||!e.manifest||!e.sha256||!e.source_sha)return false;
+  const a=e.profile;
+  if(['schema','variant','board','profile','chip','output','channel','peer_mac','uart_tx','uart_baud'].some(k=>a[k]!==p[k]))return false;
+  if(!/^[a-f0-9]{64}$/i.test(e.sha256)||!/^[a-f0-9]{40}$/i.test(e.source_sha))return false;
+  if(!/^flasher\/published\/[a-zA-Z0-9._\/-]+\.json$/.test(e.manifest)||e.manifest.includes('..'))return false;
+  return true;
+ }
+ async function verifyPublished(e,generation){
+  const manifestUrl = new URL(e.manifest,document.baseURI);
+  const metaUrl = new URL('provenance.json',manifestUrl);
+  if(manifestUrl.origin!==location.origin || metaUrl.origin!==location.origin)throw Error('Catalogue hors de ce site');
+  const [manifestResponse,metaResponse]=await Promise.all([fetch(manifestUrl),fetch(metaUrl)]);
+  if(!manifestResponse.ok || !metaResponse.ok)throw Error('Manifeste ou provenance inaccessible');
+  const manifest=await manifestResponse.json(),provenance=await metaResponse.json();
+  if(JSON.stringify(provenance.profile)!==JSON.stringify(e.profile) || provenance.sha256!==e.sha256 || provenance.source_sha!==e.source_sha)throw Error('Provenance incompatible avec le catalogue');
+  if(!manifest || !Array.isArray(manifest.builds)||manifest.builds.length!==1 || manifest.builds[0].chipFamily!==e.profile.chip)throw Error('Famille ESP incorrecte dans le manifeste');
+  const parts=manifest.builds[0].parts;
+  if(!Array.isArray(parts) || parts.length<3 || parts.length>8)throw Error('Nombre de segments flash inattendu');
+  for(const part of parts){
+    if(generation!==selectionGeneration)return;
+    if(!part || typeof part.path!=='string' || !/^[a-zA-Z0-9._-]+\.bin$/.test(part.path) || !Number.isSafeInteger(part.offset) || part.offset<0)throw Error('Segment invalide');
+    const expected=provenance.part_sha256?.[part.path];
+    if(typeof expected!=='string' || !/^[a-fA-F0-9]{64}$/.test(expected))throw Error('Empreinte manquante pour '+part.path);
+    const fileUrl=new URL(part.path,manifestUrl);
+    if(fileUrl.origin!==location.origin || !fileUrl.pathname.startsWith(manifestUrl.pathname.slice(0,manifestUrl.pathname.lastIndexOf('/')+1)))throw Error('Chemin de firmware hors manifeste');
+    const fileResponse=await fetch(fileUrl,{cache:'no-store'});
+    if(!fileResponse.ok)throw Error('Fichier firmware inaccessible: '+part.path);
+    const digest=await crypto.subtle.digest('SHA-256',await fileResponse.arrayBuffer());
+    const actual=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
+    if(actual!==expected.toLowerCase())throw Error('Empreinte incorrecte: '+part.path);
+  }
+  if(generation===selectionGeneration){
+    $('installer').setAttribute('manifest',e.manifest);
+    $('image-info').textContent=`Source ${e.source_sha.slice(0,12)} · SHA256 application ${e.sha256}`;
+    $('flash-unavailable').classList.add('hidden');$('flash-available').classList.remove('hidden');
+    result('Images publiées trouvées et leurs empreintes SHA-256 vérifiées. Confirmer le matériel avant flash.',true);
+  }
+ }
+ function render(){
+  const isS3=$('device').value==='s3-gateway';const isUart=$('device').value==='c3-rover-uart';
+  $('source').disabled=!isS3;$('receiver').disabled=!isS3;
+  $('tx-block').classList.toggle('hidden',!isUart);$('baud-block').classList.toggle('hidden',!isUart);
+  const generation=++selectionGeneration;clearFlash();summary();$('request').classList.add('hidden');
+  let p;try{p=normalized()}catch(e){result(e.message);return}
+  const matches=catalogue.filter(x=>isValidCatalogueEntry(x,p) && ($('version').value==='latest' || x.source_sha===$('version').value));
+  if(matches.length){result('Image trouvée : vérification des segments et empreintes SHA-256…');verifyPublished(matches[matches.length-1],generation).catch(e=>{if(generation===selectionGeneration){clearFlash();result('Image indisponible : '+e.message)}})}
+  else {result((catalogError?'Catalogue indisponible : '+catalogError+'\n':'')+'Aucune image UG publiée pour cette configuration. Demander un build contrôlé sur GitHub.');$('request').href=requestUrl(p);$('request').classList.remove('hidden')}
+ }
+ $('check').addEventListener('click',render);
+ ['device','source','receiver','version','channel','tx','baud'].forEach(x=>$(x).addEventListener('change',render));
+ $('peer').addEventListener('input',render);
+ $('download-profile').addEventListener('click',()=>{let p;try{p=normalized()}catch(e){result(e.message);return}const blob=new Blob([JSON.stringify(p,null,2)+'\n'],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='ug-'+p.variant+'-profile.json';a.click();URL.revokeObjectURL(url)});
+ fetch('flasher/catalog.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(data=>{if(!data||data.schema!==1||!Array.isArray(data.images))throw Error('Format catalogue non reconnu');catalogue=data.images;const old=$('version').value;const versions=[...new Set(catalogue.map(x=>x.source_sha).filter(x=>typeof x==='string'&&/^[a-f0-9]{40}$/i.test(x)))];$('version').replaceChildren();for(const [value,name] of [['latest','Dernière image publiée'],...versions.map(x=>[x,x.slice(0,12)])]){const o=document.createElement('option');o.value=value;o.textContent=name;$('version').append(o)}if(versions.includes(old))$('version').value=old;render()}).catch(e=>{catalogError=e.message;catalogue=[];render()});
+ render();
+})();
+</script>
+</body>
+</html>
