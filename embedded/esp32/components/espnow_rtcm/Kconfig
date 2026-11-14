@@ -1,0 +1,9 @@
+menu "Experimental ESP-NOW RTCM bridge"
+config ESPNOW_RTCM_BASE
+    bool "Forward existing NTRIP client RTCM over ESP-NOW (Ethernet BASE only)"
+    default n
+config ESPNOW_RTCM_ROVER
+    bool "Minimal ESP-NOW to USB Serial/JTAG ROVER"
+    default n
+    depends on SOC_USB_SERIAL_JTAG_SUPPORTED && !ESPNOW_RTCM_BASE
+endmenu

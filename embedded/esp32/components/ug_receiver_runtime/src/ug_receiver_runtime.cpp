@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+#include "ug_receiver_runtime.hpp"
+#include "universal_gnss_protocols/nmea_parser.hpp"
+#include "universal_gnss_protocols/ubx_parser.hpp"
+#include "universal_gnss_protocols/unicore_parser.hpp"
+namespace ug::embedded
+{
+using namespace universal_gnss_driver;
+Receiver::Receiver(universal_gnss_transport::ByteSink& uart, ReceiverSessionConfig config)
+    : session_(config), application_(uart)
+{
+}
+
+void Receiver::Note(const ReceiverConfigApplicationResult& result,
+                    std::optional<std::int64_t> receipt_ns)
+{
+  fence_.NoteDispatch(result);
+  history_.Record(result, incarnation_, receipt_ns);
+}
+
+bool Receiver::Start(std::vector<ReceiverCommand> commands,
+                     const std::int64_t now_ns,
+                     CommandPurpose purpose)
+{
+  if (commands.empty() || commands.size() > 32 || now_ns < last_receipt_ns_ || indeterminate())
+    return false;
+  if (application_.state() == ReceiverConfigApplicationState::kRunning ||
+      application_.state() == ReceiverConfigApplicationState::kWaitingForResponse)
+    return false;
+  // Reject the whole plan before any write; persist/reset always need confirmation.
+  for (const auto& command : commands)
+    if (!HasSafeDispatchApproval(command) || command.payload.binary.size() > 512 ||
+        command.payload.text.size() > 512)
+      return false;
+  survey_.reset();  // Earlier status never qualifies a newly requested BASE operation.
+  history_.Begin(purpose);
+  const auto result = application_.Start(std::move(commands), now_ns);
+  Note(result, now_ns);
+  return result.state != ReceiverConfigApplicationState::kFailed;
+}
+
+bool Receiver::Feed(const std::uint8_t* bytes,
+                    const std::size_t size,
+                    const std::int64_t receipt_ns)
+{
+  if ((!bytes && size) || size > 512 || receipt_ns < last_receipt_ns_ || receipt_ns < 0)
+    return false;
+  last_receipt_ns_ = receipt_ns;
+  session_.FeedBytes(bytes, size, receipt_ns);
+  // One capture generation per batch. Responses coalesced with the ACK that
+  // completes a command cannot acknowledge the next command dispatched later.
+  const auto generation = fence_.BeginCapture();
+  for (std::size_t i = 0; i < size; ++i)
+  {
+    const auto nmea = satellite_nmea_.PushByte(bytes[i], receipt_ns);
+    if (nmea.record)
+    {
+      const auto gsv = universal_gnss_protocols::ParseNmeaGsv(*nmea.record);
+      std::optional<std::uint8_t> signal;
+      if (gsv.record && GsvSignalScope(*nmea.record, signal))
+        satellites_.Observe(*gsv.record, nmea.record->talker, signal);
+    }
+    const auto unicore = satellite_unicore_.PushByte(bytes[i], receipt_ns);
+    if (unicore.record)
+    {
+      const auto sats = universal_gnss_protocols::ParseUnicoreSatsInfo(*unicore.record);
+      if (sats.record)
+        satellites_.Observe(*sats.record);
+    }
+    const auto framed = ubx_.PushByte(bytes[i], receipt_ns);
+    if (!ubx_generation_ && framed.status == universal_gnss_protocols::ParserStatus::kNeedMoreData)
+      ubx_generation_ = generation;
+    if (framed.status == universal_gnss_protocols::ParserStatus::kRecordReady && framed.record)
+    {
+      const auto sats = universal_gnss_protocols::ParseUbxNavSat(*framed.record);
+      if (sats.record)
+        satellites_.Observe(*sats.record);
+      const auto survey = universal_gnss_protocols::ParseUbxNavSvin(*framed.record);
+      if (survey.record)
+      {
+        auto next = *survey.record;
+        // Polling the same navigation epoch is a cached report, not a new
+        // physical observation. Retain its original receipt freshness.
+        if (survey_ && survey_->i_tow_ms == next.i_tow_ms)
+          next.timestamp_ns = survey_->timestamp_ns;
+        survey_ = next;
+      }
+      ublox_.ProcessUbxFrame(*framed.record, ubx_generation_.value_or(generation));
+      UbloxRoutedResponse response;
+      while (ublox_.PopResponse(response))
+        if (fence_.IsEligible(response.response))
+          Note(application_.ApplyResponse(response.response, {response.ubx_target}), receipt_ns);
+      ubx_generation_.reset();
+    }
+    else if (framed.status != universal_gnss_protocols::ParserStatus::kNeedMoreData)
+      ubx_generation_.reset();
+    if (line_size_ == 0 && !line_overflow_)
+      line_generation_ = generation;
+    if (bytes[i] == '\n')
+    {
+      if (!line_overflow_)
+      {
+        unicore_.ProcessLine({line_.data(), line_size_}, receipt_ns, line_generation_);
+        ReceiverCommandResponse response;
+        while (unicore_.PopResponse(response))
+          if (fence_.IsEligible(response))
+            Note(application_.ApplyResponse(response), receipt_ns);
+      }
+      line_size_ = 0;
+      line_overflow_ = false;
+    }
+    else if (line_size_ < line_.size())
+      line_[line_size_++] = static_cast<char>(bytes[i]);
+    else
+      line_overflow_ = true;
+  }
+  return true;
+}
+
+void Receiver::Step(const std::int64_t now_ns)
+{
+  if (now_ns < last_receipt_ns_ || now_ns < 0)
+    return;
+  Note(application_.CheckTimeout(now_ns), now_ns);
+  if (application_.state() == ReceiverConfigApplicationState::kRunning)
+    Note(application_.Step(now_ns), now_ns);
+}
+
+void Receiver::ConfigureTelemetry(ReceiverSessionConfig config)
+{
+  InvalidateObservations();  // In-flight mutation becomes indeterminate; quarantine is retained.
+  session_ = ReceiverSession(std::move(config));
+}
+
+void Receiver::InvalidateObservations()
+{
+  // A disconnected pending command cannot be made safe by resetting parsers.
+  if (application_.transaction_engine().current_transaction())
+    Note(application_.MarkTimeout());
+  session_.Reset();
+  survey_.reset();
+  satellites_.Reset();
+  satellite_nmea_.Reset();
+  satellite_unicore_.Reset();
+  ubx_.Reset();
+  ublox_.Reset();
+  unicore_.Reset();
+  line_size_ = 0;
+  line_overflow_ = false;
+  ubx_generation_.reset();
+  ++incarnation_;
+}
+}  // namespace ug::embedded

@@ -579,3 +579,13 @@ publisher identity, authenticated effective-rule audit, exact-main publication
 validation, a complete-set integrity/approval boundary, atomic-update proof and
 explicit publication authorization. No unsupported backend, hardware, ARM,
 registry artifact or official distribution publication is qualified by this lot.
+
+
+## Native ESP32 validation
+
+The additional [native ESP32 workflow](../../.github/workflows/esp32.yml) follows
+ordinary PR and push-dev/main event policy, with read-only permissions and its
+own fail-closed gate. Four bounded profiles use the [isolated SDK recipe](../../embedded/esp32/native/CI.md).
+No existing distribution/ROS2/Release job or publication permission changes.
+Firmware is neither uploaded nor published; branch protections are not updated.
+Local execution passed, while GitHub qualification awaits an authorized push/PR.

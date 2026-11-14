@@ -37,3 +37,8 @@ in TODO/manifest; the durable report and figures are linked from that handoff.
 - `retained/UG-PLAN-005_EXTERNAL_LAN_DDS.md` — completed external-LAN DDS
   matrix: unmodified bridge multicast failed; explicit bridge/unicast locators
   passed both directions and different-domain non-delivery.
+
+- `blocked/UG-ESP-SIGNALGROUP-001.md` — native Unicore signal-group reconfiguration:
+  automatic persistence/reset is documented; native mutation is refused pending
+  explicit reset/persistence approval, qualified incarnation recovery and hardware
+  evidence. Shared driver safety classification needs separate review.

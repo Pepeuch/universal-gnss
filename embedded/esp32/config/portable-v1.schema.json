@@ -1,0 +1,558 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Pepeuch/universal-gnss/embedded/esp32/config/portable-v1.schema.json",
+  "title": "UG ESP32 anonymous portable configuration v1",
+  "description": "Wire format additionally requires <=512 ASCII bytes, plain enum strings, no escapes/duplicate keys, decimal integers only. No private or free-form text fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "schema",
+    "board",
+    "profile",
+    "ethernet",
+    "output",
+    "uart_tx",
+    "uart_rx",
+    "uart_baud",
+    "gnss_model",
+    "radio_channel"
+  ],
+  "properties": {
+    "format": {
+      "const": "ug-esp32-portable"
+    },
+    "schema": {
+      "const": 1
+    },
+    "board": {
+      "enum": [
+        "waveshare-s3-eth",
+        "supermini-c3"
+      ]
+    },
+    "profile": {
+      "enum": [
+        "gateway",
+        "rover"
+      ]
+    },
+    "ethernet": {
+      "enum": [
+        "w5500-onboard",
+        "none"
+      ]
+    },
+    "output": {
+      "enum": [
+        "gnss",
+        "usb",
+        "uart"
+      ]
+    },
+    "uart_tx": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 48
+    },
+    "uart_rx": {
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 48
+    },
+    "uart_baud": {
+      "type": "integer",
+      "minimum": 9600,
+      "maximum": 921600
+    },
+    "gnss_model": {
+      "enum": [
+        "none",
+        "auto",
+        "NMEA",
+        "UM980",
+        "UM981",
+        "UM982",
+        "ZED-F9P"
+      ]
+    },
+    "radio_channel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 11
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "board": {
+          "const": "waveshare-s3-eth"
+        },
+        "profile": {
+          "const": "gateway"
+        },
+        "ethernet": {
+          "const": "w5500-onboard"
+        },
+        "output": {
+          "const": "gnss"
+        },
+        "gnss_model": {
+          "enum": [
+            "auto",
+            "NMEA",
+            "UM980",
+            "UM981",
+            "UM982",
+            "ZED-F9P"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "uart_tx": {
+              "const": -1
+            },
+            "uart_rx": {
+              "const": -1
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 1
+            },
+            "uart_rx": {
+              "enum": [
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 2
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 15
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 16
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 17
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 18
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 38
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 39
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 40
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                41,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 41
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                42,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 42
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                43,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 43
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                44,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 44
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                47,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 47
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                48
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "uart_tx": {
+              "const": 48
+            },
+            "uart_rx": {
+              "enum": [
+                1,
+                2,
+                15,
+                16,
+                17,
+                18,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                47
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "board": {
+          "const": "supermini-c3"
+        },
+        "profile": {
+          "const": "rover"
+        },
+        "ethernet": {
+          "const": "none"
+        },
+        "gnss_model": {
+          "const": "none"
+        },
+        "uart_rx": {
+          "const": -1
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "output": {
+              "const": "usb"
+            },
+            "uart_tx": {
+              "const": -1
+            },
+            "uart_baud": {
+              "const": 115200
+            }
+          }
+        },
+        {
+          "properties": {
+            "output": {
+              "const": "uart"
+            },
+            "uart_tx": {
+              "enum": [
+                4,
+                5,
+                6,
+                7,
+                10
+              ]
+            },
+            "uart_baud": {
+              "enum": [
+                115200,
+                230400,
+                460800,
+                921600
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

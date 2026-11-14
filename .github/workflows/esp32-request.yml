@@ -1,0 +1,71 @@
+name: ESP32 requested firmware validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Reviewed full commit from the trusted approval register
+        required: true
+        type: string
+      variant:
+        description: Generic supported firmware
+        required: true
+        type: choice
+        options: [s3-gateway, c3-rover-usb, c3-rover-uart]
+      uart_tx:
+        description: UART rover only (leave 4 for other variants)
+        type: choice
+        default: '4'
+        options: ['4', '5', '6', '7', '10']
+      uart_baud:
+        description: UART rover only (leave 115200 for other variants)
+        type: choice
+        default: '115200'
+        options: ['115200', '230400', '460800', '921600']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esp32-requested-build
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate approved ESP32 build request
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Require the trusted default branch (fail, never silently skip)
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_REF" = "refs/heads/$DEFAULT_BRANCH"
+      - name: Check out trusted controller and approvals
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate request and compile real isolated firmware
+        env:
+          REQUEST_SOURCE: ${{ inputs.source_sha }}
+          REQUEST_VARIANT: ${{ inputs.variant }}
+          REQUEST_TX: ${{ inputs.uart_tx }}
+          REQUEST_BAUD: ${{ inputs.uart_baud }}
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          PYTHONDONTWRITEBYTECODE=1 python3 tools/branches/firmware_request.py \
+            --source-sha "$REQUEST_SOURCE" --variant "$REQUEST_VARIANT" \
+            --uart-tx "$REQUEST_TX" --uart-baud "$REQUEST_BAUD" \
+            --output "$RUNNER_TEMP/esp32-review-bundle" --execute
+      - name: Retain temporary review bundle (not a durable firmware archive)
+        uses: actions/upload-artifact@v7
+        with:
+          name: esp32-review-${{ github.run_id }}
+          path: ${{ runner.temp }}/esp32-review-bundle
+          if-no-files-found: error
+          retention-days: 7

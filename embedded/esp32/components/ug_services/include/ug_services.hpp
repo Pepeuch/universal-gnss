@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+#pragma once
+#include "esp_err.h"
+#include "ug_network_diagnostics.hpp"
+#include "ug_network_history.hpp"
+#include "universal_gnss/gnss_runtime_state.hpp"
+namespace ug::embedded
+{
+esp_err_t StartNetworkServices();
+// IDF event task may invalidate sources while a network worker is inside connect.
+void NetworkAvailabilityChanged(bool available);
+void RestartNetworkServices();
+void PublishGnssSnapshot(const universal_gnss::GnssRuntimeState& state,
+                         std::optional<std::int64_t> position_receipt_ns = std::nullopt);
+universal_gnss::GnssRuntimeState GnssSnapshot();
+struct GnssObservationSnapshot
+{
+  universal_gnss::GnssRuntimeState state;
+  std::optional<std::int64_t> position_receipt_ns;
+};
+GnssObservationSnapshot GnssObservation();
+NetworkServiceStats NetworkStats();
+NetworkTraceSnapshot NetworkHistory();
+}  // namespace ug::embedded

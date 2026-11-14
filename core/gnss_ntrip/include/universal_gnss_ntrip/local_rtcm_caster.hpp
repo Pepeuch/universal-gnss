@@ -24,6 +24,17 @@ struct LocalRtcmCasterConfig
   std::size_t client_buffer_bytes{65536u};
 };
 
+struct LocalRtcmCasterPolicy
+{
+  // Zero preserves the historical unlimited/disabled host policy. Firmware
+  // explicitly supplies bounded limits and source-boundary disconnection.
+  std::size_t max_clients{0u};
+  std::size_t max_accepts_per_poll{0u};
+  std::uint32_t request_timeout_ms{0u};
+  bool disconnect_clients_on_source_change{false};
+  std::string username{}, password{};  // Empty pair preserves anonymous access.
+};
+
 struct LocalRtcmCasterMetrics
 {
   std::uint64_t accepted_clients{0u};
@@ -32,7 +43,7 @@ struct LocalRtcmCasterMetrics
   std::uint64_t served_frames{0u};
 };
 
-// Linux-only, synchronous local NTRIP caster. Poll() owns accept/request/write
+// Synchronous local NTRIP caster on Linux or ESP-IDF. Poll() owns accept/request/write
 // progress; PublishFrame() never waits for a client.
 class LocalRtcmCaster
 {
@@ -42,6 +53,8 @@ public:
   LocalRtcmCaster(const LocalRtcmCaster&) = delete;
   LocalRtcmCaster& operator=(const LocalRtcmCaster&) = delete;
 
+  // Opt-in policy; may be replaced only while stopped. Existing config ABI is unchanged.
+  bool SetPolicy(LocalRtcmCasterPolicy policy);
   bool Start(LocalRtcmCasterConfig config);
   void Stop();
   bool running() const;
