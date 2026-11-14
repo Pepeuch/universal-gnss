@@ -18,6 +18,7 @@ extern "C" {
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
+#include "ug_wire_selftest.hpp"
 #if UG_LOCAL_GNSS
 #include "ug_gnss_service.hpp"
 #include "universal_gnss_driver/unicore_model_profile.hpp"
@@ -668,12 +669,37 @@ esp_err_t Post(httpd_req_t* req)
 {
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
-  if (!AdmitWebWork(AssessResources(CurrentMemory()), WebWork::kMutation))
+  const std::string_view uri(req->uri);
+  const auto work =
+      uri == "/api/diagnostics/wire-selftest" ? WebWork::kDetailedDiagnostics : WebWork::kMutation;
+  if (!AdmitWebWork(AssessResources(CurrentMemory()), work))
     return ResourceBusy(req);  // Reject before body allocation, parsing or storage/receiver work.
   std::string body, error;
   if (!Body(req, body))
     return Fail(req, "400 Bad Request", "bounded application/json body required");
-  const std::string_view uri(req->uri);
+  if (uri == "/api/diagnostics/wire-selftest")
+  {
+    if (!DecodeWireSelfTest(body))
+      return Fail(req, "400 Bad Request", "explicit offline wire self-test confirmation required");
+    const auto started = esp_timer_get_time();
+    const auto report = RunWireSelfTest();
+    const auto elapsed = esp_timer_get_time() - started;
+    JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+    if (!root || !cJSON_AddStringToObject(root.get(), "scope", "offline_private_codec_buffers") ||
+        !cJSON_AddBoolToObject(root.get(), "ok", report.ok()) ||
+        !cJSON_AddNumberToObject(root.get(), "failed_mask", report.failed) ||
+        !cJSON_AddNumberToObject(root.get(), "elapsed_us", elapsed))
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    auto* checks = cJSON_AddObjectToObject(root.get(), "checks");
+    if (!checks)
+      return Fail(req, "503 Service Unavailable", "memory unavailable");
+    for (unsigned i = 0; i < kWireSelfTestCount; ++i)
+      if (!cJSON_AddBoolToObject(checks, WireSelfTestName(i), (report.passed & (1u << i)) != 0))
+        return Fail(req, "503 Service Unavailable", "memory unavailable");
+    if (!report.ok())
+      httpd_resp_set_status(req, "500 Internal Server Error");
+    return Json(req, root.get());
+  }
   if (uri == "/api/ntrip/restart")
   {
     if (!DecodeNetworkRestart(body, error))

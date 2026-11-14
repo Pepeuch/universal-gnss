@@ -16,6 +16,7 @@ if(NOT UG_PROFILE STREQUAL "rover")
         "${UG_ROOT}/embedded/esp32/components/ug_network"
         "${UG_ROOT}/embedded/esp32/components/ug_services"
         "${UG_ROOT}/embedded/esp32/components/ug_supervisor"
+        "${UG_ROOT}/embedded/esp32/components/ug_selftest"
         "${UG_ROOT}/embedded/esp32/components/ug_web"
         "${UG_ROOT}/embedded/esp32/components/ug_settings"
         "${UG_ROOT}/embedded/esp32/components/ug_platform"

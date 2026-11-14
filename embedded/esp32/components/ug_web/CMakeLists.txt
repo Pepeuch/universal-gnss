@@ -1,5 +1,5 @@
 idf_build_get_property(UG_LOCAL_GNSS UG_LOCAL_GNSS)
-set(deps ug_platform ug_services ug_gateway_service esp_https_server esp_timer)
+set(deps ug_platform ug_services ug_gateway_service ug_selftest esp_https_server esp_timer)
 if(UG_LOCAL_GNSS)
     list(APPEND deps ug_gnss)
 endif()

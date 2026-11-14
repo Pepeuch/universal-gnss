@@ -1,5 +1,6 @@
 'use strict';
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
+let wireSelfTestRunning = false, wireSelfTestAllowed = false;
 const $ = id => document.getElementById(id);
 const show = value => { $('notice').textContent = String(value); };
 const print = value => JSON.stringify(value, null, 2);
@@ -39,6 +40,8 @@ async function refresh() {
     const resources = await call('/api/resources', undefined, false);
     if (generation !== sessionGeneration) return;
     $('resources').textContent = print(resources);
+    wireSelfTestAllowed = Boolean(token) && resources.pressure === 'normal';
+    $('wire-selftest').disabled = !wireSelfTestAllowed || wireSelfTestRunning;
     if (resources.pressure === 'critical') {
       $('status').textContent = 'Rapport détaillé suspendu : pression mémoire';
       $('receiver').textContent = 'Rapport suspendu : pression mémoire';
@@ -88,7 +91,7 @@ async function load() {
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
 $('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -195,4 +198,19 @@ $('commands-read').onclick = handle(async () => {
   const generation = sessionGeneration, report = await call('/api/gnss/commands');
   if (generation !== sessionGeneration || !token) return;
   $('command-history').textContent = print(report);
+});
+
+$('wire-selftest').onclick = handle(async () => {
+  if (!token || !wireSelfTestAllowed || wireSelfTestRunning) return;
+  if (!confirm('Exécuter les six autotests CRC et codec dans des buffers privés ? Aucun paquet radio, aucune commande GNSS ni correction ne sera transmis.')) return;
+  const generation = sessionGeneration;
+  wireSelfTestRunning = true; $('wire-selftest').disabled = true;
+  try {
+    const report = await call('/api/diagnostics/wire-selftest', {confirm:'RUN_OFFLINE_WIRE_SELFTEST'});
+    if (generation !== sessionGeneration || !token) return;
+    $('wire-selftest-result').textContent = print(report);
+  } finally {
+    wireSelfTestRunning = false;
+    if (generation === sessionGeneration) $('wire-selftest').disabled = !wireSelfTestAllowed || !token;
+  }
 });

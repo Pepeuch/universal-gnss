@@ -52,6 +52,13 @@ def sdk_network_capacity(lines):
     return limits
 
 
+def check_wire_selftest_boundary(production, symbols, profile):
+    inputs = [file for file in production if file.endswith('/ug_selftest/src/ug_wire_selftest.cpp')]
+    expected = 0 if profile == 'rover' else 1
+    if len(inputs) != expected or bool('ug::embedded::RunWireSelfTest()' in symbols) != bool(expected):
+        raise ValueError('offline self-test presence does not match the firmware role')
+
+
 def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200):
     if profile != 'rover' and (rover_uart_tx is not None or rover_uart_baud != 115200):
         raise ValueError('UART output expectation requires the rover profile')
@@ -87,8 +94,9 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
         raise ValueError('missing/duplicate linked UG CRC/frame validation')
     if 'lora_transport_crc16' not in symbols:
         raise ValueError('radio fragment CRC16 was lost')
+    check_wire_selftest_boundary(production, symbols, profile)
     if profile == 'rover':
-        forbidden = ('ug_network', 'ug_settings', 'ug_platform', 'ug_web', 'ug_supervisor', 'ug_receiver', '/core/gnss_ntrip/')
+        forbidden = ('ug_network', 'ug_settings', 'ug_platform', 'ug_web', 'ug_supervisor', 'ug_receiver', 'ug_selftest', '/core/gnss_ntrip/')
         if any(any(token in file for token in forbidden) for file in production):
             raise ValueError('rover unexpectedly embeds gateway/network/admin components')
         lines = (work / 'sdkconfig').read_text().splitlines()

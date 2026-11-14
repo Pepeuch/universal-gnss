@@ -1046,3 +1046,50 @@ was additionally qualified through eight deterministic, integral ROS2 snapshots,
 Kilted snapshots were generated only; no new Kilted build was performed. The
 portable driver addition intentionally changes those source payloads; existing
 BASE command plans remained byte-identical across 768 before/after cases.
+
+
+## Finite offline CRC / wire self-test
+
+Gateway and relay provide authenticated POST `/api/diagnostics/wire-selftest`:
+
+```json
+{"confirm":"RUN_OFFLINE_WIRE_SELFTEST"}
+```
+
+The six checks exercise the actual UG CRC24Q facade and shared CRC16/ESP-NOW
+codec: known CRC vectors, maximum RTCM container and malformed bounds/header/CRC,
+bytewise stream framing with noise, byte-identical fragmented loopback, loss with
+reassembly expiry, and rejection of both radio-CRC and inner RTCM corruption.
+All state and clocks are private/synthetic, with fixed test buffers and finite
+loops. There is no radio/UART/socket access, production routing, receiver command,
+settings write, background task or periodic injection. Reused codec functions may
+emit their normal SDK diagnostic messages to the admin console; this component
+is excluded from the rover binary. No global log-level changes are made.
+
+The endpoint rejects malformed/duplicate/unknown fields or absent confirmation,
+and uses detailed-diagnostics resource admission before allocating/parsing a body.
+Its result contains six named booleans, a failure mask and elapsed monotonic
+microseconds; incomplete/failed checks return HTTP 500. Elapsed time includes
+preemption and logging, not just CPU cost. No hard runtime latency is qualified.
+The UI disables duplicate in-flight requests and memory-pressure execution, and
+ignores late responses after logout. It does not run the test automatically.
+
+This is **not** a NTRIP, radio delivery, GNSS, RTK or hardware health test. The
+historical `/api/dev/fake-rtcm/*`, `/api/dev/ntrip/mock` and NTRIP self-test routes
+remain unavailable; the old handlers really invoked runtime injection/mock modes
+behind authentication. This finite offline diagnostic does not silently emulate
+or claim full migration of those different contracts. External software replay
+and future explicitly authorized physical tests remain separate.
+
+Validation: **37 native ASan/UBSan CTests**, including 32 consecutive self-test
+runs, strict request rejection and fail-closed report masks; **five build-policy
+unit tests** and **one browser test**. IDF 6.1 builds/link/role/partition checks
+pass for S3 gateway, C3 relay and C3 USB rover. The latter is byte-identical to its
+previous qualified app and contains no self-test component/symbol. Apps are
+**1440832 / 3145728**, **1294752 / 1310720** and **682816 / 1310720** bytes.
+Relay slot headroom is now **15968 bytes**; further features must respect this
+limit or receive an explicitly reviewed profile/layout decision. Static RAM is
+unchanged: S3 DIRAM **214156 / 341760**, relay DRAM **159686 / 321296**. These
+are compile/link results; no firmware was executed on physical devices. Two
+independent gateway/relay builds also have identical apps, bootloaders and
+partition tables.

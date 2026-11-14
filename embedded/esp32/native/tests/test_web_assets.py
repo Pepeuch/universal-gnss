@@ -22,6 +22,7 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = () => 1, clearTimeout = () => {};
           class AbortController {constructor(){this.signal={};}abort(){}}
+          let hold_selftest = false, release_selftest;
           let hold_commands = false, release_commands;
           let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events;
           const confirm = () => true;
@@ -33,6 +34,12 @@ class WebAssets(unittest.TestCase):
             if (hold_status && path === '/api/gnss/status') return new Promise(resolve => {
               release_status = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"must-not-reappear"}'});
             });
+            if (path === '/api/diagnostics/wire-selftest') {
+              if (hold_selftest) return new Promise(resolve => {
+                release_selftest = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-selftest-session"}'});
+              });
+              return {ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"ok":true,"scope":"offline_private_codec_buffers","checks":{"crc_vectors":true}}'};
+            }
             if (path === '/api/gnss/commands') {
               if (hold_commands) return new Promise(resolve => {
                 release_commands = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"private":"old-command-session"}'});
@@ -105,6 +112,11 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         restart = json.loads(vm.eval("calls.filter(c=>c.path==='/api/ntrip/restart').pop().options.body"))
         self.assertEqual(restart, {'confirm':'RESTART_NTRIP_SERVICES'})
+        vm.eval("elements['wire-selftest'].onclick();")
+        self.drain(vm)
+        self.assertIn('offline_private_codec_buffers', vm.eval("elements['wire-selftest-result'].textContent"))
+        test_body = json.loads(vm.eval("calls.filter(c=>c.path==='/api/diagnostics/wire-selftest').pop().options.body"))
+        self.assertEqual(test_body, {'confirm':'RUN_OFFLINE_WIRE_SELFTEST'})
         vm.eval("elements['commands-read'].onclick();")
         self.drain(vm)
         self.assertIn('base_disable', vm.eval("elements['command-history'].textContent"))
@@ -121,6 +133,10 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         self.assertTrue(vm.eval("calls.some(c=>c.path==='/api/status')"))
         self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/gnss/satellites')"))
+        self.assertTrue(vm.eval("elements['wire-selftest'].disabled"))
+        vm.eval("elements['wire-selftest'].onclick();")
+        self.drain(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/diagnostics/wire-selftest')"))
         vm.eval("pressure='critical'; calls.length=0; refresh();")
         self.drain(vm)
         self.assertEqual(vm.eval('calls.length'), 1)
@@ -140,11 +156,19 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         vm.eval("hold_commands=true; elements['commands-read'].onclick();")
         self.drain(vm)
-        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands();')
+        vm.eval("hold_selftest=true; elements['wire-selftest'].onclick();")
+        self.drain(vm)
+        count = vm.eval("calls.filter(c=>c.path==='/api/diagnostics/wire-selftest').length")
+        vm.eval("elements['wire-selftest'].onclick();")
+        self.drain(vm)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/diagnostics/wire-selftest').length"), count)
+        vm.eval('elements.logout.onclick(); release_status(); release_events(); release_commands(); release_selftest();')
         self.drain(vm)
         self.assertEqual(vm.eval('elements.receiver.textContent'), 'Session fermée')
         self.assertEqual(vm.eval('elements.events.textContent'), 'Session fermée')
         self.assertEqual(vm.eval("elements['command-history'].textContent"), 'Session fermée')
+        self.assertEqual(vm.eval("elements['wire-selftest-result'].textContent"), 'Session fermée')
+        self.assertTrue(vm.eval("elements['wire-selftest'].disabled"))
         self.assertEqual(vm.eval("elements['ntrip-runtime'].textContent"), 'Session fermée')
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         self.assertEqual(vm.eval('elements.config.value'), '')

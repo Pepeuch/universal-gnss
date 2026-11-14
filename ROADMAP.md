@@ -35,6 +35,8 @@ A confirmed F9P-only BASE disable operation now reuses a portable UG plan and
 the native UART owner/journal; command acceptance remains distinct from physical stop.
 A bounded, volatile GNSS command-result history now retains typed dispatch, response
 and failure outcomes across observation resets, without raw payload capture.
+An authenticated, explicitly confirmed offline self-test now exercises the real UG
+CRC and shared wire codec in private buffers, without transmitting corrections.
 Remaining useful legacy features, device recovery,
 OTA/runtime qualification and final qualification remain open. LoRa is deferred
 by maintainer priority; ESP-NOW comes first. This is not a completed firmware claim.

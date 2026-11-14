@@ -92,6 +92,12 @@ add_library(ug_embedded_radio ../../components/espnow_rtcm/src/espnow_rtcm_codec
 target_include_directories(ug_embedded_radio PUBLIC radio_stubs
     ../../components/espnow_rtcm/include ../../components/lora_transport/include ../../components/rtcm_filter/include)
 target_link_libraries(ug_embedded_radio PUBLIC ug_embedded_gateway)
+add_executable(test_wire_selftest test_wire_selftest.cpp ../../components/ug_selftest/src/ug_wire_selftest.cpp)
+target_include_directories(test_wire_selftest PRIVATE ../../components/ug_selftest/include)
+target_link_libraries(test_wire_selftest PRIVATE ug_embedded_radio ug_embedded_settings)
+target_compile_options(test_wire_selftest PRIVATE -UNDEBUG)
+add_test(NAME embedded_wire_selftest_contract COMMAND test_wire_selftest)
+set_tests_properties(embedded_wire_selftest_contract PROPERTIES TIMEOUT 5)
 add_executable(test_gateway_radio_pty test_gateway_radio_pty.cpp)
 target_link_libraries(test_gateway_radio_pty PRIVATE ug_embedded_ntrip ug_embedded_radio util)
 target_compile_options(test_gateway_radio_pty PRIVATE -UNDEBUG)

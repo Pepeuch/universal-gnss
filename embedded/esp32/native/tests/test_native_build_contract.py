@@ -15,6 +15,19 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_wire_selftest_is_linked_only_in_admin_profiles(self):
+        unit = '/ug/embedded/esp32/components/ug_selftest/src/ug_wire_selftest.cpp'
+        symbol = '001 T ug::embedded::RunWireSelfTest()'
+        module.check_wire_selftest_boundary([], '', 'rover')
+        for profile in ('gateway', 'relay-ntrip'):
+            module.check_wire_selftest_boundary([unit], symbol, profile)
+            for inputs, symbols in (([], ''), ([unit], ''), ([], symbol), ([unit, unit], symbol)):
+                with self.assertRaises(ValueError):
+                    module.check_wire_selftest_boundary(inputs, symbols, profile)
+        for inputs, symbols in (([unit], symbol), ([], symbol), ([unit], '')):
+            with self.assertRaises(ValueError):
+                module.check_wire_selftest_boundary(inputs, symbols, 'rover')
+
     def test_network_defaults_preserve_small_relay_and_exclude_rover(self):
         for role in ('gateway', 'relay-ntrip'):
             self.assertEqual(builder.network_sdk_defaults(role, 'waveshare-s3-eth'), 'CONFIG_LWIP_MAX_SOCKETS=20\n')
