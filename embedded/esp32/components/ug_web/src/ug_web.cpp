@@ -16,6 +16,7 @@ extern "C" {
 #include "ug_http_encoding.hpp"
 #include "ug_https_server_status.hpp"
 #include "ug_json.hpp"
+#include "ug_memory_diagnostics.hpp"
 #include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
 #include "ug_pairing_window.hpp"
@@ -158,9 +159,14 @@ bool Body(httpd_req_t* req, std::string& body)
 }
 esp_err_t Json(httpd_req_t* req, const cJSON* root)
 {
+  SampleWebMemory();
   char* text = root ? cJSON_PrintUnformatted(root) : nullptr;
-  if (!text)
+  SampleWebMemory();
+  if (!text || !WebJsonMemoryHealthy())
+  {
+    cJSON_free(text);
     return Fail(req, "503 Service Unavailable", "response memory budget unavailable");
+  }
   Headers(req);
   httpd_resp_set_type(req, "application/json");
   const auto result = httpd_resp_sendstr(req, text);
@@ -780,6 +786,7 @@ esp_err_t CommandHistoryReply(httpd_req_t* req)
 #endif
 esp_err_t Get(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
   const std::string_view uri(req->uri);
@@ -852,6 +859,7 @@ esp_err_t Get(httpd_req_t* req)
 }
 esp_err_t Post(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
   const std::string_view uri(req->uri);
@@ -1036,6 +1044,7 @@ esp_err_t Post(httpd_req_t* req)
 }
 esp_err_t Asset(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
   std::array<char, 513> encoding{};

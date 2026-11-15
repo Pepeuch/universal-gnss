@@ -122,14 +122,33 @@ Il requiert `playwright==1.56.0` avec Chromium disponible (image de test
 sont interceptés localement sous CSP stricte, sans accès à un appareil réel ni
 service externe. Il n'est pas ajouté au conteneur de dépendances du firmware.
 
+## Validation physique et mémoire S3
+
+La nouvelle interface a été flashée sur le Waveshare S3 identifié, application
+seule, avec NVS/TLS/configuration/partitionnement conservés. Chromium a vérifié
+les six onglets, authentification/déconnexion, formulaires locaux sans écriture,
+mobile, refus attendus sous pression et redémarrage HTTPS. Dix cycles de session
+et de rafraîchissement ont ensuite été effectués sur la variante PSRAM.
+
+La lecture du service Ethernet utilise désormais `status.services.ethernet_driver`
+(identifiant de carte `ethernet` inchangé). Assertion dans les tests QuickJS,
+Chromium simulé et sur le S3 réel. Le JavaScript servi passe de 34 724/10 112
+à 34 777/10 142 octets brut/gzip ; total gzip 15 634, soit +30 octets,
+sans requête ni session HTTPS supplémentaire.
+
+Voir le [rapport mémoire S3](../../docs/analysis/ESP32_S3_MEMORY_QUALIFICATION.md)
+pour les quatre firmwares comparés, le protocole commun, les budgets, les défauts
+JSON injectés et les limites des cycles. Les relevés de mémoire sont des
+échantillons, pas une mesure de chaque pic transitoire.
+
 ## Limites et suite
 
-La refonte n'est pas flashée. Les essais matériels du rapport HTTPS concernent
-l'interface précédente et ne qualifient pas ce nouveau binaire. Pas de preuve
-GNSS/RF/RTK, de RAM gagnée ou de sessions TCP/TLS réellement mesurées pour cette
-interface. Les mesures de requêtes concernent la file API et les fixtures.
+Aucune qualification GNSS/RF/RTK ni d'endurance prolongée en l'absence de récepteur.
+Les grandes réponses de télémétrie des fixtures sont synthétiques. Les protections
+mémoire restent actives et peuvent refuser les historiques/API détaillées avec 503.
+La pression reste `reduced`, le plus grand bloc n'est pas amélioré.
 
-Le moteur partagé, ROS2/Linux, NVS, TLS, partitions, seuils mémoire et publication
-ne sont pas modifiés. L'audit RAM/PSRAM, l'instrumentation des allocations, les
-copies/buffers/timestamps du core et le brochage interactif restent des lots
-ultérieurs. Cette refonte alpha ne ferme aucun gate de release UG.
+Moteur partagé, ROS2/Linux, NVS, TLS, partitions, seuils et publication restent
+inchangés. Les optimisations ultérieures S3 et celles des copies/buffers/timestamps
+du core sont des phases distinctes. Le brochage interactif et le relais C3 restent
+reportés. Ces essais alpha ne ferment aucun gate de release UG.

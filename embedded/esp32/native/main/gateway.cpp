@@ -11,6 +11,7 @@
 #include "ug_commission.hpp"
 #include "ug_configuration.hpp"
 #include "ug_gateway_service.hpp"
+#include "ug_memory_diagnostics.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
@@ -109,6 +110,7 @@ std::int32_t StartRadioControl(void*)
 }  // namespace
 extern "C" void app_main()
 {
+  ug::embedded::InitializeMemoryDiagnostics();
   using namespace ug::embedded;
   const auto nvs = nvs_flash_init();
   if (nvs != ESP_OK)

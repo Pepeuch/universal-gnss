@@ -95,11 +95,16 @@ Existing UG release/backlog completion metrics are unaffected.
 
 The [native tabbed ESP32 WebUI](embedded/esp32/WEBUI.md) now preserves the existing
 forms in six responsive views, with serialized API requests, active-view polling
-and background suspension. Software/browser validation is separate from the
-earlier HTTPS hardware repair; this interface has not been flashed. RAM/PSRAM
-and shared-core optimization remain later work. The C3 relay is deferred until
-a later optimization phase and does not constrain this S3 WebUI. Existing Rover
-profiles remain unchanged. No release metric changes.
+and background suspension. Physical S3 validation now covers six tabs, sessions,
+read-only forms, desktop/mobile use and HTTPS after reboot. The first
+[S3 memory qualification](docs/analysis/ESP32_S3_MEMORY_QUALIFICATION.md) compares
+four firmware variants and moves the USB line buffer and cJSON allocations to
+PSRAM, with allocation-failure and repeated WebUI-cycle tests. Internal free
+memory increases, but the largest block remains smaller and memory pressure
+remains reduced. Long-duration and live GNSS/RTCM latency qualification, further
+S3 optimization and shared-core optimization remain pending. The C3 relay is
+deferred and does not constrain the S3. Existing Rover profiles remain unchanged.
+No release metric changes.
 
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.

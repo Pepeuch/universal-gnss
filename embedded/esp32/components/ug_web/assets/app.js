@@ -111,9 +111,9 @@ function unavailable() {
 function renderStatus(status) {
   $('status').textContent = print(status);
   $('services-status').textContent = print(status.services || {});
-  $('network-status').textContent = print({ethernet:status.services?.ethernet,https:status.services?.https,espnow:status.espnow});
+  $('network-status').textContent = print({ethernet:status.services?.ethernet_driver,https:status.services?.https,espnow:status.espnow});
   $('card-global').textContent = status.degraded === false ? 'Services réactifs' : 'État dégradé / inconnu';
-  for (const key of ['ethernet','https']) $('card-' + key).textContent = 'Service : ' + (status.services?.[key]?.state || 'inconnu');
+  for (const [card,service] of [['ethernet','ethernet_driver'],['https','https']]) $('card-' + card).textContent = 'Service : ' + (status.services?.[service]?.state || 'inconnu');
   $('card-rtcm').textContent = `${status.rtcm_frames ?? '?'} trames · ${status.rtcm_rejected ?? '?'} rejetées`;
   $('card-ntrip').textContent = status.upstream_flowing ? 'Flux entrant observé' : status.upstream_connected ? 'Connecté, flux non confirmé' : 'Pas de connexion entrante';
 }
