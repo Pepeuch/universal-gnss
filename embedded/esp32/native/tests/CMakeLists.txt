@@ -231,3 +231,41 @@ target_compile_features(test_web_identity PRIVATE cxx_std_17)
 target_compile_options(test_web_identity PRIVATE -UNDEBUG)
 target_link_options(test_web_identity PRIVATE -Wl,--wrap=malloc -Wl,--wrap=free)
 add_test(NAME embedded_web_identity_contract COMMAND test_web_identity)
+
+add_executable(test_console_buffer test_console_buffer.cpp)
+target_include_directories(test_console_buffer PRIVATE ../../components/ug_platform/include)
+target_compile_features(test_console_buffer PRIVATE cxx_std_17)
+target_compile_options(test_console_buffer PRIVATE -UNDEBUG)
+add_test(NAME embedded_console_buffer_contract COMMAND test_console_buffer)
+
+add_executable(test_s3_json_memory test_s3_json_memory.cpp ../../components/ug_platform/src/ug_s3_json_memory.cpp)
+target_include_directories(test_s3_json_memory PRIVATE memory_stubs credentials_stubs ../../components/ug_platform/include)
+target_link_libraries(test_s3_json_memory PRIVATE ug_embedded_settings)
+target_compile_features(test_s3_json_memory PRIVATE cxx_std_17)
+target_compile_options(test_s3_json_memory PRIVATE -UNDEBUG)
+target_compile_definitions(test_s3_json_memory PRIVATE UG_S3_JSON_PSRAM=1)
+add_test(NAME embedded_s3_json_memory_contract COMMAND test_s3_json_memory)
+
+# Run the same receiver/satellite contracts with external owned storage enabled.
+# The allocation boundary is stubbed; no S3 hardware or SDK dependency on host.
+add_library(ug_embedded_receiver_external ../../components/ug_receiver_runtime/src/ug_receiver_runtime.cpp
+    ../../components/ug_receiver_runtime/src/ug_base_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_telemetry_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_satellite_reports.cpp)
+target_include_directories(ug_embedded_receiver_external PUBLIC ../../components/ug_receiver_runtime/include)
+target_compile_definitions(ug_embedded_receiver_external PUBLIC UG_S3_SATELLITE_PSRAM=1)
+target_link_libraries(ug_embedded_receiver_external PUBLIC universal_gnss_driver ug_embedded_settings)
+foreach(contract receiver satellite_reports)
+    add_executable(test_${contract}_external test_${contract}.cpp test_satellite_allocator.cpp)
+    target_link_libraries(test_${contract}_external PRIVATE ug_embedded_receiver_external)
+    target_compile_options(test_${contract}_external PRIVATE -UNDEBUG)
+    add_test(NAME embedded_${contract}_external_contract COMMAND test_${contract}_external)
+endforeach()
+add_executable(test_satellite_storage test_satellite_storage.cpp)
+target_link_libraries(test_satellite_storage PRIVATE ug_embedded_receiver_external)
+target_compile_options(test_satellite_storage PRIVATE -UNDEBUG)
+add_test(NAME embedded_satellite_storage_contract COMMAND test_satellite_storage)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME embedded_satellite_storage_equivalence COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compare_satellite_storage.py"
+    $<TARGET_FILE:test_satellite_reports> $<TARGET_FILE:test_satellite_reports_external>)

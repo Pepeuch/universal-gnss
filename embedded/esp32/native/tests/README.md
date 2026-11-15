@@ -51,3 +51,27 @@ La [refonte WebUI](../../WEBUI.md) ajoute des contrôles QuickJS de navigation,
 file API, sessions, réponses tardives et suspension en arrière-plan. Le test
 optionnel `test_webui_browser.py` utilise Chromium/Playwright 1.56.0 sur des API
 synthétiques, sans appareil ni flash ; voir la procédure et les limites dans ce guide.
+
+
+## Allocations PSRAM S3
+
+`embedded_console_buffer_contract` contrôle l'allocation explicite, l'absence de
+repli interne, l'initialisation unique et l'effacement du tampon libéré.
+`embedded_s3_json_memory_contract` compile le véritable allocateur cJSON S3 avec
+frontières SDK simulées : précision/UTF-8, débordement de taille, refus à quarante
+limites d'allocation, injection unique, grands documents 0/16/64 lignes,
+effacement des données synthétiques sensibles, absence de fuite et canaris
+intacts. Le mode PSRAM est forcé pour ce test, même dans une variante de mesure
+qui le désactive ; aucun test n'est ignoré pour construire les variantes.
+
+Ces tests ASan/UBSan ne simulent pas une panne physique de PSRAM. Les essais
+sur appareil, budgets et limites sont séparés dans la
+[qualification S3](../../../../docs/analysis/ESP32_S3_MEMORY_QUALIFICATION.md).
+
+
+La [phase satellites S3](../../../../docs/analysis/ESP32_S3_MEMORY_FOLLOWUP.md)
+ajoute les contrats receiver/satellites exécutés avec stockage externe simulé,
+un contrôle de refus d'allocation/durée de vie/canaris et une comparaison
+canonique stricte des sorties du corpus interne/externe. Total : 51 CTest.
+Aucun test de protocole existant n'est supprimé ; ces tests synthétiques ne
+qualifient pas la réception GNSS physique.

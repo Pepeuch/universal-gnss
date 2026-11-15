@@ -453,6 +453,14 @@ class WebAssets(unittest.TestCase):
                 self.assertEqual(vm.eval("$('pairing-key').value"),'')
                 self.assertEqual(vm.eval("$('portable-preview').textContent"),'Aucun import préparé')
 
+    def test_ethernet_driver_service_is_rendered_on_the_ethernet_card(self):
+        vm=self.make_vm()
+        vm.eval("renderStatus({services:{ethernet_driver:{state:'running'},ethernet:{state:'failed'}}});")
+        self.assertEqual(vm.eval("$('card-ethernet').textContent"),'Service : running')
+        self.assertEqual(json.loads(vm.eval("$('network-status').textContent"))['ethernet']['state'],'running')
+        vm.eval("renderStatus({services:{ethernet_driver:{state:'failed'}}});")
+        self.assertEqual(vm.eval("$('card-ethernet').textContent"),'Service : failed')
+
     @staticmethod
     def drain(vm):
         for _ in range(100):

@@ -26,8 +26,16 @@ provisionnement séparé, tests isolés et reconstruction indépendante. Elle ne
 aucun binaire ; son exécution GitHub reste à qualifier après un push autorisé.
 
 La [WebUI native par onglets](WEBUI.md) décrit les formulaires, le polling borné,
-les tests et tailles des assets. La nouvelle interface reste à essayer sur appareil
-après revue ; aucun flash n’est effectué dans ce lot.
+les tests et tailles des assets. Les six onglets et sessions ont maintenant été
+vérifiés sur le S3 réel, avec conservation NVS/TLS et redémarrage HTTPS.
+La [qualification mémoire S3](../../docs/analysis/ESP32_S3_MEMORY_QUALIFICATION.md)
+compare quatre variantes, les allocations USB/JSON PSRAM et leurs essais dégradés.
+Le gain de mémoire libre ne supprime pas la pression ni les limites de contiguïté.
+La [phase satellites S3](../../docs/analysis/ESP32_S3_MEMORY_FOLLOWUP.md) déporte
+ensuite le cache natif seul, avec allocation possédée et échec explicite ; le
+snapshot partagé reste interne. Gain mesuré : 11860 octets internes au premier
+GET, sans changement de seuil ni du moteur commun.
+GNSS/RTCM physique et endurance prolongée restent à qualifier.
 
 ## Appairage natif actuel
 

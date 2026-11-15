@@ -392,6 +392,10 @@ esp_err_t StartGnssService()
   static_assert(std::is_trivially_copyable_v<GnssOperation>);
   if (operations)
     return ESP_ERR_INVALID_STATE;
+  // Allocate only the satellite payload, after PSRAM and diagnostics startup.
+  // Failure prevents an unusable GNSS owner; independent services remain alive.
+  if (!receiver.InitializeSatelliteStorage())
+    return ESP_ERR_NO_MEM;
   operations =
       xQueueCreateStatic(1, sizeof(GnssOperation), operations_memory.data(), &operations_control);
   ExpectWorker(ServiceId::kGnss, 5000000000LL);

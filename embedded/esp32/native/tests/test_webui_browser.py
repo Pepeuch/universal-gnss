@@ -90,7 +90,7 @@ def run(artifacts=None):
                     value = {'pressure': 'normal', 'internal_free': 110000, 'internal_largest': 40000, 'psram_total': 8388608 if gnss else 0, 'web_mutations_allowed': True, 'satellites_allowed': True}
                 elif path == '/api/status':
                     value = {'role': 'gateway' if gnss else 'relay-ntrip', 'degraded': False, 'rtcm_frames': 21, 'rtcm_rejected': 0, 'upstream_connected': False,
-                             'services': {'ethernet': {'state': 'running'}, 'https': {'state': 'running'}}, 'espnow': {'started': False, 'configured_enabled': False}}
+                             'services': {'ethernet_driver': {'state': 'running'}, 'https': {'state': 'running'}}, 'espnow': {'started': False, 'configured_enabled': False}}
                 elif path == '/api/gnss/status':
                     value = receiver
                 elif path == '/api/gnss/capabilities':
@@ -103,6 +103,11 @@ def run(artifacts=None):
                     value = {'scope': 'synthetic_fixture', 'events': []}
                 else:
                     raise AssertionError('Unexpected API access: ' + path)
+                if path == '/api/status':
+                    value['memory_fixture'] = {
+                        'scope': 'synthetic_memory_only',
+                        'rows': [{**{chr(97 + j): 1.23456789012345 + i * 10 + j for j in range(8)},
+                                  'text': 'synthetic \"escaped\" line\nUTF-8 ☃'} for i in range(64)]}
                 route.fulfill(json=value)
 
             context.route('**/*', route_handler)
@@ -115,6 +120,8 @@ def run(artifacts=None):
             page.locator('#login').click()
             expect(page.locator('#session-state')).to_have_text('Session ouverte')
             expect(page.locator('#card-https')).to_contain_text('running')
+            expect(page.locator('#card-ethernet')).to_have_text('Service : running')
+            expect(page.locator('#status')).to_contain_text('synthetic_memory_only')
             for tab in ('gnss', 'rtcm', 'network', 'diagnostics', 'settings', 'dashboard'):
                 page.locator('#nav-' + tab).click()
                 expect(page.locator('#tab-' + tab)).to_be_visible()
