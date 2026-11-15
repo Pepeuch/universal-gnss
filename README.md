@@ -25,7 +25,7 @@
   <img src="https://img.shields.io/badge/Unicore-Validated-success">
   <img src="https://img.shields.io/badge/Quectel-Planned-yellow">
   <img src="https://img.shields.io/badge/Septentrio-Planned-yellow">
-    <a href="docs/flasher.html">
+    <a href="https://pepeuch.github.io/universal-gnss/flasher.html">
     <img src="https://img.shields.io/badge/ESP32-Web%20Flasher-orange" alt="ESP32 Web Flasher">
   </a>
 </p>
@@ -35,9 +35,13 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
-The [ESP32 Web Flasher](docs/flasher.html) is available as repository source;
-[hosting and qualification](docs/flasher/README.md) remain pending. No active
-GitHub Pages deployment or published firmware is claimed.
+The [ESP32 ALPHA Web Flasher](https://pepeuch.github.io/universal-gnss/flasher.html)
+installs experimental S3 Gateway and C3 Rover images published through the
+[manual alpha workflow](.github/workflows/esp32-alpha.yml). Each publication builds
+both native firmwares from an exact `main` commit, checks integrity/reproducibility,
+archives prerelease assets, then deploys Pages. Hardware qualification remains
+in progress; see the [publication and first-install guide](docs/flasher/ALPHA.md).
+The public URL is usable after the maintainer's first successful publication run.
 
 ## Local source distributions
 

@@ -40,6 +40,18 @@ def check_web_assets(build, source_assets, application, portable_source=None):
     return reports
 
 
+def sdk_boot_memory(lines, s3):
+    values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
+    stack = int(values.get('CONFIG_ESP_MAIN_TASK_STACK_SIZE', '0'))
+    if stack < 32768:
+        raise ValueError('network boot stack cannot accommodate persistent configuration decoding')
+    if s3 and (values.get('CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC') != 'y' or
+               values.get('CONFIG_SPIRAM_USE_MALLOC') != 'y' or
+               values.get('CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL') != '1024'):
+        raise ValueError('S3 TLS/heap allocation must preserve internal RAM for network and tasks')
+    return {'main_stack_bytes': stack, 'tls_external': s3}
+
+
 def sdk_network_capacity(lines):
     values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
     names = {'sockets': 'LWIP_MAX_SOCKETS', 'tcp_active': 'LWIP_MAX_ACTIVE_TCP',
@@ -191,7 +203,9 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
     result['radio_configuration'] = 'runtime_nvs_encrypted_unicast'
     result['web_assets'] = web_assets
     if profile != 'rover':
-        result['network_capacity'] = sdk_network_capacity((work / 'sdkconfig').read_text().splitlines())
+        lines = (work / 'sdkconfig').read_text().splitlines()
+        result['network_capacity'] = sdk_network_capacity(lines)
+        result['boot_memory'] = sdk_boot_memory(lines, 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
     if profile == 'rover':
         result['rover_output'] = {'transport': 'uart1-tx' if rover_uart_tx is not None else 'usb-serial-jtag',
                                   'tx_pin': rover_uart_tx,

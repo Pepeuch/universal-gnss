@@ -4,6 +4,7 @@ let portableCandidate=null;
 function clearPortable(){portableCandidate=null;$('portable-file').value='';$('portable-apply').disabled=true;$('portable-preview').textContent='Aucun import préparé';}
 let wireSelfTestRunning = false, wireSelfTestAllowed = false;
 let ntripConfig = null, ntripSlots = 0, ntripGnss = false, ntripSaving = false, ntripMutationAllowed = false;
+let functionsConfig=null;
 const $ = id => document.getElementById(id);
 const show = value => { $('notice').textContent = String(value); };
 const print = value => JSON.stringify(value, null, 2);
@@ -31,6 +32,21 @@ function renderNtrip() {
   $('ntrip-gga').hidden = slot !== null;
   $('ntrip-password-status').textContent = endpoint.password_set ? 'Mot de passe enregistré ; valeur masquée.' : 'Aucun mot de passe enregistré.';
   $('ntrip-save').disabled = !token || !ntripConfig || ntripSaving || !ntripMutationAllowed;
+}
+function clearFunctions(){
+ functionsConfig=null;
+ for(const id of ['function-caster-password','function-password','function-ap-password','function-ssid','function-ap-ssid','function-caster-user','function-caster-mount'])$(id).value='';
+ for(const id of ['function-radio','function-caster','function-sta','function-ap'])$(id).checked=false;
+ $('functions-save').disabled=true;$('functions-state').textContent='Session fermée';
+}
+function renderFunctions(config){
+ functionsConfig=config;
+ $('function-radio').checked=Boolean(config.radio?.enabled);$('function-caster').checked=Boolean(config.caster?.enabled);$('function-sta').checked=Boolean(config.wifi?.sta);$('function-ap').checked=Boolean(config.wifi?.ap);
+ $('function-caster-port').value=String(config.caster?.port||2101);$('function-caster-mount').value=config.caster?.mountpoint||'';$('function-caster-user').value=config.caster?.username||'';
+ $('function-ssid').value=config.wifi?.ssid||'';$('function-ap-ssid').value=config.wifi?.ap_ssid||'UG-RTK';
+ for(const id of ['function-caster-password','function-password','function-ap-password'])$(id).value='';
+ $('functions-save').disabled=!token||!ntripMutationAllowed;
+ $('functions-state').textContent=print({activation_demandee:{gnss_uart:Boolean(config.gnss?.enabled),ntrip_client:Boolean(config.upstream?.enabled),espnow:Boolean(config.radio?.enabled),caster:Boolean(config.caster?.enabled),wifi_sta:Boolean(config.wifi?.sta),wifi_ap:Boolean(config.wifi?.ap)},etat_reel:'Consulter les services et connexions ; activation ne prouve pas réception ou disponibilité physique.'});
 }
 function clearPairingForm() { $('pairing-key').value = ''; $('pairing-ticket').value = ''; $('pairing-peer').value = ''; $('pairing-info').textContent = 'Session fermée'; }
 function clearNtripForm() { ntripMutationAllowed = false; ntripConfig = null; $('ntrip-target').value = 'upstream'; renderNtrip(); }
@@ -71,6 +87,7 @@ async function refresh() {
     if (generation !== sessionGeneration) return;
     $('resources').textContent = print(resources);
     ntripMutationAllowed = Boolean(token) && resources.pressure !== 'critical' && resources.web_mutations_allowed !== false;
+    $('functions-save').disabled=!token||!functionsConfig||!ntripMutationAllowed;
     $('ntrip-save').disabled = !ntripMutationAllowed || !ntripConfig || ntripSaving;
     wireSelfTestAllowed = Boolean(token) && resources.pressure === 'normal';
     $('wire-selftest').disabled = !wireSelfTestAllowed || wireSelfTestRunning;
@@ -114,7 +131,7 @@ async function load() {
   const config = await call('/api/config');
   if (generation !== sessionGeneration || !token) return;
   $('config').value = print(config);
-  ntripConfig = config; renderNtrip();
+  ntripConfig = config; renderNtrip();renderFunctions(config);
   if (config.gnss) {
     $('gnss-enabled').checked = config.gnss.enabled;
     $('gnss-tx').value = String(config.gnss.tx_pin); $('gnss-rx').value = String(config.gnss.rx_pin);
@@ -123,8 +140,8 @@ async function load() {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearPortable(); clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
+$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
 $('load').onclick = handle(load);
 $('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
 $('export').onclick = handle(async () => {
@@ -354,4 +371,20 @@ $('pairing-ticket').onchange=handle(async event => {
       !Number.isInteger(ticket.channel) || ticket.channel<1 || ticket.channel>11) throw Error('Ticket privé incompatible');
   $('pairing-peer').value=ticket.peer; $('pairing-channel').value=String(ticket.channel); $('pairing-key').value=ticket.key;
   event.target.value=''; show('Ticket chargé localement ; ouvrir la fenêtre puis confirmer l’association.');
+});
+
+$('functions').onsubmit=handle(async()=>{
+ if(!token || !functionsConfig || !ntripMutationAllowed)throw Error('Session et mémoire disponibles requises');
+ const generation=sessionGeneration;
+ const radio=$('function-radio').checked;
+ const patch={caster:{enabled:$('function-caster').checked,port:Number($('function-caster-port').value),mountpoint:$('function-caster-mount').value,username:$('function-caster-user').value},wifi:{sta:$('function-sta').checked,ssid:$('function-ssid').value,ap:$('function-ap').checked,ap_ssid:$('function-ap-ssid').value}};
+ for(const [id,target,key] of [['function-caster-password',patch.caster,'password'],['function-password',patch.wifi,'password'],['function-ap-password',patch.wifi,'ap_password']]){if($(id).value)target[key]=$(id).value;$(id).value='';}
+ if(!confirm('Sauvegarder ces activations ? Un équipement absent pourra rester en attente/erreur. Les changements Wi-Fi et la réactivation radio exigent un redémarrage.'))return;
+ if(radio!==Boolean(functionsConfig.radio?.enabled)){
+  await call('/api/radio/pairing/window',{confirm:'OPEN_LOCAL_PAIRING'});
+  if(generation!==sessionGeneration||!token)return;
+  patch.radio={enabled:radio};
+ }
+ const result=await call('/api/config',patch);
+ if(generation===sessionGeneration&&token){show(result);await load();}
 });

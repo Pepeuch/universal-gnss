@@ -94,10 +94,13 @@ def build(output, profile, board, gnss, provision=False, dependency_cache=None, 
     defaults = ['''CONFIG_APP_REPRODUCIBLE_BUILD=y
 CONFIG_COMPILER_HIDE_PATHS_MACROS=y
 CONFIG_COMPILER_OPTIMIZATION_SIZE=y
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
-''', 'CONFIG_ESPNOW_RTCM_ROVER=y' if rover else 'CONFIG_ESPNOW_RTCM_BASE=y']
+''', 'CONFIG_ESPNOW_RTCM_ROVER=y' if rover else 'CONFIG_ESPNOW_RTCM_BASE=y',
+        # Network boot decodes both persistent banks through nested Settings
+        # snapshots. The former 8 KiB main stack overflowed on the physical S3.
+        # IDF releases this boot-only stack when app_main returns.
+        f'CONFIG_ESP_MAIN_TASK_STACK_SIZE={8192 if rover else 32768}\n']
     if s3:
         defaults += ['''CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
@@ -105,6 +108,8 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_TYPE_ESPPSRAM64=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 ''']
         # Existing reference layout, not an authorization to repartition hardware.
         partitions = 'nvs,data,nvs,0x9000,24K,\notadata,data,ota,0xf000,8K,\nphy_init,data,phy,0x11000,4K,\nota_0,app,ota_0,0x20000,3M,\nota_1,app,ota_1,0x320000,3M,\nwww,data,spiffs,0x620000,9M,\ncoredump,data,coredump,0xf20000,256K,\n'
