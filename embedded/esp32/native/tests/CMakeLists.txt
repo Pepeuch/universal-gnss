@@ -245,3 +245,27 @@ target_compile_features(test_s3_json_memory PRIVATE cxx_std_17)
 target_compile_options(test_s3_json_memory PRIVATE -UNDEBUG)
 target_compile_definitions(test_s3_json_memory PRIVATE UG_S3_JSON_PSRAM=1)
 add_test(NAME embedded_s3_json_memory_contract COMMAND test_s3_json_memory)
+
+# Run the same receiver/satellite contracts with external owned storage enabled.
+# The allocation boundary is stubbed; no S3 hardware or SDK dependency on host.
+add_library(ug_embedded_receiver_external ../../components/ug_receiver_runtime/src/ug_receiver_runtime.cpp
+    ../../components/ug_receiver_runtime/src/ug_base_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_telemetry_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_satellite_reports.cpp)
+target_include_directories(ug_embedded_receiver_external PUBLIC ../../components/ug_receiver_runtime/include)
+target_compile_definitions(ug_embedded_receiver_external PUBLIC UG_S3_SATELLITE_PSRAM=1)
+target_link_libraries(ug_embedded_receiver_external PUBLIC universal_gnss_driver ug_embedded_settings)
+foreach(contract receiver satellite_reports)
+    add_executable(test_${contract}_external test_${contract}.cpp test_satellite_allocator.cpp)
+    target_link_libraries(test_${contract}_external PRIVATE ug_embedded_receiver_external)
+    target_compile_options(test_${contract}_external PRIVATE -UNDEBUG)
+    add_test(NAME embedded_${contract}_external_contract COMMAND test_${contract}_external)
+endforeach()
+add_executable(test_satellite_storage test_satellite_storage.cpp)
+target_link_libraries(test_satellite_storage PRIVATE ug_embedded_receiver_external)
+target_compile_options(test_satellite_storage PRIVATE -UNDEBUG)
+add_test(NAME embedded_satellite_storage_contract COMMAND test_satellite_storage)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME embedded_satellite_storage_equivalence COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compare_satellite_storage.py"
+    $<TARGET_FILE:test_satellite_reports> $<TARGET_FILE:test_satellite_reports_external>)

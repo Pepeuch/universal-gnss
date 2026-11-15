@@ -67,3 +67,11 @@ qui le désactive ; aucun test n'est ignoré pour construire les variantes.
 Ces tests ASan/UBSan ne simulent pas une panne physique de PSRAM. Les essais
 sur appareil, budgets et limites sont séparés dans la
 [qualification S3](../../../../docs/analysis/ESP32_S3_MEMORY_QUALIFICATION.md).
+
+
+La [phase satellites S3](../../../../docs/analysis/ESP32_S3_MEMORY_FOLLOWUP.md)
+ajoute les contrats receiver/satellites exécutés avec stockage externe simulé,
+un contrôle de refus d'allocation/durée de vie/canaris et une comparaison
+canonique stricte des sorties du corpus interne/externe. Total : 51 CTest.
+Aucun test de protocole existant n'est supprimé ; ces tests synthétiques ne
+qualifient pas la réception GNSS physique.

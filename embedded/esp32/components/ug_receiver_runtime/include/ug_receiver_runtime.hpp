@@ -22,6 +22,10 @@ class Receiver
 public:
   explicit Receiver(universal_gnss_transport::ByteSink& uart,
                     universal_gnss_driver::ReceiverSessionConfig config = {});
+  bool InitializeSatelliteStorage()
+  {
+    return satellites_.InitializeStorage();
+  }
   bool Feed(const std::uint8_t* bytes, std::size_t size, std::int64_t receipt_ns);
   bool Start(std::vector<universal_gnss_driver::ReceiverCommand> commands,
              std::int64_t now_ns,
