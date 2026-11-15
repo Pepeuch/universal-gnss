@@ -5,6 +5,7 @@ extern "C" {
 }
 #include "esp_heap_caps.h"
 #include "esp_https_server.h"
+#include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -13,6 +14,7 @@ extern "C" {
 #include "ug_credentials.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_http_encoding.hpp"
+#include "ug_https_server_status.hpp"
 #include "ug_json.hpp"
 #include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
@@ -35,9 +37,21 @@ namespace ug::embedded
 {
 namespace
 {
-WebIdentity identity;
+LoadedWebIdentity identity;
 httpd_handle_t server;
 PairingWindow pairing_window;
+esp_err_t FinishHttpsStartup(HttpsStartupReason reason, std::int32_t sdk_error)
+{
+  const auto result = RecordHttpsStartupStatus(reason, sdk_error);
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (reason != HttpsStartupReason::kReady)
+    ESP_LOGE("UG",
+             "HTTPS startup: %s (sdk_error=%ld)",
+             HttpsStartupReasonName(reason),
+             static_cast<long>(sdk_error));
+#endif
+  return result;
+}
 extern "C" {
 extern const std::uint8_t index_start[] asm("_binary_ug_web_index_gz_start"),
     index_end[] asm("_binary_ug_web_index_gz_end");
@@ -1061,9 +1075,11 @@ esp_err_t Asset(httpd_req_t* req)
 }  // namespace
 esp_err_t StartWebService()
 {
-  std::string error;
-  if (!LoadWebIdentity(identity, error))
-    return ESP_ERR_INVALID_STATE;  // No plaintext fallback.
+  if (server)
+    return FinishHttpsStartup(HttpsStartupReason::kServerStartFailed, ESP_ERR_INVALID_STATE);
+  const auto loaded = LoadWebIdentity(identity);
+  if (!loaded.ok())
+    return FinishHttpsStartup(loaded.reason, loaded.sdk_error);  // No plaintext fallback.
   httpd_ssl_config_t config = ug_https_defaults();
   config.httpd.task_priority = 2;  // Below correction routing (5) and UART/radio owners (4).
   config.httpd.stack_size = 24576;
@@ -1074,13 +1090,16 @@ esp_err_t StartWebService()
   config.httpd.send_wait_timeout = 3;
   config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   config.tls_handshake_timeout_ms = 3000;
-  config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem.c_str());
-  config.servercert_len = identity.certificate_pem.size() + 1;
-  config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem.c_str());
-  config.prvtkey_len = identity.private_key_pem.size() + 1;
+  config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem());
+  config.servercert_len = identity.certificate_size + 1;
+  config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem());
+  config.prvtkey_len = identity.private_key_size + 1;
   auto result = httpd_ssl_start(&server, &config);
   if (result != ESP_OK)
-    return result;
+  {
+    identity = {};
+    return FinishHttpsStartup(HttpsServerFailureReason(result, false), result);
+  }
   const struct
   {
     const char* path;
@@ -1102,11 +1121,14 @@ esp_err_t StartWebService()
     uri.handler = route.handler;
     if ((result = httpd_register_uri_handler(server, &uri)) != ESP_OK)
     {
-      httpd_ssl_stop(server);
-      server = nullptr;
-      return result;
+      if (httpd_ssl_stop(server) == ESP_OK)
+      {
+        server = nullptr;
+        identity = {};
+      }
+      return FinishHttpsStartup(HttpsServerFailureReason(result, true), result);
     }
   }
-  return ESP_OK;
+  return FinishHttpsStartup(HttpsStartupReason::kReady, ESP_OK);
 }
 }  // namespace ug::embedded

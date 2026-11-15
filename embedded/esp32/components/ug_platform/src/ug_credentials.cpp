@@ -7,6 +7,7 @@
 #include "psa/crypto.h"
 #include "ug_certificate_uri.hpp"
 #include "ug_json.hpp"
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -16,38 +17,48 @@ namespace
 {
 std::mutex credential_writer;
 constexpr std::size_t kCertMax = 4096, kKeyMax = 2048;
-bool Validate(const WebIdentity& id)
+HttpsStartupStatus
+Validate(const char* cert_pem, std::size_t cert_size, const char* key_pem, std::size_t key_size)
 {
-  if (id.certificate_pem.empty() || id.certificate_pem.size() > kCertMax ||
-      id.private_key_pem.empty() || id.private_key_pem.size() > kKeyMax ||
-      id.certificate_pem.find('\0') != std::string::npos ||
-      id.private_key_pem.find('\0') != std::string::npos)
-    return false;
-  if (psa_crypto_init() != PSA_SUCCESS)
-    return false;
+  if (!cert_pem || !key_pem || !cert_size || cert_size > kCertMax || !key_size ||
+      key_size > kKeyMax || std::memchr(cert_pem, 0, cert_size) ||
+      std::memchr(key_pem, 0, key_size))
+    return {HttpsStartupReason::kIdentityInvalid, ESP_ERR_INVALID_ARG};
+  const auto crypto = psa_crypto_init();
+  if (crypto != PSA_SUCCESS)
+    return {crypto == PSA_ERROR_INSUFFICIENT_MEMORY ? HttpsStartupReason::kNoMemory
+                                                    : HttpsStartupReason::kCryptoUnavailable,
+            crypto};
   mbedtls_x509_crt cert;
   mbedtls_x509_crt_init(&cert);
   mbedtls_pk_context key;
   mbedtls_pk_init(&key);
-  const bool ok =
-      mbedtls_x509_crt_parse(&cert,
-                             reinterpret_cast<const unsigned char*>(id.certificate_pem.c_str()),
-                             id.certificate_pem.size() + 1) == 0 &&
-      mbedtls_pk_parse_key(&key,
-                           reinterpret_cast<const unsigned char*>(id.private_key_pem.c_str()),
-                           id.private_key_pem.size() + 1,
-                           nullptr,
-                           0) == 0 &&
-      ((PSA_KEY_TYPE_IS_RSA(mbedtls_pk_get_key_type(&key)) &&
-        mbedtls_pk_get_bitlen(&key) >= 2048) ||
-       (PSA_KEY_TYPE_IS_ECC(mbedtls_pk_get_key_type(&key)) &&
-        mbedtls_pk_get_bitlen(&key) >= 256)) &&
-      mbedtls_pk_check_pair(&cert.pk, &key) == 0;
+  auto code = mbedtls_x509_crt_parse(
+      &cert, reinterpret_cast<const unsigned char*>(cert_pem), cert_size + 1);
+  if (code == 0)
+    code = mbedtls_pk_parse_key(
+        &key, reinterpret_cast<const unsigned char*>(key_pem), key_size + 1, nullptr, 0);
+  if (code == 0 &&
+      !((PSA_KEY_TYPE_IS_RSA(mbedtls_pk_get_key_type(&key)) &&
+         mbedtls_pk_get_bitlen(&key) >= 2048) ||
+        (PSA_KEY_TYPE_IS_ECC(mbedtls_pk_get_key_type(&key)) && mbedtls_pk_get_bitlen(&key) >= 256)))
+    code = PSA_ERROR_INVALID_ARGUMENT;
+  if (code == 0)
+    code = mbedtls_pk_check_pair(&cert.pk, &key);
   mbedtls_pk_free(&key);
   mbedtls_x509_crt_free(&cert);
-  return ok;
+  return {code == 0                               ? HttpsStartupReason::kReady
+          : code == PSA_ERROR_INSUFFICIENT_MEMORY ? HttpsStartupReason::kNoMemory
+                                                  : HttpsStartupReason::kIdentityInvalid,
+          code};
 }
 }  // namespace
+void SecureIdentityDelete::operator()(std::uint8_t* bytes) const
+{
+  if (bytes)
+    mbedtls_platform_zeroize(bytes, size);
+  std::free(bytes);
+}
 bool Sha256(std::string_view bytes, std::array<std::uint8_t, 32>& out)
 {
   std::size_t length = 0;
@@ -63,9 +74,13 @@ bool Sha256(std::string_view bytes, std::array<std::uint8_t, 32>& out)
 bool StoreWebIdentity(const WebIdentity& identity, std::string& error)
 {
   std::lock_guard<std::mutex> lock(credential_writer);
-  if (!Validate(identity))
+  const auto validated = Validate(identity.certificate_pem.c_str(),
+                                  identity.certificate_pem.size(),
+                                  identity.private_key_pem.c_str(),
+                                  identity.private_key_pem.size());
+  if (!validated.ok())
   {
-    error = "invalid TLS certificate/private-key pair";
+    error = HttpsStartupReasonName(validated.reason);
     return false;
   }
   std::vector<std::uint8_t> blob(4 + identity.certificate_pem.size() +
@@ -95,43 +110,62 @@ bool StoreWebIdentity(const WebIdentity& identity, std::string& error)
   error.clear();
   return true;
 }
-bool LoadWebIdentity(WebIdentity& identity, std::string& error)
+HttpsStartupStatus LoadWebIdentity(LoadedWebIdentity& identity)
 {
+  std::lock_guard<std::mutex> lock(credential_writer);
+  identity = {};
   nvs_handle_t handle{};
-  if (nvs_open("ug_identity", NVS_READONLY, &handle) != ESP_OK)
-  {
-    error = "TLS identity not provisioned";
-    return false;
-  }
+  auto code = nvs_open("ug_identity", NVS_READONLY, &handle);
+  const auto read_error = [](esp_err_t value) -> HttpsStartupStatus {
+    return {value == ESP_ERR_NVS_NOT_FOUND ? HttpsStartupReason::kIdentityMissing
+            : value == ESP_ERR_NO_MEM      ? HttpsStartupReason::kNoMemory
+                                           : HttpsStartupReason::kIdentityUnreadable,
+            value};
+  };
+  if (code != ESP_OK)
+    return read_error(code);
   std::size_t size = 0;
-  bool ok = nvs_get_blob(handle, "https", nullptr, &size) == ESP_OK && size >= 4 &&
-            size <= kCertMax + kKeyMax + 4;
-  std::vector<std::uint8_t> blob(ok ? size : 0);
-  if (ok)
-    ok = nvs_get_blob(handle, "https", blob.data(), &size) == ESP_OK;
+  code = nvs_get_blob(handle, "https", nullptr, &size);
+  if (code != ESP_OK)
+  {
+    nvs_close(handle);
+    return read_error(code);
+  }
+  if (size < 4 || size > kCertMax + kKeyMax + 4)
+  {
+    nvs_close(handle);
+    return {HttpsStartupReason::kIdentityInvalid, ESP_ERR_INVALID_SIZE};
+  }
+  LoadedWebIdentity next;
+  next.bytes = {static_cast<std::uint8_t*>(std::malloc(size + 2)), {size + 2}};
+  if (!next.bytes)
+  {
+    nvs_close(handle);
+    return {HttpsStartupReason::kNoMemory, ESP_ERR_NO_MEM};
+  }
+  auto actual = size;
+  code = nvs_get_blob(handle, "https", next.bytes.get(), &actual);
   nvs_close(handle);
-  if (!ok)
-  {
-    error = "TLS identity unreadable";
-    return false;
-  }
-  const auto cert_size = unsigned(blob[0]) | (unsigned(blob[1]) << 8),
-             key_size = unsigned(blob[2]) | (unsigned(blob[3]) << 8);
-  WebIdentity result;
-  if (cert_size + key_size + 4 == blob.size() && cert_size <= kCertMax && key_size <= kKeyMax)
-  {
-    result.certificate_pem.assign(reinterpret_cast<char*>(blob.data() + 4), cert_size);
-    result.private_key_pem.assign(reinterpret_cast<char*>(blob.data() + 4 + cert_size), key_size);
-  }
-  mbedtls_platform_zeroize(blob.data(), blob.size());
-  if (!Validate(result))
-  {
-    error = "TLS identity invalid";
-    return false;
-  }
-  identity = std::move(result);
-  error.clear();
-  return true;
+  if (code != ESP_OK)
+    return read_error(code);
+  if (actual != size)
+    return {HttpsStartupReason::kIdentityUnreadable, ESP_ERR_INVALID_SIZE};
+  auto* blob = next.bytes.get();
+  const auto cert_size = unsigned(blob[0]) | (unsigned(blob[1]) << 8);
+  const auto key_size = unsigned(blob[2]) | (unsigned(blob[3]) << 8);
+  if (!cert_size || !key_size || cert_size > kCertMax || key_size > kKeyMax ||
+      cert_size + key_size + 4 != size)
+    return {HttpsStartupReason::kIdentityInvalid, ESP_ERR_INVALID_SIZE};
+  // NVS format unchanged. Insert only RAM terminators for the PEM parsers.
+  std::memmove(blob + 5 + cert_size, blob + 4 + cert_size, key_size);
+  blob[4 + cert_size] = 0;
+  blob[size + 1] = 0;
+  next.certificate_size = cert_size;
+  next.private_key_size = key_size;
+  const auto valid = Validate(next.certificate_pem(), cert_size, next.private_key_pem(), key_size);
+  if (valid.ok())
+    identity = std::move(next);
+  return valid;
 }
 bool StoreTlsObject(std::string_view name,
                     std::string_view pem,

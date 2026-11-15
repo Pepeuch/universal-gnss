@@ -220,3 +220,14 @@ add_test(NAME embedded_portable_configuration COMMAND test_portable)
 
 add_test(NAME embedded_portable_tools COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_portable_config.py")
 set_tests_properties(embedded_portable_tools PROPERTIES ENVIRONMENT "UG_PORTABLE_VALIDATOR=$<TARGET_FILE:test_portable>;PYTHONDONTWRITEBYTECODE=1" TIMEOUT 30)
+
+add_executable(test_web_identity test_web_identity.cpp
+    ../../components/ug_platform/src/ug_credentials.cpp
+    ../../components/ug_platform/src/ug_https_diagnostics.cpp)
+target_include_directories(test_web_identity PRIVATE credentials_stubs
+    ../../components/ug_platform/include ../../components/ug_web/include)
+target_link_libraries(test_web_identity PRIVATE ug_embedded_settings)
+target_compile_features(test_web_identity PRIVATE cxx_std_17)
+target_compile_options(test_web_identity PRIVATE -UNDEBUG)
+target_link_options(test_web_identity PRIVATE -Wl,--wrap=malloc -Wl,--wrap=free)
+add_test(NAME embedded_web_identity_contract COMMAND test_web_identity)
