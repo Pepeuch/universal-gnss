@@ -46,3 +46,8 @@ duplicated prefixes. CRC16 remains the existing radio integrity algorithm.
 This is a reproducible property corpus, not exhaustive or coverage-guided fuzzing,
 cryptographic authentication, or a hardware-delivery proof. It runs against the
 existing wire format without enabling or qualifying a LoRa radio.
+
+La [refonte WebUI](../../WEBUI.md) ajoute des contrôles QuickJS de navigation,
+file API, sessions, réponses tardives et suspension en arrière-plan. Le test
+optionnel `test_webui_browser.py` utilise Chromium/Playwright 1.56.0 sur des API
+synthétiques, sans appareil ni flash ; voir la procédure et les limites dans ce guide.
