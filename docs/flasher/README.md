@@ -53,7 +53,13 @@ texte utilisateur. Le registre [approved-sources.json](approved-sources.json)
 contient uniquement des SHA complets, arbres Git, références de revue et droits
 de publication explicitement approuvés par le mainteneur.
 
-Procédure intermédiaire :
+Pour publier les deux firmwares alpha, utiliser désormais la
+[procédure alpha](ALPHA.md) : le lancement manuel **ESP32 alpha publication** sur
+`main` autorise les builds, génère leur registre, archive les images durablement
+et déploie Pages. Aucune seconde édition manuelle du registre n’est requise.
+
+Le workflow de revue seul reste disponible pour une demande particulière sans
+publication. Sa procédure est distincte :
 
 1. Le mainteneur examine la demande, le commit et son arbre, puis intègre une
    approbation dans le registre de la branche par défaut. `not_authorized`
@@ -71,8 +77,8 @@ Procédure intermédiaire :
    durable ni une publication officielle. Une erreur de build, test ou
    empaquetage empêche sa production ; l’issue ne peut déclarer le build réussi.
 
-Tant que le workflow n’est pas intégré à la branche par défaut et que le registre
-reste vide, aucun lancement public n’est disponible. Ne pas simuler cet état.
+Ce workflow de revue exige son registre et ne publie pas son résultat. Il ne
+conditionne pas le lancement manuel de la chaîne alpha.
 Pour une validation locale de développement autorisée, depuis la racine du dépôt :
 
 ```bash
@@ -129,13 +135,14 @@ La compatibilité effective Web Serial/Blob manifeste reste à accepter sur mat�
 
 ## Conservation durable et préparation Pages
 
-La politique reste `dev → main → distributions générées`. Avant toute publication,
-le mainteneur doit accepter les limites matérielles/licences, approuver la source
-contenue dans `main`, puis autoriser une **opération séparée** de stockage durable
-(assets d’une GitHub Release ou stockage versionné approprié). Aucun workflow de
-ce lot ne crée de Release, tag, branche spécialisée ou déploiement Pages.
-L’archive durable doit conserver le bundle, sa référence source exacte, les
-notices et les empreintes. Une archive Actions temporaire ne la remplace pas.
+La politique reste `dev → main → distributions générées`. La chaîne
+[`esp32-alpha.yml`](../../.github/workflows/esp32-alpha.yml) reçoit cette
+autorisation par son déclenchement volontaire sur `main`, pour un SHA exact
+contenu dans `main`. Elle conserve les deux bundles, le code source correspondant,
+les notices et empreintes dans une prépublication immuable, vérifie les assets
+retéléchargés puis déploie Pages. Une archive Actions temporaire ne la remplace
+pas. La qualification matérielle manquante est affichée comme limite alpha,
+sans désactiver une installation dont les images et la cible ont été vérifiées.
 
 [prepare_esp32_site.py](../../tools/branches/prepare_esp32_site.py) prépare un
 répertoire statique local, sans déployer. Sans bundle, il produit un site source
@@ -150,7 +157,8 @@ python3 tools/branches/prepare_esp32_site.py --output /tmp/ug-pages-review
 # ajouter --bundle /chemin/du/bundle-revu (répétable).
 ```
 
-Déployer **ce répertoire préparé** après autorisation distincte, pas tout le dépôt.
+Le workflow alpha déploie **ce répertoire préparé**, jamais tout le dépôt. La
+commande locale ci-dessus reste une préparation sans publication.
 Les ressources sont relatives et `.nojekyll` est inclus. Le chemin envisagé est
 `https://pepeuch.github.io/universal-gnss/flasher.html` ; il n’est pas déclaré actif.
 Aucune intégration avec le workflow Release Docker n’est ajoutée.

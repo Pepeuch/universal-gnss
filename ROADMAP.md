@@ -69,12 +69,18 @@ The [UG Build & Flash portal source](docs/flasher.html) now uses bounded generic
 S3 Gateway and C3 USB/UART Rover profiles. Runtime pairing is separate from ROM
 identity. Local packaging verifies actual IDF offsets, partitions and qualified
 binary hashes; the browser freezes verified bytes before offering installation.
-A manual, read-only controlled-build workflow and local Pages staging are prepared.
-The approval register and public catalogue remain empty: no deployed Pages site,
-installable published firmware or public build automation is claimed. Durable
-storage, default-branch integration, explicit source/publication approval and
-hardware acceptance remain separate gates. Configuration-preserving updates are
-not offered. See the [portal procedure and limits](docs/flasher/README.md).
+A [manual alpha publication pipeline](docs/flasher/ALPHA.md) now couples two real
+builds, a generated nonempty catalogue, immutable prerelease assets and Pages
+verification. Its main-only dispatch is the publication authority; no second
+manual register approval is required. Public deployment remains pending main
+integration and the maintainer's dispatch; no published firmware is claimed.
+S3 function switches remain configurable without connected GNSS hardware, while
+requested activation and observed service state stay distinct. The first
+[S3 hardware trial](embedded/esp32/HARDWARE_ALPHA.md) verified corrected boot,
+W5500/Ethernet, local HTTPS and WebUI caster switching without a GNSS receiver.
+GNSS/RF/RTK and field endurance remain unqualified. MQTT is not yet implemented
+and LoRa remains deferred. Configuration-preserving updates are not
+offered. See the [portal procedure and limits](docs/flasher/README.md).
 Existing UG release/backlog completion metrics are unaffected.
 
 Current prerelease: **`v0.7.4-rc6`** at
