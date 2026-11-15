@@ -43,7 +43,24 @@ void Handle(std::string_view command)
           s.watchdog_registered,
           static_cast<long>(s.watchdog_error));
     }
+    const auto https = LastHttpsStartupStatus();
+    std::printf("UG_LOCAL https_startup=%s sdk_error=%ld admin_configured=%d\n",
+                HttpsStartupReasonName(https.reason),
+                static_cast<long>(https.sdk_error),
+                !Configuration()->admin_token_sha256.empty());
     ok = true;
+  }
+  else if (command == "tls-status")
+  {
+    LoadedWebIdentity stored;
+    const auto read = LoadWebIdentity(stored);
+    const auto boot = LastHttpsStartupStatus();
+    std::printf("UG_LOCAL tls_identity=%s sdk_error=%ld admin_configured=%d https_startup=%s\n",
+                HttpsStartupReasonName(read.reason),
+                static_cast<long>(read.sdk_error),
+                !Configuration()->admin_token_sha256.empty(),
+                HttpsStartupReasonName(boot.reason));
+    ok = true;  // Read-only diagnostic succeeded even when no identity exists.
   }
   else if (command == "events")
   {
@@ -62,6 +79,9 @@ void Handle(std::string_view command)
                   ServiceStateName(event.state),
                   ServiceEventName(event.kind),
                   static_cast<long>(event.error));
+      if (event.service == ServiceId::kHttps && event.state == ServiceState::kFailed)
+        std::printf("UG_LOCAL https_event_reason=%s\n",
+                    HttpsStartupReasonName(static_cast<HttpsStartupReason>(event.error)));
     }
     ok = true;
   }
@@ -126,7 +146,8 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected status/history/events, config/rollback/tls-init/tls-object <JSON> or reboot "
+    error = "expected status/history/events/tls-status, config/rollback/tls-init/tls-object <JSON> "
+            "or reboot "
             "CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());

@@ -176,6 +176,23 @@ identification. Verify/trust the certificate fingerprint locally. The local
 commands are `tls-init <JSON>`, `config <JSON>` and `reboot CONFIRM`. The rover
 links neither this console nor network/Web/settings services.
 
+The read-only `tls-status` maintenance command validates the stored identity and
+reports `admin_configured` without exposing certificates, keys or hashes. `status`
+also reports the last HTTPS startup classification and its numeric SDK error;
+`events` identifies HTTPS failures with the same fixed labels. Startup distinguishes
+`identity_missing`, `identity_unreadable`, `identity_invalid`, `no_memory`,
+`crypto_unavailable`, `server_start_failed` and `route_registration_failed`.
+Local service errors `0x6e01`–`0x6e07` carry these classifications; the underlying
+SDK error remains available in `status`. A successful stored-identity check does
+not imply that the HTTPS server has started; startup status is reported separately.
+No diagnostic command writes NVS or substitutes a default identity.
+
+On an unprovisioned installation, HTTPS deliberately remains unavailable until
+local commissioning. Include `--ip <intended-local-address>` when preparing a
+certificate for access by IP. Back up existing NVS before any repair; retain valid
+identity/admin settings and send only the required provisioning commands. Reboot
+explicitly, then verify HTTPS, authentication and persistence across another reboot.
+
 Wi-Fi/radio/TLS identity/name settings take effect after explicit reboot. The
 current fixed-channel ESP-NOW profile rejects STA association; AP mode uses the
 configured channel. No automatic pairing/channel switching is added. Default

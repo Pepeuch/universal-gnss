@@ -18,6 +18,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 embedded/esp32/native/tests/test_capture_tools
 The separate browser mock requires host-only `quickjs==1.19.4`; it is not a
 firmware dependency. None of these commands downloads an SDK or flashes a board.
 
+`embedded_web_identity_contract` compiles the production identity loader with
+NVS/PSA boundary stubs and allocation fault injection. It checks missing,
+unreadable and invalid records, memory failures, server-error classification,
+unchanged NVS bytes and zeroization of released identity storage. These synthetic
+tests do not validate cryptography or physical NVS persistence; those require the
+pinned SDK and a separately identified/provisioned board.
+
 ## Bounded wire mutation corpus
 
 `embedded_wire_corpus_contract` exercises the actual shared ESP-NOW codec and
