@@ -269,3 +269,19 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME embedded_satellite_storage_equivalence COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/compare_satellite_storage.py"
     $<TARGET_FILE:test_satellite_reports> $<TARGET_FILE:test_satellite_reports_external>)
+
+add_executable(test_espnow_lifecycle test_espnow_lifecycle.c
+    ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
+target_include_directories(test_espnow_lifecycle PRIVATE espnow_driver_stubs radio_stubs
+    ../../components/espnow_rtcm/include ../../components/ug_pairing/include)
+target_link_libraries(test_espnow_lifecycle PRIVATE ug_embedded_radio ug_embedded_pairing)
+target_compile_options(test_espnow_lifecycle PRIVATE -UNDEBUG)
+foreach(scenario nominal oom wifi-failure callback-failure late-ack stop-before-start expired epoch-overflow)
+    add_test(NAME embedded_espnow_lifecycle_${scenario} COMMAND test_espnow_lifecycle ${scenario})
+endforeach()
+find_package(Threads REQUIRED)
+add_executable(test_espnow_storage_concurrent test_espnow_storage_concurrent.c
+    ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
+target_link_libraries(test_espnow_storage_concurrent PRIVATE ug_embedded_radio Threads::Threads)
+target_compile_options(test_espnow_storage_concurrent PRIVATE -UNDEBUG)
+add_test(NAME embedded_espnow_storage_concurrent COMMAND test_espnow_storage_concurrent)

@@ -75,3 +75,11 @@ un contrôle de refus d'allocation/durée de vie/canaris et une comparaison
 canonique stricte des sorties du corpus interne/externe. Total : 51 CTest.
 Aucun test de protocole existant n'est supprimé ; ces tests synthétiques ne
 qualifient pas la réception GNSS physique.
+
+
+La [phase ESP-NOW S3](../../../../docs/analysis/ESP32_S3_ESPNOW_MEMORY.md)
+ajoute huit scénarios exécutant le véritable driver avec SDK/RTOS simulés
+(nominal, refus d'allocation, échecs Wi-Fi/callback, ACK tardif, arrêt avant start,
+expiration et débordement d'époque), plus une publication concurrente du stockage
+avec pthread. Total : 60 CTest ASan/UBSan. Les fixtures ne provisionnent aucun
+pair ni clé sur du matériel. La qualification radio active est reportée.

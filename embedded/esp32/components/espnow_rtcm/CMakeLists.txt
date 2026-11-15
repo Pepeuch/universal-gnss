@@ -2,6 +2,9 @@ set(bridge_sources)
 if(CONFIG_ESPNOW_RTCM_BASE OR CONFIG_ESPNOW_RTCM_ROVER)
     list(APPEND bridge_sources "src/espnow_rtcm_codec.c" "src/espnow_rtcm.c" "src/espnow_rtcm_output.c")
 endif()
+if(CONFIG_IDF_TARGET_ESP32S3 AND CONFIG_ESPNOW_RTCM_BASE)
+    list(APPEND bridge_sources "src/espnow_rtcm_storage.c")
+endif()
 idf_component_register(
     SRCS ${bridge_sources}
     INCLUDE_DIRS "include"
