@@ -102,7 +102,10 @@ class NativeCI(unittest.TestCase):
         self.assertEqual(set(workflow['jobs']), {'firmware','gate'})
         job = workflow['jobs']['firmware']
         self.assertNotIn('if', job)
-        self.assertEqual(job['strategy'], {'fail-fast':'false','matrix':{'variant':list(ci.VARIANTS)}})
+        # The relay remains buildable manually but is deliberately deferred in CI.
+        self.assertIn('c3-relay', ci.VARIANTS)
+        self.assertEqual(job['strategy'], {'fail-fast':'false','matrix':{
+            'variant':['s3-gateway','c3-rover-usb','c3-rover-uart']}})
         self.assertEqual(job['steps'][0]['with']['persist-credentials'], 'false')
         self.assertEqual(len(job['steps']), 2)
         self.assertIn('embedded/esp32/native/ci.py', job['steps'][1]['run'])
