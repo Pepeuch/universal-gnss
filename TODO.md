@@ -101,8 +101,11 @@ read-only forms, desktop/mobile use and HTTPS after reboot. The first
 four firmware variants and moves the USB line buffer and cJSON allocations to
 PSRAM, with allocation-failure and repeated WebUI-cycle tests. Internal free
 memory increases, but the largest block remains smaller and memory pressure
-remains reduced. Long-duration and live GNSS/RTCM latency qualification, further
-S3 optimization and shared-core optimization remain pending. The C3 relay is
+remains reduced. The [satellite-cache followup](docs/analysis/ESP32_S3_MEMORY_FOLLOWUP.md)
+now qualifies S3-only owned PSRAM storage: 11860 additional internal bytes at the
+first HTTPS GET and a larger contiguous block, preserving the shared snapshot.
+Long-duration and live GNSS/RTCM latency qualification, further S3 optimization
+and shared-core optimization remain pending. The C3 relay is
 deferred and does not constrain the S3. Existing Rover profiles remain unchanged.
 No release metric changes.
 

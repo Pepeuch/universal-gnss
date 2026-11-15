@@ -6,6 +6,7 @@
 #include "universal_gnss_transport/memory_stream.hpp"
 #include <cassert>
 #include <cstdio>
+#include <iostream>
 using namespace ug::embedded;
 using namespace universal_gnss_protocols;
 static NmeaGsvRecord Part(unsigned index, unsigned total = 2, unsigned visible = 2)
@@ -26,37 +27,53 @@ static std::string Sentence(const std::string& payload)
   std::snprintf(checksum, sizeof(checksum), "*%02X\r\n", ComputeNmeaChecksum(payload));
   return "$" + payload + checksum;
 }
+// Canonical semantic output lets CTest compare inline/external storage strictly.
+static const SatelliteReport& View(const SatelliteReports& reports, std::int64_t now)
+{
+  const auto& r = reports.Latest(now);
+  std::cout << unsigned(r.protocol) << ' ' << r.talker.data() << ' ' << r.receipt_ns.has_value()
+            << ' ' << r.receipt_ns.value_or(0) << ' ' << r.signal_id.has_value() << ' '
+            << unsigned(r.signal_id.value_or(0)) << ' ' << r.tow_ms << ' ' << r.week << ' '
+            << unsigned(r.time_reference) << ' ' << r.reported_total << ' ' << r.epoch_known << ' '
+            << r.truncated << ' ' << r.count;
+  for (const auto& e : r.entries)
+    std::cout << ' ' << e.id << ' ' << e.elevation << ' ' << e.azimuth << ' ' << std::hexfloat
+              << e.cn0 << ' ' << unsigned(e.raw_system_id) << ' ' << unsigned(e.flags) << ' '
+              << unsigned(e.frequency_status) << ' ' << unsigned(e.frequency_count);
+  std::cout << '\n';
+  return r;
+}
 int main()
 {
   SatelliteReports reports;
   reports.Observe(Part(1), "GP", 1);
-  assert(!reports.Latest(1).receipt_ns);
+  assert(!View(reports, 1).receipt_ns);
   // Signal and talker scopes can interleave; their fragments never join.
   reports.Observe(Part(1), "GP", 2);
   reports.Observe(Part(2), "GP", 1);
-  auto out = reports.Latest(2);
+  auto out = View(reports, 2);
   assert(out.signal_id == 1 && out.count == 2 && out.receipt_ns == 1 &&
          out.entries[0].cn0 == 45.5f);
   assert(!(out.entries[0].flags & SatelliteEntry::kUsedKnown));
   reports.Observe(Part(2), "GP", 2);
-  assert(reports.Latest(2).signal_id == 2);
+  assert(View(reports, 2).signal_id == 2);
   reports.Reset();
   reports.Observe(Part(2), "GP");
-  assert(!reports.Latest(2).receipt_ns);
+  assert(!View(reports, 2).receipt_ns);
   reports.Observe(Part(1), "GP");
   auto late = Part(2);
   late.timestamp_ns = 3000000002LL;
   reports.Observe(late, "GP");
-  assert(!reports.Latest(3000000002LL).receipt_ns);
+  assert(!View(reports, 3000000002LL).receipt_ns);
   reports.Observe(Part(1), "GP");
   auto changed = Part(2);
   changed.satellites_in_view = 3;
   reports.Observe(changed, "GP");
-  assert(!reports.Latest(2).receipt_ns);
+  assert(!View(reports, 2).receipt_ns);
   // Incomplete/reordered cycles cannot qualify a new complete view.
   reports.Observe(Part(1, 3, 3), "GP");
   reports.Observe(Part(3, 3, 3), "GP");
-  assert(!reports.Latest(3).receipt_ns);
+  assert(!View(reports, 3).receipt_ns);
   // Capacity is explicit: retain 64 entries, never silently claim 128 listed.
   for (unsigned i = 1; i <= 32; ++i)
   {
@@ -66,7 +83,7 @@ int main()
       p.satellites[j].prn = (i - 1) * 4 + j + 1;
     reports.Observe(p, "GN");
   }
-  out = reports.Latest(32);
+  out = View(reports, 32);
   assert(out.count == 64 && out.truncated && out.reported_total == 128);
   UbxNavSatRecord ubx;
   ubx.timestamp_ns = 100;
@@ -77,10 +94,10 @@ int main()
   ubx.satellites[0].gnss_id = 2;
   ubx.satellites[0].used_in_navigation = true;
   reports.Observe(ubx);
-  assert(reports.Latest(100).protocol == SatelliteProtocol::kUbxNavSat);
+  assert(View(reports, 100).protocol == SatelliteProtocol::kUbxNavSat);
   ubx.timestamp_ns = 1000000000LL;
   reports.Observe(ubx);
-  assert(reports.Latest(1000000000LL).receipt_ns == 100);
+  assert(View(reports, 1000000000LL).receipt_ns == 100);
   UnicoreSatsInfoRecord unicore;
   unicore.header.timestamp_ns = 200;
   unicore.header.time_reference = UnicoreTimeReference::kGps;
@@ -92,18 +109,18 @@ int main()
   reports.Observe(unicore);
   ubx.timestamp_ns = 2000000000LL;
   reports.Observe(ubx);  // Other protocol didn't erase its epoch cache.
-  out = reports.Latest(2000000000LL);
+  out = View(reports, 2000000000LL);
   assert(out.receipt_ns == 200 && out.protocol == SatelliteProtocol::kUnicoreSatsInfo);
   assert(!SatelliteReportFresh(out, 3000000201LL));
   assert(!SatelliteReportFresh(out, 199));
   unicore.header.time_reference = UnicoreTimeReference::kBds;
   unicore.header.timestamp_ns = 201;
   reports.Observe(unicore);
-  assert(reports.Latest(201).receipt_ns == 201);
+  assert(View(reports, 201).receipt_ns == 201);
   reports.Reset();
-  assert(!reports.Latest(0).receipt_ns);
+  assert(!View(reports, 0).receipt_ns);
   reports.Observe(Part(1, 1, 1), "<>");
-  assert(!reports.Latest(1).receipt_ns);
+  assert(!View(reports, 1).receipt_ns);
   // Real UG framing/parsing, including bad CRC rejection, through native owner.
   universal_gnss_transport::MemoryByteSink sink;
   Receiver receiver(sink);
