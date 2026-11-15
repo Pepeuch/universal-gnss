@@ -93,6 +93,14 @@ and LoRa remains deferred. Configuration-preserving updates are not
 offered. See the [portal procedure and limits](docs/flasher/README.md).
 Existing UG release/backlog completion metrics are unaffected.
 
+The [native tabbed ESP32 WebUI](embedded/esp32/WEBUI.md) now preserves the existing
+forms in six responsive views, with serialized API requests, active-view polling
+and background suspension. Software/browser validation is separate from the
+earlier HTTPS hardware repair; this interface has not been flashed. RAM/PSRAM
+and shared-core optimization remain later work. The C3 relay is deferred until
+a later optimization phase and does not constrain this S3 WebUI. Existing Rover
+profiles remain unchanged. No release metric changes.
+
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 

@@ -25,6 +25,10 @@ La [validation CI native](native/CI.md) couvre quatre variantes compilables, ave
 provisionnement séparé, tests isolés et reconstruction indépendante. Elle ne publie
 aucun binaire ; son exécution GitHub reste à qualifier après un push autorisé.
 
+La [WebUI native par onglets](WEBUI.md) décrit les formulaires, le polling borné,
+les tests et tailles des assets. La nouvelle interface reste à essayer sur appareil
+après revue ; aucun flash n’est effectué dans ce lot.
+
 ## Appairage natif actuel
 
 Le [contrat d’appairage et de maintenance USB](PAIRING.md) remplace les pairs
