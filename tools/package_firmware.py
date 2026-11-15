@@ -130,7 +130,7 @@ def package(build, verified, profile, source_sha, output, qualification):
     if dest.exists() or dest.is_symlink():raise ValueError('refuse bundle overwrite')
     dest.parent.mkdir(parents=True,exist_ok=True)
     names={p:f'{offsets[p]:06x}-{Path(p).name}' for p in PARTS}
-    manifest={'name':'Universal GNSS '+profile['variant'],'version':source_sha[:12]+'-'+key,
+    manifest={'name':'Universal GNSS ALPHA '+profile['variant'],'version':'alpha-'+source_sha[:12]+'-'+key,
               'new_install_prompt_erase':True,'builds':[{'chipFamily':profile['chip'],
               'parts':[{'path':names[p],'offset':offsets[p]} for p in sorted(PARTS,key=lambda x:offsets[x])]}]}
     entry={'profile':profile,'build_key':key,'manifest':f'flasher/published/{key}/manifest.json',

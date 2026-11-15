@@ -161,7 +161,7 @@
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
         $('image-info').textContent=`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète.`;
         $('request').classList.add('hidden');
-        status('Octets et provenance vérifiés. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
+        status('ALPHA — qualification matérielle en cours. Octets et provenance vérifiés. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
       finally {clearTimeout(timer);}
     }
@@ -239,7 +239,7 @@
         if(!catalog || catalog.schema!==2 || !Array.isArray(catalog.images) || catalog.images.length>512)throw Error('Catalogue invalide');
         images=catalog.images;for(const e of images)normalize(e.profile);
         $('version').replaceChildren();
-        for(const item of (sources.length?sources:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?item.source_sha.slice(0,12):'Aucune source approuvée';$('version').append(option)}
+        for(const item of (sources.length?sources:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?'ALPHA '+item.source_sha.slice(0,12):'Aucune source approuvée';$('version').append(option)}
         await render();
       } catch(error){clear();status('Portail non disponible : '+error.message)}finally{clearTimeout(timer)}
     })();

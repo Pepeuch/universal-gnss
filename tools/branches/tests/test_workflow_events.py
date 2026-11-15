@@ -18,7 +18,7 @@ VALIDATIONS = {
     'ros2-lyrical.yml': 'ROS 2 Lyrical validation',
 }
 MANUAL_VALIDATIONS = {'ros2-kilted.yml': 'ROS 2 Kilted validation'}
-CONTROLLED_BUILDS = {'esp32-request.yml': 'ESP32 requested firmware validation'}
+CONTROLLED_BUILDS = {'esp32-request.yml': 'ESP32 requested firmware validation', 'esp32-alpha.yml':'ESP32 alpha publication'}
 
 
 def require_manual_events(events):

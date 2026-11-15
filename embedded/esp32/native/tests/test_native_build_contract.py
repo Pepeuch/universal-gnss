@@ -18,6 +18,17 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_network_boot_and_s3_tls_reject_insufficient_effective_memory_settings(self):
+        s3 = ['CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768', 'CONFIG_SPIRAM_USE_MALLOC=y',
+              'CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y', 'CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024']
+        self.assertEqual(module.sdk_boot_memory(s3, True),
+                         {'main_stack_bytes':32768, 'tls_external':True})
+        for i in range(len(s3)):
+            with self.assertRaises(ValueError):module.sdk_boot_memory(s3[:i]+s3[i+1:], True)
+        for replacement in ('CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192', 'CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384'):
+            with self.assertRaises(ValueError):module.sdk_boot_memory([replacement]+s3[1:], True)
+        self.assertEqual(module.sdk_boot_memory(s3[:1], False)['tls_external'], False)
+
     def test_readonly_source_keeps_its_modes_while_network_copy_gets_its_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

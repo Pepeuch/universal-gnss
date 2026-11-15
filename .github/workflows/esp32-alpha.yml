@@ -1,0 +1,115 @@
+name: ESP32 alpha publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact main commit to build and publish as experimental alpha
+        required: true
+        type: string
+      release_tag:
+        description: Optional existing compatible 0.7.5-a01; otherwise esp32-alpha-<source SHA prefix>
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: esp32-alpha-publication
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build real alpha (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [s3-gateway, c3-rover-usb]
+    steps:
+      - name: Require manual publication from main
+        env:
+          WORKFLOW_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          test "$WORKFLOW_REF" = refs/heads/main
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate source and build real isolated firmware
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          python3 tools/branches/esp32_alpha.py validate --source-sha "$SOURCE_SHA" --release-tag "$RELEASE_TAG"
+          PYTHONDONTWRITEBYTECODE=1 python3 embedded/esp32/native/ci.py \
+            --source-ref "$SOURCE_SHA" --variant "$VARIANT" \
+            --bundle-output "$RUNNER_TEMP/alpha-bundle"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: alpha-${{ matrix.variant }}
+          path: ${{ runner.temp }}/alpha-bundle
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Archive alpha and deploy Web Flasher
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: alpha-*
+          path: ${{ runner.temp }}/alpha-builds
+      - name: Assemble catalogue from both successful builds
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REVIEW_URL: https://github.com/Pepeuch/universal-gnss/actions/workflows/esp32-alpha.yml
+        run: |
+          set -euo pipefail
+          python3 tools/branches/esp32_alpha.py stage --source-sha "$SOURCE_SHA" --release-tag "$RELEASE_TAG" \
+            --bundle "$RUNNER_TEMP/alpha-builds/alpha-s3-gateway" \
+            --bundle "$RUNNER_TEMP/alpha-builds/alpha-c3-rover-usb" \
+            --output "$RUNNER_TEMP/alpha-site" --review "$REVIEW_URL"
+      - name: Preserve immutable prerelease assets before deploying Pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/branches/esp32_alpha.py release \
+            --site "$RUNNER_TEMP/alpha-site" --assets "$RUNNER_TEMP/alpha-assets"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/alpha-site
+      - name: Deploy verified alpha catalogue
+        id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Verify public catalogue and real firmware bytes
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/alpha-site" --url "$PAGE_URL"

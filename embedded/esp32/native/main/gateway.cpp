@@ -161,6 +161,9 @@ extern "C" void app_main()
   const auto boot = RunBoot(steps, sizeof(steps) / sizeof(steps[0]), ObserveBoot);
   if (!boot.plan_valid)
     ObserveBoot(ServiceId::kNetworkCore, ServiceState::kFailed, ESP_ERR_INVALID_ARG, nullptr);
+  ESP_LOGI("UG",
+           "Boot complete; main stack minimum free: %u bytes",
+           static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
   // Driver/setup success is not proof of a network link or physical correction
   // delivery. Per-worker progress and actual flow are reported separately.
 }
