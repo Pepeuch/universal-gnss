@@ -53,6 +53,9 @@ class Flasher(unittest.TestCase):
         history={'schema':1,'publications':[{'source_sha':sha,'status':'validated_authorized_alpha','published_at':date} for sha,date in [('a'*40,'2026-11-15T00:00:00Z'),('b'*40,'2026-11-16T00:00:00Z')]]}
         expr='UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')'
         self.assertEqual(vm.eval(expr+'[0].source_sha'),'b'*40)
+        registry['sources'][1]['publication']='not_authorized'
+        with self.assertRaises(Exception):vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')')
+        registry['sources'][1]['publication']='main_approved'
         history['publications'][1]['source_sha']='c'*40
         with self.assertRaises(Exception):vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')')
     def test_actual_packager_and_browser_agree(self):

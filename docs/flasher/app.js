@@ -112,7 +112,7 @@
     finally {reader.releaseLock();}
   }
   function publishedVersions(registry, catalog, history) {
-    const approved=approvals(registry);
+    const approved=approvals(registry).filter(row=>row.publication==='main_approved');
     if(!history)return approved.map(row=>({...row,published_at:null,status:'alpha_historical'}));
     if(history.schema!==1||!Array.isArray(history.publications)||history.publications.length>128)throw Error('Historique invalide');
     const seen=new Set();
