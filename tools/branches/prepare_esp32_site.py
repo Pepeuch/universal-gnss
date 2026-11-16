@@ -116,7 +116,29 @@ def prepare(output,approvals,bundles=(),repo=ROOT):
     for directory,files in records:
         dest=output/'flasher/published'/directory.name;dest.mkdir(parents=True)
         for name in sorted(files):shutil.copyfile(directory/name,dest/name)
+    cache_bust(output)
     return output
+
+def cache_bust(site):
+    """Validate local HTML resource references and address them by content hash."""
+    import hashlib
+    from html.parser import HTMLParser
+    site=Path(site)
+    class Resources(HTMLParser):
+        def handle_starttag(self,tag,attrs):
+            for name,value in attrs:
+                if name not in ('src','href') or not value or ':' in value or value.startswith(('#','/')):
+                    continue
+                path=value.split('?')[0]
+                if Path(path).suffix not in ('.js','.css','.png','.svg','.webp'):
+                    continue
+                file=(site/path).resolve(strict=True)
+                if not file.is_relative_to(site.resolve()):raise ValueError('unsafe HTML resource')
+                digest=hashlib.sha256(file.read_bytes()).hexdigest()
+                self.text=self.text.replace('"'+value+'"','"'+path+'?v='+digest+'"')
+    parser=Resources();parser.text=(site/'flasher.html').read_text()
+    parser.feed(parser.text)
+    (site/'flasher.html').write_text(parser.text)
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
