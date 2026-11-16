@@ -1,0 +1,1210 @@
+{
+  "base": "19541b77f8d565d95bb40e250b5acdee798b3c4a",
+  "branch": "perf/esp32-s3-native-buffers",
+  "validation_tree": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+  "committed": false,
+  "flashed": false,
+  "scope": "S3 native routing storage only; no common UG or WebUI changes",
+  "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+  "compiled_inputs_sha256": {
+    "embedded/esp32/components/ug_gateway_service/CMakeLists.txt": "8717f0f17965c8a651f3ab31f6bae17a919cbf2ac48db8935e8d11f5dc28a06d",
+    "embedded/esp32/components/ug_gateway_service/src/ug_gateway_service.cpp": "35d8ba8f97f3f9327f2199827c03cbd32b1c8359c116eec24cbad51e72775da6",
+    "embedded/esp32/components/ug_gateway_service/include/ug_boot_payload.hpp": "641e4ddf3f50a3da75d4f8063f0014c4e366280f5f4553bf0701f28cd1d2e1e2",
+    "embedded/esp32/native/tests/CMakeLists.txt": "ed5758c7415456f4c7976a41174c8c4f5ab37f18794f02b086fc9483822fc937",
+    "embedded/esp32/native/tests/test_routing_storage.cpp": "16f658ece87e90f1c4bd7bb140225fa9b872329770ce899d88038267db7fc17e",
+    "embedded/esp32/native/tests/routing_stubs/esp_err.h": "6fb8f3ea0fb82a85dc075c5a2be72aa5771e8f5e23eef3636c5c0d8ce782c87f",
+    "embedded/esp32/native/tests/routing_stubs/esp_heap_caps.h": "5177cbad905145af443f78c684690cc50a53bed19c5c6d38d60a8c99787f042c",
+    "embedded/esp32/native/tests/routing_stubs/esp_memory_utils.h": "cce39327d4120252dca1df19725fa41dce0a531454d3fa2fde0d0364d08040e3",
+    "embedded/esp32/native/tests/routing_stubs/esp_timer.h": "ebb6913768ead4f88af3bc9b7f14ac85cdcc28243ebbe4f0c8ee58f372daf4ba",
+    "embedded/esp32/native/tests/routing_stubs/freertos/FreeRTOS.h": "4b45d6573718ee43438a1aefe42971878c10e5a617cb2f4e8208cc0fe61662a4",
+    "embedded/esp32/native/tests/routing_stubs/freertos/queue.h": "ac26fdb0be78837a039a666bd713dcba5d87774bd5fc763eeb947317300c3256",
+    "embedded/esp32/native/tests/routing_stubs/freertos/task.h": "fb16e668360028a682e2926eb6e7ca41150d8c620f906b41bf3c97ace71d63d0",
+    "embedded/esp32/native/tests/routing_stubs/sdkconfig.h": "74666c95fec2fe376cbbc078f97de344d5f8246923024a47ac728121e47a95b5"
+  },
+  "builds": {
+    "http": {
+      "before": {
+        "source_object": "2275b09f614a0894f396811b7c9f92c4a608e692",
+        "source_type": "tree",
+        "source_tree": "2275b09f614a0894f396811b7c9f92c4a608e692",
+        "source_commit": null,
+        "variant": "s3-gateway",
+        "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+        "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+        "build_and_verify": "pass",
+        "reproducibility": "pass",
+        "host_tests": "pass",
+        "network_during_build_and_tests": "disconnected_no_interfaces",
+        "source_mounts": false,
+        "flash_or_publication": false,
+        "binary": {
+          "profile": "gateway",
+          "local_gnss": true,
+          "app_bytes": 1485792,
+          "app_slots": [
+            {
+              "label": "ota_0",
+              "offset": 131072,
+              "size": 3145728
+            },
+            {
+              "label": "ota_1",
+              "offset": 3276800,
+              "size": 3145728
+            }
+          ],
+          "sha256": "cacc1196f0b8445bb6f013e6b3303312d21446d53e8296e0df3595d371bb2e0c",
+          "ug_crc_definitions": [
+            "420507a4 T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+          ],
+          "driver_source_count": 22,
+          "compile_units": 861,
+          "project_language_standards": {
+            "c": [
+              "gnu17"
+            ],
+            "cxx": [
+              "gnu++17"
+            ]
+          },
+          "hardware": "NOT_TESTED",
+          "rover_ROM_bytes": "not applicable",
+          "portable_configuration_schema": 1,
+          "radio_configuration": "runtime_nvs_encrypted_unicast",
+          "web_assets": [
+            {
+              "name": "index.html",
+              "source_bytes": 16031,
+              "gzip_bytes": 4876
+            },
+            {
+              "name": "app.js",
+              "source_bytes": 50806,
+              "gzip_bytes": 14926
+            },
+            {
+              "name": "style.css",
+              "source_bytes": 3286,
+              "gzip_bytes": 1258
+            }
+          ],
+          "web_transport": "http",
+          "network_capacity": {
+            "sockets": 20,
+            "tcp_active": 16,
+            "tcp_listeners": 16,
+            "udp_pcbs": 16,
+            "mdns_socket_mode": false
+          },
+          "boot_memory": {
+            "main_stack_bytes": 32768,
+            "tls_external": true
+          }
+        },
+        "part_sha256": {
+          "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+          "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+          "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+          "universal-gnss-esp32.bin": "cacc1196f0b8445bb6f013e6b3303312d21446d53e8296e0df3595d371bb2e0c"
+        },
+        "flash_offsets": {
+          "bootloader/bootloader.bin": 0,
+          "partition_table/partition-table.bin": 32768,
+          "ota_data_initial.bin": 61440,
+          "universal-gnss-esp32.bin": 131072
+        }
+      },
+      "after": {
+        "source_object": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+        "source_type": "tree",
+        "source_tree": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+        "source_commit": null,
+        "variant": "s3-gateway",
+        "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+        "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+        "build_and_verify": "pass",
+        "reproducibility": "pass",
+        "host_tests": "pass",
+        "network_during_build_and_tests": "disconnected_no_interfaces",
+        "source_mounts": false,
+        "flash_or_publication": false,
+        "binary": {
+          "profile": "gateway",
+          "local_gnss": true,
+          "app_bytes": 1486000,
+          "app_slots": [
+            {
+              "label": "ota_0",
+              "offset": 131072,
+              "size": 3145728
+            },
+            {
+              "label": "ota_1",
+              "offset": 3276800,
+              "size": 3145728
+            }
+          ],
+          "sha256": "1e26a113bafc2db32644159e5d34c01d63cd26df2cb51c7e59062164d9435eea",
+          "ug_crc_definitions": [
+            "42050844 T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+          ],
+          "driver_source_count": 22,
+          "compile_units": 861,
+          "project_language_standards": {
+            "c": [
+              "gnu17"
+            ],
+            "cxx": [
+              "gnu++17"
+            ]
+          },
+          "hardware": "NOT_TESTED",
+          "rover_ROM_bytes": "not applicable",
+          "portable_configuration_schema": 1,
+          "radio_configuration": "runtime_nvs_encrypted_unicast",
+          "web_assets": [
+            {
+              "name": "index.html",
+              "source_bytes": 16031,
+              "gzip_bytes": 4876
+            },
+            {
+              "name": "app.js",
+              "source_bytes": 50806,
+              "gzip_bytes": 14926
+            },
+            {
+              "name": "style.css",
+              "source_bytes": 3286,
+              "gzip_bytes": 1258
+            }
+          ],
+          "web_transport": "http",
+          "network_capacity": {
+            "sockets": 20,
+            "tcp_active": 16,
+            "tcp_listeners": 16,
+            "udp_pcbs": 16,
+            "mdns_socket_mode": false
+          },
+          "boot_memory": {
+            "main_stack_bytes": 32768,
+            "tls_external": true
+          }
+        },
+        "part_sha256": {
+          "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+          "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+          "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+          "universal-gnss-esp32.bin": "1e26a113bafc2db32644159e5d34c01d63cd26df2cb51c7e59062164d9435eea"
+        },
+        "flash_offsets": {
+          "bootloader/bootloader.bin": 0,
+          "partition_table/partition-table.bin": 32768,
+          "ota_data_initial.bin": 61440,
+          "universal-gnss-esp32.bin": 131072
+        }
+      },
+      "before_sections": {
+        ".iram0.vectors": 1028,
+        ".iram0.text": 92351,
+        ".dram0.data": 23757,
+        ".dram0.bss": 70608
+      },
+      "after_sections": {
+        ".iram0.vectors": 1028,
+        ".iram0.text": 92351,
+        ".dram0.data": 23757,
+        ".dram0.bss": 42384
+      },
+      "layouts": {
+        "ug_layout_boot_control": 8,
+        "ug_layout_frame": 1056,
+        "ug_layout_gateway": 17608,
+        "ug_layout_ingress": 8512,
+        "ug_layout_input": 1064,
+        "ug_layout_payload": 28240,
+        "ug_layout_queue_control": 92
+      },
+      "protected_segments_identical": true,
+      "web_assets_and_boot_memory_identical": true
+    },
+    "https": {
+      "before": {
+        "source_object": "2275b09f614a0894f396811b7c9f92c4a608e692",
+        "source_type": "tree",
+        "source_tree": "2275b09f614a0894f396811b7c9f92c4a608e692",
+        "source_commit": null,
+        "variant": "s3-gateway",
+        "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+        "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+        "build_and_verify": "pass",
+        "reproducibility": "pass",
+        "host_tests": "pass",
+        "network_during_build_and_tests": "disconnected_no_interfaces",
+        "source_mounts": false,
+        "flash_or_publication": false,
+        "binary": {
+          "profile": "gateway",
+          "local_gnss": true,
+          "app_bytes": 1490544,
+          "app_slots": [
+            {
+              "label": "ota_0",
+              "offset": 131072,
+              "size": 3145728
+            },
+            {
+              "label": "ota_1",
+              "offset": 3276800,
+              "size": 3145728
+            }
+          ],
+          "sha256": "d09d7bc4d2f00a2b68df22b8f86ce1c8e01762ec617e4dea7ecb3dd9c8f1e627",
+          "ug_crc_definitions": [
+            "42051058 T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+          ],
+          "driver_source_count": 22,
+          "compile_units": 861,
+          "project_language_standards": {
+            "c": [
+              "gnu17"
+            ],
+            "cxx": [
+              "gnu++17"
+            ]
+          },
+          "hardware": "NOT_TESTED",
+          "rover_ROM_bytes": "not applicable",
+          "portable_configuration_schema": 1,
+          "radio_configuration": "runtime_nvs_encrypted_unicast",
+          "web_assets": [
+            {
+              "name": "index.html",
+              "source_bytes": 16031,
+              "gzip_bytes": 4876
+            },
+            {
+              "name": "app.js",
+              "source_bytes": 50806,
+              "gzip_bytes": 14926
+            },
+            {
+              "name": "style.css",
+              "source_bytes": 3286,
+              "gzip_bytes": 1258
+            }
+          ],
+          "web_transport": "https",
+          "network_capacity": {
+            "sockets": 20,
+            "tcp_active": 16,
+            "tcp_listeners": 16,
+            "udp_pcbs": 16,
+            "mdns_socket_mode": false
+          },
+          "boot_memory": {
+            "main_stack_bytes": 32768,
+            "tls_external": true
+          }
+        },
+        "part_sha256": {
+          "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+          "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+          "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+          "universal-gnss-esp32.bin": "d09d7bc4d2f00a2b68df22b8f86ce1c8e01762ec617e4dea7ecb3dd9c8f1e627"
+        },
+        "flash_offsets": {
+          "bootloader/bootloader.bin": 0,
+          "partition_table/partition-table.bin": 32768,
+          "ota_data_initial.bin": 61440,
+          "universal-gnss-esp32.bin": 131072
+        }
+      },
+      "after": {
+        "source_object": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+        "source_type": "tree",
+        "source_tree": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+        "source_commit": null,
+        "variant": "s3-gateway",
+        "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+        "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+        "build_and_verify": "pass",
+        "reproducibility": "pass",
+        "host_tests": "pass",
+        "network_during_build_and_tests": "disconnected_no_interfaces",
+        "source_mounts": false,
+        "flash_or_publication": false,
+        "binary": {
+          "profile": "gateway",
+          "local_gnss": true,
+          "app_bytes": 1490768,
+          "app_slots": [
+            {
+              "label": "ota_0",
+              "offset": 131072,
+              "size": 3145728
+            },
+            {
+              "label": "ota_1",
+              "offset": 3276800,
+              "size": 3145728
+            }
+          ],
+          "sha256": "89cf33c02f3ddf77c68697637346cc5f5e4aebd6a715831d21882e3fbf9b8b94",
+          "ug_crc_definitions": [
+            "4205109c T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+          ],
+          "driver_source_count": 22,
+          "compile_units": 861,
+          "project_language_standards": {
+            "c": [
+              "gnu17"
+            ],
+            "cxx": [
+              "gnu++17"
+            ]
+          },
+          "hardware": "NOT_TESTED",
+          "rover_ROM_bytes": "not applicable",
+          "portable_configuration_schema": 1,
+          "radio_configuration": "runtime_nvs_encrypted_unicast",
+          "web_assets": [
+            {
+              "name": "index.html",
+              "source_bytes": 16031,
+              "gzip_bytes": 4876
+            },
+            {
+              "name": "app.js",
+              "source_bytes": 50806,
+              "gzip_bytes": 14926
+            },
+            {
+              "name": "style.css",
+              "source_bytes": 3286,
+              "gzip_bytes": 1258
+            }
+          ],
+          "web_transport": "https",
+          "network_capacity": {
+            "sockets": 20,
+            "tcp_active": 16,
+            "tcp_listeners": 16,
+            "udp_pcbs": 16,
+            "mdns_socket_mode": false
+          },
+          "boot_memory": {
+            "main_stack_bytes": 32768,
+            "tls_external": true
+          }
+        },
+        "part_sha256": {
+          "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+          "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+          "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+          "universal-gnss-esp32.bin": "89cf33c02f3ddf77c68697637346cc5f5e4aebd6a715831d21882e3fbf9b8b94"
+        },
+        "flash_offsets": {
+          "bootloader/bootloader.bin": 0,
+          "partition_table/partition-table.bin": 32768,
+          "ota_data_initial.bin": 61440,
+          "universal-gnss-esp32.bin": 131072
+        }
+      },
+      "before_sections": {
+        ".iram0.vectors": 1028,
+        ".iram0.text": 92351,
+        ".dram0.data": 23757,
+        ".dram0.bss": 70608
+      },
+      "after_sections": {
+        ".iram0.vectors": 1028,
+        ".iram0.text": 92351,
+        ".dram0.data": 23757,
+        ".dram0.bss": 42384
+      },
+      "layouts": {
+        "ug_layout_boot_control": 8,
+        "ug_layout_frame": 1056,
+        "ug_layout_gateway": 17608,
+        "ug_layout_ingress": 8512,
+        "ug_layout_input": 1064,
+        "ug_layout_payload": 28240,
+        "ug_layout_queue_control": 92
+      },
+      "protected_segments_identical": true,
+      "web_assets_and_boot_memory_identical": true
+    }
+  },
+  "physical_measurements": "NOT_RUN; prior installed firmware is a distinct baseline",
+  "routing_host_benchmark": {
+    "base": "19541b77f8d565d95bb40e250b5acdee798b3c4a",
+    "candidate_head": "19541b77f8d565d95bb40e250b5acdee798b3c4a",
+    "host": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+    "runs": 7,
+    "compiler": "c++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "harness_sha256": "16f658ece87e90f1c4bd7bb140225fa9b872329770ce899d88038267db7fc17e",
+    "baseline_service_sha256": "cbe5602fc9503098680186683542557cbda19df18a4db6e679812d1da0959514",
+    "candidate_service_sha256": "35d8ba8f97f3f9327f2199827c03cbd32b1c8359c116eec24cbad51e72775da6",
+    "qualification": "host only; no PSRAM/RTOS scheduling/radio/physical-latency model",
+    "measurements": {
+      "baseline": [
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 15163599,
+            "cpu_ns": 15172000,
+            "batch_p50_ns": 7068,
+            "batch_p95_ns": 11205
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 11290025,
+            "cpu_ns": 11287000,
+            "batch_p50_ns": 5488,
+            "batch_p95_ns": 8958
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 108673016,
+            "cpu_ns": 108668000,
+            "batch_p50_ns": 50841,
+            "batch_p95_ns": 80752
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5136800,
+            "cpu_ns": 5141000,
+            "batch_p50_ns": 2526,
+            "batch_p95_ns": 2560
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8156339,
+            "cpu_ns": 8157000,
+            "batch_p50_ns": 4036,
+            "batch_p95_ns": 4083
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 103165693,
+            "cpu_ns": 103129000,
+            "batch_p50_ns": 51803,
+            "batch_p95_ns": 52453
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5023305,
+            "cpu_ns": 5022000,
+            "batch_p50_ns": 2465,
+            "batch_p95_ns": 2536
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8122993,
+            "cpu_ns": 8120000,
+            "batch_p50_ns": 4036,
+            "batch_p95_ns": 4070
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102236020,
+            "cpu_ns": 102234000,
+            "batch_p50_ns": 50830,
+            "batch_p95_ns": 52032
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5227371,
+            "cpu_ns": 5226000,
+            "batch_p50_ns": 2504,
+            "batch_p95_ns": 2532
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8099208,
+            "cpu_ns": 8100000,
+            "batch_p50_ns": 4028,
+            "batch_p95_ns": 4062
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102239056,
+            "cpu_ns": 102235000,
+            "batch_p50_ns": 50820,
+            "batch_p95_ns": 52149
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5136334,
+            "cpu_ns": 5137000,
+            "batch_p50_ns": 2466,
+            "batch_p95_ns": 2510
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8076748,
+            "cpu_ns": 8077000,
+            "batch_p50_ns": 3999,
+            "batch_p95_ns": 4085
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102142812,
+            "cpu_ns": 102131000,
+            "batch_p50_ns": 50838,
+            "batch_p95_ns": 51890
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 12249876,
+            "cpu_ns": 12256000,
+            "batch_p50_ns": 6032,
+            "batch_p95_ns": 6174
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 9670662,
+            "cpu_ns": 9661000,
+            "batch_p50_ns": 4055,
+            "batch_p95_ns": 8087
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 103655871,
+            "cpu_ns": 103648000,
+            "batch_p50_ns": 51789,
+            "batch_p95_ns": 52799
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5082395,
+            "cpu_ns": 5088000,
+            "batch_p50_ns": 2512,
+            "batch_p95_ns": 2538
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8145107,
+            "cpu_ns": 8146000,
+            "batch_p50_ns": 4046,
+            "batch_p95_ns": 4078
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102778815,
+            "cpu_ns": 102735000,
+            "batch_p50_ns": 50835,
+            "batch_p95_ns": 52844
+          }
+        ]
+      ],
+      "candidate": [
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5198488,
+            "cpu_ns": 5202000,
+            "batch_p50_ns": 2569,
+            "batch_p95_ns": 2595
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8272463,
+            "cpu_ns": 8273000,
+            "batch_p50_ns": 4117,
+            "batch_p95_ns": 4149
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102653984,
+            "cpu_ns": 102641000,
+            "batch_p50_ns": 51046,
+            "batch_p95_ns": 52103
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 12109443,
+            "cpu_ns": 12113000,
+            "batch_p50_ns": 6053,
+            "batch_p95_ns": 6096
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 9725860,
+            "cpu_ns": 9722000,
+            "batch_p50_ns": 4124,
+            "batch_p95_ns": 8023
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 104919749,
+            "cpu_ns": 104765000,
+            "batch_p50_ns": 51031,
+            "batch_p95_ns": 55157
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5114972,
+            "cpu_ns": 5119000,
+            "batch_p50_ns": 2520,
+            "batch_p95_ns": 2577
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8231374,
+            "cpu_ns": 8232000,
+            "batch_p50_ns": 4094,
+            "batch_p95_ns": 4120
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102939755,
+            "cpu_ns": 102937000,
+            "batch_p50_ns": 51053,
+            "batch_p95_ns": 52407
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5819647,
+            "cpu_ns": 5819000,
+            "batch_p50_ns": 2558,
+            "batch_p95_ns": 6075
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8245406,
+            "cpu_ns": 8246000,
+            "batch_p50_ns": 4103,
+            "batch_p95_ns": 4127
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102375365,
+            "cpu_ns": 102372000,
+            "batch_p50_ns": 51017,
+            "batch_p95_ns": 52050
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5126282,
+            "cpu_ns": 5130000,
+            "batch_p50_ns": 2518,
+            "batch_p95_ns": 2577
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8108297,
+            "cpu_ns": 8106000,
+            "batch_p50_ns": 4018,
+            "batch_p95_ns": 4087
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102598741,
+            "cpu_ns": 102590000,
+            "batch_p50_ns": 51012,
+            "batch_p95_ns": 52548
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 6324315,
+            "cpu_ns": 6320000,
+            "batch_p50_ns": 2526,
+            "batch_p95_ns": 6101
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8095374,
+            "cpu_ns": 8096000,
+            "batch_p50_ns": 4015,
+            "batch_p95_ns": 4100
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102276219,
+            "cpu_ns": 102278000,
+            "batch_p50_ns": 51006,
+            "batch_p95_ns": 52155
+          }
+        ],
+        [
+          {
+            "frame_bytes": 6,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 672000,
+            "wall_ns": 5115632,
+            "cpu_ns": 5120000,
+            "batch_p50_ns": 2524,
+            "batch_p95_ns": 2570
+          },
+          {
+            "frame_bytes": 38,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 4256000,
+            "wall_ns": 8112885,
+            "cpu_ns": 8114000,
+            "batch_p50_ns": 4030,
+            "batch_p95_ns": 4079
+          },
+          {
+            "frame_bytes": 1029,
+            "input_frames": 16000,
+            "outputs": 112000,
+            "bytes": 115248000,
+            "wall_ns": 102181818,
+            "cpu_ns": 102176000,
+            "batch_p50_ns": 50987,
+            "batch_p95_ns": 52033
+          }
+        ]
+      ]
+    },
+    "medians": {
+      "baseline": [
+        {
+          "frame_bytes": 6,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 672000,
+          "wall_ns": 5136800,
+          "cpu_ns": 5141000,
+          "batch_p50_ns": 2512,
+          "batch_p95_ns": 2538
+        },
+        {
+          "frame_bytes": 38,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 4256000,
+          "wall_ns": 8145107,
+          "cpu_ns": 8146000,
+          "batch_p50_ns": 4036,
+          "batch_p95_ns": 4083
+        },
+        {
+          "frame_bytes": 1029,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 115248000,
+          "wall_ns": 102778815,
+          "cpu_ns": 102735000,
+          "batch_p50_ns": 50838,
+          "batch_p95_ns": 52453
+        }
+      ],
+      "candidate": [
+        {
+          "frame_bytes": 6,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 672000,
+          "wall_ns": 5198488,
+          "cpu_ns": 5202000,
+          "batch_p50_ns": 2526,
+          "batch_p95_ns": 2595
+        },
+        {
+          "frame_bytes": 38,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 4256000,
+          "wall_ns": 8231374,
+          "cpu_ns": 8232000,
+          "batch_p50_ns": 4094,
+          "batch_p95_ns": 4120
+        },
+        {
+          "frame_bytes": 1029,
+          "input_frames": 16000,
+          "outputs": 112000,
+          "bytes": 115248000,
+          "wall_ns": 102598741,
+          "cpu_ns": 102590000,
+          "batch_p50_ns": 51017,
+          "batch_p95_ns": 52155
+        }
+      ]
+    }
+  },
+  "ros2_boundaries": {
+    "base": "19541b77f8d565d95bb40e250b5acdee798b3c4a",
+    "tree": "14d053ae0b36ec9b59044b56656fd4fa3a8eedbc",
+    "component_count": 13,
+    "classification": "all14new/modified native source/test files excluded",
+    "checks": [
+      {
+        "distribution": "ros2-kilted",
+        "options": [],
+        "files": 316,
+        "components": [
+          "core",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "73846eab5c05b851caa8324e92aa8fd04e17700678f3f1b684b4456b4ba3faec",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-kilted",
+        "options": [
+          "mavros"
+        ],
+        "files": 326,
+        "components": [
+          "core",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "mavros",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "3ae4cc9404285400f1b0d5d2556795ab8a672f45d5c50cc3c2be37e27ebbaa79",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-kilted",
+        "options": [
+          "docker"
+        ],
+        "files": 324,
+        "components": [
+          "core",
+          "docker",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "60d1cf415439d92975f3a83646489b5bdf978fc3c60c2465be66ae12dc3d94ab",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-kilted",
+        "options": [
+          "mavros",
+          "docker"
+        ],
+        "files": 334,
+        "components": [
+          "core",
+          "docker",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "mavros",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "e7024a49f278bde92f8859f71ed83645565afde9d3139a8f2cb3c094eb6d4e97",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-lyrical",
+        "options": [],
+        "files": 316,
+        "components": [
+          "core",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "73846eab5c05b851caa8324e92aa8fd04e17700678f3f1b684b4456b4ba3faec",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-lyrical",
+        "options": [
+          "mavros"
+        ],
+        "files": 326,
+        "components": [
+          "core",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "mavros",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "3ae4cc9404285400f1b0d5d2556795ab8a672f45d5c50cc3c2be37e27ebbaa79",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-lyrical",
+        "options": [
+          "docker"
+        ],
+        "files": 324,
+        "components": [
+          "core",
+          "docker",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "60d1cf415439d92975f3a83646489b5bdf978fc3c60c2465be66ae12dc3d94ab",
+        "candidate_source_blobs_and_modes_identical": true
+      },
+      {
+        "distribution": "ros2-lyrical",
+        "options": [
+          "mavros",
+          "docker"
+        ],
+        "files": 334,
+        "components": [
+          "core",
+          "docker",
+          "driver",
+          "fixtures",
+          "healthcheck",
+          "legal",
+          "mavros",
+          "messages",
+          "ntrip",
+          "protocols",
+          "ros2",
+          "tools",
+          "transport"
+        ],
+        "inventory_sha256": "e7024a49f278bde92f8859f71ed83645565afde9d3139a8f2cb3c094eb6d4e97",
+        "candidate_source_blobs_and_modes_identical": true
+      }
+    ]
+  },
+  "tests": {
+    "native_host_asan_ubsan": {
+      "passed": 76,
+      "failed": 0,
+      "seconds": 10.03,
+      "new_service_cases": 8
+    },
+    "generator_ci": {
+      "passed": 265,
+      "failed": 0,
+      "seconds": 26.574
+    },
+    "linux_ros2_replay": "not repeated: selected source Git blobs/modes unchanged",
+    "benchmark": "7 alternating Release pairs, 3 frame sizes, 16000 ingress and 112000 destination deliveries per size/run"
+  },
+  "reference_physical_observation": {
+    "app_sha256": "9df28836b0afd95f990160d051d7e46179423af880f9091fac2005ac6a3e4328",
+    "http": true,
+    "radio_enabled": false,
+    "internal_free_bytes": 115095,
+    "internal_largest_bytes": 34816,
+    "internal_min_bytes": 48560,
+    "psram_free_bytes": 8344068,
+    "failed_allocations": 0,
+    "fresh_probe": false,
+    "same_firmware_as_compact_software_baseline": false
+  },
+  "task_files": [
+    "embedded/esp32/components/ug_gateway_service/CMakeLists.txt",
+    "embedded/esp32/components/ug_gateway_service/src/ug_gateway_service.cpp",
+    "embedded/esp32/components/ug_gateway_service/include/ug_boot_payload.hpp",
+    "embedded/esp32/native/tests/CMakeLists.txt",
+    "embedded/esp32/native/tests/test_routing_storage.cpp",
+    "embedded/esp32/native/tests/routing_stubs/esp_err.h",
+    "embedded/esp32/native/tests/routing_stubs/esp_heap_caps.h",
+    "embedded/esp32/native/tests/routing_stubs/esp_memory_utils.h",
+    "embedded/esp32/native/tests/routing_stubs/esp_timer.h",
+    "embedded/esp32/native/tests/routing_stubs/freertos/FreeRTOS.h",
+    "embedded/esp32/native/tests/routing_stubs/freertos/queue.h",
+    "embedded/esp32/native/tests/routing_stubs/freertos/task.h",
+    "embedded/esp32/native/tests/routing_stubs/sdkconfig.h",
+    "embedded/esp32/native/tests/compare_routing_storage.py",
+    "docs/analysis/ESP32_S3_NATIVE_BUFFERS.md",
+    "docs/analysis/ESP32_S3_NATIVE_BUFFERS_MEASUREMENTS.json",
+    "TODO.md",
+    "ROADMAP.md",
+    ".agent/shared/checkpoints/active/UG-ESP32-RADIO-MEMORY.md"
+  ]
+}

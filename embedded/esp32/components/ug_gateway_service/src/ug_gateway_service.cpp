@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gateway_service.hpp"
+#include "sdkconfig.h"
 #include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
 extern "C" {
@@ -11,6 +12,12 @@ extern "C" {
 #include "freertos/task.h"
 #include <array>
 #include <cstring>
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
+#include "ug_boot_payload.hpp"
+#include <cstdio>
+#endif
 namespace ug::embedded
 {
 namespace
@@ -34,8 +41,6 @@ struct Destination
   void* context{};
   std::uint64_t revision{};
 };
-Gateway gateway;
-Gateway::Frame frame;
 std::array<Control, Gateway::kSources> desired{}, applied{};
 std::array<Destination, Gateway::kSinks> destinations{}, active_destinations{};
 GatewayServiceStats stats{};
@@ -43,9 +48,73 @@ portMUX_TYPE guard = portMUX_INITIALIZER_UNLOCKED;
 QueueHandle_t ingress;
 StaticQueue_t ingress_control;
 constexpr std::size_t kIngressDepth = 8;
+#if CONFIG_IDF_TARGET_ESP32S3
+// Task-only routing data, never DMA/ISR or cache-disabled storage. FreeRTOS
+// queue control, locks and source/destination publication stay internal above.
+struct RoutingPayload
+{
+  Gateway gateway;
+  Gateway::Frame frame;
+  Input input;
+  std::array<std::uint8_t, kIngressDepth * sizeof(Input)> ingress_memory{};
+};
+BootPayload<RoutingPayload> routing_payload;
+bool InitializeRoutingPayload()
+{
+  return routing_payload.Initialize([](std::size_t size) -> void* {
+    auto* memory = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    const bool external = memory && esp_ptr_external_ram(memory);
+    if (memory && !external)
+    {
+      heap_caps_free(memory);
+      memory = nullptr;
+    }
+    std::printf("UG_MEM routing_storage bytes=%zu external=%d ready=%d\n",
+                size,
+                external,
+                memory != nullptr);
+    return memory;
+  });
+}
+Gateway& RoutingGateway()
+{
+  return routing_payload.Get()->gateway;
+}
+Gateway::Frame& RoutingFrame()
+{
+  return routing_payload.Get()->frame;
+}
+Input& RoutingInput()
+{
+  return routing_payload.Get()->input;
+}
+std::uint8_t* IngressMemory()
+{
+  return routing_payload.Get()->ingress_memory.data();
+}
+#else
+Gateway gateway;
+Gateway::Frame frame;
 std::array<std::uint8_t, kIngressDepth * sizeof(Input)> ingress_memory{};
 Input input;
-void RefreshControls()
+Gateway& RoutingGateway()
+{
+  return gateway;
+}
+Gateway::Frame& RoutingFrame()
+{
+  return frame;
+}
+Input& RoutingInput()
+{
+  return input;
+}
+std::uint8_t* IngressMemory()
+{
+  return ingress_memory.data();
+}
+#endif
+void RefreshControls(Gateway& gateway)
 {
   for (std::size_t i = 0; i < desired.size(); ++i)
   {
@@ -59,7 +128,7 @@ void RefreshControls()
     espnow_rtcm_invalidate_pending();
   }
 }
-void RefreshDestinations()
+void RefreshDestinations(Gateway& gateway)
 {
   for (std::size_t i = 0; i < destinations.size(); ++i)
   {
@@ -75,14 +144,17 @@ void RefreshDestinations()
 }
 void Owner(void*)
 {
+  auto& gateway = RoutingGateway();
+  auto& frame = RoutingFrame();
+  auto& input = RoutingInput();
   WorkerHealth health(ServiceId::kRouting, 5000000000LL, true);
   for (;;)
   {
-    RefreshControls();
-    RefreshDestinations();
+    RefreshControls(gateway);
+    RefreshDestinations(gateway);
     if (xQueueReceive(ingress, &input, FiniteWaitTicks(5, configTICK_RATE_HZ)) == pdTRUE)
     {
-      RefreshControls();
+      RefreshControls(gateway);
       if (input.complete)
         gateway.FeedFrame(
             input.source, input.incarnation, input.bytes.data(), input.size, input.receipt_ns);
@@ -90,7 +162,7 @@ void Owner(void*)
         gateway.Feed(
             input.source, input.incarnation, input.bytes.data(), input.size, input.receipt_ns);
     }
-    RefreshControls();
+    RefreshControls(gateway);
     for (std::size_t i = 0; i < Gateway::kSinks; ++i)
     {
       while (gateway.Pop(i, esp_timer_get_time() * 1000, frame))
@@ -115,8 +187,11 @@ esp_err_t StartGatewayService()
 {
   if (ingress)
     return ESP_ERR_INVALID_STATE;
-  ingress =
-      xQueueCreateStatic(kIngressDepth, sizeof(Input), ingress_memory.data(), &ingress_control);
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (!InitializeRoutingPayload())
+    return ESP_ERR_NO_MEM;
+#endif
+  ingress = xQueueCreateStatic(kIngressDepth, sizeof(Input), IngressMemory(), &ingress_control);
   if (!ingress)
     return ESP_ERR_NO_MEM;
 
