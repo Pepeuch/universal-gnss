@@ -52,4 +52,21 @@ class Gate(unittest.TestCase):
         with patch.object(g.a.s.p,'load',return_value={'schema':1,'sources':[row]}),patch.object(g.a,'git',return_value=self.sha),patch.object(g,'authorize'),patch.object(g,'api',return_value={'draft':False,'prerelease':True,'assets':[]}):
             with self.assertRaises(ValueError):g.select()
 
+    def test_workflow_trigger_names_escape_literal_plus_without_renaming_checks(self):
+        import yaml
+        flow=yaml.load((ROOT/'.github/workflows/esp32-alpha.yml').read_text(),Loader=yaml.BaseLoader)
+        patterns=flow['on']['workflow_run']['workflows']
+        self.assertIn(r'C/C\+\+ Format',patterns)
+        self.assertNotIn('C/C++ Format',patterns)
+        names={pattern.replace('\\+','+') for pattern in patterns}
+        for filename in g.REQUIRED:
+            expected=yaml.load((ROOT/'.github/workflows'/filename).read_text(),Loader=yaml.BaseLoader)['name']
+            self.assertIn(expected,names)
+    def test_every_supported_firmware_is_automatically_built(self):
+        import yaml
+        flow=yaml.load((ROOT/'.github/workflows/esp32.yml').read_text(),Loader=yaml.BaseLoader)
+        self.assertEqual(set(flow['jobs']['firmware']['strategy']['matrix']['variant']),{'s3-gateway','c3-rover-usb','c3-rover-uart'})
+        self.assertEqual(set(flow['on']),{'push','pull_request'})
+        self.assertEqual(set(flow['on']['push']['branches']),{'main','dev'})
+        self.assertIn('native/ci.py',str(flow['jobs']['firmware']['steps']))
 if __name__=='__main__':unittest.main()

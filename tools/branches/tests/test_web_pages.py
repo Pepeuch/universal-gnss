@@ -32,7 +32,7 @@ class Pages(unittest.TestCase):
                 if file.is_file():z.write(file,file.relative_to(site))
         return data.getvalue()
     def refresh(self,site,out):
-        with patch.object(w.a,'source',return_value={'source_tree':'b'*40}),patch.object(w.a.s,'require_main'):
+        with patch.object(w.a,'source',return_value={'source_tree':'b'*40}),patch.object(w.a.s,'require_main'),patch.object(w.a,'remote_tag',return_value='a'*40):
             return w.refresh(self.archive(site),'synthetic',out)
     def test_web_only_preserves_every_firmware_byte_and_catalogue(self):
         fixture,site,entry=self.fixture()
@@ -82,6 +82,14 @@ class Pages(unittest.TestCase):
                  'assets':[{'name':n,'browser_download_url':'https://github.com/Pepeuch/universal-gnss/releases/download/synthetic/'+n} for n in ('esp32-alpha-site.zip','SHA256SUMS')]}
         with patch.object(w.urllib.request,'urlopen'),patch.object(w.json,'load',return_value=[release]),patch.object(w,'download',side_effect=[b'archive',b'0'*64+b'  esp32-alpha-site.zip']):
             with self.assertRaisesRegex(ValueError,'checksum mismatch'):w.durable_archive()
+    def test_durable_releases_include_alpha_beta_and_stable_without_channel_filter(self):
+        import hashlib
+        for prerelease,tag in [(True,'alpha-tag'),(True,'beta-tag'),(False,'v1.0.0')]:
+            data=b'archive';digest=hashlib.sha256(data).hexdigest()
+            release={'draft':False,'prerelease':prerelease,'published_at':'2026-11-16','tag_name':tag,
+                     'assets':[{'name':n,'browser_download_url':'https://github.com/Pepeuch/universal-gnss/releases/download/'+tag+'/'+n} for n in ('esp32-site.zip','SHA256SUMS')]}
+            with patch.object(w.urllib.request,'urlopen'),patch.object(w.json,'load',return_value=[release]),patch.object(w,'download',side_effect=[data,(digest+'  esp32-site.zip').encode()]):
+                self.assertEqual(w.durable_archive(),(data,tag))
     def test_resource_cache_key_changes_with_content(self):
         with tempfile.TemporaryDirectory() as d:
             site=Path(d);(site/'flasher').mkdir()

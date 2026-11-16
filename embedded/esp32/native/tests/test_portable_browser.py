@@ -91,7 +91,7 @@ class Browser(unittest.TestCase):
   # The missing-firmware request includes only the generic ROM profile, never runtime pins/channel.
   self.assertNotIn('uart_tx',vm.eval('elements.request.href'))
   self.assertNotIn('radio_channel',vm.eval('elements.request.href'))
-  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/approved-sources.json','flasher/catalog.json','flasher/publications.json'])
+  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/catalog.json','flasher/approved-sources.json','flasher/publications.json'])
   vm.eval("elements['portable-import'].change({target:{value:'private',files:[{size:300,text:async()=>JSON.stringify({...UGPortable.defaults('supermini-c3'),ssid:'PRIVATE_SENTINEL'})}]}});")
   drain();self.assertIn('Import refusé',vm.eval("elements['portable-info'].textContent"));self.assertNotIn('PRIVATE_SENTINEL',vm.eval("elements['portable-info'].textContent"))
   self.assertEqual(vm.eval('requests.length'),3)

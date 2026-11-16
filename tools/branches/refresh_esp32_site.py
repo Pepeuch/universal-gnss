@@ -29,21 +29,22 @@ def download(url, limit):
 
 
 def durable_archive():
-    # Do not use /latest: alpha prereleases are intentionally not latest releases.
+    # Include published alpha, beta and stable releases; drafts are never public.
     with urllib.request.urlopen('https://api.github.com/repos/'+a.REPO+'/releases?per_page=100', timeout=30) as response:
         releases = json.load(response)
-    candidates = [r for r in releases if not r['draft'] and r['prerelease'] and
-                  any(x['name'] == 'esp32-alpha-site.zip' for x in r['assets'])]
+    candidates = [r for r in releases if not r['draft'] and
+                  any(x['name'] in ('esp32-site.zip','esp32-alpha-site.zip') for x in r['assets'])]
     if not candidates:
-        raise ValueError('no durable alpha catalogue available')
+        raise ValueError('no durable firmware catalogue available')
     release = max(candidates, key=lambda r: r['published_at'])
     assets = {x['name']: x for x in release['assets']}
-    archive = download(assets['esp32-alpha-site.zip']['browser_download_url'], 512*1024*1024)
+    name='esp32-site.zip' if 'esp32-site.zip' in assets else 'esp32-alpha-site.zip'
+    archive = download(assets[name]['browser_download_url'], 512*1024*1024)
     sums = download(assets['SHA256SUMS']['browser_download_url'], 65536).decode('ascii')
     checks = dict((name, sha) for sha, name in (line.split() for line in sums.splitlines()))
-    if checks.get('esp32-alpha-site.zip') != hashlib.sha256(archive).hexdigest():
+    if checks.get(name) != hashlib.sha256(archive).hexdigest():
         raise ValueError('durable archive checksum mismatch')
-    digest = assets['esp32-alpha-site.zip'].get('digest')
+    digest = assets[name].get('digest')
     if digest and digest != 'sha256:'+hashlib.sha256(archive).hexdigest():
         raise ValueError('GitHub asset digest mismatch')
     return archive, release['tag_name']
@@ -78,7 +79,9 @@ def refresh(data, tag, output, repo=ROOT):
         root = Path(temp); old = root/'old'; old.mkdir()
         unpack(data, old)
         meta = a.s.p.load(old/'alpha-publication.json')
-        identity = a.source(repo, meta['source_sha'], tag)
+        identity = a.source(repo, meta['source_sha'])
+        if a.remote_tag(repo,tag)!=meta['source_sha']:
+            raise ValueError('published release tag/source mismatch')
         if meta['release_tag'] != tag or meta['source_tree'] != identity['source_tree']:
             raise ValueError('durable publication identity mismatch')
         catalog = a.s.p.load(old/'flasher/catalog.json')

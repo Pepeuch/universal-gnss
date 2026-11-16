@@ -2,7 +2,7 @@ name: ESP32 alpha publication
 
 on:
   workflow_run:
-    workflows: [Backlog Status, CMake, Distribution validation, Docker image validation, C/C++ Format, ROS 2 Lyrical validation, ESP32 native validation]
+    workflows: [Backlog Status, CMake, Distribution validation, Docker image validation, 'C/C\+\+ Format', ROS 2 Lyrical validation, ESP32 native validation]
     types: [completed]
     branches: [main]
   workflow_dispatch:

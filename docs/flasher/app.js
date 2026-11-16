@@ -112,19 +112,32 @@
     finally {reader.releaseLock();}
   }
   function publishedVersions(registry, catalog, history) {
-    const approved=approvals(registry).filter(row=>row.publication==='main_approved');
-    if(!history)return approved.map(row=>({...row,published_at:null,status:'alpha_historical'}));
-    if(history.schema!==1||!Array.isArray(history.publications)||history.publications.length>128)throw Error('Historique invalide');
-    const seen=new Set();
-    const result=history.publications.map(row=>{
-      if(!row||!sha(row.source_sha)||seen.has(row.source_sha)||row.status!=='validated_authorized_alpha'||!Number.isFinite(Date.parse(row.published_at))||!approved.some(a=>a.source_sha===row.source_sha))throw Error('Publication non approuvée');
-      seen.add(row.source_sha);
-      const variants=catalog.images.filter(e=>e.source_sha===row.source_sha).map(e=>e.profile.variant);
-      if(!variants.includes('s3-gateway')||!variants.includes('c3-rover-usb'))throw Error('Publication incomplète');
-      return {...approved.find(a=>a.source_sha===row.source_sha),...row};
-    });
-    if(!result.length)throw Error('Historique vide');
-    return result.sort((a,b)=>Date.parse(b.published_at)-Date.parse(a.published_at));
+    // Availability comes from the published catalogue, never optional metadata.
+    const rows=new Map();
+    for(const entry of catalog.images) {
+      if(!sha(entry.source_sha))continue;
+      rows.set(entry.source_sha,{source_sha:entry.source_sha,published_at:null,status:'published',channel:'',release_tag:''});
+    }
+    if(history?.schema===1&&Array.isArray(history.publications)) {
+      for(const row of history.publications) {
+        if(!row||!rows.has(row.source_sha))continue;
+        const target=rows.get(row.source_sha);
+        if(typeof row.published_at==='string'&&Number.isFinite(Date.parse(row.published_at)))target.published_at=row.published_at;
+        if(typeof row.status==='string')target.status=row.status;
+        if(typeof row.channel==='string')target.channel=row.channel;
+        if(typeof row.release_tag==='string')target.release_tag=row.release_tag;
+      }
+    }
+    return [...rows.values()].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0));
+  }
+  async function loadCatalogue(signal) {
+    const catalog=json(await boundedFetch('flasher/catalog.json',2097152,signal));
+    if(!catalog||catalog.schema!==2||!Array.isArray(catalog.images)||catalog.images.length>512)throw Error('Catalogue invalide');
+    const optional=async(path)=>{try{return json(await boundedFetch(path,65536,signal));}catch{return null;}};
+    const [registry,history]=await Promise.all([optional('flasher/approved-sources.json'),optional('flasher/publications.json')]);
+    let sources=[];
+    try {sources=approvals(registry);}catch{}
+    return {catalog,registry,history,sources,versions:publishedVersions(registry,catalog,history)};
   }
   function initialize() {
     const $=id=>document.getElementById(id);let images=[],sources=[],generation=0,controller=null,current=null,urls=[];
@@ -163,6 +176,7 @@
       const approval=sources.find(s=>s.source_sha===source);
       const candidates=images.filter(e=>e.source_sha===source && canonical(normalize(e.profile))===canonical(p));
       if(candidates.length!==1){status(candidates.length?'Catalogue ambigu : flash refusé.':'Aucune image publiée pour cette source/profil. La demande GitHub nécessite une approbation mainteneur.');return}
+      if(!approval){$('request').classList.add('hidden');status('Firmware publié disponible ; registre de provenance indisponible. Réessayez pour vérifier les binaires.');return}
       const requestController=new AbortController();controller=requestController;const signal=requestController.signal,timer=setTimeout(()=>requestController.abort(),30000);
       status('Vérification de la source, des partitions et de tous les segments…');
       try {
@@ -176,7 +190,7 @@
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
         $('image-info').textContent=`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète.`;
         $('request').classList.add('hidden');
-        status('ALPHA — qualification matérielle en cours. Octets et provenance vérifiés. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
+        status('Firmware publié — octets et provenance vérifiés. Qualification matérielle distincte. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
       finally {clearTimeout(timer);}
     }
@@ -249,20 +263,16 @@
     (async()=>{
       const timeout=new AbortController(),timer=setTimeout(()=>timeout.abort(),15000);
       try {
-        const [registry,catalog]=await Promise.all(['flasher/approved-sources.json','flasher/catalog.json'].map(path=>boundedFetch(path,path.endsWith('catalog.json')?2097152:65536,timeout.signal).then(json)));
-        sources=approvals(registry);
-        if(!catalog || catalog.schema!==2 || !Array.isArray(catalog.images) || catalog.images.length>512)throw Error('Catalogue invalide');
-        images=catalog.images;for(const e of images)normalize(e.profile);
-        let history=null;
-        try { history=json(await boundedFetch('flasher/publications.json',65536,timeout.signal)); }
-        catch(error){if(!String(error.message).includes('404'))throw error;}
-        const versions=publishedVersions(registry,catalog,history);
+        const loaded=await loadCatalogue(timeout.signal);
+        sources=loaded.sources;images=loaded.catalog.images;
+        for(const entry of images)normalize(entry.profile);
+        const versions=loaded.versions;
         $('version').replaceChildren();
-        for(const item of (versions.length?versions:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?'ALPHA validée logiciel — '+item.source_sha+' — '+(item.published_at||'date historique indisponible'):'Aucune source approuvée';$('version').append(option)}
+        for(const item of (versions.length?versions:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?(item.channel||item.status?.match(/alpha|beta|stable/i)?.[0]||'Publié').toUpperCase()+' — '+(item.release_tag?item.release_tag+' — ':'')+item.source_sha+' — '+(item.published_at||'date indisponible'):'Aucun firmware publié';$('version').append(option)}
         await render();
       } catch(error){clear();status('Portail non disponible : '+error.message)}finally{clearTimeout(timer)}
     })();
   }
-  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished,publishedVersions};
+  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished,publishedVersions,loadCatalogue};
   if(typeof document!=='undefined')initialize();
 })();

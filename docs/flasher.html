@@ -24,7 +24,7 @@
   <h2 id="config-heading">Profil du firmware</h2>
   <div class="fields">
    <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB / UART runtime</option></select></div>
-   <div><label for="version">Version du firmware</label><select id="version"><option value="none">Aucune source approuvée chargée</option></select><small>La liste se remplit depuis le registre des sources approuvées.</small></div>
+   <div><label for="version">Version du firmware</label><select id="version"><option value="none">Chargement des firmwares publiés…</option></select><small>Toutes les versions publiées compatibles : alpha, bêta et stable.</small></div>
    <div><label for="source">Source de corrections (S3)</label><select id="source"><option value="local">GNSS local — BASE RTK</option><option value="ntrip">NTRIP entrant — mode relais</option></select><small>Mode choisi après installation ; un même firmware S3 peut fournir les deux chemins.</small></div>
    <div><label for="receiver">Récepteur GNSS (S3)</label><select id="receiver"><option value="unicore">Unicore UM980 / UM982</option><option value="ublox">u-blox ZED-F9P</option></select><small>Choix de configuration à l'exécution : même moteur UG.</small></div>
    <div id="tx-block" class="hidden"><label for="tx">Broche TX UART (C3 rover)</label><select id="tx"><option value="4">GPIO4</option><option value="5">GPIO5</option><option value="6">GPIO6</option><option value="7">GPIO7</option><option value="10">GPIO10</option></select></div>

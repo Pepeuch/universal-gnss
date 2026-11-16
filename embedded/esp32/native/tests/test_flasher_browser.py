@@ -53,11 +53,31 @@ class Flasher(unittest.TestCase):
         history={'schema':1,'publications':[{'source_sha':sha,'status':'validated_authorized_alpha','published_at':date} for sha,date in [('a'*40,'2026-11-15T00:00:00Z'),('b'*40,'2026-11-16T00:00:00Z')]]}
         expr='UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')'
         self.assertEqual(vm.eval(expr+'[0].source_sha'),'b'*40)
+        # Listing is availability, not a new build/flash authorization.
         registry['sources'][1]['publication']='not_authorized'
-        with self.assertRaises(Exception):vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')')
-        registry['sources'][1]['publication']='main_approved'
-        history['publications'][1]['source_sha']='c'*40
-        with self.assertRaises(Exception):vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')')
+        self.assertEqual(vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')[0].source_sha'),'b'*40)
+        history['publications'].append({'source_sha':'c'*40,'channel':'stable','published_at':'2030-01-01'})
+        self.assertEqual(vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+').length'),2)
+    def test_alpha_beta_and_stable_catalogue_versions_are_all_visible(self):
+        vm=self.vm()
+        catalog={'images':[{'source_sha':x*40} for x in ('a','b','c')]}
+        history={'schema':1,'publications':[{'source_sha':x*40,'channel':channel,'published_at':'2026-11-'+day+'T00:00:00Z'} for x,channel,day in [('a','alpha','14'),('b','beta','15'),('c','stable','16')]]}
+        expr='UGFlasher.publishedVersions(null,'+json.dumps(catalog)+','+json.dumps(history)+')'
+        self.assertEqual(json.loads(vm.eval('JSON.stringify('+expr+'.map(x=>x.channel))')),['stable','beta','alpha'])
+        for bad in (None,{}, {'schema':1,'publications':'bad'}):
+            expr='UGFlasher.publishedVersions(null,'+json.dumps(catalog)+','+json.dumps(bad)+')'
+            self.assertEqual(vm.eval(expr+'.length'),3)
+    def test_metadata_503_or_invalid_json_never_hides_published_catalogue(self):
+        for failure in ('503','json'):
+            vm=self.vm()
+            vm.eval("const document={baseURI:'https://fixture.invalid/flasher.html'};const location={origin:'https://fixture.invalid'};class URL{constructor(path){this.path=path;this.origin=location.origin;}}")
+            vm.eval('const catalogue='+json.dumps({'schema':2,'images':[self.entry]})+';const failure='+json.dumps(failure)+''';async function fetch(url){const main=url.path==='flasher/catalog.json';return {ok:main||failure==='json',status:main?200:503,headers:{get:()=>null},arrayBuffer:async()=>new TextEncoder().encode(main?JSON.stringify(catalogue):'invalid json').buffer};}
+            UGFlasher.loadCatalogue({}).then(v=>globalThis.loaded=v,e=>globalThis.err=e.message);
+            ''')
+            for _ in range(200):
+                if not vm.execute_pending_job():break
+            self.assertEqual(vm.eval('loaded.versions.length'),1)
+            self.assertEqual(vm.eval('loaded.versions[0].source_sha'),'a'*40)
     def test_actual_packager_and_browser_agree(self):
         result,paths=self.evaluate();self.assertEqual(result,{'ok':True,'count':4});self.assertEqual(len(paths),7)
     def test_unapproved_source_never_downloads_images(self):
