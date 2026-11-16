@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Prepare or publish real alpha firmware. A manual main workflow is the authority.
+"""Publish explicitly authorized main firmware after mandatory CI succeeds.
 
-Local `stage` never publishes. `release` is only callable by the trusted manual
-main workflow, after both builds and all bundle checks. It never replaces tags
-or assets. Hardware qualification is pending and does not disable alpha installs.
+Manual and automatic main workflows share the same authority and immutable
+release checks. Local stage never publishes; hardware qualification remains
+pending and installations are full-only, with NVS-preserving updates unqualified.
 """
 import argparse
 import hashlib
@@ -69,12 +69,16 @@ def remote_tag(repo,tag):
     return refs.get('refs/tags/'+tag+'^{}',refs.get('refs/tags/'+tag))
 
 def release(repo,site,assets,env=os.environ):
-    if env.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or env.get('GITHUB_REF')!='refs/heads/main' or env.get('GITHUB_REPOSITORY')!=REPO:
-        raise ValueError('publication requires the maintainer manual workflow on main')
+    if env.get('GITHUB_EVENT_NAME') not in ('workflow_dispatch','workflow_run') or env.get('GITHUB_REF')!='refs/heads/main' or env.get('GITHUB_REPOSITORY')!=REPO:
+        raise ValueError('publication requires an authorized main workflow')
+    if env.get('GITHUB_EVENT_NAME') in ('workflow_run','workflow_dispatch'):
+        spec=importlib.util.spec_from_file_location('release_authority',ROOT/'tools/branches/esp32_publication_gate.py')
+        gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
+        gate.authorize(s.p.load(Path(site)/'alpha-publication.json')['source_sha'],repo)
     site=Path(site);meta=s.p.load(site/'alpha-publication.json');identity=source(repo,meta['source_sha'],meta['release_tag'])
     if meta['source_tree']!=identity['source_tree']:raise ValueError('publication tree changed')
     catalog=s.p.load(site/'flasher/catalog.json')
-    if len(catalog['images'])!=2 or {v['profile']['variant'] for v in catalog['images']}!=set(VARIANTS):raise ValueError('nonempty complete catalogue required')
+    if len([v for v in catalog['images'] if v['source_sha']==identity['source_sha']])!=2 or {v['profile']['variant'] for v in catalog['images']}!=set(VARIANTS):raise ValueError('nonempty complete catalogue required')
     # Reconstruct and revalidate the review bundles from the exact prepared site.
     import tempfile,shutil
     with tempfile.TemporaryDirectory(prefix='ug-alpha-check-') as temp:
@@ -89,7 +93,9 @@ def release(repo,site,assets,env=os.environ):
     # Include an exact corresponding-source archive, not just expiring CI artifacts.
     subprocess.run(['git','-C',str(repo),'archive','--format=tar.gz','--output='+str((assets/'firmware-source.tar.gz').resolve()),identity['source_sha']],check=True,env=ENV)
     for name in ('catalog.json','approved-sources.json'):shutil.copyfile(site/'flasher'/name,assets/name)
-    for entry in catalog['images']:shutil.copyfile(site/entry['bundle'],assets/(entry['profile']['variant']+'.zip'))
+    for entry in catalog['images']:
+        if entry['source_sha']!=identity['source_sha']:continue
+        shutil.copyfile(site/entry['bundle'],assets/(entry['profile']['variant']+'.zip'))
     sums={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(assets.iterdir())}
     (assets/'SHA256SUMS').write_text(''.join(value+'  '+key+'\n' for key,value in sums.items()))
     notes=assets/'release-notes.md';notes.write_text('ALPHA — qualification matérielle en cours.\n\nSource: '+identity['source_sha']+'\n\nS3 Gateway W5500/GNSS/NTRIP/ESP-NOW; C3 ESP-NOW RTCM USB/UART runtime.\nInstallation complète; sauvegarder Flash/NVS. Aucun secret ni configuration utilisateur inclus.\nLes essais logiciels ne prouvent pas RF, RTK FIX ou le câblage de chaque installation.\n')
@@ -126,7 +132,8 @@ def verify_online(site,url):
     base=url.rstrip('/')+'/'
     site=Path(site);paths=['flasher.html','flasher/catalog.json','flasher/approved-sources.json','flasher/app.js','flasher/portable.js','flasher/provision.js']
     catalog=s.p.load(site/'flasher/catalog.json')
-    if len(catalog['images'])!=2:raise ValueError('public alpha catalogue must not be empty')
+    if not catalog['images']:raise ValueError('public alpha catalogue must not be empty')
+    if (site/'flasher/publications.json').exists():paths.append('flasher/publications.json')
     for entry in catalog['images']:
         prefix='flasher/published/'+entry['build_key']+'/'
         paths.extend(prefix+name for name in ('manifest.json','provenance.json','qualification.json','bundle.zip'))
@@ -151,7 +158,11 @@ def main(argv=None):
     if os.getuid()==0:p.error('run as normal project user')
     try:
         if a.command=='validate':result=source(ROOT,a.source_sha,a.release_tag)
-        elif a.command=='stage':result=stage(ROOT,a.source_sha,a.bundle,a.output,a.release_tag,a.review)[0]
+        elif a.command=='stage':
+            result=stage(ROOT,a.source_sha,a.bundle,a.output,a.release_tag,a.review)[0]
+            spec=importlib.util.spec_from_file_location('catalog_history',ROOT/'tools/branches/esp32_catalog_history.py')
+            history=importlib.util.module_from_spec(spec);spec.loader.exec_module(history)
+            history.merge(a.output)
         elif a.command=='release':result=release(ROOT,a.site,a.assets)
         else:result=verify_online(a.site,a.url)
     except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as e:p.error(str(e))

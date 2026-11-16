@@ -97,7 +97,7 @@
     const url=new URL(path,document.baseURI);
     if (url.origin!==location.origin) throw Error('Ressource hors du portail');
     const response=await fetch(url,{cache:'no-store',credentials:'omit',signal});
-    if (!response.ok || Number(response.headers.get('Content-Length') || 0)>limit) throw Error('Ressource indisponible ou trop grande');
+    if (!response.ok || Number(response.headers.get('Content-Length') || 0)>limit) throw Error('Ressource indisponible ou trop grande (HTTP '+response.status+')');
     if (!response.body?.getReader) {
       const bytes=new Uint8Array(await response.arrayBuffer());if(bytes.byteLength>limit)throw Error('Ressource trop grande');return bytes;
     }
@@ -110,6 +110,21 @@
       throw Error('Budget de segments réseau dépassé');
     } catch(error) {await reader.cancel();throw error;}
     finally {reader.releaseLock();}
+  }
+  function publishedVersions(registry, catalog, history) {
+    const approved=approvals(registry).filter(row=>row.publication==='main_approved');
+    if(!history)return approved.map(row=>({...row,published_at:null,status:'alpha_historical'}));
+    if(history.schema!==1||!Array.isArray(history.publications)||history.publications.length>128)throw Error('Historique invalide');
+    const seen=new Set();
+    const result=history.publications.map(row=>{
+      if(!row||!sha(row.source_sha)||seen.has(row.source_sha)||row.status!=='validated_authorized_alpha'||!Number.isFinite(Date.parse(row.published_at))||!approved.some(a=>a.source_sha===row.source_sha))throw Error('Publication non approuvée');
+      seen.add(row.source_sha);
+      const variants=catalog.images.filter(e=>e.source_sha===row.source_sha).map(e=>e.profile.variant);
+      if(!variants.includes('s3-gateway')||!variants.includes('c3-rover-usb'))throw Error('Publication incomplète');
+      return {...approved.find(a=>a.source_sha===row.source_sha),...row};
+    });
+    if(!result.length)throw Error('Historique vide');
+    return result.sort((a,b)=>Date.parse(b.published_at)-Date.parse(a.published_at));
   }
   function initialize() {
     const $=id=>document.getElementById(id);let images=[],sources=[],generation=0,controller=null,current=null,urls=[];
@@ -238,12 +253,16 @@
         sources=approvals(registry);
         if(!catalog || catalog.schema!==2 || !Array.isArray(catalog.images) || catalog.images.length>512)throw Error('Catalogue invalide');
         images=catalog.images;for(const e of images)normalize(e.profile);
+        let history=null;
+        try { history=json(await boundedFetch('flasher/publications.json',65536,timeout.signal)); }
+        catch(error){if(!String(error.message).includes('404'))throw error;}
+        const versions=publishedVersions(registry,catalog,history);
         $('version').replaceChildren();
-        for(const item of (sources.length?sources:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?'ALPHA '+item.source_sha.slice(0,12):'Aucune source approuvée';$('version').append(option)}
+        for(const item of (versions.length?versions:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?'ALPHA validée logiciel — '+item.source_sha+' — '+(item.published_at||'date historique indisponible'):'Aucune source approuvée';$('version').append(option)}
         await render();
       } catch(error){clear();status('Portail non disponible : '+error.message)}finally{clearTimeout(timer)}
     })();
   }
-  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished};
+  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished,publishedVersions};
   if(typeof document!=='undefined')initialize();
 })();

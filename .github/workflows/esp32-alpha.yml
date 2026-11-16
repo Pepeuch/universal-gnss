@@ -1,6 +1,10 @@
 name: ESP32 alpha publication
 
 on:
+  workflow_run:
+    workflows: [Backlog Status, CMake, Distribution validation, Docker image validation, C/C++ Format, ROS 2 Lyrical validation, ESP32 native validation]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       source_sha:
@@ -21,7 +25,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  authorize:
+    if: github.repository == 'Pepeuch/universal-gnss' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      source_sha: ${{ steps.authority.outputs.source_sha }}
+      already_published: ${{ steps.authority.outputs.already_published }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: authority
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_SHA: ${{ inputs.source_sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if test "$EVENT" = workflow_dispatch; then
+            python3 tools/branches/esp32_publication_gate.py --source-sha "$REQUESTED_SHA"
+          else
+            python3 tools/branches/esp32_publication_gate.py
+          fi
   build:
+    needs: authorize
+    if: needs.authorize.outputs.source_sha != '' && needs.authorize.outputs.already_published != 'true'
     name: Build real alpha (${{ matrix.variant }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -30,7 +63,7 @@ jobs:
       matrix:
         variant: [s3-gateway, c3-rover-usb]
     steps:
-      - name: Require manual publication from main
+      - name: Require publication from main
         env:
           WORKFLOW_REF: ${{ github.ref }}
         run: |
@@ -38,12 +71,12 @@ jobs:
           test "$WORKFLOW_REF" = refs/heads/main
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - name: Validate source and build real isolated firmware
         env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           VARIANT: ${{ matrix.variant }}
         run: |
@@ -62,11 +95,12 @@ jobs:
 
   publish:
     name: Archive alpha and deploy Web Flasher
-    needs: build
+    needs: [authorize, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
+      actions: read
       pages: write
       id-token: write
     environment:
@@ -75,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@v8
@@ -84,7 +118,7 @@ jobs:
           path: ${{ runner.temp }}/alpha-builds
       - name: Assemble catalogue from both successful builds
         env:
-          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           REVIEW_URL: https://github.com/Pepeuch/universal-gnss/actions/workflows/esp32-alpha.yml
         run: |
@@ -113,3 +147,37 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/alpha-site" --url "$PAGE_URL"
+
+  restore:
+    name: Recover verified existing publication without rebuilding
+    needs: authorize
+    if: needs.authorize.outputs.already_published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore durable verified catalogue
+        env:
+          SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
+        run: python3 tools/branches/refresh_esp32_site.py --output "$RUNNER_TEMP/restored-site" --require-source "$SOURCE_SHA"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/restored-site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Verify public firmware bytes
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/restored-site" --url "$PAGE_URL"
