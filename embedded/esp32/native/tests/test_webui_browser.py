@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
+from test_pairing_browser import FIXTURE as SERIAL_FIXTURE
 
 ROOT = Path(__file__).resolve().parents[4]
 ASSETS = ROOT / 'embedded/esp32/components/ug_web/assets'
@@ -24,6 +25,7 @@ def run(artifacts=None):
         browser = engine.chromium.launch(headless=True)
         for gnss, width in ((True, 1280), (True, 390), (False, 390)):
             context = browser.new_context(ignore_https_errors=True, viewport={'width': width, 'height': 900})
+            context.add_init_script("globalThis.scenario='nominal';\n"+SERIAL_FIXTURE+"\nglobalThis.serialFixtureState=()=>({key:storedKey,closed:port.closed});Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>port},configurable:true});")
             page = context.new_page()
             calls, patches, errors, pending = [], [], [], set()
             peak = [0]
@@ -33,7 +35,9 @@ def run(artifacts=None):
                       'caster': {'enabled': False, 'port': 2101, 'mountpoint': 'LOCAL'},
                       'wifi': {'sta': False, 'ap': False, 'ssid': '', 'ap_ssid': 'UG-RTK'}}
             receiver = {'present': False, 'model_verified': False, 'model': '', 'position_stale': True, 'fix_valid': False}
-            rejected, offline = [False], [False]
+            pairing={'sta_mac':'02:00:00:00:00:02','configured_channel':1,'peer':'','key_set':False,'enabled':False,'started':False,'effective_channel':0,'restart_required':False}
+            pairing_keys=[]
+            rejected, offline, fresh = [False], [False], [False]
 
             def request_started(request):
                 if '/api/' in request.url:
@@ -64,8 +68,34 @@ def run(artifacts=None):
                 if offline[0] and path == '/api/resources':
                     route.fulfill(status=503, body='fixture disconnected')
                     return
-                if path not in ('/api/resources', '/api/status', '/api/capabilities') and route.request.headers.get('authorization') != 'Bearer ' + 'z' * 64:
+                if path == '/api/auth/login':
+                    good = route.request.post_data_json == {'username':'admin','password':'admin' if fresh[0] else 'a'*64}
+                    route.fulfill(status=200 if good else 401, json={'token':'a'*64,'password_change_required':fresh[0]} if good else {'error':'invalid credentials'})
+                    return
+                if path == '/api/auth/logout':
+                    route.fulfill(body='closed')
+                    return
+                if path not in ('/api/resources' , '/api/status', '/api/capabilities') and route.request.headers.get('authorization') != 'Bearer ' + 'a' * 64:
                     route.fulfill(status=401, body='administrator required')
+                    return
+                if path.startswith('/api/radio/pairing'):
+                    body=route.request.post_data_json if route.request.method=='POST' else None
+                    if path.endswith('/window'):
+                        assert body == {'confirm':'OPEN_LOCAL_PAIRING'}
+                        pairing['window_open']=True
+                    elif path.endswith('/apply'):
+                        assert body['confirm']=='PAIR_ESPNOW_ROVER' and body['peer']=='02:00:00:00:00:03' and body['channel']==1
+                        pairing_keys.append(body['key'])
+                        pairing.update(peer=body['peer'],enabled=True,key_set=True,window_open=False,restart_required=True)
+                    elif path.endswith('/restart'):
+                        assert body=={'confirm':'RESTART_AFTER_PAIRING'}
+                        pairing.update(started=True,effective_channel=1,restart_required=False)
+                    route.fulfill(json=pairing)
+                    return
+                if path == '/api/auth/password':
+                    assert route.request.post_data_json == {'current_password':'admin','new_password':'new-fixture-password','confirm':'CHANGE_PASSWORD'}
+                    fresh[0] = False
+                    route.fulfill(body='password changed')
                     return
                 if path == '/api/config' and route.request.method == 'POST':
                     value = route.request.post_data_json
@@ -85,7 +115,7 @@ def run(artifacts=None):
                         owner.pop('password', None)
                         owner.get('endpoint', {}).pop('password', None)
                 elif path == '/api/capabilities':
-                    value = {'gnss': gnss, 'publishers': 1, 'gnss_allowed_pins': [16, 17] if gnss else []}
+                    value = {'password_authentication':True,'gnss': gnss, 'publishers': 1, 'gnss_allowed_pins': [16, 17] if gnss else []}
                 elif path == '/api/resources':
                     value = {'pressure': 'normal', 'internal_free': 110000, 'internal_largest': 40000, 'psram_total': 8388608 if gnss else 0, 'web_mutations_allowed': True, 'satellites_allowed': True}
                 elif path == '/api/status':
@@ -112,11 +142,11 @@ def run(artifacts=None):
 
             context.route('**/*', route_handler)
             page.goto('https://ug.test/', wait_until='networkidle')
-            page.locator('#token').fill('invalid-fixture-token')
+            page.locator('#password').fill('invalid-fixture-token')
             page.locator('#login').click()
             expect(page.locator('#notice')).to_contain_text('401')
             expect(page.locator('#session-state')).to_have_text('Session fermée')
-            page.locator('#token').fill('z' * 64)
+            page.locator('#password').fill('a' * 64)
             page.locator('#login').click()
             expect(page.locator('#session-state')).to_have_text('Session ouverte')
             expect(page.locator('#card-https')).to_contain_text('running')
@@ -173,9 +203,32 @@ def run(artifacts=None):
             assert len(calls) == count, 'hidden page issued API requests'
             page.evaluate("Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'))")
             expect(page.locator('#connection-state')).to_have_text('API accessible')
+            page.locator('#nav-network').click()
+            page.locator('#pairing-start').click()
+            expect(page.locator('#pairing-info')).to_contain_text('S3 radio démarrée',timeout=15000)
+            assert len(pairing_keys)==1 and len(pairing_keys[0])==32
+            assert page.evaluate('serialFixtureState().key')==pairing_keys[0]
+            assert pairing_keys[0] not in page.locator('body').inner_text()
+            assert page.locator('#pairing-key').count()==0 and page.locator('#pairing-ticket').count()==0
+            assert page.evaluate('serialFixtureState().closed')
             page.locator('#logout').click()
-            expect(page.locator('#token')).to_have_value('')
+            expect(page.locator('#password')).to_have_value('')
             expect(page.locator('#session-state')).to_have_text('Session fermée')
+            fresh[0] = True
+            before_config = sum(path == '/api/config' for path, _ in calls)
+            page.locator('#password').fill('admin')
+            page.locator('#login').click()
+            expect(page.locator('#session-state')).to_have_text('Mot de passe à changer')
+            expect(page.locator('#tab-settings')).to_be_visible()
+            expect(page.locator('#password')).to_have_value('')
+            assert sum(path == '/api/config' for path, _ in calls) == before_config
+            page.locator('#current-password').fill('admin')
+            page.locator('#new-password').fill('new-fixture-password')
+            page.locator('#confirm-password').fill('new-fixture-password')
+            page.locator('#password-form button').click()
+            expect(page.locator('#session-state')).to_have_text('Session fermée')
+            for name in ('current-password','new-password','confirm-password'):
+                expect(page.locator('#'+name)).to_have_value('')
             if artifacts:
                 page.locator('#nav-dashboard').click()
                 Path(artifacts).mkdir(parents=True, exist_ok=True)

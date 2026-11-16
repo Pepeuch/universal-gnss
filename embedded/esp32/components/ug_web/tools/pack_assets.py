@@ -10,7 +10,7 @@ PORTABLE = Path(__file__).resolve().parents[5] / 'docs/flasher/portable.js'
 
 def source_bytes(source, name):
     raw=(Path(source)/name).read_bytes()
-    return PORTABLE.read_bytes()+b'\n'+raw if name=='app.js' else raw
+    return PORTABLE.read_bytes()+b'\n'+(Path(__file__).parents[1]/'assets/pairing.js').read_bytes()+b'\n'+raw if name=='app.js' else raw
 
 
 

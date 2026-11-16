@@ -18,7 +18,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[4]
 
 
-def prepare(output, hostname, address=None):
+def prepare(output, hostname, address=None, tls_only=False):
     output = Path(output).resolve()
     if output == ROOT or ROOT in output.parents or output.exists():
         raise ValueError('output must be new and outside UG source roots')
@@ -43,10 +43,13 @@ def prepare(output, hostname, address=None):
                     'confirm': 'REPLACE_TLS_IDENTITY'}
         settings = {'name': hostname, 'admin_token_sha256': hashlib.sha256(token.encode()).hexdigest()}
         commands = 'tls-init ' + json.dumps(identity, separators=(',', ':')) + '\n'
-        commands += 'config ' + json.dumps(settings, separators=(',', ':')) + '\n'
+        if not tls_only:
+            commands += 'config ' + json.dumps(settings, separators=(',', ':')) + '\n'
         commands += 'reboot CONFIRM\n'
-        for name, contents in {'console-input.txt': commands, 'admin-token.txt': token + '\n',
-                               'certificate.pem': cert.read_text()}.items():
+        files = {'console-input.txt':commands, 'certificate.pem':cert.read_text()}
+        if not tls_only:
+            files['admin-token.txt'] = token + '\n'
+        for name, contents in files.items():
             with os.fdopen(os.open(output / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as stream:
                 stream.write(contents)
     fingerprint = subprocess.check_output(['openssl', 'x509', '-in', str(output / 'certificate.pem'),
@@ -61,5 +64,6 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True)
     parser.add_argument('--hostname', default='ug-rtk')
     parser.add_argument('--ip', help='optional intended local address included in certificate SAN')
+    parser.add_argument('--tls-only', action='store_true', help='prepare TLS only; fresh devices retain restricted admin/admin, existing credentials are untouched')
     args = parser.parse_args()
-    prepare(args.output, args.hostname, args.ip)
+    prepare(args.output, args.hostname, args.ip, args.tls_only)

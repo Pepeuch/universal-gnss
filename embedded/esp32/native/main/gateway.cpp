@@ -16,6 +16,7 @@
 #include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
 #include "ug_web.hpp"
+#include "ug_web_auth_platform.hpp"
 #include "ug_wifi.hpp"
 extern "C" {
 #include "espnow_rtcm.h"
@@ -110,6 +111,10 @@ std::int32_t StartRadioControl(void*)
 }  // namespace
 extern "C" void app_main()
 {
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (!ug::embedded::InitializeWebSessionRandom())
+    ESP_LOGE("UG", "Web session RNG unavailable; password login fails closed");
+#endif
   ug::embedded::InitializeMemoryDiagnostics();
   using namespace ug::embedded;
   const auto nvs = nvs_flash_init();

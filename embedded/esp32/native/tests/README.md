@@ -83,3 +83,13 @@ ajoute huit scénarios exécutant le véritable driver avec SDK/RTOS simulés
 expiration et débordement d'époque), plus une publication concurrente du stockage
 avec pthread. Total : 60 CTest ASan/UBSan. Les fixtures ne provisionnent aucun
 pair ni clé sur du matériel. La qualification radio active est reportée.
+
+The S3 WebUI authentication extension adds the portable session/migration contract,
+a production PBKDF2 comparison with OpenSSL (600000 iterations and failure wipe),
+and TLS-only/legacy commissioning checks: **63 CTest cases**. Current WebUI tests
+also cover restricted credentials, password confirmations, session cleanup and the
+historical non-S3 Bearer path. `test_pairing_browser.py` exercises the real serial
+helper against Chromium Streams doubles, including partial/uncertain writes; it
+opens no hardware. Run it in the same Playwright 1.56.0 environment as
+`test_webui_browser.py`. Passing these tests is not physical pairing or S3 latency
+qualification; see the [WebUI report](../../../../docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md).

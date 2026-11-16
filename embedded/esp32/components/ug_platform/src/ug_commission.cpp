@@ -12,6 +12,7 @@
 #include "ug_memory_diagnostics.hpp"
 #include "ug_s3_json_memory.hpp"
 #include "ug_s3_memory_options.hpp"
+#include "ug_web_auth_platform.hpp"
 #include <charconv>
 #if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
 #include "esp_heap_caps.h"
@@ -85,6 +86,18 @@ void Handle(std::string_view command)
     ok = MemoryTraceCommand(true, error);
   else if (command == "memory trace-stop")
     ok = MemoryTraceCommand(false, error);
+#if CONFIG_IDF_TARGET_ESP32S3
+  else if (command == "auth-benchmark")
+  {
+    std::int64_t elapsed{};
+    ok = BenchmarkWebPassword(elapsed);
+    std::printf("UG_AUTH benchmark_fixed_vector=%s iterations=%u elapsed_us=%lld "
+                "no_credentials_changed=1\n",
+                ok ? "pass" : "fail",
+                WebAuth::kIterations,
+                static_cast<long long>(elapsed));
+  }
+#endif
   else if (command == "tls-status")
   {
     LoadedWebIdentity stored;

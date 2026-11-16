@@ -43,6 +43,11 @@ La consommation et la marge radio active restent non qualifiées, jusqu'à un
 appairage matériel réel ; les tests de cycle de vie actuels sont simulés.
 GNSS/RTCM physique et endurance prolongée restent à qualifier.
 
+La [simplification WebUI en cours](../../docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md)
+remplace les tickets d'association par Web Serial et introduit une connexion par
+mot de passe. Les validations logicielles restent distinctes de l'acceptation
+matérielle et des mesures de coût S3, encore nécessaires avant publication.
+
 ## Appairage natif actuel
 
 Le [contrat d’appairage et de maintenance USB](PAIRING.md) remplace les pairs
