@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
+#include "ug_rtcm_rules.hpp"
 #pragma once
 #include "ug_gateway.hpp"
 #include "ug_ntrip_trace.hpp"
@@ -13,11 +14,12 @@ class NtripPublisher
 public:
   struct Metrics
   {
-    std::uint64_t connects{}, frames{}, bytes{}, failures{}, expired{};
+    std::uint64_t connects{}, frames{}, bytes{}, failures{}, expired{}, filtered{};
   };
   bool Configure(const universal_gnss_ntrip::NtripConfig&,
                  bool enabled,
-                 std::function<bool()> cancelled = {});
+                 std::function<bool()> cancelled = {},
+                 std::string_view rtcm_messages = {});
   void Tick(std::int64_t now_ns);
   bool Send(const Gateway::Frame&, std::int64_t now_ns);
   void Stop();
@@ -46,6 +48,8 @@ private:
   void Fail(std::int64_t now_ns, NtripTraceError error);
   NtripTraceSink trace_;
   bool WriteAll(const std::uint8_t*, std::size_t);
+  RtcmRules filter_;
+  std::string filter_text_;
   State state_{State::kStopped};
   universal_gnss_transport::TcpClientTransport transport_;
   universal_gnss_transport::TcpClientConfig tcp_;

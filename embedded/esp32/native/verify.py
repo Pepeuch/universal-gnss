@@ -92,7 +92,20 @@ def check_wire_logging(commands, profile, maximum_level):
         raise ValueError('native wire logging inputs missing')
 
 
-def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200):
+def sdk_web_transport(lines, expected='https'):
+    if expected not in ('https', 'http'):
+        raise ValueError('unknown Web transport expectation')
+    values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
+    actual = 'http' if values.get('CONFIG_UG_WEB_HTTP') == 'y' else 'https'
+    if actual != expected or (actual == 'http' and values.get('CONFIG_IDF_TARGET_ESP32S3') != 'y'):
+        raise ValueError('Web transport does not match explicit S3 build selection')
+    return actual
+
+
+def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200,
+           web_transport='https'):
+    if web_transport not in ('https', 'http') or (web_transport=='http' and profile!='gateway'):
+        raise ValueError('HTTP experiment requires the S3 gateway')
     if profile != 'rover' and (rover_uart_tx is not None or rover_uart_baud != 115200):
         raise ValueError('UART output expectation requires the rover profile')
     work = Path(work).resolve()
@@ -204,6 +217,7 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
     result['web_assets'] = web_assets
     if profile != 'rover':
         lines = (work / 'sdkconfig').read_text().splitlines()
+        result['web_transport'] = sdk_web_transport(lines, web_transport)
         result['network_capacity'] = sdk_network_capacity(lines)
         result['boot_memory'] = sdk_boot_memory(lines, 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
     if profile == 'rover':
@@ -221,7 +235,8 @@ if __name__ == '__main__':
     parser.add_argument('--work', required=True)
     parser.add_argument('--profile', required=True, choices=('gateway','relay-ntrip','rover'))
     parser.add_argument('--local-gnss', action='store_true')
+    parser.add_argument('--web-transport', choices=('https','http'), default='https')
     parser.add_argument('--rover-uart-tx', type=int)
     parser.add_argument('--rover-uart-baud', type=int, default=115200)
     args = parser.parse_args()
-    verify(args.work,args.profile,args.local_gnss,args.rover_uart_tx,args.rover_uart_baud)
+    verify(args.work,args.profile,args.local_gnss,args.rover_uart_tx,args.rover_uart_baud,args.web_transport)

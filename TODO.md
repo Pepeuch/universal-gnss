@@ -126,6 +126,22 @@ Acceptance remains open until the authorized S3/C3 firmware is built, archived a
 verified on public Pages; no hardware or release milestone is marked complete.
 See [publication policy](docs/flasher/README.md).
 
+ESP32 single-login WebUI and independent per-publisher RTCM interval filters are
+validated in software on a dedicated branch, including authenticated on-demand
+NTRIP password visibility. Physical S3 memory/latency and reboot
+qualification, plus rover-to-S3 GGA transport for NEAR, remain open. See the
+[local qualification report](docs/analysis/ESP32_WEBUI_SESSION_NTRIP.md). No release metric changes.
+Active ESP-NOW exposed an HTTPS task-allocation failure on S3; radio is temporarily
+disabled with pairing retained. The [PSRAM queue repair](docs/analysis/ESP32_RADIO_HTTPS_COEXISTENCE.md)
+restores HTTPS startup, but the active-radio 32 KiB block criterion failed under requests.
+The [explicit HTTP S3 experiment](docs/analysis/ESP32_HTTP_ADMIN_EXPERIMENT.md) has a physical
+comparison and owner-confirmed login/six-tab/NTRIP-password journey. Active-radio
+32 KiB block acceptance still fails; alternate USB pairing and multi-peer/broadcast
+remain open. A [compatible login optimization](docs/analysis/ESP32_LOGIN_LATENCY.md)
+is measured on S3: public-vector median 36.84 s and negative HTTP login 38.58 s
+versus historical ~86–88 s. The owner confirms positive login with the existing password after reboot. This
+remains too slow; acceptable login latency remains open.
+
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 

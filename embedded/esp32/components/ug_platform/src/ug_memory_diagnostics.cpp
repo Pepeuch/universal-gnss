@@ -139,7 +139,7 @@ void PrintMemoryDiagnostics()
       const char* owner = task.xHandle == xTaskGetIdleTaskHandleForCore(0)   ? "idle0"
                           : task.xHandle == xTaskGetIdleTaskHandleForCore(1) ? "idle1"
                           : task.xHandle == xTaskGetCurrentTaskHandle()      ? "console"
-                          : task.xHandle == web_task                         ? "https"
+                          : task.xHandle == web_task                         ? "web"
                                                                              : "task";
       std::printf(
           "UG_MEM task=%lu owner=%s priority=%u state=%u stack_min_bytes=%lu runtime_us=%llu\n",

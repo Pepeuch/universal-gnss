@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_ntrip_publisher.hpp"
+#include "rtcm_filter.h"
 #include "ug_rtcm.h"
 #include "universal_gnss_ntrip/ntrip_request.hpp"
 #include <algorithm>
@@ -17,13 +18,22 @@ bool Token(const std::string& s, std::size_t max, bool empty = false)
 }  // namespace
 bool NtripPublisher::Configure(const universal_gnss_ntrip::NtripConfig& config,
                                bool enabled,
-                               std::function<bool()> cancelled)
+                               std::function<bool()> cancelled,
+                               std::string_view messages)
 {
   if (enabled &&
       (!Token(config.host, 253) || !config.port || !Token(config.mountpoint, 128) ||
        !Token(config.password, 128) || !Token(config.user_agent, 128) || !config.tls_verify_peer))
     return false;
+  std::string filter_error;
+  RtcmRules candidate;
+  if (!candidate.Configure(messages, filter_error))
+    return false;
   Stop();
+  if (filter_text_ != messages || config_.host != config.host || config_.port != config.port ||
+      config_.mountpoint != config.mountpoint)
+    filter_ = candidate;
+  filter_text_ = messages;
   config_ = config;
   cancelled_ = std::move(cancelled);
   tcp_ = {};
@@ -188,11 +198,18 @@ bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns
   }
   if (frame.size > frame.bytes.size() || !ug_rtcm_frame_valid(frame.bytes.data(), frame.size))
     return false;
+  const auto type = frame.size >= 8 ? rtcm3_get_message_type(frame.bytes.data(), frame.size) : 0;
+  if (!filter_.Allows(type, now_ns))
+  {
+    ++metrics_.filtered;
+    return false;
+  }
   if (!WriteAll(frame.bytes.data(), frame.size))
   {
     Fail(now_ns, NtripTraceError::kWrite);
     return false;
   }
+  filter_.Sent(type, now_ns);
   ++metrics_.frames;
   metrics_.bytes += frame.size;
   if (++session_frames_ == 2)

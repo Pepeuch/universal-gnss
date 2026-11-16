@@ -109,4 +109,43 @@ int main()
   assert(!after_fault.Previous(2, old, old_generation, error));
   undo.read_error = true;
   assert(!after_fault.Previous(2, old, old_generation, error) && !after_fault.can_write());
+  Memory filters_memory;
+  SettingsStore filters_store(filters_memory, caps);
+  Settings filtered;
+  assert(filters_store.Load(filtered, error));
+  for (unsigned i = 0; i < 5; ++i)
+    filtered.publishers[i].rtcm_messages = std::to_string(1001 + i) + "(10),1077";
+  assert(filters_store.Save(filtered, error));
+  SettingsStore boot(filters_memory, caps);
+  Settings after_boot;
+  assert(boot.Load(after_boot, error));
+  for (unsigned i = 0; i < 5; ++i)
+    assert(after_boot.publishers[i].rtcm_messages == filtered.publishers[i].rtcm_messages);
+  // An older valid bank omitted filter fields: never impose the new preset.
+  auto& legacy_record = filters_memory.banks[0];
+  std::string payload(legacy_record.begin() + 20, legacy_record.end() - 3);
+  const std::string key = "\"rtcm_messages\":\"";
+  for (;;)
+  {
+    auto at = payload.find(key);
+    if (at == std::string::npos)
+      break;
+    auto end = payload.find('"', at + key.size());
+    assert(end != std::string::npos && payload[end + 1] == ',');
+    payload.erase(at, end + 2 - at);
+  }
+  legacy_record.resize(20);
+  for (unsigned i = 0; i < 4; ++i)
+    legacy_record[16 + i] = (payload.size() >> (8 * i)) & 255;
+  legacy_record.insert(legacy_record.end(), payload.begin(), payload.end());
+  auto check =
+      universal_gnss_protocols::ComputeRtcmCrc24Q(legacy_record.data(), legacy_record.size());
+  legacy_record.push_back(check);
+  legacy_record.push_back(check >> 8);
+  legacy_record.push_back(check >> 16);
+  SettingsStore legacy_boot(filters_memory, caps);
+  Settings legacy_settings;
+  assert(legacy_boot.Load(legacy_settings, error));
+  for (const auto& publisher : legacy_settings.publishers)
+    assert(publisher.rtcm_messages.empty());
 }

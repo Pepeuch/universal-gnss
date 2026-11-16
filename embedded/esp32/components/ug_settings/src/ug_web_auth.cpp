@@ -60,7 +60,7 @@ WebAuth::Session* WebAuth::Find(std::string_view token, std::int64_t now)
     return nullptr;
   for (auto& s : sessions_)
   {
-    if (s.active && (now < s.used || now - s.created >= kLifetime || now - s.used >= kIdle))
+    if (s.active && (now < s.used || now - s.used >= kIdle))
     {
       Wipe(s.token.data(), s.token.size());
       s.active = false;

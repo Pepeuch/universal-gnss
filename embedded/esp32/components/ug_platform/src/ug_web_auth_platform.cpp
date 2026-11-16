@@ -1,7 +1,4 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-// IDF6.1/MbedTLS4 hides its existing legacy HMAC declarations by default.
-// This exposes declarations only; it changes no SDK configuration or ABI.
-#define MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
 #include "ug_web_auth_platform.hpp"
 #include "bootloader_random.h"
 #include "esp_random.h"
@@ -9,16 +6,18 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "mbedtls/md.h"
-#include "mbedtls/platform.h"
-#include "mbedtls/private/sha256.h"
-#undef MBEDTLS_DECLARE_PRIVATE_IDENTIFIERS
 #include "mbedtls/private/ctr_drbg.h"
 #include "nvs.h"
 #include "psa/crypto.h"
+#include "psa_crypto_driver_esp_sha.h"
+extern "C" {
+#include "psa_crypto_driver_esp_sha256.h"
+}
+#include "sha/sha_core.h"
 #include "ug_admin.hpp"
 #include "ug_configuration.hpp"
 #include "ug_credentials.hpp"
+#include "ug_password_hmac.hpp"
 #include "ug_password_kdf.hpp"
 #include <cstring>
 namespace ug::embedded
@@ -37,6 +36,45 @@ int SeedEntropy(void*, unsigned char* bytes, std::size_t size)
   return 0;
 }
 using Record = std::array<std::uint8_t, 56>;
+// Pinned IDF 6.1 SHA driver, using caller-owned contexts. Unlike the general
+// PSA hash clone dispatcher, these operations do not allocate per HMAC round.
+// The SDK owns padding, SHA state cloning and hardware arbitration; each hash
+// block releases the SHA/AES lock before PasswordKdf can yield to other tasks.
+class PasswordSha256
+{
+public:
+  ~PasswordSha256()
+  {
+    Reset();
+  }
+  bool Start()
+  {
+    return esp_sha256_starts(&context_, SHA2_256) == PSA_SUCCESS;
+  }
+  bool Update(const std::uint8_t* data, std::size_t size)
+  {
+    return !size || esp_sha256_driver_update(&context_, data, size) == PSA_SUCCESS;
+  }
+  bool Clone(const PasswordSha256& source)
+  {
+    return esp_sha256_driver_clone(&source.context_, &context_) == PSA_SUCCESS;
+  }
+  bool Finish(std::array<std::uint8_t, 32>& out)
+  {
+    std::size_t size{};
+    return esp_sha256_driver_finish(
+               &context_, out.data(), out.size(), &size, ESP_SHA_OPERATION_TYPE_SHA256) ==
+               PSA_SUCCESS &&
+           size == out.size();
+  }
+  void Reset()
+  {
+    esp_sha256_driver_abort(&context_);
+  }
+
+private:
+  esp_sha256_context context_{};
+};
 class Backend final : public AuthBackend
 {
 public:
@@ -96,51 +134,26 @@ public:
               const PasswordRecord& record,
               std::array<std::uint8_t, 32>& out) override
   {
-    // RFC8018 PBKDF2-HMAC-SHA256, one 32-byte block, 600k iterations. Yield to
-    // existing GNSS/network/idle tasks without changing their stacks/priorities.
+    // RFC8018 parameters and the v1 NVS record stay unchanged. Cache only
+    // keyed prefix states for this derivation, never a reusable password proof.
+    out = {};
     if (psa_crypto_init() != PSA_SUCCESS)
       return false;
-    // Reuse the SDK HMAC context and its key pads for all PBKDF2 rounds.
-    // Re-importing/rebuilding a PSA MAC operation each round took 137 seconds
-    // on S3. This preserves exactly the same algorithm, salt and iteration count.
-    mbedtls_md_context_t context;
-    mbedtls_md_init(&context);
-    const auto* info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    // The default md_setup dispatches every short digest through the PSA
-    // hardware driver. Use the SDK's existing software SHA256 engine for this
-    // local HMAC only; TLS and global crypto configuration remain unchanged.
-    // This adapter mirrors the pinned SDK md.c legacy-context ownership contract:
-    // md_free owns/wipes both this allocation and the hmac_setup key pads.
-    auto* sha =
-        static_cast<mbedtls_sha256_context*>(mbedtls_calloc(1, sizeof(mbedtls_sha256_context)));
-    context.MBEDTLS_PRIVATE(md_info) = info;
-    context.MBEDTLS_PRIVATE(md_ctx) = sha;
-#if defined(MBEDTLS_MD_SOME_PSA)
-    context.MBEDTLS_PRIVATE(engine) = MBEDTLS_MD_ENGINE_LEGACY;
-#endif
-    if (sha)
-      mbedtls_sha256_init(sha);
-    const bool initialized =
-        info && sha && mbedtls_md_hmac_setup(&context, info) == 0 &&
-        mbedtls_md_hmac_starts(&context,
-                               reinterpret_cast<const unsigned char*>(password.data()),
-                               password.size()) == 0;
-    const bool ok = initialized && PasswordKdf(
-                                       record,
-                                       WebAuth::kIterations,
-                                       [](void* ctx,
-                                          const std::uint8_t* data,
-                                          std::size_t size,
-                                          std::array<std::uint8_t, 32>& result) {
-                                         auto* mac = static_cast<mbedtls_md_context_t*>(ctx);
-                                         return mbedtls_md_hmac_reset(mac) == 0 &&
-                                                mbedtls_md_hmac_update(mac, data, size) == 0 &&
-                                                mbedtls_md_hmac_finish(mac, result.data()) == 0;
-                                       },
-                                       &context,
-                                       [] { vTaskDelay(1); },
-                                       out);
-    mbedtls_md_free(&context);  // SDK wipes the HMAC key pads and context.
+    PasswordHmac<PasswordSha256> hmac;
+    const bool ok =
+        hmac.Initialize(password) &&
+        PasswordKdf(
+            record,
+            WebAuth::kIterations,
+            [](void* ctx,
+               const std::uint8_t* data,
+               std::size_t size,
+               std::array<std::uint8_t, 32>& result) {
+              return static_cast<PasswordHmac<PasswordSha256>*>(ctx)->Compute(data, size, result);
+            },
+            &hmac,
+            [] { vTaskDelay(1); },
+            out);
     if (!ok)
       Wipe(out.data(), out.size());
     return ok;

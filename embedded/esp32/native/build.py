@@ -62,7 +62,10 @@ def copy_main(source, destination, network):
 
 
 def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=None,
-          rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False):
+          rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False, web_transport='https'):
+    if web_transport not in ('http', 'https') or (web_transport == 'http' and
+            (profile != 'gateway' or board != 'waveshare-s3-eth')):
+        raise ValueError('HTTP experiment requires the S3 gateway; HTTPS remains the default')
     validate_rover_output(profile, board, rover_uart_tx, rover_uart_baud)
     if peer_mac is not None or channel is not None:
         raise ValueError('peer and channel are runtime settings, never firmware variants')
@@ -102,6 +105,7 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
         # IDF releases this boot-only stack when app_main returns.
         f'CONFIG_ESP_MAIN_TASK_STACK_SIZE={8192 if rover else 32768}\n']
     if s3:
+        defaults += ['CONFIG_UG_WEB_HTTP=y\n' if web_transport == 'http' else '# CONFIG_UG_WEB_HTTP is not set\n']
         defaults += ['''CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
@@ -161,6 +165,8 @@ if __name__ == '__main__':
     p.add_argument('--profile', required=True, choices=('gateway', 'relay-ntrip', 'rover'))
     p.add_argument('--board', required=True, choices=('waveshare-s3-eth', 'supermini-c3'))
     p.add_argument('--local-gnss', action='store_true')
+    p.add_argument('--web-transport', choices=('https', 'http'), default='https',
+                   help='explicit S3 LAN HTTP experiment; never a TLS fallback')
     p.add_argument('--peer-mac', help='obsolete; rejected: provision the peer locally at runtime')
     p.add_argument('--channel', type=int, help='obsolete override; channels are provisioned at runtime')
     p.add_argument('--rover-uart-tx', type=int, help='explicit reviewed C3 TX-only GPIO; omitted keeps USB')
@@ -170,4 +176,4 @@ if __name__ == '__main__':
     p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
     a = p.parse_args()
     build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel,
-          a.rover_uart_tx, a.rover_uart_baud, a.prepare_only)
+          a.rover_uart_tx, a.rover_uart_baud, a.prepare_only, a.web_transport)

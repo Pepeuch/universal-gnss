@@ -37,6 +37,7 @@ extern "C" {
 #include <cstring>
 #include <string_view>
 extern "C" httpd_ssl_config_t ug_https_defaults(void);
+extern "C" httpd_config_t ug_http_defaults(void);
 namespace ug::embedded
 {
 namespace
@@ -143,16 +144,17 @@ std::string Bearer(httpd_req_t* req)
     return {};
   return std::string(text.substr(7));
 }
-bool Authenticated(httpd_req_t* req)
+bool Authenticated(httpd_req_t* req, bool allow_restricted = false)
 {
 #if CONFIG_IDF_TARGET_ESP32S3
   auto& auth = WebAuthentication();
   const auto token = Bearer(req);
-  return auth.Authorized(token, esp_timer_get_time()) ||
+  return auth.Authorized(token, esp_timer_get_time(), allow_restricted) ||
          (auth.LegacyAllowed() && AuthorizedBearer(std::string("Bearer ") + token,
                                                    Configuration()->admin_token_sha256,
                                                    Sha256));
 #else
+  (void)allow_restricted;
   return AuthorizedBearer(
       std::string("Bearer ") + Bearer(req), Configuration()->admin_token_sha256, Sha256);
 #endif
@@ -195,6 +197,35 @@ esp_err_t Json(httpd_req_t* req, const cJSON* root)
   cJSON_free(text);
   return result;
 }
+esp_err_t NtripPasswordReply(httpd_req_t* req, std::string_view target)
+{
+  const auto config = Configuration();
+  const auto* endpoint = FindNtripEndpoint(*config, BoardCapabilities(), target);
+  if (!endpoint)
+    return Fail(req, "404 Not Found", "NTRIP connection unavailable");
+  JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
+  auto* password =
+      root ? cJSON_AddStringToObject(root.get(), "password", endpoint->password.c_str()) : nullptr;
+  // At most 128 bytes, worst case six JSON escape bytes each, plus envelope.
+  std::array<char, 800> reply{};
+  struct Clean
+  {
+    cJSON* password;
+    std::array<char, 800>& reply;
+    ~Clean()
+    {
+      if (password)
+        Wipe(password->valuestring, std::strlen(password->valuestring));
+      Wipe(reply.data(), reply.size());
+    }
+  } clean{password, reply};
+  if (!password || !WebJsonMemoryHealthy() ||
+      !cJSON_PrintPreallocated(root.get(), reply.data(), reply.size(), false))
+    return Fail(req, "503 Service Unavailable", "response memory budget unavailable");
+  Headers(req);
+  httpd_resp_set_type(req, "application/json");
+  return httpd_resp_sendstr(req, reply.data());
+}
 esp_err_t Status(httpd_req_t* req)
 {
   const auto net = NetworkStats();
@@ -205,6 +236,7 @@ esp_err_t Status(httpd_req_t* req)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
   cJSON_AddStringToObject(root.get(), "board", BoardCapabilities().board.c_str());
   cJSON_AddStringToObject(root.get(), "role", BoardCapabilities().role.c_str());
+  cJSON_AddStringToObject(root.get(), "web_transport", WebTransportName());
   cJSON_AddBoolToObject(root.get(), "configuration_writable", ConfigurationWritable());
   cJSON_AddBoolToObject(root.get(), "admin_configured", !config->admin_token_sha256.empty());
   cJSON_AddNumberToObject(root.get(), "uptime_s", esp_timer_get_time() / 1000000);
@@ -271,6 +303,7 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
   if (!root)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
+  cJSON_AddStringToObject(root.get(), "web_transport", WebTransportName());
 #if CONFIG_IDF_TARGET_ESP32S3
   cJSON_AddBoolToObject(root.get(), "password_authentication", true);
 #else
@@ -290,7 +323,8 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   auto* limits = cJSON_AddObjectToObject(root.get(), "network_limits");
   if (!limits || !cJSON_AddNumberToObject(limits, "provisioned_sockets", capacity.sockets) ||
       !cJSON_AddNumberToObject(limits, "budgeted_sockets", capacity.required.sockets) ||
-      !cJSON_AddNumberToObject(limits, "https_clients", kHttpsClientLimit) ||
+      !cJSON_AddNumberToObject(limits, "web_clients", kHttpsClientLimit) ||
+      !cJSON_AddNumberToObject(limits, "https_clients", WebUsesHttps() ? kHttpsClientLimit : 0) ||
       !cJSON_AddNumberToObject(limits, "caster_clients", caps.caster ? kCasterClientLimit : 0) ||
       !cJSON_AddBoolToObject(limits, "budget_fits", NetworkBudgetFits(capacity)))
     return Fail(req, "503 Service Unavailable", "memory unavailable");
@@ -851,8 +885,14 @@ esp_err_t Get(httpd_req_t* req)
     return Status(req);
   if (uri == "/api/capabilities")
     return CapabilitiesReply(req);
+  if (uri == "/api/auth/session")
+    return Authenticated(req, true) ? Fail(req, "200 OK", "session active")
+                                    : Fail(req, "401 Unauthorized", "session invalid");
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  constexpr std::string_view password_prefix = "/api/ntrip/password/";
+  if (uri.substr(0, password_prefix.size()) == password_prefix)
+    return NtripPasswordReply(req, uri.substr(password_prefix.size()));
   if (uri == "/api/diagnostics/events")
     return EventReply(req);
   if (uri == "/api/ntrip/runtime")
@@ -950,12 +990,12 @@ esp_err_t AuthenticationPost(httpd_req_t* req)
     if (!auth.Login(text("username"), text("password"), now, token, restricted))
       return Fail(req, "401 Unauthorized", "login refused; wait before retrying");
     std::array<char, 192> reply{};
-    const int n =
-        std::snprintf(reply.data(),
-                      reply.size(),
-                      "{\"token\":\"%s\",\"password_change_required\":%s,\"expires_in_s\":1800}",
-                      token.data(),
-                      restricted ? "true" : "false");
+    const int n = std::snprintf(
+        reply.data(),
+        reply.size(),
+        "{\"token\":\"%s\",\"password_change_required\":%s,\"expires_in_s\":600,\"sliding\":true}",
+        token.data(),
+        restricted ? "true" : "false");
     Wipe(token.data(), token.size());
     Headers(req);
     httpd_resp_set_type(req, "application/json");
@@ -1211,32 +1251,58 @@ esp_err_t Asset(httpd_req_t* req)
   return Fail(req, "404 Not Found", "asset not found");
 }
 }  // namespace
+bool WebUsesHttps()
+{
+#if CONFIG_UG_WEB_HTTP
+  return false;
+#else
+  return true;
+#endif
+}
+const char* WebTransportName()
+{
+  return WebUsesHttps() ? "https" : "http";
+}
 esp_err_t StartWebService()
 {
+  const auto finish = [](HttpsStartupReason reason, esp_err_t result) {
+    return WebUsesHttps() ? FinishHttpsStartup(reason, result) : result;
+  };
   if (server)
-    return FinishHttpsStartup(HttpsStartupReason::kServerStartFailed, ESP_ERR_INVALID_STATE);
+    return finish(HttpsStartupReason::kServerStartFailed, ESP_ERR_INVALID_STATE);
+#if CONFIG_UG_WEB_HTTP
+  // Explicit build selection, never entered as a fallback after a TLS error.
+  // Keep provisioned identities in NVS; client-side NTRIP TLS is independent.
+  httpd_config_t httpd = ug_http_defaults();
+#else
   const auto loaded = LoadWebIdentity(identity);
   if (!loaded.ok())
     return FinishHttpsStartup(loaded.reason, loaded.sdk_error);  // No plaintext fallback.
   httpd_ssl_config_t config = ug_https_defaults();
-  config.httpd.task_priority = 2;  // Below correction routing (5) and UART/radio owners (4).
-  config.httpd.stack_size = 24576;
-  config.httpd.max_uri_handlers = 10;
-  config.httpd.max_open_sockets = kHttpsClientLimit;
-  config.httpd.lru_purge_enable = true;
-  config.httpd.recv_wait_timeout = 3;
-  config.httpd.send_wait_timeout = 3;
-  config.httpd.uri_match_fn = httpd_uri_match_wildcard;
+  auto& httpd = config.httpd;
+#endif
+  httpd.task_priority = 2;   // Below correction routing (5) and UART/radio owners (4).
+  httpd.stack_size = 24576;  // Same baseline for the initial HTTP/HTTPS comparison.
+  httpd.max_uri_handlers = 10;
+  httpd.max_open_sockets = kHttpsClientLimit;
+  httpd.lru_purge_enable = true;
+  httpd.recv_wait_timeout = 3;
+  httpd.send_wait_timeout = 3;
+  httpd.uri_match_fn = httpd_uri_match_wildcard;
+#if CONFIG_UG_WEB_HTTP
+  auto result = httpd_start(&server, &httpd);
+#else
   config.tls_handshake_timeout_ms = 3000;
   config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem());
   config.servercert_len = identity.certificate_size + 1;
   config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem());
   config.prvtkey_len = identity.private_key_size + 1;
   auto result = httpd_ssl_start(&server, &config);
+#endif
   if (result != ESP_OK)
   {
     identity = {};
-    return FinishHttpsStartup(HttpsServerFailureReason(result, false), result);
+    return finish(HttpsServerFailureReason(result, false), result);
   }
   const struct
   {
@@ -1259,14 +1325,14 @@ esp_err_t StartWebService()
     uri.handler = route.handler;
     if ((result = httpd_register_uri_handler(server, &uri)) != ESP_OK)
     {
-      if (httpd_ssl_stop(server) == ESP_OK)
+      if ((WebUsesHttps() ? httpd_ssl_stop(server) : httpd_stop(server)) == ESP_OK)
       {
         server = nullptr;
         identity = {};
       }
-      return FinishHttpsStartup(HttpsServerFailureReason(result, true), result);
+      return finish(HttpsServerFailureReason(result, true), result);
     }
   }
-  return FinishHttpsStartup(HttpsStartupReason::kReady, ESP_OK);
+  return finish(HttpsStartupReason::kReady, ESP_OK);
 }
 }  // namespace ug::embedded
