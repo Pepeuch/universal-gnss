@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_driver/detail/timestamped_byte_buffer.hpp"
 #include "universal_gnss_driver/position_payload_freshness.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 
@@ -94,7 +95,7 @@ private:
   void RouteRtcmFrame(const universal_gnss_protocols::RtcmFrame& frame);
 
   UbloxSessionConfig config_{};
-  std::vector<BufferedByte> buffer_{};
+  detail::TimestampedByteBuffer buffer_{};
   universal_gnss::GnssRuntimeAggregator aggregator_{};
   PositionPayloadFreshnessTracker position_payload_freshness_tracker_{};
   UbloxSessionMetrics metrics_{};

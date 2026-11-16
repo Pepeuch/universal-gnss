@@ -74,7 +74,22 @@ class CheckpointAuditTests(unittest.TestCase):
     def test_shared_index_covers_every_checkpoint_and_lifecycle(self) -> None:
         entries, problems, warnings = MODULE.audit_shared_index()
 
-        self.assertEqual(11, len(entries))  # Includes the native SIGNALGROUP safety contract.
+        # The inventory grows with findings; validate coverage, not a frozen count.
+        indexed = set(MODULE.INDEX_PATH_RE.findall((MODULE.BASE / "INDEX.md").read_text()))
+        self.assertEqual(indexed, set(entries))
+        for required in (
+            "blocked/UG-ESP-SIGNALGROUP-001.md",
+            "active/UG-GNSS-COMPACT-BUFFERS.md",
+            "active/UG-ESP32-LOGIN-LATENCY.md",
+            "active/UG-ESP32-RADIO-MEMORY.md",
+            "active/UG-ESP32-USB-PAIRING.md",
+            "active/UG-ESP32-NTRIP-QUALIFICATION.md",
+            "active/UG-ESP32-PUBLICATION-AUTHORITY.md",
+            "retained/UG-ESP32-QUALIFIED-BASELINE.md",
+            "retained/UG-ESP32-PUBLICATION-RECOVERY.md",
+        ):
+            with self.subTest(checkpoint=required):
+                self.assertIn(required, entries)
         self.assertEqual([], problems)
         self.assertEqual([], warnings)
 

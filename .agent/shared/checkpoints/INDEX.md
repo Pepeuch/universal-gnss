@@ -42,3 +42,27 @@ in TODO/manifest; the durable report and figures are linked from that handoff.
   automatic persistence/reset is documented; native mutation is refused pending
   explicit reset/persistence approval, qualified incarnation recovery and hardware
   evidence. Shared driver safety classification needs separate review.
+
+## ESP32 and compact-buffer handoff — reconciled 2026-11-16
+
+ESP32 qualification baseline is `e5cb849dd2e1830d98dfb5ec893af2648a91bd40`; the
+compact-buffer review commit is `8b1b446b71bec60f24e1e2426282033cf901a9f6`. These entries cache evidence and next actions;
+TODO/reports/source remain authoritative. No new physical/remote qualification was
+performed for this documentation reconciliation.
+
+- `active/UG-GNSS-COMPACT-BUFFERS.md` — exact timestamp/storage proposal, benchmark
+  provenance, CPU regressions and pending review before integration.
+- `active/UG-ESP32-LOGIN-LATENCY.md` — compatible login works but ~38.6 s remains
+  excessive; no credential reset or lowered work factor.
+- `active/UG-ESP32-RADIO-MEMORY.md` — active-radio largest block 31744 B fails
+  32768 B acceptance; inactive memory gains are distinct.
+- `active/UG-ESP32-USB-PAIRING.md` — HTTPS Web Flasher USB integration, partial
+  pairing failure handling, requested multiple peers/broadcast still unfinished.
+- `active/UG-ESP32-NTRIP-QUALIFICATION.md` — independent filters proven in software;
+  rover GGA return, real receiver output and physical routing budgets unqualified.
+- `active/UG-ESP32-PUBLICATION-AUTHORITY.md` — one-off historical tag recovery is
+  complete; general future authority/policy remains undecided.
+- `retained/UG-ESP32-QUALIFIED-BASELINE.md` — bounded HTTPS/HTTP/WebUI/memory
+  evidence and last recorded installed S3 state; prevents obsolete recovery steps.
+- `retained/UG-ESP32-PUBLICATION-RECOVERY.md` — listing/glob defects and actual
+  approved S3/C3 Release/Pages recovery, distinct from later local firmware.
