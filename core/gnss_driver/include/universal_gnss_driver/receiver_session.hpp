@@ -6,6 +6,7 @@
 #include <string_view>
 #include <vector>
 
+#include "universal_gnss_driver/detail/timestamped_byte_buffer.hpp"
 #include "universal_gnss_driver/nmea_session.hpp"
 #include "universal_gnss_driver/ublox_session.hpp"
 #include "universal_gnss_driver/unicore_session.hpp"
@@ -102,7 +103,7 @@ private:
   NmeaSession nmea_session_;
   UbloxSession ublox_session_;
   UnicoreSession unicore_session_;
-  std::vector<BufferedByte> pending_auto_detect_bytes_{};
+  detail::TimestampedByteBuffer pending_auto_detect_bytes_{};
   universal_gnss::GnssRuntimeState empty_state_{};
 };
 

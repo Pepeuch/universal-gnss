@@ -1,5 +1,6 @@
 #include "universal_gnss_driver/ublox_session.hpp"
 
+#include <algorithm>
 #include <optional>
 #include <string_view>
 #include <utility>
@@ -40,13 +41,15 @@ struct ProbeResult
 
 template <typename FramerT, typename RecordT>
 ProbeResult<RecordT> ProbeAtOffset(FramerT& framer,
-                                   const std::vector<UbloxSession::BufferedByte>& bytes,
+                                   const detail::TimestampedByteBuffer& bytes,
                                    const std::size_t start_offset)
 {
   framer.Reset();
-  for (std::size_t index = start_offset; index < bytes.size(); ++index)
+  std::size_t consumed = 0;
+  for (auto input = bytes.cursor(start_offset); input.valid(); input.next())
   {
-    auto parser_result = framer.PushByte(bytes[index].value, bytes[index].timestamp_ns);
+    ++consumed;
+    auto parser_result = framer.PushByte(input.value(), input.timestamp());
     if (parser_result.status == ParserStatus::kNeedMoreData ||
         parser_result.status == ParserStatus::kIdle)
     {
@@ -56,7 +59,7 @@ ProbeResult<RecordT> ProbeAtOffset(FramerT& framer,
     return ProbeResult<RecordT>{
         parser_result.status,
         std::move(parser_result.record),
-        (index - start_offset) + 1u,
+        consumed,
     };
   }
 
@@ -171,11 +174,7 @@ void UbloxSession::FeedBytes(const std::uint8_t* data,
   }
 
   metrics_.bytes_seen += size;
-  buffer_.reserve(buffer_.size() + size);
-  for (std::size_t index = 0u; index < size; ++index)
-  {
-    buffer_.push_back(BufferedByte{data[index], timestamp_ns});
-  }
+  buffer_.Append(data, size, timestamp_ns);
 
   ProcessBufferedData(false);
 }
@@ -200,6 +199,9 @@ void UbloxSession::Finalize()
 void UbloxSession::Reset()
 {
   buffer_.clear();
+  buffer_.ConstrainCapacity(std::max({config_.max_nmea_sentence_length_bytes,
+                                      config_.max_ubx_frame_length_bytes,
+                                      config_.max_rtcm_frame_length_bytes}));
   aggregator_.Reset();
   position_payload_freshness_tracker_.Reset();
   metrics_ = UbloxSessionMetrics{};
@@ -229,7 +231,7 @@ void UbloxSession::ProcessBufferedData(const bool finalizing)
     bool keep_tail = false;
     bool consumed = false;
 
-    const std::uint8_t byte = buffer_[offset].value;
+    const std::uint8_t byte = buffer_[offset];
     if (byte == '$' || byte == '!')
     {
       consumed = ConsumeNmeaAtOffset(offset, finalizing, next_offset, keep_tail);
@@ -257,8 +259,11 @@ void UbloxSession::ProcessBufferedData(const bool finalizing)
 
   if (offset > 0u)
   {
-    buffer_.erase(buffer_.begin(), buffer_.begin() + static_cast<std::ptrdiff_t>(offset));
+    buffer_.ErasePrefix(offset);
   }
+  buffer_.ConstrainCapacity(std::max({config_.max_nmea_sentence_length_bytes,
+                                      config_.max_ubx_frame_length_bytes,
+                                      config_.max_rtcm_frame_length_bytes}));
 }
 
 bool UbloxSession::ConsumeNmeaAtOffset(const std::size_t start_offset,

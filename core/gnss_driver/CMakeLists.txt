@@ -304,3 +304,19 @@ if(BUILD_TESTING)
     COMMAND gnss_driver_test_unicore_config_profile_builder
   )
 endif()
+
+option(UNIVERSAL_GNSS_BUILD_BUFFER_BENCHMARK "Build Linux session buffer allocation benchmark" OFF)
+if(UNIVERSAL_GNSS_BUILD_BUFFER_BENCHMARK)
+  add_executable(gnss_driver_benchmark_session_buffers tests/benchmark_session_buffers.cpp)
+  target_link_libraries(gnss_driver_benchmark_session_buffers PRIVATE universal_gnss_driver)
+  target_compile_options(gnss_driver_benchmark_session_buffers PRIVATE -fno-access-control)
+  target_compile_definitions(gnss_driver_benchmark_session_buffers PRIVATE
+    UG_BUFFER_TESTDATA="${CMAKE_CURRENT_SOURCE_DIR}/../../testdata")
+endif()
+
+if(BUILD_TESTING)
+  add_executable(gnss_driver_test_timestamped_byte_buffer tests/test_timestamped_byte_buffer.cpp)
+  target_link_libraries(gnss_driver_test_timestamped_byte_buffer PRIVATE universal_gnss_driver)
+  target_compile_options(gnss_driver_test_timestamped_byte_buffer PRIVATE -UNDEBUG)
+  add_test(NAME gnss_driver_test_timestamped_byte_buffer COMMAND gnss_driver_test_timestamped_byte_buffer)
+endif()

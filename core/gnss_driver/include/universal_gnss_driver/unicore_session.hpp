@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "universal_gnss/gnss_runtime_aggregator.hpp"
+#include "universal_gnss_driver/detail/timestamped_byte_buffer.hpp"
 #include "universal_gnss_driver/position_payload_freshness.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/unicore_binary_framer.hpp"
@@ -114,7 +115,7 @@ private:
   universal_gnss::GnssRuntimeAggregator aggregator_{};
   PositionPayloadFreshnessTracker position_payload_freshness_tracker_{};
   UnicoreSessionMetrics metrics_{};
-  std::vector<UnicoreBufferedByte> buffer_{};
+  detail::TimestampedByteBuffer buffer_{};
   bool ascii_seen_valid_record_{false};
   bool binary_seen_valid_frame_{false};
   bool ascii_startup_malformed_suppressed_{false};
