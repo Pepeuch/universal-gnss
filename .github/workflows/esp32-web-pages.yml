@@ -1,0 +1,57 @@
+name: ESP32 Web Flasher Pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/flasher.html
+      - docs/flasher/**
+      - docs/UG_logo.png
+      - tools/branches/prepare_esp32_site.py
+      - tools/branches/refresh_esp32_site.py
+      - tools/branches/esp32_alpha.py
+      - .github/workflows/esp32-web-pages.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: esp32-alpha-publication
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test Web Flasher and publication policy
+        run: |
+          set -euo pipefail
+          test "$(id -u)" != 0
+          python3 -m pip install quickjs==1.19.4 PyYAML==6.0.3
+          python3 embedded/esp32/native/tests/test_flasher_browser.py
+          python3 -m unittest discover -s tools/branches/tests -p 'test_firmware_site.py'
+          python3 -m unittest discover -s tools/branches/tests -p 'test_web_pages.py'
+          python3 -m unittest discover -s tools/branches/tests -p 'test_esp32_alpha.py'
+      - name: Restore verified durable firmware and refresh interface only
+        run: python3 tools/branches/refresh_esp32_site.py --output "$RUNNER_TEMP/web-site"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/web-site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Check published interface and firmware
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/web-site" --url "$PAGE_URL"
