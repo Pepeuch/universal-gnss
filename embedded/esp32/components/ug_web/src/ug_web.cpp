@@ -5,15 +5,20 @@ extern "C" {
 }
 #include "esp_heap_caps.h"
 #include "esp_https_server.h"
+#include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "ug_admin.hpp"
 #include "ug_configuration.hpp"
 #include "ug_credentials.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_http_encoding.hpp"
+#include "ug_https_server_status.hpp"
 #include "ug_json.hpp"
+#include "ug_memory_diagnostics.hpp"
 #include "ug_network_budget.hpp"
 #include "ug_network_operations.hpp"
 #include "ug_pairing_window.hpp"
@@ -21,6 +26,7 @@ extern "C" {
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
+#include "ug_web_auth_platform.hpp"
 #include "ug_wire_selftest.hpp"
 #if UG_LOCAL_GNSS
 #include "ug_gnss_service.hpp"
@@ -35,9 +41,21 @@ namespace ug::embedded
 {
 namespace
 {
-WebIdentity identity;
+LoadedWebIdentity identity;
 httpd_handle_t server;
 PairingWindow pairing_window;
+esp_err_t FinishHttpsStartup(HttpsStartupReason reason, std::int32_t sdk_error)
+{
+  const auto result = RecordHttpsStartupStatus(reason, sdk_error);
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (reason != HttpsStartupReason::kReady)
+    ESP_LOGE("UG",
+             "HTTPS startup: %s (sdk_error=%ld)",
+             HttpsStartupReasonName(reason),
+             static_cast<long>(sdk_error));
+#endif
+  return result;
+}
 extern "C" {
 extern const std::uint8_t index_start[] asm("_binary_ug_web_index_gz_start"),
     index_end[] asm("_binary_ug_web_index_gz_end");
@@ -110,15 +128,34 @@ esp_err_t Resources(httpd_req_t* req)
   httpd_resp_set_type(req, "application/json");
   return httpd_resp_send(req, buffer.data(), length);
 }
-bool Authenticated(httpd_req_t* req)
+std::string Bearer(httpd_req_t* req)
 {
   const auto size = httpd_req_get_hdr_value_len(req, "Authorization");
   if (!size || size > 135)
-    return false;
+    return {};
   std::array<char, 136> header{};
   if (httpd_req_get_hdr_value_str(req, "Authorization", header.data(), header.size()) != ESP_OK)
-    return false;
-  return AuthorizedBearer({header.data(), size}, Configuration()->admin_token_sha256, Sha256);
+    return {};
+  const std::string_view text(header.data(), size);
+  if (text.size() < 7 || (text[0] != 'B' && text[0] != 'b') || (text[1] != 'E' && text[1] != 'e') ||
+      (text[2] != 'A' && text[2] != 'a') || (text[3] != 'R' && text[3] != 'r') ||
+      (text[4] != 'E' && text[4] != 'e') || (text[5] != 'R' && text[5] != 'r') || text[6] != ' ')
+    return {};
+  return std::string(text.substr(7));
+}
+bool Authenticated(httpd_req_t* req)
+{
+#if CONFIG_IDF_TARGET_ESP32S3
+  auto& auth = WebAuthentication();
+  const auto token = Bearer(req);
+  return auth.Authorized(token, esp_timer_get_time()) ||
+         (auth.LegacyAllowed() && AuthorizedBearer(std::string("Bearer ") + token,
+                                                   Configuration()->admin_token_sha256,
+                                                   Sha256));
+#else
+  return AuthorizedBearer(
+      std::string("Bearer ") + Bearer(req), Configuration()->admin_token_sha256, Sha256);
+#endif
 }
 bool Body(httpd_req_t* req, std::string& body)
 {
@@ -144,9 +181,14 @@ bool Body(httpd_req_t* req, std::string& body)
 }
 esp_err_t Json(httpd_req_t* req, const cJSON* root)
 {
+  SampleWebMemory();
   char* text = root ? cJSON_PrintUnformatted(root) : nullptr;
-  if (!text)
+  SampleWebMemory();
+  if (!text || !WebJsonMemoryHealthy())
+  {
+    cJSON_free(text);
     return Fail(req, "503 Service Unavailable", "response memory budget unavailable");
+  }
   Headers(req);
   httpd_resp_set_type(req, "application/json");
   const auto result = httpd_resp_sendstr(req, text);
@@ -229,6 +271,11 @@ esp_err_t CapabilitiesReply(httpd_req_t* req)
   JsonDocument root(cJSON_CreateObject(), cJSON_Delete);
   if (!root)
     return Fail(req, "503 Service Unavailable", "memory unavailable");
+#if CONFIG_IDF_TARGET_ESP32S3
+  cJSON_AddBoolToObject(root.get(), "password_authentication", true);
+#else
+  cJSON_AddBoolToObject(root.get(), "password_authentication", false);
+#endif
   cJSON_AddBoolToObject(root.get(), "gnss", caps.local_gnss);
   cJSON_AddBoolToObject(root.get(), "caster", caps.caster);
   cJSON_AddBoolToObject(root.get(), "lora", caps.lora);
@@ -638,6 +685,28 @@ esp_err_t PairingMutation(httpd_req_t* req, std::string_view uri, const std::str
   pairing_window.Close();
   return PairingReply(req);
 }
+void PairingRestart(void*)
+{
+  vTaskDelay(pdMS_TO_TICKS(750));
+  esp_restart();
+}
+esp_err_t PairingRestartReply(httpd_req_t* req, const std::string& body)
+{
+  std::string error;
+  auto root = ParseBoundedObject(body, error);
+  const auto config = Configuration();
+  if (!root || !OnlyKeys(root.get(), {"confirm"}) ||
+      !Confirmed(root.get(), "RESTART_AFTER_PAIRING") || !config->radio_enabled ||
+      config->radio_peer.empty() || config->radio_key.empty())
+    return Fail(req, "409 Conflict", "confirmed saved pairing required");
+  static bool pending = false;  // HTTP handlers execute on the single server task.
+  if (pending)
+    return Fail(req, "409 Conflict", "restart already pending");
+  if (xTaskCreate(PairingRestart, "ug_pair_restart", 2048, nullptr, 2, nullptr) != pdPASS)
+    return Fail(req, "503 Service Unavailable", "restart allocation failed");
+  pending = true;
+  return Fail(req, "200 OK", "pairing restart scheduled");
+}
 esp_err_t NetworkHistoryReply(httpd_req_t* req)
 {
   const auto snapshot = NetworkHistory();
@@ -766,6 +835,7 @@ esp_err_t CommandHistoryReply(httpd_req_t* req)
 #endif
 esp_err_t Get(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
   const std::string_view uri(req->uri);
@@ -836,8 +906,87 @@ esp_err_t Get(httpd_req_t* req)
 #endif
   return Fail(req, "404 Not Found", "API operation unavailable in this profile");
 }
+#if CONFIG_IDF_TARGET_ESP32S3
+esp_err_t AuthenticationPost(httpd_req_t* req)
+{
+  if (!AdmitWebWork(AssessResources(CurrentMemory()), WebWork::kMutation))
+    return ResourceBusy(req);
+  // A separate tight bound applies before JSON allocation. Request buffers and
+  // cJSON string values are wiped on all exits, including malformed requests.
+  std::string body, error;
+  if (req->content_len > 512 || !Body(req, body))
+  {
+    Wipe(body.data(), body.size());
+    return Fail(req, "400 Bad Request", "bounded credentials required");
+  }
+  auto root = ParseBoundedObject(body, error);
+  Wipe(body.data(), body.size());
+  struct Clean
+  {
+    cJSON* root;
+    ~Clean()
+    {
+      if (root)
+        for (auto* v = root->child; v; v = v->next)
+          if (cJSON_IsString(v))
+            Wipe(v->valuestring, std::strlen(v->valuestring));
+    }
+  } clean{root.get()};
+  if (!root)
+    return Fail(req, "400 Bad Request", "invalid credentials request");
+  const auto text = [&](const char* name) -> std::string_view {
+    auto* v = cJSON_GetObjectItemCaseSensitive(root.get(), name);
+    return cJSON_IsString(v) ? std::string_view(v->valuestring) : std::string_view{};
+  };
+  auto& auth = WebAuthentication();
+  const auto now = esp_timer_get_time();
+  const std::string_view uri(req->uri);
+  if (uri == "/api/auth/login")
+  {
+    if (!OnlyKeys(root.get(), {"username", "password"}))
+      return Fail(req, "400 Bad Request", "invalid login request");
+    std::array<char, 65> token{};
+    bool restricted = true;
+    if (!auth.Login(text("username"), text("password"), now, token, restricted))
+      return Fail(req, "401 Unauthorized", "login refused; wait before retrying");
+    std::array<char, 192> reply{};
+    const int n =
+        std::snprintf(reply.data(),
+                      reply.size(),
+                      "{\"token\":\"%s\",\"password_change_required\":%s,\"expires_in_s\":1800}",
+                      token.data(),
+                      restricted ? "true" : "false");
+    Wipe(token.data(), token.size());
+    Headers(req);
+    httpd_resp_set_type(req, "application/json");
+    const auto result = httpd_resp_send(req, reply.data(), n);
+    Wipe(reply.data(), reply.size());
+    return result;
+  }
+  const auto token = Bearer(req);
+  if (uri == "/api/auth/logout")
+  {
+    if (!OnlyKeys(root.get(), {}))
+      return Fail(req, "400 Bad Request", "invalid logout request");
+    auth.Logout(token);
+    return Fail(req, "200 OK", "session closed");
+  }
+  if (!OnlyKeys(root.get(), {"current_password", "new_password", "confirm"}) ||
+      !Confirmed(root.get(), "CHANGE_PASSWORD") ||
+      !auth.Change(token, text("current_password"), text("new_password"), now))
+    return Fail(req, "403 Forbidden", "password change refused; session or credentials invalid");
+  return Fail(req, "200 OK", "password changed; all Web sessions revoked; reconnect");
+}
+#endif
 esp_err_t Post(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (std::string_view(req->uri) == "/api/auth/login" ||
+      std::string_view(req->uri) == "/api/auth/password" ||
+      std::string_view(req->uri) == "/api/auth/logout")
+    return AuthenticationPost(req);
+#endif
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
   const std::string_view uri(req->uri);
@@ -881,6 +1030,8 @@ esp_err_t Post(httpd_req_t* req)
                 "and pairing retained");
   }
 #endif
+  if (uri == "/api/radio/pairing/restart")
+    return PairingRestartReply(req, body);
   if (uri == "/api/radio/pairing/window" || uri == "/api/radio/pairing/apply" ||
       uri == "/api/radio/pairing/remove")
     return PairingMutation(req, uri, body);
@@ -1022,6 +1173,7 @@ esp_err_t Post(httpd_req_t* req)
 }
 esp_err_t Asset(httpd_req_t* req)
 {
+  WebMemoryScope memory(req->uri);
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
   std::array<char, 513> encoding{};
@@ -1061,9 +1213,11 @@ esp_err_t Asset(httpd_req_t* req)
 }  // namespace
 esp_err_t StartWebService()
 {
-  std::string error;
-  if (!LoadWebIdentity(identity, error))
-    return ESP_ERR_INVALID_STATE;  // No plaintext fallback.
+  if (server)
+    return FinishHttpsStartup(HttpsStartupReason::kServerStartFailed, ESP_ERR_INVALID_STATE);
+  const auto loaded = LoadWebIdentity(identity);
+  if (!loaded.ok())
+    return FinishHttpsStartup(loaded.reason, loaded.sdk_error);  // No plaintext fallback.
   httpd_ssl_config_t config = ug_https_defaults();
   config.httpd.task_priority = 2;  // Below correction routing (5) and UART/radio owners (4).
   config.httpd.stack_size = 24576;
@@ -1074,13 +1228,16 @@ esp_err_t StartWebService()
   config.httpd.send_wait_timeout = 3;
   config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   config.tls_handshake_timeout_ms = 3000;
-  config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem.c_str());
-  config.servercert_len = identity.certificate_pem.size() + 1;
-  config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem.c_str());
-  config.prvtkey_len = identity.private_key_pem.size() + 1;
+  config.servercert = reinterpret_cast<const std::uint8_t*>(identity.certificate_pem());
+  config.servercert_len = identity.certificate_size + 1;
+  config.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(identity.private_key_pem());
+  config.prvtkey_len = identity.private_key_size + 1;
   auto result = httpd_ssl_start(&server, &config);
   if (result != ESP_OK)
-    return result;
+  {
+    identity = {};
+    return FinishHttpsStartup(HttpsServerFailureReason(result, false), result);
+  }
   const struct
   {
     const char* path;
@@ -1102,11 +1259,14 @@ esp_err_t StartWebService()
     uri.handler = route.handler;
     if ((result = httpd_register_uri_handler(server, &uri)) != ESP_OK)
     {
-      httpd_ssl_stop(server);
-      server = nullptr;
-      return result;
+      if (httpd_ssl_stop(server) == ESP_OK)
+      {
+        server = nullptr;
+        identity = {};
+      }
+      return FinishHttpsStartup(HttpsServerFailureReason(result, true), result);
     }
   }
-  return ESP_OK;
+  return FinishHttpsStartup(HttpsStartupReason::kReady, ESP_OK);
 }
 }  // namespace ug::embedded

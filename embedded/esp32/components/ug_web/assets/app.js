@@ -1,4 +1,5 @@
 'use strict';
+let passwordChangeRequired=false, passwordLogin=false;
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
 let portableCandidate=null;
 function clearPortable(){portableCandidate=null;$('portable-file').value='';$('portable-apply').disabled=true;$('portable-preview').textContent='Aucun import préparé';}
@@ -6,7 +7,7 @@ let wireSelfTestRunning = false, wireSelfTestAllowed = false;
 let ntripConfig = null, ntripSlots = 0, ntripGnss = false, ntripSaving = false, ntripMutationAllowed = false;
 let functionsConfig=null;
 const $ = id => document.getElementById(id);
-const show = value => { $('notice').textContent = String(value); };
+const show = value => { $('notice').textContent = typeof value === 'object' ? print(value) : String(value); };
 const print = value => JSON.stringify(value, null, 2);
 const ntripTextFields = ['host','mountpoint','username','ca_file','client_cert_file','client_key_file'];
 function ntripTarget() {
@@ -46,23 +47,35 @@ function renderFunctions(config){
  $('function-ssid').value=config.wifi?.ssid||'';$('function-ap-ssid').value=config.wifi?.ap_ssid||'UG-RTK';
  for(const id of ['function-caster-password','function-password','function-ap-password'])$(id).value='';
  $('functions-save').disabled=!token||!ntripMutationAllowed;
- $('functions-state').textContent=print({activation_demandee:{gnss_uart:Boolean(config.gnss?.enabled),ntrip_client:Boolean(config.upstream?.enabled),espnow:Boolean(config.radio?.enabled),caster:Boolean(config.caster?.enabled),wifi_sta:Boolean(config.wifi?.sta),wifi_ap:Boolean(config.wifi?.ap)},etat_reel:'Consulter les services et connexions ; activation ne prouve pas réception ou disponibilité physique.'});
+ $('functions-state').textContent=print({activation_demandee:{gnss_uart:Boolean(config.gnss?.enabled),ntrip_client:Boolean(config.upstream?.enabled),espnow:Boolean(config.radio?.enabled),caster:Boolean(config.caster?.enabled),wifi_sta:Boolean(config.wifi?.sta),wifi_ap:Boolean(config.wifi?.ap)},etat_reel:'Consulter les services : activation ≠ réception.'});
 }
-function clearPairingForm() { $('pairing-key').value = ''; $('pairing-ticket').value = ''; $('pairing-peer').value = ''; $('pairing-info').textContent = 'Session fermée'; }
+let pairingController = null, pairingPendingVerification = null;
+function clearPairingForm() { const interrupted=Boolean(pairingController); pairingController?.abort(); $('pairing-info').textContent = interrupted?'Session fermée ; association interrompue, état des deux cartes à vérifier.':'Session fermée'; $('pairing-details').textContent = ''; }
+
 function clearNtripForm() { ntripMutationAllowed = false; ntripConfig = null; $('ntrip-target').value = 'upstream'; renderNtrip(); }
-async function call(path, body, authorized = true) {
-  const headers = {};
-  if (authorized && token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', headers,
-      body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', signal: controller.signal});
-    const text = await response.text();
-    if (!response.ok) throw new Error(`${response.status} ${text}`);
-    if (response.headers.get('Content-Type')?.includes('application/json')) return JSON.parse(text);
-    return text;
-  } finally { clearTimeout(timer); }
+let requestQueue = Promise.resolve(), configRead = 0, editGeneration = 0;
+function call(path, body, authorized = true) {
+  const generation = sessionGeneration, credential = token;
+  const run = async () => {
+    if (authorized && generation !== sessionGeneration && path!=='/api/auth/logout') throw Error('Session modifiée');
+    if(pairingController && body!==undefined && !path.startsWith('/api/radio/pairing/') && path!=='/api/auth/logout') throw Error('Appairage en cours ; terminer ou annuler avant une autre modification');
+    if (authorized && passwordChangeRequired && !path.startsWith('/api/auth/')) throw Error('Changer le mot de passe dans Paramètres');
+    const headers = {};
+    if (authorized && credential) headers.Authorization = `Bearer ${credential}`;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.startsWith('/api/auth/') ? 120000 : 10000);
+    try {
+      const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', headers,
+        body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', signal: controller.signal});
+      const text = await response.text();
+      if (!response.ok) { if(response.status===401 && authorized && generation===sessionGeneration && path!=='/api/auth/logout')closeSession(); throw Error(`${response.status} ${text}`); }
+      if (authorized && generation !== sessionGeneration && path!=='/api/auth/logout') throw Error('Session modifiée');
+      return response.headers.get('Content-Type')?.includes('application/json') ? JSON.parse(text) : text;
+    } finally { clearTimeout(timer); }
+  };
+  const result = requestQueue.then(run);
+  requestQueue = result.catch(() => {});
+  return result;
 }
 function satellites(report) {
   const rows = $('satellite-rows'); rows.replaceChildren();
@@ -78,58 +91,109 @@ function satellites(report) {
   }
 }
 
+const tabs = ['dashboard','gnss','rtcm','network','diagnostics','settings'];
+const periods = [5000,3000,5000,5000,5000,10000];
+let activeTab = 'dashboard', viewGeneration = 0, refreshTimer;
+function scheduleRefresh(delay = periods[tabs.indexOf(activeTab)]) {
+  clearTimeout(refreshTimer);
+  if (!document.hidden) refreshTimer = setTimeout(() => refresh(), delay);
+}
+function selectTab(name) {
+  if (!tabs.includes(name)) return;
+  activeTab = name; ++viewGeneration;
+  for (const key of tabs) {
+    $('tab-' + key).hidden = key !== name;
+    $('nav-' + key).setAttribute('aria-selected', String(key === name));
+    $('nav-' + key).tabIndex = key === name ? 0 : -1;
+  }
+  refresh();
+}
+function unavailable() {
+  for (const key of ['global','ethernet','https','gnss','rtcm','ntrip','memory']) $('card-' + key).textContent = 'Non actualisé';
+  receiverPlans = null;
+  for (const id of ['base-submit','base-disable','telemetry-submit']) $(id).disabled = true;
+}
+function renderStatus(status) {
+  $('status').textContent = print(status);
+  $('services-status').textContent = print(status.services || {});
+  $('network-status').textContent = print({ethernet:status.services?.ethernet_driver,https:status.services?.https,espnow:status.espnow});
+  $('card-global').textContent = status.degraded === false ? 'Services réactifs' : 'État dégradé / inconnu';
+  for (const [card,service] of [['ethernet','ethernet_driver'],['https','https']]) $('card-' + card).textContent = 'Service : ' + (status.services?.[service]?.state || 'inconnu');
+  $('card-rtcm').textContent = `${status.rtcm_frames ?? '?'} trames · ${status.rtcm_rejected ?? '?'} rejetées`;
+  $('card-ntrip').textContent = status.upstream_flowing ? 'Flux entrant observé' : status.upstream_connected ? 'Connecté, flux non confirmé' : 'Pas de connexion entrante';
+}
+function renderReceiver(receiver) {
+  $('receiver').textContent = print(receiver);
+  $('card-gnss').textContent = !receiver.present ? 'Non détecté' : receiver.position_stale !== false || !receiver.fix_valid ? 'Position non valide / périmée' :
+    `${['Inconnu','Aucun FIX','FIX','RTK FLOAT','RTK FIX','Estimé','2D','3D','DGPS'][receiver.fix_type] || 'Inconnu'} · âge ${receiver.position_observation_age_ms ?? '?'} ms`;
+}
 async function refresh() {
-  if (refreshing) return;
+  if (refreshing || document.hidden || pairingController) return;
   refreshing = true;
-  const generation = sessionGeneration;
+  const generation = sessionGeneration, view = viewGeneration, tab = activeTab;
+  const current = () => generation === sessionGeneration && view === viewGeneration && !document.hidden;
   try {
     const resources = await call('/api/resources', undefined, false);
-    if (generation !== sessionGeneration) return;
+    if (!current()) return;
     $('resources').textContent = print(resources);
-    ntripMutationAllowed = Boolean(token) && resources.pressure !== 'critical' && resources.web_mutations_allowed !== false;
-    $('functions-save').disabled=!token||!functionsConfig||!ntripMutationAllowed;
+    $('card-memory').textContent = `${resources.pressure} · ${resources.internal_free ?? '?'} octets internes`;
+    ntripMutationAllowed = Boolean(token) && !passwordChangeRequired && ['normal','reduced'].includes(resources.pressure) && resources.web_mutations_allowed === true;
+    $('functions-save').disabled = !ntripMutationAllowed || !functionsConfig;
     $('ntrip-save').disabled = !ntripMutationAllowed || !ntripConfig || ntripSaving;
-    wireSelfTestAllowed = Boolean(token) && resources.pressure === 'normal';
+    wireSelfTestAllowed = Boolean(token) && !passwordChangeRequired && resources.pressure === 'normal';
     $('wire-selftest').disabled = !wireSelfTestAllowed || wireSelfTestRunning;
-    if (resources.pressure === 'critical') {
-      $('status').textContent = 'Rapport détaillé suspendu : pression mémoire';
-      $('receiver').textContent = 'Rapport suspendu : pression mémoire';
-      satellites({available:false}); receiverPlans = null;
-      $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true;
+    if (!['normal','reduced'].includes(resources.pressure)) {
+      unavailable(); satellites({available:false});
       show('Pression mémoire : opérations Web suspendues. Diagnostic compact disponible ; console locale pour la maintenance.');
       return;
     }
-    const status = await call('/api/status', undefined, false);
-    if (generation !== sessionGeneration) return;
-    $('status').textContent = print(status);
-    if (token && !$('gnss').hidden) {
+    if (tab !== 'settings') {
+      const status = await call('/api/status', undefined, false);
+      if (!current()) return;
+      renderStatus(status);
+    }
+    if (token && !passwordChangeRequired && tab === 'rtcm') {
+      const report = await call('/api/ntrip/runtime');
+      if (!current()) return;
+      $('ntrip-runtime').textContent = print(report);
+    }
+    if (token && !passwordChangeRequired && !$('gnss').hidden && (tab === 'dashboard' || tab === 'gnss')) {
       const receiver = await call('/api/gnss/status');
-      if (generation !== sessionGeneration || !token) return;
-      $('receiver').textContent = print(receiver);
+      if (!current()) return;
+      renderReceiver(receiver);
       if (!receiverPlans || receiverPlans.model !== receiver.model || receiverPlans.model_verified !== receiver.model_verified) {
         const plans = await call('/api/gnss/capabilities');
-        if (generation !== sessionGeneration || !token) return;
+        if (!current()) return;
         receiverPlans = plans; $('receiver-plans').textContent = print(plans);
-        $('base-submit').disabled = !(plans.fixed || plans.survey_in || plans.time_optimization);
-        $('telemetry-submit').disabled = !plans.telemetry;
       }
-      $('base-disable').disabled = !receiverPlans?.disable_base || Boolean(receiver.quarantined || receiver.busy);
-      if (resources.satellites_allowed === false) {
-        satellites({available:false});
-        return;
+      const permitted = receiver.model_verified && !receiver.busy && !receiver.quarantined;
+      $('base-submit').disabled = !permitted || !(receiverPlans.fixed || receiverPlans.survey_in || receiverPlans.time_optimization);
+      $('telemetry-submit').disabled = !permitted || !receiverPlans.telemetry;
+      $('base-disable').disabled = !permitted || !receiverPlans.disable_base;
+      if (tab === 'gnss') {
+        if (resources.satellites_allowed === false) satellites({available:false});
+        else {
+          const report = await call('/api/gnss/satellites');
+          if (!current()) return;
+          satellites(report);
+        }
       }
-      const report = await call('/api/gnss/satellites');
-      if (generation !== sessionGeneration || !token) return;
-      satellites(report);
     }
-  } catch (e) { if (generation === sessionGeneration) { ntripMutationAllowed = false; $('ntrip-save').disabled = true; show(e.message); } }
-  finally { refreshing = false; }
+    $('connection-state').textContent = 'API accessible';
+    $('freshness').textContent = 'Lecture API : ' + new Date().toLocaleTimeString() + ' · âges dans les rapports';
+  } catch (e) {
+    if (current()) {
+      ntripMutationAllowed = false; wireSelfTestAllowed = false;
+      for (const id of ['ntrip-save','functions-save','wire-selftest']) $(id).disabled = true;
+      unavailable(); $('connection-state').textContent = 'API indisponible'; $('freshness').textContent = 'État non actualisé'; show(e.message);
+    }
+  } finally { refreshing = false; scheduleRefresh(view !== viewGeneration || generation !== sessionGeneration ? 0 : undefined); }
 }
-
-async function load() {
-  const generation = sessionGeneration;
+async function load(expectedEdit = editGeneration) {
+  if (typeof expectedEdit !== 'number') expectedEdit = editGeneration;
+  const generation = sessionGeneration, read = ++configRead;
   const config = await call('/api/config');
-  if (generation !== sessionGeneration || !token) return;
+  if (generation !== sessionGeneration || read !== configRead || expectedEdit !== editGeneration || !token) return;
   $('config').value = print(config);
   ntripConfig = config; renderNtrip();renderFunctions(config);
   if (config.gnss) {
@@ -139,12 +203,59 @@ async function load() {
     $('correction-input').value = config.input;
   }
 }
-function handle(fn) { return async event => { event?.preventDefault(); try { await fn(event); } catch (e) { show(e.message); } }; }
-$('login').onclick = handle(async () => { const generation = ++sessionGeneration; receiverPlans = null; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); token = $('token').value; $('token').value = ''; await load(); if (generation !== sessionGeneration) return; await refresh(); if (generation === sessionGeneration) show('Session ouverte'); });
-$('logout').onclick = () => { wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); };
+function handle(fn) { return async event => { event?.preventDefault(); const generation = sessionGeneration; try { await fn(event, editGeneration); } catch (e) { if (generation === sessionGeneration) show(e.message); } }; }
+function closeSession() { $('session-state').textContent = 'Session fermée'; unavailable(); wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('password').value = ''; for(const id of ['current-password','new-password','confirm-password'])$(id).value=''; passwordChangeRequired=false; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); }
+$('logout').onclick = async () => {
+  const pending = token && passwordLogin ? call('/api/auth/logout', {}) : Promise.resolve();
+  closeSession(); await pending.catch(()=>{});
+};
+let loginPending=false;
+$('login').onclick = async () => {
+  if(loginPending)return;
+  const username=$('username').value, password=$('password').value;
+  closeSession(); loginPending=true; $('login').disabled=true;
+  const generation=sessionGeneration;
+  try {
+    const result=passwordLogin?await call('/api/auth/login',{username,password},false):{token:password,password_change_required:false};
+    if(generation!==sessionGeneration)return;
+    if(typeof result.token!=='string' || (passwordLogin?!/^[a-f0-9]{64}$/.test(result.token):!/^[A-Za-z0-9_-]{32,128}$/.test(result.token)) || typeof result.password_change_required!=='boolean')throw Error('Réponse de connexion invalide');
+    token=result.token; passwordChangeRequired=result.password_change_required;
+    if(passwordChangeRequired){
+      selectTab('settings'); $('auth-state').textContent='Changement obligatoire : cette session autorise uniquement le choix du nouveau mot de passe.';
+      $('session-state').textContent='Mot de passe à changer'; show('Changer le mot de passe dans Paramètres avant toute opération sensible.');
+    } else {
+      await load(); await refresh();
+      if(pairingPendingVerification){
+        const pending=pairingPendingVerification, state=await call('/api/radio/pairing');
+        if(generation===sessionGeneration && token){
+          const ok=state.started && !state.restart_required && state.key_set && state.enabled &&
+            state.peer?.toLowerCase()===pending.peer.toLowerCase() && state.effective_channel===pending.channel;
+          $('pairing-info').textContent=ok?'Association enregistrée sur les deux cartes, S3 radio démarrée. Réception RTCM/USB non vérifiée.':'Configurations enregistrées ; démarrage radio S3 non confirmé.';
+          if(ok)pairingPendingVerification=null;
+        }
+      }
+      if(generation===sessionGeneration){$('session-state').textContent='Session ouverte';$('auth-state').textContent='Identifiant : admin. Le changement révoque toutes les sessions Web.';show('Session ouverte');}
+    }
+  } catch(e){if(generation===sessionGeneration){closeSession();show(e.message);}}
+  finally { loginPending=false; $('login').disabled=false; }
+};
+$('password-form').onsubmit=handle(async()=>{
+  const current_password=$('current-password').value, new_password=$('new-password').value, confirmation=$('confirm-password').value;
+  for(const id of ['current-password','new-password','confirm-password'])$(id).value='';
+  if(!token || new_password.length<8 || new_password.length>128 || new_password!==confirmation)throw Error('Mot de passe de 8 à 128 caractères et confirmation identique requis');
+  if(!confirm('Changer le mot de passe et fermer toutes les sessions Web ?'))return;
+  await call('/api/auth/password',{current_password,new_password,confirm:'CHANGE_PASSWORD'});
+  closeSession(); show('Mot de passe changé ; reconnectez-vous.');
+});
 $('load').onclick = handle(load);
-$('save').onclick = handle(async () => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(); } });
-$('export').onclick = handle(async () => {
+$('save').onclick = handle(async (_, edit) => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(edit); } });
+async function fileText(event, limit) {
+  const generation = sessionGeneration, edit = editGeneration, file = event.target.files?.[0];
+  if (!token || !file || file.size > limit) throw Error(`Session et fichier ≤${limit} octets requis`);
+  const text = await file.text();
+  return generation === sessionGeneration && edit === editGeneration && token ? text : null;
+}
+$('export').onclick = handle(async (_, edit) => {
   const generation=sessionGeneration;
   const value=UGPortable.validate(await call('/api/config/portable'),'waveshare-s3-eth');
   if(generation!==sessionGeneration || !token)return;
@@ -152,9 +263,9 @@ $('export').onclick = handle(async () => {
   const link=document.createElement('a');link.href=url;link.download='ug-portable-config.json';link.click();URL.revokeObjectURL(url);
 });
 $('portable-file').onchange=handle(async event=>{
- const generation=sessionGeneration,file=event.target.files?.[0];clearPortable();
- if(!token || !file || file.size>512)throw Error('Session et fichier portable de 512 octets maximum requis');
- const value=UGPortable.parse(await file.text(),'waveshare-s3-eth');
+ const generation=sessionGeneration,pending=fileText(event,512);clearPortable();
+ const text=await pending;if(text===null)return;
+ const value=UGPortable.parse(text,'waveshare-s3-eth');
  if(generation!==sessionGeneration || !token)return;
  const before=UGPortable.validate(await call('/api/config/portable'),'waveshare-s3-eth');
  if(generation!==sessionGeneration || !token)return;
@@ -162,14 +273,14 @@ $('portable-file').onchange=handle(async event=>{
  if(generation!==sessionGeneration || !token)return;
  portableCandidate=after;$('portable-preview').textContent=print({avant:before,apres:after,effets:'GNSS/source locale/GGA désactivés ; secrets et association conservés'});$('portable-apply').disabled=false;
 });
-$('portable-apply').onclick=handle(async()=>{
+$('portable-apply').onclick=handle(async(_,edit)=>{
  if(!token || !portableCandidate || !ntripMutationAllowed)throw Error('Aperçu et session disponibles requis');
  if(!confirm('Appliquer ces réglages non personnels ? GNSS/source locale/GGA seront désactivés ; vérifier le câblage avant réactivation.'))return;
  const generation=sessionGeneration,value=portableCandidate;clearPortable();
  const result=await call('/api/config/portable/apply',{confirm:'APPLY_PORTABLE_CONFIGURATION',configuration:value});
- if(generation===sessionGeneration && token){show(result);await load();}
+ if(generation===sessionGeneration && token){show(result);await load(edit);}
 });
-$('import').onchange = handle(async event => { const file = event.target.files[0]; if (!file || file.size > 8192) throw new Error('Fichier JSON : maximum 8192 octets'); const text = await file.text(); JSON.parse(text); $('config').value = text; });
+$('import').onchange = handle(async event => { const text = await fileText(event,8192); if(text===null)return; JSON.parse(text); $('config').value = text; });
 $('base').onsubmit = handle(async event => {
   const fields = new FormData(event.target), value = {mode: fields.get('mode'), height_datum: fields.get('height_datum'), rtcm_output: true, persist: fields.has('persist')};
   for (const key of ['latitude_deg','longitude_deg','height_m','duration_s','accuracy_01mm','reuse_distance_m','receiver_port']) {
@@ -185,23 +296,25 @@ $('base').onsubmit = handle(async event => {
   }
   show(await call('/api/gnss/base/apply', value));
 });
-$('tls-object').onsubmit = handle(async () => {
+$('tls-object').onsubmit = handle(async (_, edit) => {
   const kind = $('tls-kind').value, value = {name: $('tls-name').value, kind};
   const confirmation = kind === 'delete' ? 'DELETE_TLS_OBJECT' : 'REPLACE_TLS_OBJECT';
   if (prompt(`Saisir ${confirmation} pour confirmer`) !== confirmation) return;
   value.confirm = confirmation;
   if (kind !== 'delete') value.pem = $('tls-pem').value;
-  show(await call('/api/tls/object', value)); $('tls-pem').value = '';
+  $('tls-pem').value = ''; show(await call('/api/tls/object', value));
 });
-$('transport').onsubmit = handle(async () => {
+$('transport').onsubmit = handle(async (_, edit) => {
   const value = {input: $('correction-input').value, gnss: {enabled: $('gnss-enabled').checked,
     tx_pin: Number($('gnss-tx').value), rx_pin: Number($('gnss-rx').value),
     baud: Number($('gnss-baud').value), model: $('gnss-model').value}};
   if (!confirm('Appliquer ce transport au câblage GNSS réel ? Une commande en cours sera interrompue.')) return;
-  show(await call('/api/config', value)); await load();
+  show(await call('/api/config', value)); await load(edit);
 });
 call('/api/capabilities', undefined, false).then(caps => {
-  $('gnss').hidden = !caps.gnss;
+  passwordLogin=caps.password_authentication===true; $('login').disabled=false; $('password-section').hidden=!passwordLogin; $('pairing-start').disabled=!passwordLogin;
+  if(!passwordLogin)$('auth-state').textContent='Profil historique : mot de passe = jeton existant, aucun changement d’identifiants ici.';
+  $('gnss').hidden = !caps.gnss; $('gnss-unavailable').hidden = Boolean(caps.gnss);
   $('portable-section').hidden=!caps.gnss;$('export').hidden=!caps.gnss;
   ntripGnss = Boolean(caps.gnss);
   ntripSlots = Number.isInteger(caps.publishers) && caps.publishers >= 0 && caps.publishers <= 5 ? caps.publishers : 0;
@@ -213,9 +326,23 @@ call('/api/capabilities', undefined, false).then(caps => {
     const option = document.createElement('option'); option.value = String(pin); option.textContent = String(pin); $(id).appendChild(option);
   }
 }).catch(e => show(e.message));
-refresh(); setInterval(refresh, 3000);
+for (const [i,key] of tabs.entries()) {
+  $('nav-' + key).onclick = () => selectTab(key);
+  $('nav-' + key).onkeydown = event => {
+    const n = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : event.key === 'ArrowRight' ? (i+1)%tabs.length : event.key === 'ArrowLeft' ? (i+tabs.length-1)%tabs.length : -1;
+    if (n >= 0) { event.preventDefault(); selectTab(tabs[n]); $('nav-' + tabs[n]).focus(); }
+  };
+}
+$('refresh-now').onclick = () => refresh();
+document.addEventListener('input', () => ++editGeneration);
+document.addEventListener('visibilitychange', () => {
+  ++viewGeneration; clearTimeout(refreshTimer);
+  if (document.hidden) { unavailable(); $('freshness').textContent = 'En pause — onglet masqué'; $('connection-state').textContent = 'En pause'; }
+  else refresh();
+});
+refresh();
 
-$('telemetry').onsubmit = handle(async () => {
+$('telemetry').onsubmit = handle(async (_, edit) => {
   const value = {rate_hz: Number($('telemetry-rate').value), persist: $('telemetry-persist').checked,
     confirm: 'APPLY_GNSS_TELEMETRY'};
   if (!confirm('Modifier les messages du récepteur identifié ? Les corrections locales seront suspendues pendant la configuration.')) return;
@@ -226,33 +353,30 @@ $('telemetry').onsubmit = handle(async () => {
   show(await call('/api/gnss/telemetry/apply', value));
 });
 
-$('detect').onclick = handle(async () => {
+$('detect').onclick = handle(async (_, edit) => {
   if (!confirm('Relancer les interrogations de modèle en lecture seule ? Les corrections locales peuvent être interrompues brièvement. La quarantaine restera active.')) return;
   show(await call('/api/gnss/detect', {confirm: 'DETECT_RECEIVER'})); receiverPlans = null; await refresh();
 });
 
-$('rollback').onclick = handle(async () => {
+$('rollback').onclick = handle(async (_, edit) => {
   const generation = sessionGeneration, history = await call('/api/config/history');
   if (generation !== sessionGeneration || !token) return;
   if (!history.writable || !history.previous_available) throw new Error('Aucune configuration précédente intacte disponible');
   if (prompt('Restaurer les réglages de la passerelle ? Les commandes déjà appliquées au GNSS ne seront pas annulées. Saisir ROLLBACK_CONFIGURATION. Identité admin et quarantaine conservées.') !== 'ROLLBACK_CONFIGURATION') return;
   show(await call('/api/config/rollback', {confirm:'ROLLBACK_CONFIGURATION', expected_generation:history.generation}));
-  await load();
+  await load(edit);
 });
 
-$('events-read').onclick = handle(async () => {
-  const generation = sessionGeneration, report = await call('/api/diagnostics/events');
-  if (generation !== sessionGeneration || !token) return;
-  $('events').textContent = print(report);
-});
-
-async function readNtrip() {
-  const generation = sessionGeneration, report = await call('/api/ntrip/runtime');
-  if (generation !== sessionGeneration || !token) return;
-  $('ntrip-runtime').textContent = print(report);
+const reportVersions = {};
+async function readReport(id, path) {
+  const generation = sessionGeneration, version = reportVersions[id] = (reportVersions[id] || 0) + 1;
+  const report = await call(path);
+  if (generation === sessionGeneration && token && reportVersions[id] === version) $(id).textContent = print(report);
 }
+$('events-read').onclick = handle(() => readReport('events', '/api/diagnostics/events'));
+const readNtrip = () => readReport('ntrip-runtime', '/api/ntrip/runtime');
 $('ntrip-read').onclick = handle(readNtrip);
-$('ntrip-restart').onclick = handle(async () => {
+$('ntrip-restart').onclick = handle(async (_, edit) => {
   if (!confirm('Interrompre puis redémarrer toutes les connexions NTRIP ? Le récepteur GNSS reste inchangé.')) return;
   const generation = sessionGeneration;
   const result = await call('/api/ntrip/restart', {confirm:'RESTART_NTRIP_SERVICES'});
@@ -260,7 +384,7 @@ $('ntrip-restart').onclick = handle(async () => {
   show(result); await readNtrip();
 });
 
-$('base-disable').onclick = handle(async () => {
+$('base-disable').onclick = handle(async (_, edit) => {
   if (!receiverPlans?.disable_base) throw new Error('Désactivation BASE indisponible pour ce modèle vérifié');
   if (!confirm('Quitter BASE sur le récepteur vérifié ? F9P : désactiver le mode statique et son profil RTCM ; UM980/UM982 : MODE ROVER générique et arrêt du profil RTCM sur le port choisi. Le mode concerne tout le récepteur, sans restitution d’un ancien profil rover.')) return;
   const operation = {confirm:'DISABLE_BASE_MODE', receiver_port:Number($('base-disable-port').value), persist:Boolean($('base-disable-persist').checked)};
@@ -272,13 +396,9 @@ $('base-disable').onclick = handle(async () => {
   if (generation === sessionGeneration && token) show(result);
 });
 
-$('commands-read').onclick = handle(async () => {
-  const generation = sessionGeneration, report = await call('/api/gnss/commands');
-  if (generation !== sessionGeneration || !token) return;
-  $('command-history').textContent = print(report);
-});
+$('commands-read').onclick = handle(() => readReport('command-history', '/api/gnss/commands'));
 
-$('wire-selftest').onclick = handle(async () => {
+$('wire-selftest').onclick = handle(async (_, edit) => {
   if (!token || !wireSelfTestAllowed || wireSelfTestRunning) return;
   if (!confirm('Exécuter les six autotests CRC et codec dans des buffers privés ? Aucun paquet radio, aucune commande GNSS ni correction ne sera transmis.')) return;
   const generation = sessionGeneration;
@@ -293,15 +413,11 @@ $('wire-selftest').onclick = handle(async () => {
   }
 });
 
-$('ntrip-history-read').onclick = handle(async () => {
-  const generation = sessionGeneration, report = await call('/api/ntrip/history');
-  if (generation !== sessionGeneration || !token) return;
-  $('ntrip-history').textContent = print(report);
-});
+$('ntrip-history-read').onclick = handle(() => readReport('ntrip-history', '/api/ntrip/history'));
 
 $('ntrip-target').value = 'upstream';
-$('ntrip-target').onchange = handle(async () => { renderNtrip(); });
-$('ntrip-endpoint').onsubmit = handle(async () => {
+$('ntrip-target').onchange = handle(async (_, edit) => { renderNtrip(); });
+$('ntrip-endpoint').onsubmit = handle(async (_, edit) => {
   if (ntripSaving) return;
   const password = $('ntrip-password').value, erase = $('ntrip-password-clear').checked;
   clearNtripSecret();
@@ -323,7 +439,7 @@ $('ntrip-endpoint').onsubmit = handle(async () => {
   try {
     const result = await call('/api/config', patch);
     if (generation !== sessionGeneration || !token) return;
-    show(result); await load();
+    show(result); await load(edit);
   } catch (error) {
     if (generation === sessionGeneration && token) throw error;
   } finally {
@@ -333,47 +449,64 @@ $('ntrip-endpoint').onsubmit = handle(async () => {
 
 async function readPairing() {
   const generation=sessionGeneration, report=await call('/api/radio/pairing');
-  if (generation!==sessionGeneration || !token) return;
-  $('pairing-info').textContent=print(report);
-  $('pairing-peer').value=report.peer || '';
-  $('pairing-channel').value=String(report.configured_channel || 1);
+  if (generation===sessionGeneration && token) $('pairing-details').textContent=print(report);
 }
 $('pairing-read').onclick=handle(readPairing);
-$('pairing-open').onclick=handle(async () => {
-  if (!confirm('Ouvrir pendant 120 secondes la configuration manuelle d’un pair local ? Aucun appairage radio automatique.')) return;
-  const generation=sessionGeneration, result=await call('/api/radio/pairing/window',{confirm:'OPEN_LOCAL_PAIRING'});
-  if (generation===sessionGeneration && token) $('pairing-info').textContent=print(result);
-});
-$('pairing-form').onsubmit=handle(async () => {
-  const key=$('pairing-key').value; $('pairing-key').value='';
-  if (!token || !ntripMutationAllowed) throw Error('Session et mémoire disponibles requises');
-  if (!confirm('Associer ce rover avec la clé privée partagée ? La sortie radio sera coupée jusqu’au redémarrage.')) return;
-  const generation=sessionGeneration, result=await call('/api/radio/pairing/apply',{
-    confirm:'PAIR_ESPNOW_ROVER',peer:$('pairing-peer').value,channel:Number($('pairing-channel').value),key});
-  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(); }
-});
-$('pairing-remove').onclick=handle(async () => {
+$('pairing-start').onclick=async () => {
+  if (pairingController) { pairingController.abort(); return; }
+  const output=$('pairing-info'), button=$('pairing-start'), generation=sessionGeneration;
+  if (!passwordLogin) { output.textContent='Appairage USB disponible sur le Gateway S3.'; return; }
+  if (!token || !ntripMutationAllowed) { output.textContent='Session et mémoire disponibles requises'; return; }
+  if (!globalThis.isSecureContext || !navigator.serial || !crypto?.getRandomValues) {
+    output.textContent='Web Serial indisponible : utiliser Chromium sur une origine HTTPS de confiance.'; return;
+  }
+  const controller=new AbortController(); pairingController=controller;
+  button.textContent='Annuler l’appairage'; clearTimeout(refreshTimer);
+  const progress=text => { if (generation===sessionGeneration && token) output.textContent=text; };
+  try {
+    // requestPort must run directly in the click activation, before any asynchronous API call.
+    const port=await navigator.serial.requestPort();
+    const result=await UGRoverPairing.pair(port,async(path,body)=>{
+      if(controller.signal.aborted || generation!==sessionGeneration || !token)throw Error('Session modifiée');
+      return call(path,body);
+    },progress,controller.signal,async(channel,replacing)=>confirm(
+      'Appairer ce C3 Rover au S3 sur le canal '+channel+' avec une nouvelle clé privée ? Le S3 redémarrera. '+
+      (replacing?'Une association existe : elle sera remplacée. Une interruption peut laisser une configuration partielle.':'Les deux cartes enregistreront cette association.')));
+    if(result.cancelled){progress('Appairage annulé avant écriture.');return;}
+    pairingPendingVerification=result;
+    progress('Configurations enregistrées ; attente du retour du S3…');
+    const deadline=Date.now()+45000;
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    while(Date.now()<deadline){
+      if(controller.signal.aborted || generation!==sessionGeneration || !token)throw Error();
+      try {
+        const state=await call('/api/radio/pairing');
+        if(state.started && !state.restart_required && state.key_set && state.enabled &&
+           state.peer?.toLowerCase()===result.peer.toLowerCase() && state.effective_channel===result.channel){
+          pairingPendingVerification=null; progress('Association enregistrée sur les deux cartes, S3 radio démarrée. Réception RTCM/USB non vérifiée.');return;
+        }
+      } catch(error) {
+        if(error.message?.startsWith('401')){progress('Configurations enregistrées. S3 redémarré : reconnectez-vous pour vérifier son état radio.');return;}
+      }
+      await new Promise(resolve=>setTimeout(resolve,1500));
+    }
+    progress('Configurations enregistrées ; démarrage radio S3 non confirmé. Vérifiez le statut avant utilisation.');
+  } catch(error) {
+    if(generation===sessionGeneration && token)output.textContent=error.name==='NotFoundError'?'Sélection USB annulée ; aucune écriture.':
+      error.message || 'Vérification interrompue ; état des cartes à contrôler.';
+  } finally {
+    pairingController=null; button.textContent='Appairer un Rover'; scheduleRefresh(0);
+  }
+};
+globalThis.addEventListener?.('pagehide',()=>pairingController?.abort());
+$('pairing-remove').onclick=handle(async (_, edit) => {
+  if(pairingController)throw Error('Appairage en cours');
   if (!confirm('Supprimer l’association persistante et couper cette sortie radio ? Le C3 doit être reconfiguré séparément par USB.')) return;
   const generation=sessionGeneration, result=await call('/api/radio/pairing/remove',{confirm:'UNPAIR_ESPNOW_ROVER'});
-  $('pairing-key').value='';
-  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(); }
+  if (generation===sessionGeneration && token) { $('pairing-details').textContent=print(result); await load(edit); }
 });
 
-$('pairing-ticket').onchange=handle(async event => {
-  const generation=sessionGeneration, file=event.target.files[0];
-  if (!token || !file || file.size>1024) throw Error('Session et ticket privé de 1024 octets maximum requis');
-  const ticket=JSON.parse(await file.text());
-  if (generation!==sessionGeneration || !token) return;
-  if (!ticket || typeof ticket!=='object' || Array.isArray(ticket) ||
-      Object.keys(ticket).sort().join(',')!=='channel,confirm,key,peer' || ticket.confirm!=='PAIR_ESPNOW_ROVER' ||
-      typeof ticket.key!=='string' || !/^[a-fA-F0-9]{32}$/.test(ticket.key) ||
-      typeof ticket.peer!=='string' || !/^(?:[a-fA-F0-9]{2}:){5}[a-fA-F0-9]{2}$/.test(ticket.peer) ||
-      !Number.isInteger(ticket.channel) || ticket.channel<1 || ticket.channel>11) throw Error('Ticket privé incompatible');
-  $('pairing-peer').value=ticket.peer; $('pairing-channel').value=String(ticket.channel); $('pairing-key').value=ticket.key;
-  event.target.value=''; show('Ticket chargé localement ; ouvrir la fenêtre puis confirmer l’association.');
-});
-
-$('functions').onsubmit=handle(async()=>{
+$('functions').onsubmit=handle(async(_,edit)=>{
  if(!token || !functionsConfig || !ntripMutationAllowed)throw Error('Session et mémoire disponibles requises');
  const generation=sessionGeneration;
  const radio=$('function-radio').checked;
@@ -386,5 +519,5 @@ $('functions').onsubmit=handle(async()=>{
   patch.radio={enabled:radio};
  }
  const result=await call('/api/config',patch);
- if(generation===sessionGeneration&&token){show(result);await load();}
+ if(generation===sessionGeneration&&token){show(result);await load(edit);}
 });

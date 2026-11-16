@@ -33,7 +33,7 @@ bool GsvSignalScope(const universal_gnss_protocols::NmeaSentence& sentence,
 }
 void SatelliteReports::PublishVendor(SatelliteReport&& next)
 {
-  auto& vendor_ = vendors_[next.protocol == SatelliteProtocol::kUbxNavSat ? 0 : 1];
+  auto& vendor_ = storage_.Get()->vendors[next.protocol == SatelliteProtocol::kUbxNavSat ? 0 : 1];
   if (next.epoch_known && vendor_.epoch_known && vendor_.protocol == next.protocol &&
       vendor_.tow_ms == next.tow_ms && vendor_.week == next.week &&
       vendor_.time_reference == next.time_reference)
@@ -42,6 +42,8 @@ void SatelliteReports::PublishVendor(SatelliteReport&& next)
 }
 void SatelliteReports::Observe(const universal_gnss_protocols::UbxNavSatRecord& record)
 {
+  if (!InitializeStorage())
+    return;
   if (!record.timestamp_ns || *record.timestamp_ns < 0 ||
       record.satellite_count > SatelliteReport::kCapacity)
     return;
@@ -75,6 +77,8 @@ void SatelliteReports::Observe(const universal_gnss_protocols::UbxNavSatRecord& 
 }
 void SatelliteReports::Observe(const universal_gnss_protocols::UnicoreSatsInfoRecord& record)
 {
+  if (!InitializeStorage())
+    return;
   if (!record.header.timestamp_ns || *record.header.timestamp_ns < 0 ||
       record.parsed_satellite_count > SatelliteReport::kCapacity)
     return;
@@ -109,6 +113,10 @@ void SatelliteReports::Observe(const universal_gnss_protocols::NmeaGsvRecord& re
                                std::string_view talker,
                                std::optional<std::uint8_t> signal_id)
 {
+  if (!InitializeStorage())
+    return;
+  auto& cycles_ = storage_.Get()->cycles;
+  auto& nmea_ = storage_.Get()->nmea;
   if (!record.timestamp_ns || *record.timestamp_ns < 0 || talker.size() != 2 ||
       record.message_index == 0 || record.message_index > record.total_messages ||
       record.total_messages > 32 || record.satellite_count > 4)
@@ -191,6 +199,13 @@ void SatelliteReports::Observe(const universal_gnss_protocols::NmeaGsvRecord& re
 }
 const SatelliteReport& SatelliteReports::Latest(std::int64_t now) const
 {
+  // No mutable fallback and no allocation on the reader path.
+  static const SatelliteReport empty{};
+  const auto* data = storage_.Get();
+  if (!data)
+    return empty;
+  const auto& vendors_ = data->vendors;
+  const auto& nmea_ = data->nmea;
   // Prefer a fresh native vendor report; never merge protocol ID namespaces,
   // per-signal GSV cycles or unrelated measurement clocks.
   const SatelliteReport* fresh = nullptr;
@@ -211,6 +226,12 @@ const SatelliteReport& SatelliteReports::Latest(std::int64_t now) const
 
 void SatelliteReports::Reset()
 {
+  auto* data = storage_.Get();
+  if (!data)
+    return;
+  auto& vendors_ = data->vendors;
+  auto& nmea_ = data->nmea;
+  auto& cycles_ = data->cycles;
   for (auto& report : vendors_)
     report = {};
   nmea_ = {};

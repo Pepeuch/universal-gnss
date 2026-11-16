@@ -85,11 +85,12 @@ static bool save(nvs_handle_t handle, const ug_pairing_t* pairing)
 }
 static bool status(const ug_pairing_t* p, bool writable, const uint8_t mac[6], const char* nonce)
 {
-  char out[320];
+  char out[416];
   snprintf(out,
            sizeof(out),
            "UGCFG/1 "
-           "{\"mode\":\"control\",\"ttl_ms\":120000,\"nonce\":\"%s\",\"writable\":%s,\"paired\":%s,"
+           "{\"firmware\":\"universal-gnss\",\"board\":\"esp32c3\",\"role\":\"rover\",\"mode\":"
+           "\"control\",\"ttl_ms\":120000,\"nonce\":\"%s\",\"writable\":%s,\"paired\":%s,"
            "\"channel\":%u,\"key_set\":%s,\"sta_mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\",\"peer\":"
            "\"%02x:%02x:%02x:%02x:%02x:%02x\"}\n",
            nonce,

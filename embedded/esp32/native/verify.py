@@ -33,7 +33,7 @@ def check_web_assets(build, source_assets, application, portable_source=None):
         packed = (Path(build) / 'esp-idf/ug_web/web_assets' / (name + '.gz')).read_bytes()
         source = Path(source_assets) / name
         raw=source.read_bytes()
-        if name=='app.js':raw=(Path(portable_source) if portable_source else Path(__file__).resolve().parents[3]/'docs/flasher/portable.js').read_bytes()+b'\n'+raw
+        if name=='app.js':raw=(Path(portable_source) if portable_source else Path(__file__).resolve().parents[3]/'docs/flasher/portable.js').read_bytes()+b'\n'+(Path(source_assets)/'pairing.js').read_bytes()+b'\n'+raw
         if gzip.decompress(packed) != raw or application.count(packed) != 1:
             raise ValueError('stale or missing linked Web asset: ' + name)
         reports.append({'name': name, 'source_bytes': len(raw), 'gzip_bytes': len(packed)})

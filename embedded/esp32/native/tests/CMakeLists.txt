@@ -58,7 +58,7 @@ target_link_libraries(ug_embedded_portable PUBLIC ug_embedded_gateway)
 add_library(ug_embedded_pairing ../../components/ug_pairing/src/ug_pairing.c)
 target_include_directories(ug_embedded_pairing PUBLIC ../../components/ug_pairing/include)
 target_link_libraries(ug_embedded_pairing PUBLIC ug_embedded_gateway)
-add_library(ug_embedded_settings ../../components/ug_settings/src/ug_portable_settings.cpp ../../components/ug_settings/src/ug_settings.cpp ../../components/ug_settings/src/ug_settings_store.cpp ../../components/ug_settings/src/ug_admin.cpp "${UG_CJSON_SOURCE}/cJSON.c")
+add_library(ug_embedded_settings ../../components/ug_settings/src/ug_portable_settings.cpp ../../components/ug_settings/src/ug_settings.cpp ../../components/ug_settings/src/ug_settings_store.cpp ../../components/ug_settings/src/ug_password_kdf.cpp ../../components/ug_settings/src/ug_web_auth.cpp ../../components/ug_settings/src/ug_admin.cpp "${UG_CJSON_SOURCE}/cJSON.c")
 target_include_directories(ug_embedded_settings PUBLIC ../../components/ug_settings/include "${UG_CJSON_SOURCE}")
 target_link_libraries(ug_embedded_settings PUBLIC universal_gnss_ntrip ug_embedded_pairing ug_embedded_portable)
 add_executable(test_settings test_settings.cpp)
@@ -220,3 +220,79 @@ add_test(NAME embedded_portable_configuration COMMAND test_portable)
 
 add_test(NAME embedded_portable_tools COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_portable_config.py")
 set_tests_properties(embedded_portable_tools PROPERTIES ENVIRONMENT "UG_PORTABLE_VALIDATOR=$<TARGET_FILE:test_portable>;PYTHONDONTWRITEBYTECODE=1" TIMEOUT 30)
+
+add_executable(test_web_identity test_web_identity.cpp
+    ../../components/ug_platform/src/ug_credentials.cpp
+    ../../components/ug_platform/src/ug_https_diagnostics.cpp)
+target_include_directories(test_web_identity PRIVATE credentials_stubs
+    ../../components/ug_platform/include ../../components/ug_web/include)
+target_link_libraries(test_web_identity PRIVATE ug_embedded_settings)
+target_compile_features(test_web_identity PRIVATE cxx_std_17)
+target_compile_options(test_web_identity PRIVATE -UNDEBUG)
+target_link_options(test_web_identity PRIVATE -Wl,--wrap=malloc -Wl,--wrap=free)
+add_test(NAME embedded_web_identity_contract COMMAND test_web_identity)
+
+add_executable(test_console_buffer test_console_buffer.cpp)
+target_include_directories(test_console_buffer PRIVATE ../../components/ug_platform/include)
+target_compile_features(test_console_buffer PRIVATE cxx_std_17)
+target_compile_options(test_console_buffer PRIVATE -UNDEBUG)
+add_test(NAME embedded_console_buffer_contract COMMAND test_console_buffer)
+
+add_executable(test_s3_json_memory test_s3_json_memory.cpp ../../components/ug_platform/src/ug_s3_json_memory.cpp)
+target_include_directories(test_s3_json_memory PRIVATE memory_stubs credentials_stubs ../../components/ug_platform/include)
+target_link_libraries(test_s3_json_memory PRIVATE ug_embedded_settings)
+target_compile_features(test_s3_json_memory PRIVATE cxx_std_17)
+target_compile_options(test_s3_json_memory PRIVATE -UNDEBUG)
+target_compile_definitions(test_s3_json_memory PRIVATE UG_S3_JSON_PSRAM=1)
+add_test(NAME embedded_s3_json_memory_contract COMMAND test_s3_json_memory)
+
+# Run the same receiver/satellite contracts with external owned storage enabled.
+# The allocation boundary is stubbed; no S3 hardware or SDK dependency on host.
+add_library(ug_embedded_receiver_external ../../components/ug_receiver_runtime/src/ug_receiver_runtime.cpp
+    ../../components/ug_receiver_runtime/src/ug_base_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_telemetry_operation.cpp
+    ../../components/ug_receiver_runtime/src/ug_satellite_reports.cpp)
+target_include_directories(ug_embedded_receiver_external PUBLIC ../../components/ug_receiver_runtime/include)
+target_compile_definitions(ug_embedded_receiver_external PUBLIC UG_S3_SATELLITE_PSRAM=1)
+target_link_libraries(ug_embedded_receiver_external PUBLIC universal_gnss_driver ug_embedded_settings)
+foreach(contract receiver satellite_reports)
+    add_executable(test_${contract}_external test_${contract}.cpp test_satellite_allocator.cpp)
+    target_link_libraries(test_${contract}_external PRIVATE ug_embedded_receiver_external)
+    target_compile_options(test_${contract}_external PRIVATE -UNDEBUG)
+    add_test(NAME embedded_${contract}_external_contract COMMAND test_${contract}_external)
+endforeach()
+add_executable(test_satellite_storage test_satellite_storage.cpp)
+target_link_libraries(test_satellite_storage PRIVATE ug_embedded_receiver_external)
+target_compile_options(test_satellite_storage PRIVATE -UNDEBUG)
+add_test(NAME embedded_satellite_storage_contract COMMAND test_satellite_storage)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME embedded_satellite_storage_equivalence COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compare_satellite_storage.py"
+    $<TARGET_FILE:test_satellite_reports> $<TARGET_FILE:test_satellite_reports_external>)
+
+add_executable(test_espnow_lifecycle test_espnow_lifecycle.c
+    ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
+target_include_directories(test_espnow_lifecycle PRIVATE espnow_driver_stubs radio_stubs
+    ../../components/espnow_rtcm/include ../../components/ug_pairing/include)
+target_link_libraries(test_espnow_lifecycle PRIVATE ug_embedded_radio ug_embedded_pairing)
+target_compile_options(test_espnow_lifecycle PRIVATE -UNDEBUG)
+foreach(scenario nominal oom wifi-failure callback-failure late-ack stop-before-start expired epoch-overflow)
+    add_test(NAME embedded_espnow_lifecycle_${scenario} COMMAND test_espnow_lifecycle ${scenario})
+endforeach()
+find_package(Threads REQUIRED)
+add_executable(test_espnow_storage_concurrent test_espnow_storage_concurrent.c
+    ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
+target_link_libraries(test_espnow_storage_concurrent PRIVATE ug_embedded_radio Threads::Threads)
+target_compile_options(test_espnow_storage_concurrent PRIVATE -UNDEBUG)
+add_test(NAME embedded_espnow_storage_concurrent COMMAND test_espnow_storage_concurrent)
+
+add_executable(test_web_auth test_web_auth.cpp)
+target_compile_options(test_web_auth PRIVATE -UNDEBUG)
+target_link_libraries(test_web_auth PRIVATE ug_embedded_settings)
+add_test(NAME embedded_web_auth_contract COMMAND test_web_auth)
+find_package(OpenSSL REQUIRED)
+add_executable(test_password_kdf test_password_kdf.cpp)
+target_compile_options(test_password_kdf PRIVATE -UNDEBUG)
+target_link_libraries(test_password_kdf PRIVATE ug_embedded_settings OpenSSL::Crypto)
+add_test(NAME embedded_password_kdf_contract COMMAND test_password_kdf)
+add_test(NAME embedded_commission_contract COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test_commission.py")

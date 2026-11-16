@@ -6,8 +6,18 @@
 #include "freertos/task.h"
 #include "mbedtls/platform_util.h"
 #include "ug_configuration.hpp"
+#include "ug_console_buffer.hpp"
 #include "ug_credentials.hpp"
 #include "ug_json.hpp"
+#include "ug_memory_diagnostics.hpp"
+#include "ug_s3_json_memory.hpp"
+#include "ug_s3_memory_options.hpp"
+#include "ug_web_auth_platform.hpp"
+#include <charconv>
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
+#include "esp_heap_caps.h"
+#include "esp_memory_utils.h"
+#endif
 #include "ug_portable_settings.hpp"
 #include "ug_supervisor.hpp"
 #include <array>
@@ -18,7 +28,11 @@ namespace ug::embedded
 namespace
 {
 // Single local operator owner. Never linked into the rover's binary RTCM path.
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
+ConsoleBuffer<8192 + 32> line;
+#else
 std::array<char, 8192 + 32> line{};
+#endif
 void (*tls_changed)() = nullptr;
 void Handle(std::string_view command)
 {
@@ -43,7 +57,58 @@ void Handle(std::string_view command)
           s.watchdog_registered,
           static_cast<long>(s.watchdog_error));
     }
+    const auto https = LastHttpsStartupStatus();
+    std::printf("UG_LOCAL https_startup=%s sdk_error=%ld admin_configured=%d\n",
+                HttpsStartupReasonName(https.reason),
+                static_cast<long>(https.sdk_error),
+                !Configuration()->admin_token_sha256.empty());
     ok = true;
+  }
+  else if (command == "memory")
+  {
+    PrintMemoryDiagnostics();
+    ok = true;
+  }
+  else if (command.substr(0, std::string_view("memory json-fail ").size()) == "memory json-fail ")
+  {
+    constexpr std::string_view prefix = "memory json-fail ";
+    int budget{};
+    const auto parsed =
+        std::from_chars(command.data() + prefix.size(), command.data() + command.size(), budget);
+    ok = parsed.ec == std::errc{} && parsed.ptr == command.data() + command.size() &&
+         ArmS3JsonMemoryFailure(budget);
+    if (!ok)
+      error = "invalid or unavailable one-shot JSON fault budget";
+  }
+  else if (command == "memory json-large")
+    ok = RunMemoryJsonStress(error);
+  else if (command == "memory trace")
+    ok = MemoryTraceCommand(true, error);
+  else if (command == "memory trace-stop")
+    ok = MemoryTraceCommand(false, error);
+#if CONFIG_IDF_TARGET_ESP32S3
+  else if (command == "auth-benchmark")
+  {
+    std::int64_t elapsed{};
+    ok = BenchmarkWebPassword(elapsed);
+    std::printf("UG_AUTH benchmark_fixed_vector=%s iterations=%u elapsed_us=%lld "
+                "no_credentials_changed=1\n",
+                ok ? "pass" : "fail",
+                WebAuth::kIterations,
+                static_cast<long long>(elapsed));
+  }
+#endif
+  else if (command == "tls-status")
+  {
+    LoadedWebIdentity stored;
+    const auto read = LoadWebIdentity(stored);
+    const auto boot = LastHttpsStartupStatus();
+    std::printf("UG_LOCAL tls_identity=%s sdk_error=%ld admin_configured=%d https_startup=%s\n",
+                HttpsStartupReasonName(read.reason),
+                static_cast<long>(read.sdk_error),
+                !Configuration()->admin_token_sha256.empty(),
+                HttpsStartupReasonName(boot.reason));
+    ok = true;  // Read-only diagnostic succeeded even when no identity exists.
   }
   else if (command == "events")
   {
@@ -62,6 +127,9 @@ void Handle(std::string_view command)
                   ServiceStateName(event.state),
                   ServiceEventName(event.kind),
                   static_cast<long>(event.error));
+      if (event.service == ServiceId::kHttps && event.state == ServiceState::kFailed)
+        std::printf("UG_LOCAL https_event_reason=%s\n",
+                    HttpsStartupReasonName(static_cast<HttpsStartupReason>(event.error)));
     }
     ok = true;
   }
@@ -126,7 +194,8 @@ void Handle(std::string_view command)
     esp_restart();
   }
   else
-    error = "expected status/history/events, config/rollback/tls-init/tls-object <JSON> or reboot "
+    error = "expected status/history/events/tls-status, config/rollback/tls-init/tls-object <JSON> "
+            "or reboot "
             "CONFIRM";
   // Report only a status/reason, never the input or secret material.
   std::printf("UG_LOCAL %s%s%s\n", ok ? "OK" : "ERROR", error.empty() ? "" : ": ", error.c_str());
@@ -167,9 +236,24 @@ void Console(void*)
 }  // namespace
 esp_err_t StartLocalCommissioning(void (*credentials_changed)())
 {
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
+  if (!line.Initialize(
+          [](std::size_t size) -> void* {
+            return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+          },
+          heap_caps_free,
+          mbedtls_platform_zeroize))
+    return ESP_ERR_NO_MEM;
+  std::printf("UG_MEM console_buffer bytes=%zu external=%d\n",
+              line.size(),
+              esp_ptr_external_ram(line.data()));
+#endif
   tls_changed = credentials_changed;
-  return xTaskCreate(Console, "ug_local_setup", 16384, nullptr, 1, nullptr) == pdPASS
-             ? ESP_OK
-             : ESP_ERR_NO_MEM;
+  const bool created = xTaskCreate(Console, "ug_local_setup", 16384, nullptr, 1, nullptr) == pdPASS;
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
+  if (!created)
+    line.Reset();
+#endif
+  return created ? ESP_OK : ESP_ERR_NO_MEM;
 }
 }  // namespace ug::embedded

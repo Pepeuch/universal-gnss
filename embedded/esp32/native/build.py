@@ -110,6 +110,10 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_HEAP_TRACING_STANDALONE=y
+CONFIG_HEAP_TRACING_STACK_DEPTH=4
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+CONFIG_FREERTOS_RUN_TIME_COUNTER_TYPE_U64=y
 ''']
         # Existing reference layout, not an authorization to repartition hardware.
         partitions = 'nvs,data,nvs,0x9000,24K,\notadata,data,ota,0xf000,8K,\nphy_init,data,phy,0x11000,4K,\nota_0,app,ota_0,0x20000,3M,\nota_1,app,ota_1,0x320000,3M,\nwww,data,spiffs,0x620000,9M,\ncoredump,data,coredump,0xf20000,256K,\n'

@@ -154,13 +154,14 @@ class NativeBuildContract(unittest.TestCase):
             root = Path(tmp)
             source = root / 'source'
             source.mkdir()
+            (source/'pairing.js').write_text('public pairing helper')
             packed = root / 'esp-idf/ug_web/web_assets'
             packed.mkdir(parents=True)
             application = b'fake-app-prefix'
             for name in ('index.html', 'app.js', 'style.css'):
                 raw = ('content-' + name).encode()
                 (source/name).write_bytes(raw)
-                if name=='app.js':raw=(Path(__file__).resolve().parents[4]/'docs/flasher/portable.js').read_bytes()+b'\n'+raw
+                if name=='app.js':raw=(Path(__file__).resolve().parents[4]/'docs/flasher/portable.js').read_bytes()+b'\n'+(source/'pairing.js').read_bytes()+b'\n'+raw
                 compressed = gzip.compress(raw, mtime=0)
                 (packed/(name+'.gz')).write_bytes(compressed)
                 application += compressed

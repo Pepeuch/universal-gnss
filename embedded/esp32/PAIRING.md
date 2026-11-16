@@ -2,7 +2,7 @@
 
 Status: software implementation; physical S3/C3/CCMP/USB acceptance is pending.
 One peer is supported per device. No C6, LoRa, RF discovery or remote association
-protocol is enabled. A MAC read through local USB is manual identification, not
+protocol is enabled. A MAC read through local USB is device identification, not
 an RF discovery result. No firmware variant contains a user's peer or channel.
 [Portable configuration v1](PORTABLE_CONFIG.md) adds private-free CONFIG_GET/CHECK/APPLY
 commands in this same maintenance phase; USB/UART output is selected before data starts.
@@ -70,28 +70,56 @@ marker. Reset/re-enumeration, Linux grants and actual USB delivery remain physic
 acceptance tasks. This protocol does not offer live unsolicited diagnostics in a
 binary stream, nor does it implement a ROS2 node or automatic reset here.
 
-## Reproducible operator procedure (not executed on hardware here)
+## Bouton WebUI « Appairer un Rover »
 
-1. Identify both boards and actual STA MACs. Read the S3 MAC from its authenticated
-   pairing status and the C3 MAC through maintenance. USB IDs are not Wi-Fi MACs.
-2. Reset the identified C3 manually and run the tool within its boot window:
+Dans Réseau & radio, connecter le **C3 Rover** en USB au PC affichant la WebUI
+HTTPS du S3, puis cliquer sur le bouton. Chromium demande le port, jamais une MAC
+ou une clé. L'origine HTTPS doit être de confiance et Web Serial autorisé ; les
+navigateurs incompatibles affichent un diagnostic. Voir le
+[contrat Web Serial Chromium](https://developer.chrome.com/docs/capabilities/serial/).
+Le C3 Relay n'est pas concerné.
 
-```bash
-python3 embedded/esp32/tools/rover_config.py /dev/serial/by-id/<identified-C3> \
-  --set-peer <S3-STA-MAC> --channel 1 \
-  --new-key-file /private/new-pair.key --s3-ticket /private/new-s3-ticket.json
-```
+Le navigateur ouvre UGCFG/1 avec un nonce aléatoire. La réponse doit déclarer
+`firmware=universal-gnss`, `board=esp32c3`, `role=rover`, `mode=control`, stockage
+modifiable et le même nonce. Les anciens firmwares sans ces métadonnées doivent
+être mis à jour explicitement. Aucun reset DTR/RTS automatique d'une carte encore
+non identifiée n'est tenté : si sa maintenance est fermée, RESET physique puis
+nouvel essai sont indiqués.
 
-The two files are created with mode 0600 and no overwrite. Keep them outside Git,
-issues, public profiles, logs and captures. The tool performs no scan/reset/flash.
-3. In S3 WebUI, load the private ticket locally, open the pairing window and
-   confirm the association. The status distinguishes configured/effective channel,
-   startup and MAC ACKs; an ACK is not proof of rover USB reception.
-4. Restart the S3 explicitly. End C3 maintenance with the same tool and `--run`,
-   or wait its documented timeout. Both ends must use the same channel/key and
-   each other's STA MAC. Pair/channel changes need no compilation.
-5. Capture RTCM with the existing Linux tools after maintenance ends. Never feed
-   control JSON into an RTCM consumer. Qualify W5500 and GNSS UART wiring first.
+Le S3 fournit sa MAC STA via `/api/radio/pairing` authentifié. Le canal déjà
+configuré (1–11 ; canal 1 pour la campagne actuelle) est conservé : aucun scan,
+association au point d'accès ou choix automatique du canal. Après confirmation,
+WebCrypto génère une LMK de 16 octets ; SET l'enregistre sur le C3, puis les API
+existantes ouvrent la fenêtre S3 et enregistrent son pair. GET vérifie ensuite
+MAC croisées, canal, présence de clé et état persistant. La clé elle-même n'est
+jamais retournée. Elle ne passe ni dans un champ DOM, ni dans un fichier ticket,
+ni dans localStorage/sessionStorage ; seules les requêtes autorisées la portent.
+Les tableaux aléatoires sont effacés ; JavaScript ne garantit pas l'effacement
+physique des chaînes transitoires par son ramasse-miettes.
+
+RUN clôt et draine la maintenance C3. Une nouvelle commande S3 authentifiée
+`POST /api/radio/pairing/restart` avec `RESTART_AFTER_PAIRING` planifie le reboot
+uniquement avec une association enregistrée. Les nouvelles sessions Web étant
+volatiles, il faut se reconnecter après reboot : la WebUI reprend alors la
+vérification du pair/canal et du démarrage radio sans conserver le mot de passe.
+La confirmation de configuration/démarrage ne démontre ni CCMP sur l'air, ni
+réception RTCM/USB. Aucun flux synthétique n'est injecté par le bouton.
+
+Une seule opération locale est admise à la fois. Le bouton devient Annuler ;
+fermer la session/la page annule la suite et libère les streams USB. Timeout,
+clé non confirmée, déconnexion et refus S3 ont des résultats distincts des
+réussites. Les deux écritures **ne sont pas atomiques**. Après toute tentative
+SET sans réponse, le C3 peut déjà avoir enregistré la clé ; après une tentative
+S3, les deux états peuvent être incertains. Aucun rollback d'une ancienne clé
+inconnue ni CLEAR destructif automatique n'est exécuté. Le résultat demande une
+vérification et un nouvel appairage explicite ; une réussite n'est jamais affichée
+sur la seule présence d'une configuration S3.
+
+L'outil `tools/rover_config.py` reste une maintenance locale avancée ; la WebUI
+ne demande plus ses tickets ou une copie manuelle de secrets.
+
+Qualification de ce parcours et de la nouvelle authentification :
+[rapport WebUI](../../docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md).
 
 S3 pair changes latch TX stopped and invalidate pending frames until reboot.
 The receiver's new boot starts fresh reassembly state; configuration never edits

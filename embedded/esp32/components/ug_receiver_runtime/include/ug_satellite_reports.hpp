@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
+#include "ug_satellite_storage.hpp"
 #include "universal_gnss_protocols/nmea_records.hpp"
 #include "universal_gnss_protocols/protocol_records.hpp"
 #include "universal_gnss_protocols/ubx_records.hpp"
@@ -59,6 +60,10 @@ bool GsvSignalScope(const universal_gnss_protocols::NmeaSentence&, std::optional
 class SatelliteReports
 {
 public:
+  bool InitializeStorage()
+  {
+    return storage_.Initialize();
+  }
   void Observe(const universal_gnss_protocols::UbxNavSatRecord&);
   void Observe(const universal_gnss_protocols::UnicoreSatsInfoRecord&);
   void Observe(const universal_gnss_protocols::NmeaGsvRecord&,
@@ -75,8 +80,12 @@ private:
     bool active{};
   };
   void PublishVendor(SatelliteReport&&);
-  std::array<SatelliteReport, 2> vendors_{};
-  SatelliteReport nmea_{};
-  std::array<Cycle, 8> cycles_{};
+  struct Data
+  {
+    std::array<SatelliteReport, 2> vendors{};
+    SatelliteReport nmea{};
+    std::array<Cycle, 8> cycles{};
+  };
+  SatelliteStorage<Data> storage_{};
 };
 }  // namespace ug::embedded

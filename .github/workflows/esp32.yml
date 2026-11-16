@@ -24,7 +24,6 @@ jobs:
       matrix:
         variant:
           - s3-gateway
-          - c3-relay
           - c3-rover-usb
           - c3-rover-uart
     steps:
