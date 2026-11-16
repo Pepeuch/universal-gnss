@@ -152,3 +152,20 @@ Moteur partagé, ROS2/Linux, NVS, TLS, partitions, seuils et publication restent
 inchangés. Les optimisations ultérieures S3 et celles des copies/buffers/timestamps
 du core sont des phases distinctes. Le brochage interactif et le relais C3 restent
 reportés. Ces essais alpha ne ferment aucun gate de release UG.
+
+## Évolution locale : appairage USB et connexion par mot de passe
+
+La WebUI remplace la saisie du jeton par Identifiant/Mot de passe et propose le
+changement du mot de passe dans Paramètres, sans page ni assistant supplémentaire.
+Installation réellement vierge : admin/admin autorise seulement ce changement.
+Une installation déjà provisionnée accepte son ancien jeton comme mot de passe
+de migration pour admin ; aucune réinitialisation NVS/TLS/GNSS automatique.
+Le changement validé révoque les sessions et l'usage réseau de l'ancien jeton.
+Les API métier conservent le schéma Bearer ; les sessions nouvelles restent en
+mémoire seulement, expirent et se ferment explicitement.
+
+Le bouton d'[appairage Rover USB](PAIRING.md) conserve la confirmation et la fenêtre
+S3, automatise UGCFG/1 et ne présente jamais une écriture partielle comme une
+association complète. Les essais physiques et les coûts d'authentification S3
+sont distingués des tests simulés dans le
+[rapport dédié](../../docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md).

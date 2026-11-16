@@ -94,10 +94,20 @@ memory increases, but the largest block remains smaller and memory pressure
 remains reduced. The [satellite-cache followup](docs/analysis/ESP32_S3_MEMORY_FOLLOWUP.md)
 now qualifies S3-only owned PSRAM storage: 11860 additional internal bytes at the
 first HTTPS GET and a larger contiguous block, preserving the shared snapshot.
+The [S3 radio-storage phase](docs/analysis/ESP32_S3_ESPNOW_MEMORY.md) qualifies
+conditional internal allocation with radio disabled: 13760 additional free bytes
+at the first HTTPS GET, largest block retained at 34816 bytes, and simulated
+lifecycle/failure/late-ACK tests. Active-radio memory qualification is deferred
+until a real pairing exists; the idle saving is not an active-radio saving.
 Long-duration and live GNSS/RTCM latency qualification, further S3 optimization
 and shared-core optimization remain pending. The C3 relay is
 deferred and does not constrain the S3. Existing Rover profiles remain unchanged.
 No release metric changes.
+The [WebUI pairing/authentication work](docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md)
+adds one-button USB C3 Rover pairing and restricted initial/password-migration
+sessions on a separate feature branch. Software checks and physical acceptance
+are tracked separately; hardware pairing and acceptable S3 password latency remain
+pending; the requested account is verified on hardware. No release gate or hardware milestone is marked complete by this work.
 
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.

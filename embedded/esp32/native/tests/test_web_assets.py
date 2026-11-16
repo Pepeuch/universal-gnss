@@ -12,11 +12,11 @@ ASSETS = Path(__file__).resolve().parents[2] / 'components/ug_web/assets'
 
 
 class WebAssets(unittest.TestCase):
-    def make_vm(self, gnss=True):
+    def make_vm(self, gnss=True, passwords=True):
         vm = quickjs.Context()
         vm.set_memory_limit(8 * 1024 * 1024)
         vm.set_time_limit(2)
-        vm.eval('const hasGnss=' + json.dumps(gnss) + ';')
+        vm.eval('const hasGnss=' + json.dumps(gnss) + '; const hasPasswordLogin='+json.dumps(passwords)+';')
         vm.eval(r'''
           const elements = {}, calls = [], listeners = {}, timers = new Map(); let timerId = 0;
           const document = {hidden:false,addEventListener(name,fn){listeners[name]=fn;},getElementById(id) {return elements[id] ||= {value:'', textContent:'', hidden:false,setAttribute(){},focus(){},children:[],appendChild(child){this.children.push(child);},replaceChildren(){this.children=[];}};},
@@ -26,7 +26,7 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = (fn,delay) => {const id=++timerId;timers.set(id,{fn,delay});return id;}, clearTimeout = id => timers.delete(id);
           class AbortController {constructor(){this.signal={};}abort(){}}
-          let hold_selftest = false, release_selftest;
+          let authRestricted=false; let hold_selftest = false, release_selftest;
           let hold_commands = false, release_commands;
           let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events, hold_ntrip_history = false, release_ntrip_history, hold_config_post = false, release_config_post, reject_config_post = false;
           const confirm = () => true;
@@ -35,6 +35,8 @@ class WebAssets(unittest.TestCase):
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
             calls.push({path,options});
+            if(path==='/api/auth/login')return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({token:'a'.repeat(64),password_change_required:authRestricted})};
+            if(path==='/api/auth/logout')return {ok:true,status:200,headers:{get:()=> 'text/plain'},text:async()=> 'closed'};
             if(path==='/api/config/portable' || path==='/api/config/portable/preview')return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(path.endsWith('preview')?JSON.parse(options.body):UGPortable.defaults('waveshare-s3-eth'))};
             if(path==='/api/config/portable/apply')return {ok:true,status:200,headers:{get:()=> 'text/plain'},text:async()=> 'saved'};
             if (path === '/api/config' && options.method === 'POST') {
@@ -67,7 +69,7 @@ class WebAssets(unittest.TestCase):
             if (hold_events && path === '/api/diagnostics/events') return new Promise(resolve => {
               release_events = () => resolve({ok:true,headers:{get:()=> 'application/json'},text:async()=>'{"events":[{"private":"old-session"}]}'});
             });
-            const payload = path === '/api/gnss/status' ? {present:true,model:'ZED-F9P',model_verified:true,fix_valid:true,position_stale:false,fix_type:4} : path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true,disable_base:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {gnss:hasGnss,gnss_allowed_pins:hasGnss?[17,18]:[],publishers:1} : path === '/api/config' ?
+            const payload = path === '/api/gnss/status' ? {present:true,model:'ZED-F9P',model_verified:true,fix_valid:true,position_stale:false,fix_type:4} : path === '/api/ntrip/runtime' ? {configuration_revision:'7',upstream:{sample_current:false,active:false}} : path === '/api/diagnostics/events' ? {scope:'volatile_service_events_this_boot',events:[{sequence:'3',service:'rtcm_router',kind:'watchdog',error:7}]} : path === '/api/resources' ? {pressure,satellites_allowed:pressure === 'normal',web_mutations_allowed:pressure !== 'critical'} : path === '/api/config/history' ? {generation:'3',previous_generation:'2',previous_available:true,writable:true} : path === '/api/gnss/capabilities' ? {model:'ZED-F9P',model_verified:true,fixed:true,survey_in:true,time_optimization:false,telemetry:true,disable_base:true} : path === '/api/gnss/satellites' ? {available:true,source:'NMEA-GSV',stale:false,satellites:[{svid:2,cn0:45.5}]} : path === '/api/capabilities' ? {password_authentication:hasPasswordLogin,gnss:hasGnss,gnss_allowed_pins:hasGnss?[17,18]:[],publishers:1} : path === '/api/config' ?
               {schema:1,input:'ntrip',gnss:{enabled:false,tx_pin:-1,rx_pin:-1,baud:115200,model:'auto'},upstream:{enabled:false,endpoint:{host:'caster.test',port:2101,mountpoint:'IN',username:'reader',password_set:true,tls:true,ca_file:'nvs://ug_tls/ca',send_gga:false,gga_interval_s:5}},publishers:[{slot:0,enabled:false,endpoint:{host:'output.test',port:2101,mountpoint:'OUT',password_set:true}}]} : {};
             return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(payload)};
           };
@@ -77,13 +79,54 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         return vm
 
+    def test_fresh_login_restricts_sensitive_operations(self):
+        vm=self.make_vm()
+        vm.eval("authRestricted=true; $('username').value='admin'; $('password').value='admin';elements.login.onclick();")
+        self.drain(vm)
+        self.assertEqual(vm.eval('activeTab'),'settings')
+        self.assertTrue(vm.eval('passwordChangeRequired'))
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/config')"))
+        vm.eval("elements['functions-save'].onclick?.();elements.load.onclick();")
+        self.drain(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/config')"))
+        self.assertEqual(vm.eval('elements.password.value'),'')
+
+    def test_password_change_confirmation_and_secret_clearing(self):
+        vm=self.make_vm();self.login(vm)
+        vm.eval("elements['current-password'].value='old-private-password';elements['new-password'].value='new-private-password';elements['confirm-password'].value='mismatch';elements['password-form'].onsubmit();")
+        self.drain(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/auth/password')"))
+        vm.eval("elements['current-password'].value='old-private-password';elements['new-password'].value='new-private-password';elements['confirm-password'].value='new-private-password';elements['password-form'].onsubmit();")
+        self.drain(vm)
+        request=json.loads(vm.eval("calls.filter(c=>c.path==='/api/auth/password').pop().options.body"))
+        self.assertEqual(request,{'current_password':'old-private-password','new_password':'new-private-password','confirm':'CHANGE_PASSWORD'})
+        self.assertEqual(vm.eval('token'),'')
+        for field in ('password','current-password','new-password','confirm-password'):
+            self.assertEqual(vm.eval("elements['"+field+"'].value"),'')
+
+    def test_webserial_unavailable_diagnostic_without_writes(self):
+        vm=self.make_vm();self.login(vm)
+        vm.eval("elements['pairing-start'].onclick();")
+        self.drain(vm)
+        self.assertIn('Web Serial indisponible',vm.eval("elements['pairing-info'].textContent"))
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/radio/pairing/apply')"))
+
+    def test_legacy_profile_keeps_bearer_api_without_password_or_pairing_work(self):
+        vm=self.make_vm(gnss=False,passwords=False)
+        self.login(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/auth/login')"))
+        self.assertTrue(vm.eval("calls.some(c=>c.path==='/api/config' && c.options.headers.Authorization==='Bearer '+'a'.repeat(64))"))
+        self.assertTrue(vm.eval("elements['password-section'].hidden && elements['pairing-start'].disabled"))
+        vm.eval('elements.logout.onclick();');self.drain(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/auth/logout')"))
+
     def test_browser_auth_configuration_and_base_confirmation(self):
         vm = self.make_vm()
-        vm.eval("document.getElementById('token').value='z'.repeat(64); elements.login.onclick();")
+        vm.eval("document.getElementById('password').value='a'.repeat(64); elements.login.onclick();")
         self.drain(vm)
         vm.eval("selectTab('gnss');");self.drain(vm)
         calls = json.loads(vm.eval('JSON.stringify(calls)'))
-        self.assertTrue(any(c['options']['headers'].get('Authorization') == 'Bearer ' + 'z'*64 for c in calls))
+        self.assertTrue(any(c['options']['headers'].get('Authorization') == 'Bearer ' + 'a'*64 for c in calls))
         self.assertFalse(vm.eval("elements['ntrip-save'].disabled"),vm.eval("elements.notice.textContent + JSON.stringify({token,ntripMutationAllowed,refreshing,activeTab})"))
         self.assertEqual(vm.eval("elements['ntrip-target'].children.length"), 1)
         self.assertEqual(vm.eval("elements['ntrip-host'].value"), 'caster.test')
@@ -131,15 +174,8 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval("elements['ntrip-password'].value"), '')
         self.assertIn('invalid endpoint', vm.eval('elements.notice.textContent'))
         vm.eval('reject_config_post=false;')
-        vm.eval("elements['pairing-read'].onclick(); elements['pairing-open'].onclick();")
+        vm.eval("elements['pairing-read'].onclick();")
         self.drain(vm)
-        window = json.loads(vm.eval("calls.filter(c=>c.path==='/api/radio/pairing/window').pop().options.body"))
-        self.assertEqual(window, {'confirm':'OPEN_LOCAL_PAIRING'})
-        vm.eval("elements['pairing-peer'].value='02:00:00:00:00:02'; elements['pairing-channel'].value='1'; elements['pairing-key'].value='0123456789abcdef0123456789abcdef'; elements['pairing-form'].onsubmit();")
-        self.drain(vm)
-        pairing = json.loads(vm.eval("calls.filter(c=>c.path==='/api/radio/pairing/apply').pop().options.body"))
-        self.assertEqual(pairing, {'confirm':'PAIR_ESPNOW_ROVER','peer':'02:00:00:00:00:02','channel':1,'key':'0123456789abcdef0123456789abcdef'})
-        self.assertEqual(vm.eval("elements['pairing-key'].value"), '')
         vm.eval("elements['pairing-remove'].onclick();")
         self.drain(vm)
         self.assertEqual(json.loads(vm.eval("calls.filter(c=>c.path==='/api/radio/pairing/remove').pop().options.body")), {'confirm':'UNPAIR_ESPNOW_ROVER'})
@@ -165,7 +201,7 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         detect = json.loads(vm.eval("calls.filter(c=>c.path==='/api/gnss/detect').pop().options.body"))
         self.assertEqual(detect['confirm'], 'DETECT_RECEIVER')
-        self.assertEqual(vm.eval('elements.token.value'), '')
+        self.assertEqual(vm.eval('elements.password.value'), '')
         vm.eval("elements.base.onsubmit({preventDefault(){},target:{mode:'fixed',height_datum:'ellipsoidal',latitude_deg:'48.123456789',longitude_deg:'2.123456789',height_m:'123.4567',persist:true}});")
         self.drain(vm)
         operation = json.loads(vm.eval('calls[calls.length-1].options.body'))
@@ -315,8 +351,8 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(vm.eval('token'), '')
         self.assertTrue(vm.eval("elements['functions-save'].disabled"))
         self.assertIsNone(vm.eval('functionsConfig'))
-        self.assertEqual(vm.eval("elements['pairing-key'].value"), '')
-        self.assertEqual(vm.eval("elements['pairing-peer'].value"), '')
+        self.assertEqual(vm.eval("elements['new-password'].value"), '')
+        self.assertEqual(vm.eval("elements['password'].value"), '')
         self.assertTrue(vm.eval("elements['base-submit'].disabled"))
         self.assertTrue(vm.eval("elements['telemetry-submit'].disabled"))
         self.assertTrue(vm.eval("elements['base-disable'].disabled"))
@@ -329,7 +365,7 @@ class WebAssets(unittest.TestCase):
             self.assertEqual(html.count('id="ntrip-' + key + '"'), 1)
 
     def login(self, vm):
-        vm.eval("document.getElementById('token').value='z'.repeat(64); elements.login.onclick();")
+        vm.eval("document.getElementById('password').value='a'.repeat(64); elements.login.onclick();")
         self.drain(vm)
 
     def test_tab_and_asset_contract(self):
@@ -380,7 +416,7 @@ class WebAssets(unittest.TestCase):
         vm.eval("elements['events-read'].onclick();elements['commands-read'].onclick();");self.drain(vm)
         self.assertEqual(vm.eval('calls.length'),before)
         vm.eval('elements.logout.onclick();release_status();');self.drain(vm)
-        self.assertEqual(vm.eval('calls.length'),before)
+        self.assertEqual(vm.eval("calls.filter(c=>c.path!=='/api/auth/logout').length"),before)
         self.assertEqual(vm.eval('elements.events.textContent'),'Session fermée')
 
     def test_individual_private_responses_do_not_survive_logout(self):
@@ -442,7 +478,7 @@ class WebAssets(unittest.TestCase):
         self.assertIn('inconnu',vm.eval("elements['card-global'].textContent"))
 
     def test_delayed_files_do_not_repopulate_after_logout(self):
-        for control in ('import','portable-file','pairing-ticket'):
+        for control in ('import','portable-file'):
             with self.subTest(control=control):
                 vm=self.make_vm();self.login(vm)
                 vm.eval("let fileRelease;$("+json.dumps(control)+").onchange({preventDefault(){},target:{files:[{size:40,text:()=>new Promise(r=>fileRelease=r)}]}});")
@@ -450,7 +486,7 @@ class WebAssets(unittest.TestCase):
                 vm.eval("elements.logout.onclick();fileRelease('{\"private\":\"old-session-file\"}');")
                 self.drain(vm)
                 self.assertEqual(vm.eval('elements.config.value'),'')
-                self.assertEqual(vm.eval("$('pairing-key').value"),'')
+                self.assertEqual(vm.eval("$('new-password').value"),'')
                 self.assertEqual(vm.eval("$('portable-preview').textContent"),'Aucun import préparé')
 
     def test_ethernet_driver_service_is_rendered_on_the_ethernet_card(self):

@@ -1,4 +1,5 @@
 'use strict';
+let passwordChangeRequired=false, passwordLogin=false;
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
 let portableCandidate=null;
 function clearPortable(){portableCandidate=null;$('portable-file').value='';$('portable-apply').disabled=true;$('portable-preview').textContent='Aucun import préparé';}
@@ -48,23 +49,27 @@ function renderFunctions(config){
  $('functions-save').disabled=!token||!ntripMutationAllowed;
  $('functions-state').textContent=print({activation_demandee:{gnss_uart:Boolean(config.gnss?.enabled),ntrip_client:Boolean(config.upstream?.enabled),espnow:Boolean(config.radio?.enabled),caster:Boolean(config.caster?.enabled),wifi_sta:Boolean(config.wifi?.sta),wifi_ap:Boolean(config.wifi?.ap)},etat_reel:'Consulter les services : activation ≠ réception.'});
 }
-function clearPairingForm() { $('pairing-key').value = ''; $('pairing-ticket').value = ''; $('pairing-peer').value = ''; $('pairing-info').textContent = 'Session fermée'; }
+let pairingController = null, pairingPendingVerification = null;
+function clearPairingForm() { const interrupted=Boolean(pairingController); pairingController?.abort(); $('pairing-info').textContent = interrupted?'Session fermée ; association interrompue, état des deux cartes à vérifier.':'Session fermée'; $('pairing-details').textContent = ''; }
+
 function clearNtripForm() { ntripMutationAllowed = false; ntripConfig = null; $('ntrip-target').value = 'upstream'; renderNtrip(); }
 let requestQueue = Promise.resolve(), configRead = 0, editGeneration = 0;
 function call(path, body, authorized = true) {
   const generation = sessionGeneration, credential = token;
   const run = async () => {
-    if (authorized && generation !== sessionGeneration) throw Error('Session modifiée');
+    if (authorized && generation !== sessionGeneration && path!=='/api/auth/logout') throw Error('Session modifiée');
+    if(pairingController && body!==undefined && !path.startsWith('/api/radio/pairing/') && path!=='/api/auth/logout') throw Error('Appairage en cours ; terminer ou annuler avant une autre modification');
+    if (authorized && passwordChangeRequired && !path.startsWith('/api/auth/')) throw Error('Changer le mot de passe dans Paramètres');
     const headers = {};
     if (authorized && credential) headers.Authorization = `Bearer ${credential}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 10000);
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.startsWith('/api/auth/') ? 120000 : 10000);
     try {
       const response = await fetch(path, {method: body === undefined ? 'GET' : 'POST', headers,
         body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store', credentials: 'omit', signal: controller.signal});
       const text = await response.text();
-      if (!response.ok) throw Error(`${response.status} ${text}`);
-      if (authorized && generation !== sessionGeneration) throw Error('Session modifiée');
+      if (!response.ok) { if(response.status===401 && authorized && generation===sessionGeneration && path!=='/api/auth/logout')closeSession(); throw Error(`${response.status} ${text}`); }
+      if (authorized && generation !== sessionGeneration && path!=='/api/auth/logout') throw Error('Session modifiée');
       return response.headers.get('Content-Type')?.includes('application/json') ? JSON.parse(text) : text;
     } finally { clearTimeout(timer); }
   };
@@ -123,7 +128,7 @@ function renderReceiver(receiver) {
     `${['Inconnu','Aucun FIX','FIX','RTK FLOAT','RTK FIX','Estimé','2D','3D','DGPS'][receiver.fix_type] || 'Inconnu'} · âge ${receiver.position_observation_age_ms ?? '?'} ms`;
 }
 async function refresh() {
-  if (refreshing || document.hidden) return;
+  if (refreshing || document.hidden || pairingController) return;
   refreshing = true;
   const generation = sessionGeneration, view = viewGeneration, tab = activeTab;
   const current = () => generation === sessionGeneration && view === viewGeneration && !document.hidden;
@@ -132,10 +137,10 @@ async function refresh() {
     if (!current()) return;
     $('resources').textContent = print(resources);
     $('card-memory').textContent = `${resources.pressure} · ${resources.internal_free ?? '?'} octets internes`;
-    ntripMutationAllowed = Boolean(token) && ['normal','reduced'].includes(resources.pressure) && resources.web_mutations_allowed === true;
+    ntripMutationAllowed = Boolean(token) && !passwordChangeRequired && ['normal','reduced'].includes(resources.pressure) && resources.web_mutations_allowed === true;
     $('functions-save').disabled = !ntripMutationAllowed || !functionsConfig;
     $('ntrip-save').disabled = !ntripMutationAllowed || !ntripConfig || ntripSaving;
-    wireSelfTestAllowed = Boolean(token) && resources.pressure === 'normal';
+    wireSelfTestAllowed = Boolean(token) && !passwordChangeRequired && resources.pressure === 'normal';
     $('wire-selftest').disabled = !wireSelfTestAllowed || wireSelfTestRunning;
     if (!['normal','reduced'].includes(resources.pressure)) {
       unavailable(); satellites({available:false});
@@ -147,12 +152,12 @@ async function refresh() {
       if (!current()) return;
       renderStatus(status);
     }
-    if (token && tab === 'rtcm') {
+    if (token && !passwordChangeRequired && tab === 'rtcm') {
       const report = await call('/api/ntrip/runtime');
       if (!current()) return;
       $('ntrip-runtime').textContent = print(report);
     }
-    if (token && !$('gnss').hidden && (tab === 'dashboard' || tab === 'gnss')) {
+    if (token && !passwordChangeRequired && !$('gnss').hidden && (tab === 'dashboard' || tab === 'gnss')) {
       const receiver = await call('/api/gnss/status');
       if (!current()) return;
       renderReceiver(receiver);
@@ -199,19 +204,49 @@ async function load(expectedEdit = editGeneration) {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); const generation = sessionGeneration; try { await fn(event, editGeneration); } catch (e) { if (generation === sessionGeneration) show(e.message); } }; }
-function closeSession() { $('session-state').textContent = 'Session fermée'; unavailable(); wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('token').value = ''; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); }
-$('logout').onclick = closeSession;
-$('login').onclick = async () => {
-  const credential = $('token').value;
-  closeSession(); token = credential;
-  const generation = sessionGeneration;
-  try {
-    await load();
-    if (generation !== sessionGeneration) return;
-    await refresh();
-    if (generation === sessionGeneration) { $('session-state').textContent = 'Session ouverte'; show('Session ouverte'); }
-  } catch (e) { if (generation === sessionGeneration) { closeSession(); show(e.message); } }
+function closeSession() { $('session-state').textContent = 'Session fermée'; unavailable(); wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('password').value = ''; for(const id of ['current-password','new-password','confirm-password'])$(id).value=''; passwordChangeRequired=false; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); }
+$('logout').onclick = async () => {
+  const pending = token && passwordLogin ? call('/api/auth/logout', {}) : Promise.resolve();
+  closeSession(); await pending.catch(()=>{});
 };
+let loginPending=false;
+$('login').onclick = async () => {
+  if(loginPending)return;
+  const username=$('username').value, password=$('password').value;
+  closeSession(); loginPending=true; $('login').disabled=true;
+  const generation=sessionGeneration;
+  try {
+    const result=passwordLogin?await call('/api/auth/login',{username,password},false):{token:password,password_change_required:false};
+    if(generation!==sessionGeneration)return;
+    if(typeof result.token!=='string' || (passwordLogin?!/^[a-f0-9]{64}$/.test(result.token):!/^[A-Za-z0-9_-]{32,128}$/.test(result.token)) || typeof result.password_change_required!=='boolean')throw Error('Réponse de connexion invalide');
+    token=result.token; passwordChangeRequired=result.password_change_required;
+    if(passwordChangeRequired){
+      selectTab('settings'); $('auth-state').textContent='Changement obligatoire : cette session autorise uniquement le choix du nouveau mot de passe.';
+      $('session-state').textContent='Mot de passe à changer'; show('Changer le mot de passe dans Paramètres avant toute opération sensible.');
+    } else {
+      await load(); await refresh();
+      if(pairingPendingVerification){
+        const pending=pairingPendingVerification, state=await call('/api/radio/pairing');
+        if(generation===sessionGeneration && token){
+          const ok=state.started && !state.restart_required && state.key_set && state.enabled &&
+            state.peer?.toLowerCase()===pending.peer.toLowerCase() && state.effective_channel===pending.channel;
+          $('pairing-info').textContent=ok?'Association enregistrée sur les deux cartes, S3 radio démarrée. Réception RTCM/USB non vérifiée.':'Configurations enregistrées ; démarrage radio S3 non confirmé.';
+          if(ok)pairingPendingVerification=null;
+        }
+      }
+      if(generation===sessionGeneration){$('session-state').textContent='Session ouverte';$('auth-state').textContent='Identifiant : admin. Le changement révoque toutes les sessions Web.';show('Session ouverte');}
+    }
+  } catch(e){if(generation===sessionGeneration){closeSession();show(e.message);}}
+  finally { loginPending=false; $('login').disabled=false; }
+};
+$('password-form').onsubmit=handle(async()=>{
+  const current_password=$('current-password').value, new_password=$('new-password').value, confirmation=$('confirm-password').value;
+  for(const id of ['current-password','new-password','confirm-password'])$(id).value='';
+  if(!token || new_password.length<8 || new_password.length>128 || new_password!==confirmation)throw Error('Mot de passe de 8 à 128 caractères et confirmation identique requis');
+  if(!confirm('Changer le mot de passe et fermer toutes les sessions Web ?'))return;
+  await call('/api/auth/password',{current_password,new_password,confirm:'CHANGE_PASSWORD'});
+  closeSession(); show('Mot de passe changé ; reconnectez-vous.');
+});
 $('load').onclick = handle(load);
 $('save').onclick = handle(async (_, edit) => { const value = JSON.parse($('config').value); if (confirm('Sauvegarder cette configuration ?')) { show(await call('/api/config', value)); await load(edit); } });
 async function fileText(event, limit) {
@@ -277,6 +312,8 @@ $('transport').onsubmit = handle(async (_, edit) => {
   show(await call('/api/config', value)); await load(edit);
 });
 call('/api/capabilities', undefined, false).then(caps => {
+  passwordLogin=caps.password_authentication===true; $('login').disabled=false; $('password-section').hidden=!passwordLogin; $('pairing-start').disabled=!passwordLogin;
+  if(!passwordLogin)$('auth-state').textContent='Profil historique : mot de passe = jeton existant, aucun changement d’identifiants ici.';
   $('gnss').hidden = !caps.gnss; $('gnss-unavailable').hidden = Boolean(caps.gnss);
   $('portable-section').hidden=!caps.gnss;$('export').hidden=!caps.gnss;
   ntripGnss = Boolean(caps.gnss);
@@ -412,44 +449,61 @@ $('ntrip-endpoint').onsubmit = handle(async (_, edit) => {
 
 async function readPairing() {
   const generation=sessionGeneration, report=await call('/api/radio/pairing');
-  if (generation!==sessionGeneration || !token) return;
-  $('pairing-info').textContent=print(report);
-  $('pairing-peer').value=report.peer || '';
-  $('pairing-channel').value=String(report.configured_channel || 1);
+  if (generation===sessionGeneration && token) $('pairing-details').textContent=print(report);
 }
 $('pairing-read').onclick=handle(readPairing);
-$('pairing-open').onclick=handle(async (_, edit) => {
-  if (!confirm('Ouvrir pendant 120 secondes la configuration manuelle d’un pair local ? Aucun appairage radio automatique.')) return;
-  const generation=sessionGeneration, result=await call('/api/radio/pairing/window',{confirm:'OPEN_LOCAL_PAIRING'});
-  if (generation===sessionGeneration && token) $('pairing-info').textContent=print(result);
-});
-$('pairing-form').onsubmit=handle(async (_, edit) => {
-  const key=$('pairing-key').value; $('pairing-key').value='';
-  if (!token || !ntripMutationAllowed) throw Error('Session et mémoire disponibles requises');
-  if (!confirm('Associer ce rover avec la clé privée partagée ? La sortie radio sera coupée jusqu’au redémarrage.')) return;
-  const generation=sessionGeneration, result=await call('/api/radio/pairing/apply',{
-    confirm:'PAIR_ESPNOW_ROVER',peer:$('pairing-peer').value,channel:Number($('pairing-channel').value),key});
-  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(edit); }
-});
+$('pairing-start').onclick=async () => {
+  if (pairingController) { pairingController.abort(); return; }
+  const output=$('pairing-info'), button=$('pairing-start'), generation=sessionGeneration;
+  if (!passwordLogin) { output.textContent='Appairage USB disponible sur le Gateway S3.'; return; }
+  if (!token || !ntripMutationAllowed) { output.textContent='Session et mémoire disponibles requises'; return; }
+  if (!globalThis.isSecureContext || !navigator.serial || !crypto?.getRandomValues) {
+    output.textContent='Web Serial indisponible : utiliser Chromium sur une origine HTTPS de confiance.'; return;
+  }
+  const controller=new AbortController(); pairingController=controller;
+  button.textContent='Annuler l’appairage'; clearTimeout(refreshTimer);
+  const progress=text => { if (generation===sessionGeneration && token) output.textContent=text; };
+  try {
+    // requestPort must run directly in the click activation, before any asynchronous API call.
+    const port=await navigator.serial.requestPort();
+    const result=await UGRoverPairing.pair(port,async(path,body)=>{
+      if(controller.signal.aborted || generation!==sessionGeneration || !token)throw Error('Session modifiée');
+      return call(path,body);
+    },progress,controller.signal,async(channel,replacing)=>confirm(
+      'Appairer ce C3 Rover au S3 sur le canal '+channel+' avec une nouvelle clé privée ? Le S3 redémarrera. '+
+      (replacing?'Une association existe : elle sera remplacée. Une interruption peut laisser une configuration partielle.':'Les deux cartes enregistreront cette association.')));
+    if(result.cancelled){progress('Appairage annulé avant écriture.');return;}
+    pairingPendingVerification=result;
+    progress('Configurations enregistrées ; attente du retour du S3…');
+    const deadline=Date.now()+45000;
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    while(Date.now()<deadline){
+      if(controller.signal.aborted || generation!==sessionGeneration || !token)throw Error();
+      try {
+        const state=await call('/api/radio/pairing');
+        if(state.started && !state.restart_required && state.key_set && state.enabled &&
+           state.peer?.toLowerCase()===result.peer.toLowerCase() && state.effective_channel===result.channel){
+          pairingPendingVerification=null; progress('Association enregistrée sur les deux cartes, S3 radio démarrée. Réception RTCM/USB non vérifiée.');return;
+        }
+      } catch(error) {
+        if(error.message?.startsWith('401')){progress('Configurations enregistrées. S3 redémarré : reconnectez-vous pour vérifier son état radio.');return;}
+      }
+      await new Promise(resolve=>setTimeout(resolve,1500));
+    }
+    progress('Configurations enregistrées ; démarrage radio S3 non confirmé. Vérifiez le statut avant utilisation.');
+  } catch(error) {
+    if(generation===sessionGeneration && token)output.textContent=error.name==='NotFoundError'?'Sélection USB annulée ; aucune écriture.':
+      error.message || 'Vérification interrompue ; état des cartes à contrôler.';
+  } finally {
+    pairingController=null; button.textContent='Appairer un Rover'; scheduleRefresh(0);
+  }
+};
+globalThis.addEventListener?.('pagehide',()=>pairingController?.abort());
 $('pairing-remove').onclick=handle(async (_, edit) => {
+  if(pairingController)throw Error('Appairage en cours');
   if (!confirm('Supprimer l’association persistante et couper cette sortie radio ? Le C3 doit être reconfiguré séparément par USB.')) return;
   const generation=sessionGeneration, result=await call('/api/radio/pairing/remove',{confirm:'UNPAIR_ESPNOW_ROVER'});
-  $('pairing-key').value='';
-  if (generation===sessionGeneration && token) { $('pairing-info').textContent=print(result); await load(edit); }
-});
-
-$('pairing-ticket').onchange=handle(async event => {
-  const generation=sessionGeneration, text=await fileText(event,1024);
-  if(text===null)return;
-  const ticket=JSON.parse(text);
-  if (generation!==sessionGeneration || !token) return;
-  if (!ticket || typeof ticket!=='object' || Array.isArray(ticket) ||
-      Object.keys(ticket).sort().join(',')!=='channel,confirm,key,peer' || ticket.confirm!=='PAIR_ESPNOW_ROVER' ||
-      typeof ticket.key!=='string' || !/^[a-fA-F0-9]{32}$/.test(ticket.key) ||
-      typeof ticket.peer!=='string' || !/^(?:[a-fA-F0-9]{2}:){5}[a-fA-F0-9]{2}$/.test(ticket.peer) ||
-      !Number.isInteger(ticket.channel) || ticket.channel<1 || ticket.channel>11) throw Error('Ticket privé incompatible');
-  $('pairing-peer').value=ticket.peer; $('pairing-channel').value=String(ticket.channel); $('pairing-key').value=ticket.key;
-  event.target.value=''; show('Ticket chargé localement ; ouvrir la fenêtre puis confirmer l’association.');
+  if (generation===sessionGeneration && token) { $('pairing-details').textContent=print(result); await load(edit); }
 });
 
 $('functions').onsubmit=handle(async(_,edit)=>{

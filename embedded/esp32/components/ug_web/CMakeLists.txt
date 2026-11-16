@@ -6,7 +6,7 @@ endif()
 idf_component_register(SRCS "src/ug_web.cpp" "src/ug_https_defaults.c" INCLUDE_DIRS "include" REQUIRES ug_supervisor ${deps})
 set(asset_output "${CMAKE_CURRENT_BINARY_DIR}/web_assets")
 get_filename_component(UG_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
-set(asset_sources "${UG_SOURCE_ROOT}/docs/flasher/portable.js" "${CMAKE_CURRENT_LIST_DIR}/assets/index.html" "${CMAKE_CURRENT_LIST_DIR}/assets/app.js" "${CMAKE_CURRENT_LIST_DIR}/assets/style.css")
+set(asset_sources "${CMAKE_CURRENT_LIST_DIR}/assets/pairing.js" "${UG_SOURCE_ROOT}/docs/flasher/portable.js" "${CMAKE_CURRENT_LIST_DIR}/assets/index.html" "${CMAKE_CURRENT_LIST_DIR}/assets/app.js" "${CMAKE_CURRENT_LIST_DIR}/assets/style.css")
 set(asset_files "${asset_output}/index.html.gz" "${asset_output}/app.js.gz" "${asset_output}/style.css.gz")
 add_custom_command(OUTPUT ${asset_files}
     COMMAND "${PYTHON}" "${CMAKE_CURRENT_LIST_DIR}/tools/pack_assets.py"

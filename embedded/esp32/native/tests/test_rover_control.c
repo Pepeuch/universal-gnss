@@ -130,6 +130,9 @@ int main(void)
   assert(!strstr(output, key) && strstr(output, "\"mode\":\"control\"") &&
          strstr(output, "\"mode\":\"closed\""));
   assert(!memchr(output, 0xd3, used));
+  assert(strstr(output, "\"firmware\":\"universal-gnss\""));
+  assert(strstr(output, "\"board\":\"esp32c3\""));
+  assert(strstr(output, "\"role\":\"rover\""));
   // A normal paired reboot emits zero control bytes, even if given ordinary input.
   script("noise\nUGCFG/1 GET\n");
   assert(ug_rover_configure(true, &p) && p.paired && !used && writes == 1);
