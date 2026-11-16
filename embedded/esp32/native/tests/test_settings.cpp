@@ -18,7 +18,22 @@ int main()
   Capabilities relay{false, false, false, 1, "supermini-c3", "relay-ntrip"};
   std::string error, json;
   Settings original = DefaultSettings(base), out;
+  assert(FindNtripEndpoint(original, base, "upstream") == &original.upstream);
+  for (unsigned slot = 0; slot < 5; ++slot)
+    assert(FindNtripEndpoint(original, base, std::to_string(slot)) ==
+           &original.publishers[slot].endpoint);
+  for (const auto* target : {"", "5", "-1", "00", "0/", "0?", "upstream/", "radio", "wifi"})
+    assert(!FindNtripEndpoint(original, base, target));
+  assert(FindNtripEndpoint(original, relay, "0") == &original.publishers[0].endpoint);
+  assert(!FindNtripEndpoint(original, relay, "1"));
   assert(ValidateSettings(original, base, error));
+  assert(original.upstream.host == "crtk.net" && original.upstream.mountpoint == "NEAR" &&
+         !original.upstream_enabled);
+  for (const auto& p : original.publishers)
+  {
+    assert(!p.enabled && p.endpoint.mountpoint.empty() && p.endpoint.host == "crtk.net");
+    assert(p.rtcm_messages.find("1077") != std::string::npos);
+  }
   assert(!original.radio_enabled && original.radio_peer.empty() && original.radio_key.empty());
   assert(DecodeSettings(R"({"wifi":{"sta":true,"ssid":"test"}})", original, base, out, error));
   const char* key = "0123456789abcdef0123456789abcdef";
@@ -102,6 +117,25 @@ int main()
   assert(out.wifi_password == slots.wifi_password &&
          out.admin_token_sha256 == slots.admin_token_sha256);
   const auto active_slot = out;
+  assert(DecodeSettings(
+      R"json({"publishers":[{"slot":0,"rtcm_messages":"1005(10),1077"},{"slot":1,"rtcm_messages":"1006(20),1087"}]})json",
+      active_slot,
+      base,
+      out,
+      error));
+  assert(out.publishers[0].rtcm_messages == "1005(10),1077");
+  assert(out.publishers[1].rtcm_messages == "1006(20),1087");
+  assert(EncodeSettings(out, json, true));
+  Settings restored;
+  assert(DecodeSettings(json, original, base, restored, error));
+  assert(restored.publishers[1].rtcm_messages == "1006(20),1087");
+  const auto filters = restored;
+  assert(!DecodeSettings(R"json({"publishers":[{"slot":0,"rtcm_messages":"1005(-1)"}]})json",
+                         filters,
+                         base,
+                         out,
+                         error));
+  assert(error.find("RTCM interval") != std::string::npos);
   // A SOURCE without a mountpoint must be rejected before it reaches the worker.
   assert(!DecodeSettings(R"({"publishers":[{"slot":1,"endpoint":{"mountpoint":""}}]})",
                          active_slot,
@@ -109,11 +143,12 @@ int main()
                          out,
                          error));
   assert(out.publishers[1].endpoint.mountpoint == "OUT");
-  assert(DecodeSettings(R"({"publishers":[{"slot":1,"enabled":false,"endpoint":{"mountpoint":""}}]})",
-                        active_slot,
-                        base,
-                        out,
-                        error));
+  assert(
+      DecodeSettings(R"({"publishers":[{"slot":1,"enabled":false,"endpoint":{"mountpoint":""}}]})",
+                     active_slot,
+                     base,
+                     out,
+                     error));
   assert(!out.publishers[1].enabled && out.publishers[1].endpoint.mountpoint.empty());
   assert(!DecodeSettings(R"({"publishers":[{"slot":1,"endpoint":{"password":""}}]})",
                          active_slot,
@@ -143,7 +178,7 @@ int main()
         R"({"name":"\u0000bad"})",
         R"({"name":"bad\nline"})",
         R"({"upstream":{"endpoint":{"host":"evil\r\nheader"}}})",
-        R"({"upstream":{"enabled":true}})",
+        R"({"upstream":{"enabled":true,"endpoint":{"host":""}}})",
         R"({"upstream":{"endpoint":{"port":0}}})",
         R"({"upstream":{"endpoint":{"ca_file":"/spiffs/certs/../secret"}}})",
         R"({"upstream":{"endpoint":{"client_cert_file":"/spiffs/certs/client.pem"}}})",

@@ -4,4 +4,6 @@
 namespace ug::embedded
 {
 esp_err_t StartWebService();
-}
+bool WebUsesHttps();
+const char* WebTransportName();
+}  // namespace ug::embedded

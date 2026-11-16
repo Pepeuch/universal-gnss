@@ -25,6 +25,7 @@ enum class ServiceId : std::uint8_t
   kConsole,
   kHttps,
   kNtripSetup,
+  kHttp,
   kCount
 };
 constexpr std::size_t kServiceCount = static_cast<std::size_t>(ServiceId::kCount);
@@ -56,7 +57,8 @@ inline const char* ServiceName(ServiceId id)
                                                          "radio_control",
                                                          "local_console",
                                                          "https",
-                                                         "ntrip_setup"};
+                                                         "ntrip_setup",
+                                                         "http"};
   return ValidService(id) ? names[static_cast<std::size_t>(id)] : "invalid";
 }
 enum class ServiceState : std::uint8_t

@@ -13,6 +13,13 @@
 #include "ug_s3_json_memory.hpp"
 #include "ug_s3_memory_options.hpp"
 #include "ug_web_auth_platform.hpp"
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "esp_mac.h"
+#include "ug_pairing_read.hpp"
+extern "C" {
+#include "espnow_rtcm.h"
+}
+#endif
 #include <charconv>
 #if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CONSOLE_PSRAM
 #include "esp_heap_caps.h"
@@ -34,11 +41,65 @@ ConsoleBuffer<8192 + 32> line;
 std::array<char, 8192 + 32> line{};
 #endif
 void (*tls_changed)() = nullptr;
+#if CONFIG_IDF_TARGET_ESP32S3
+GatewayPairingRead pairing_read;
+bool PairingReadReply(std::string_view command)
+{
+  if (!pairing_read.Query(command, esp_timer_get_time()))
+    return false;
+  std::uint8_t mac[6]{};
+  if (esp_read_mac(mac, ESP_MAC_WIFI_STA) != ESP_OK)
+    return false;
+  const auto config = Configuration();
+  espnow_rtcm_stats_t radio{};
+  espnow_rtcm_get_stats(&radio);
+  const bool restart =
+      config->radio_enabled &&
+      (radio.tx_quarantined || !espnow_rtcm_configuration_matches(config->radio_peer.c_str(),
+                                                                  config->radio_key.c_str(),
+                                                                  config->radio_channel));
+  // All strings are firmware-controlled literals or validated MAC addresses.
+  // Never print a private key, credential, arbitrary command or configuration.
+  std::printf("UGCFG/1 {\"firmware\":\"universal-gnss\",\"board\":\"esp32s3\","
+              "\"hardware\":\"waveshare-s3-eth\",\"role\":\"%s\",\"mode\":\"control\","
+              "\"nonce\":\"%s\",\"writable\":%s,\"maintenance_open\":true,"
+              "\"sta_mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\",\"configured_channel\":%u,"
+              "\"peer\":\"%s\",\"key_set\":%s,\"enabled\":%s,\"wifi_sta\":%s,"
+              "\"started\":%s,\"effective_channel\":%u,\"restart_required\":%s,"
+              "\"proves_rover_delivery\":false}\n",
+              BoardCapabilities().role.c_str(),
+              pairing_read.nonce(),
+              ConfigurationWritable() ? "true" : "false",
+              mac[0],
+              mac[1],
+              mac[2],
+              mac[3],
+              mac[4],
+              mac[5],
+              config->radio_channel,
+              config->radio_peer.c_str(),
+              config->radio_key.empty() ? "false" : "true",
+              config->radio_enabled ? "true" : "false",
+              config->wifi_sta_enabled ? "true" : "false",
+              radio.started ? "true" : "false",
+              radio.effective_channel,
+              restart ? "true" : "false");
+  return true;
+}
+#endif
 void Handle(std::string_view command)
 {
   std::string error;
   bool ok = false;
-  if (command == "status")
+  if (command.substr(0, 7) == "UGCFG/1")
+  {
+#if CONFIG_IDF_TARGET_ESP32S3
+    ok = PairingReadReply(command);
+#endif
+    if (!ok)
+      error = "invalid or expired local identity query";
+  }
+  else if (command == "status")
   {
     const auto services = ServiceHealths();
     const auto now = esp_timer_get_time() * 1000;

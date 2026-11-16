@@ -83,7 +83,10 @@ int main()
   assert(a.Login("admin", "a-private-password", 0, t, restricted));
   for (int i = 1; i <= 3; ++i)
     assert(a.Authorized(t.data(), i * 500000000LL));
-  assert(!a.Authorized(t.data(), WebAuth::kLifetime));
+  // Active use remains valid well beyond the former 30-minute cutoff.
+  for (int i = 4; i <= 100; ++i)
+    assert(a.Authorized(t.data(), i * 500000000LL));
+  assert(!a.Authorized(t.data(), 100 * 500000000LL + WebAuth::kIdle));
   b.state = AuthRead::kMissing;
   a.Start(false, {});
   assert(!a.Login("admin", "admin", 0, t, restricted));  // Existing non-fresh install stays locked.

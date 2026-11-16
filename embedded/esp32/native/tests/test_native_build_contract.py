@@ -18,6 +18,19 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_web_transport_is_explicit_and_does_not_downgrade_tls(self):
+        s3=['CONFIG_IDF_TARGET_ESP32S3=y']
+        self.assertEqual(module.sdk_web_transport(s3),'https')
+        self.assertEqual(module.sdk_web_transport(s3+['CONFIG_UG_WEB_HTTP=y'],'http'),'http')
+        for lines,expected in ((s3,'http'),(s3+['CONFIG_UG_WEB_HTTP=y'],'https'),
+                               (['CONFIG_UG_WEB_HTTP=y'],'http'),(s3,'automatic')):
+            with self.assertRaises(ValueError):module.sdk_web_transport(lines,expected)
+        for profile,board,mode in (('rover','supermini-c3','http'),
+                                   ('relay-ntrip','supermini-c3','http'),
+                                   ('gateway','waveshare-s3-eth','automatic')):
+            with self.assertRaises(ValueError):
+                builder.build('/tmp/not-created-http-invalid',profile,board,False,web_transport=mode)
+
     def test_network_boot_and_s3_tls_reject_insufficient_effective_memory_settings(self):
         s3 = ['CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768', 'CONFIG_SPIRAM_USE_MALLOC=y',
               'CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y', 'CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024']

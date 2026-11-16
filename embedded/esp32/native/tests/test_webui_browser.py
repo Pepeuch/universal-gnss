@@ -23,7 +23,8 @@ spec.loader.exec_module(pack)
 def run(artifacts=None):
     with sync_playwright() as engine:
         browser = engine.chromium.launch(headless=True)
-        for gnss, width in ((True, 1280), (True, 390), (False, 390)):
+        for gnss, width, transport in ((True, 1280, 'https'), (True, 390, 'https'),
+                                      (False, 390, 'https'), (True, 1280, 'http'), (True, 390, 'http')):
             context = browser.new_context(ignore_https_errors=True, viewport={'width': width, 'height': 900})
             context.add_init_script("globalThis.scenario='nominal';\n"+SERIAL_FIXTURE+"\nglobalThis.serialFixtureState=()=>({key:storedKey,closed:port.closed});Object.defineProperty(navigator,'serial',{value:{requestPort:async()=>port},configurable:true});")
             page = context.new_page()
@@ -31,13 +32,14 @@ def run(artifacts=None):
             peak = [0]
             config = {'schema': 1, 'input': 'ntrip', 'gnss': {'enabled': False, 'tx_pin': -1, 'rx_pin': -1, 'baud': 115200, 'model': 'auto'},
                       'upstream': {'enabled': False, 'endpoint': {'host': 'caster.test', 'port': 2101, 'mountpoint': 'IN', 'password_set': True}},
-                      'publishers': [], 'radio': {'enabled': False},
+                      'publishers': [{'slot':i,'enabled':False,'rtcm_messages':'1005(10),1077' if i==0 else '1087','endpoint':{'host':'publisher.test','port':2101,'mountpoint':'PUB'+str(i),'password_set':True}} for i in range(5)], 'radio': {'enabled': False},
                       'caster': {'enabled': False, 'port': 2101, 'mountpoint': 'LOCAL'},
                       'wifi': {'sta': False, 'ap': False, 'ssid': '', 'ap_ssid': 'UG-RTK'}}
             receiver = {'present': False, 'model_verified': False, 'model': '', 'position_stale': True, 'fix_valid': False}
             pairing={'sta_mac':'02:00:00:00:00:02','configured_channel':1,'peer':'','key_set':False,'enabled':False,'started':False,'effective_channel':0,'restart_required':False}
             pairing_keys=[]
             rejected, offline, fresh = [False], [False], [False]
+            expired=[False]
 
             def request_started(request):
                 if '/api/' in request.url:
@@ -75,8 +77,17 @@ def run(artifacts=None):
                 if path == '/api/auth/logout':
                     route.fulfill(body='closed')
                     return
+                if expired[0] and path == '/api/auth/session':
+                    route.fulfill(status=401,body='session invalidated by reboot');return
                 if path not in ('/api/resources' , '/api/status', '/api/capabilities') and route.request.headers.get('authorization') != 'Bearer ' + 'a' * 64:
                     route.fulfill(status=401, body='administrator required')
+                    return
+                if path == '/api/auth/session':
+                    route.fulfill(body='session active');return
+                if path.startswith('/api/ntrip/password/'):
+                    target=path.rsplit('/',1)[-1]
+                    owner=config['upstream'] if target=='upstream' else config['publishers'][int(target)]
+                    route.fulfill(json={'password':owner['endpoint'].get('password','synthetic-stored-'+target)})
                     return
                 if path.startswith('/api/radio/pairing'):
                     body=route.request.post_data_json if route.request.method=='POST' else None
@@ -104,23 +115,29 @@ def run(artifacts=None):
                         route.fulfill(status=400, body='invalid fixture configuration')
                         return
                     for key, item in value.items():
-                        if isinstance(item, dict):
+                        if key=='publishers':
+                            for row in item:
+                                target=next(p for p in config['publishers'] if p['slot']==row['slot'])
+                                for k,v in row.items():
+                                    if k=='endpoint':target['endpoint'].update(v)
+                                    else:target[k]=v
+                        elif isinstance(item, dict):
                             config.setdefault(key, {}).update(item)
                         else:
                             config[key] = item
                     value = {'saved': True}
                 elif path == '/api/config':
                     value = copy.deepcopy(config)
-                    for owner in (value.get('upstream', {}), value.get('caster', {})):
+                    for owner in (value.get('upstream', {}), value.get('caster', {}), *value.get('publishers', [])):
                         owner.pop('password', None)
                         owner.get('endpoint', {}).pop('password', None)
                 elif path == '/api/capabilities':
-                    value = {'password_authentication':True,'gnss': gnss, 'publishers': 1, 'gnss_allowed_pins': [16, 17] if gnss else []}
+                    value = {'web_transport':transport,'password_authentication':True,'gnss': gnss, 'publishers': 5, 'gnss_allowed_pins': [16, 17] if gnss else []}
                 elif path == '/api/resources':
                     value = {'pressure': 'normal', 'internal_free': 110000, 'internal_largest': 40000, 'psram_total': 8388608 if gnss else 0, 'web_mutations_allowed': True, 'satellites_allowed': True}
                 elif path == '/api/status':
-                    value = {'role': 'gateway' if gnss else 'relay-ntrip', 'degraded': False, 'rtcm_frames': 21, 'rtcm_rejected': 0, 'upstream_connected': False,
-                             'services': {'ethernet_driver': {'state': 'running'}, 'https': {'state': 'running'}}, 'espnow': {'started': False, 'configured_enabled': False}}
+                    value = {'web_transport':transport,'role': 'gateway' if gnss else 'relay-ntrip', 'degraded': False, 'rtcm_frames': 21, 'rtcm_rejected': 0, 'upstream_connected': False,
+                             'services': {'ethernet_driver': {'state': 'running'}, 'https': {'state': 'running' if transport=='https' else 'disabled'}, 'http': {'state':'running' if transport=='http' else 'disabled'}}, 'espnow': {'started': False, 'configured_enabled': False}}
                 elif path == '/api/gnss/status':
                     value = receiver
                 elif path == '/api/gnss/capabilities':
@@ -141,20 +158,26 @@ def run(artifacts=None):
                 route.fulfill(json=value)
 
             context.route('**/*', route_handler)
-            page.goto('https://ug.test/', wait_until='networkidle')
+            page.goto(transport+'://ug.test/', wait_until='networkidle')
+            expect(page.locator('#login-screen')).to_be_visible()
+            expect(page.locator('#webui')).to_be_hidden()
+            assert page.locator('details.session').count()==0
             page.locator('#password').fill('invalid-fixture-token')
             page.locator('#login').click()
             expect(page.locator('#notice')).to_contain_text('401')
             expect(page.locator('#session-state')).to_have_text('Session fermée')
             page.locator('#password').fill('a' * 64)
             page.locator('#login').click()
-            expect(page.locator('#session-state')).to_have_text('Session ouverte')
+            expect(page.locator('#login-screen')).to_be_hidden()
+            expect(page.locator('#webui')).to_be_visible()
+            expect(page.locator('#tab-dashboard')).to_be_visible()
             expect(page.locator('#card-https')).to_contain_text('running')
             expect(page.locator('#card-ethernet')).to_have_text('Service : running')
             expect(page.locator('#status')).to_contain_text('synthetic_memory_only')
             for tab in ('gnss', 'rtcm', 'network', 'diagnostics', 'settings', 'dashboard'):
                 page.locator('#nav-' + tab).click()
                 expect(page.locator('#tab-' + tab)).to_be_visible()
+                expect(page.locator('#login-form')).to_be_hidden()
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (tab, width)
             page.locator('#nav-gnss').click()
             if gnss:
@@ -169,11 +192,44 @@ def run(artifacts=None):
                 expect(page.locator('#gnss-unavailable')).to_be_visible()
                 expect(page.locator('#gnss')).not_to_be_visible()
             page.locator('#nav-rtcm').click()
+            expect(page.locator('#ntrip-password-toggle')).to_be_enabled()
+            page.locator('#ntrip-password-toggle').click()
+            expect(page.locator('#ntrip-password')).to_have_value('synthetic-stored-upstream')
+            expect(page.locator('#ntrip-password')).to_have_attribute('type','text')
+            page.locator('#ntrip-password-toggle').click()
+            expect(page.locator('#ntrip-password')).to_have_attribute('type','password')
             page.locator('#ntrip-password').fill('synthetic-fixture-password')
             page.locator('#ntrip-save').click()
             expect(page.locator('#ntrip-password')).to_have_value('')
             expect(page.locator('#notice')).to_contain_text('saved')
             assert patches[-1]['upstream']['endpoint']['password'] == 'synthetic-fixture-password'
+            login_count=sum(path=='/api/auth/login' for path,_ in calls)
+            page.locator('#ntrip-target').select_option('0')
+            expect(page.locator('#ntrip-password')).to_have_value('')
+            page.locator('#ntrip-password-toggle').click()
+            expect(page.locator('#ntrip-password')).to_have_value('synthetic-stored-0')
+            expect(page.locator('#ntrip-password')).to_have_attribute('type','text')
+            for slot in range(1,5):
+                page.locator('#ntrip-target').select_option(str(slot))
+                page.locator('#ntrip-password-toggle').click()
+                expect(page.locator('#ntrip-password')).to_have_value('synthetic-stored-'+str(slot))
+                expect(page.locator('#ntrip-password')).to_have_attribute('type','text')
+            page.locator('#ntrip-target').select_option('0')
+            expect(page.locator('#ntrip-password')).to_have_value('')
+            expect(page.locator('#ntrip-messages')).to_have_value('1005(10),1077')
+            page.locator('#ntrip-messages').fill('1006(10),1077')
+            page.locator('#ntrip-save').click()
+            expect(page.locator('#ntrip-save')).to_be_enabled()
+            assert patches[-1]['publishers'][0]['slot']==0 and patches[-1]['publishers'][0]['rtcm_messages']=='1006(10),1077'
+            page.locator('#ntrip-target').select_option('1')
+            expect(page.locator('#ntrip-messages')).to_have_value('1087')
+            page.locator('#ntrip-messages').fill('1087,1230(20)')
+            page.locator('#ntrip-save').click()
+            expect(page.locator('#ntrip-save')).to_be_enabled()
+            assert config['publishers'][0]['rtcm_messages']=='1006(10),1077'
+            assert sum(path=='/api/auth/login' for path,_ in calls)==login_count
+            expect(page.locator('#webui')).to_be_visible()
+            page.locator('#ntrip-target').select_option('upstream')
             rejected[0] = True
             page.locator('#ntrip-password').fill('rejected-fixture-password')
             page.locator('#ntrip-save').click()
@@ -205,23 +261,50 @@ def run(artifacts=None):
             expect(page.locator('#connection-state')).to_have_text('API accessible')
             page.locator('#nav-network').click()
             page.locator('#pairing-start').click()
-            expect(page.locator('#pairing-info')).to_contain_text('S3 radio démarrée',timeout=15000)
-            assert len(pairing_keys)==1 and len(pairing_keys[0])==32
-            assert page.evaluate('serialFixtureState().key')==pairing_keys[0]
-            assert pairing_keys[0] not in page.locator('body').inner_text()
+            if transport=='http':
+                expect(page.locator('#pairing-info')).to_contain_text('HTTPS ou localhost requis')
+                assert not pairing_keys
+            else:
+                expect(page.locator('#pairing-info')).to_contain_text('S3 radio démarrée',timeout=15000)
+                assert len(pairing_keys)==1 and len(pairing_keys[0])==32
+                assert page.evaluate('serialFixtureState().key')==pairing_keys[0]
+                assert pairing_keys[0] not in page.locator('body').inner_text()
+                assert page.evaluate('serialFixtureState().closed')
             assert page.locator('#pairing-key').count()==0 and page.locator('#pairing-ticket').count()==0
-            assert page.evaluate('serialFixtureState().closed')
+            expired[0]=True
+            page.locator('#refresh-now').click()
+            expect(page.locator('#login-screen')).to_be_visible()
+            expect(page.locator('#webui')).to_be_hidden()
+            expired[0]=False
+            page.locator('#password').fill('a'*64)
+            page.locator('#login').click()
+            expect(page.locator('#webui')).to_be_visible()
             page.locator('#logout').click()
             expect(page.locator('#password')).to_have_value('')
-            expect(page.locator('#session-state')).to_have_text('Session fermée')
+            expect(page.locator('#login-screen')).to_be_visible()
+            expect(page.locator('#webui')).to_be_hidden()
             fresh[0] = True
             before_config = sum(path == '/api/config' for path, _ in calls)
             page.locator('#password').fill('admin')
             page.locator('#login').click()
             expect(page.locator('#session-state')).to_have_text('Mot de passe à changer')
-            expect(page.locator('#tab-settings')).to_be_visible()
+            expect(page.locator('#login-password-slot')).to_be_visible()
+            expect(page.locator('#webui')).to_be_hidden()
             expect(page.locator('#password')).to_have_value('')
             assert sum(path == '/api/config' for path, _ in calls) == before_config
+            page.locator('#restricted-logout').click()
+            expect(page.locator('#login-form')).to_be_visible()
+            page.locator('#password').fill('admin')
+            page.locator('#login').click()
+            expect(page.locator('#login-password-slot')).to_be_visible()
+            expired[0] = True
+            page.evaluate('refresh()')
+            expect(page.locator('#login-form')).to_be_visible()
+            expect(page.locator('#login-password-slot')).to_be_hidden()
+            expired[0] = False
+            page.locator('#password').fill('admin')
+            page.locator('#login').click()
+            expect(page.locator('#login-password-slot')).to_be_visible()
             page.locator('#current-password').fill('admin')
             page.locator('#new-password').fill('new-fixture-password')
             page.locator('#confirm-password').fill('new-fixture-password')
@@ -235,7 +318,7 @@ def run(artifacts=None):
                 page.screenshot(path=str(Path(artifacts) / f'{"gateway" if gnss else "relay"}-{width}.png'), full_page=True)
             assert peak[0] <= 1, ('concurrent API requests', peak[0])
             assert not errors, errors
-            print(f'Chromium {"gateway" if gnss else "relay"} {width}px: six tabs, no overflow, auth, forms, secrets, history, hidden pause; peak API={peak[0]} PASS')
+            print(f'Chromium {transport} {"gateway" if gnss else "relay"} {width}px: six tabs, no overflow, auth, forms, secrets, history, hidden pause; peak API={peak[0]} PASS')
             context.close()
         browser.close()
 

@@ -7,3 +7,8 @@ httpd_ssl_config_t ug_https_defaults(void)
   const httpd_ssl_config_t config = HTTPD_SSL_CONFIG_DEFAULT();
   return config;
 }
+httpd_config_t ug_http_defaults(void)
+{
+  const httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+  return config;
+}
