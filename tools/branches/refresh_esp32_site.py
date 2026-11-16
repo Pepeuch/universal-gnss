@@ -87,8 +87,6 @@ def refresh(data, tag, output, repo=ROOT):
             raise ValueError('nonempty existing catalogue required')
         bundles = []
         for i, entry in enumerate(catalog['images']):
-            if entry['source_sha'] != meta['source_sha']:
-                raise ValueError('unexpected unapproved firmware source')
             key = entry['build_key']
             if not re.fullmatch('[a-f0-9]{20}', key):
                 raise ValueError('unsafe build identity')
@@ -106,6 +104,8 @@ def refresh(data, tag, output, repo=ROOT):
         # Preserve exact authoritative catalogue and every published firmware byte.
         for path in ('flasher/catalog.json', 'flasher/approved-sources.json', 'alpha-publication.json'):
             shutil.copyfile(old/path, staged/path)
+        if (old/'flasher/publications.json').exists():
+            shutil.copyfile(old/'flasher/publications.json',staged/'flasher/publications.json')
         if (old/'index.html').exists():
             shutil.copyfile(old/'index.html', staged/'index.html')
         old_files = {p.relative_to(old/'flasher/published'): p.read_bytes()
@@ -122,9 +122,12 @@ def refresh(data, tag, output, repo=ROOT):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--require-source')
     args = parser.parse_args()
     data, tag = durable_archive()
     refresh(data, tag, args.output)
+    if args.require_source and not any(e['source_sha']==args.require_source for e in a.s.p.load(args.output/'flasher/catalog.json')['images']):
+        raise ValueError('authorized source missing from durable recovery catalogue')
     print('Verified durable catalogue preserved; interface only refreshed from main.')
 
 

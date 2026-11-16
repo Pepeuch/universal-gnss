@@ -46,6 +46,15 @@ class Flasher(unittest.TestCase):
         result=vm.eval('JSON.stringify(globalThis.result)')
         self.assertIsNotNone(result,'browser promise budget exceeded')
         return json.loads(result),json.loads(vm.eval('JSON.stringify(downloads)'))
+    def test_latest_complete_authorized_publication_selected_first(self):
+        vm=self.vm();old=dict(self.approval);new=dict(self.approval,source_sha='b'*40)
+        registry={'schema':1,'sources':[old,new]}
+        images=[{'source_sha':sha,'profile':{'variant':v}} for sha in ('a'*40,'b'*40) for v in ('s3-gateway','c3-rover-usb')]
+        history={'schema':1,'publications':[{'source_sha':sha,'status':'validated_authorized_alpha','published_at':date} for sha,date in [('a'*40,'2026-11-15T00:00:00Z'),('b'*40,'2026-11-16T00:00:00Z')]]}
+        expr='UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')'
+        self.assertEqual(vm.eval(expr+'[0].source_sha'),'b'*40)
+        history['publications'][1]['source_sha']='c'*40
+        with self.assertRaises(Exception):vm.eval('UGFlasher.publishedVersions('+','.join(json.dumps(v) for v in (registry,{'images':images},history))+')')
     def test_actual_packager_and_browser_agree(self):
         result,paths=self.evaluate();self.assertEqual(result,{'ok':True,'count':4});self.assertEqual(len(paths),7)
     def test_unapproved_source_never_downloads_images(self):
