@@ -50,8 +50,9 @@ def merge(site):
         else:
             import urllib.request
             with urllib.request.urlopen('https://api.github.com/repos/'+w.a.REPO+'/releases/tags/'+tag,timeout=30) as response:
-                published=json.load(response)['published_at']
-            publications=[{'source_sha':old_meta['source_sha'],'published_at':published,'status':'validated_authorized_alpha','release_tag':tag}]
+                release=json.load(response);published=release['published_at']
+            channel='stable' if not release['prerelease'] else ('beta' if 'beta' in tag.lower() else 'alpha')
+            publications=[{'source_sha':old_meta['source_sha'],'published_at':published,'status':'published','channel':channel,'release_tag':tag}]
         meta=w.a.s.p.load(site/'alpha-publication.json')
         if not any(row['source_sha']==meta['source_sha'] for row in publications):
             publications.append({'source_sha':meta['source_sha'],'published_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),

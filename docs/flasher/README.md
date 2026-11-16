@@ -232,8 +232,8 @@ ressources ou scripts de staging changent. Les PR ne déploient pas. Le lancemen
 manuel est également limité à `main`. Ce workflow ne compile ni n’autorise aucun
 firmware ; ses permissions de contenu sont en lecture seule.
 
-La source durable est la plus récente Release alpha non brouillon contenant
-`esp32-alpha-site.zip` et `SHA256SUMS` (par date de publication, parmi les 100
+La source durable est la plus récente Release publiée non brouillon contenant
+`esp32-site.zip` (ou le nom historique `esp32-alpha-site.zip`) et `SHA256SUMS` (par date de publication, parmi les 100
 Releases retournées). Une source absente, incomplète ou invalide bloque tout
 upload Pages : aucun catalogue vide de secours. L’archive est vérifiée par ses
 sommes et, lorsqu’elle est fournie, l’empreinte de l’asset GitHub. Les approbations,
@@ -289,8 +289,7 @@ d’identité ou d’octets et toute limite de capacité bloque la publication, 
 suppression de l’historique. `publications.json` enregistre les sources, leur date
 UTC de préparation pour publication et leur statut `validated_authorized_alpha`.
 Pour l’ancienne Release, sa date GitHub est récupérée. Le portail affiche le SHA
-complet, la date et le statut logiciel ; la révision publiée la plus récente ayant
-les deux profils est sélectionnée par défaut. Chaque flash revérifie les vrais
+complet, la date et le statut logiciel ; la révision publiée la plus récente connue est sélectionnée par défaut. Chaque flash revérifie les vrais
 manifestes, binaires, offsets et empreintes. Cette validation ne prouve pas le RTK.
 
 Le workflow Web uniquement conserve aussi cet historique et n’approuve ni ne
@@ -309,3 +308,37 @@ Validation P0 locale : 262 tests générateur/politique et 10 tests JavaScript d
 portail ; autorité réelle des sept validations main vérifiée pour le SHA autorisé.
 Les essais HTTP bout en bout utilisent des réponses synthétiques comparées octet
 par octet, pas un nouveau firmware déjà publié.
+
+
+## Disponibilité de la liste et canaux publiés
+
+La liste des versions provient de `catalog.json`, qui décrit les firmwares déjà
+publiés. Alpha, bêta et stable sont tous affichés : le canal ne constitue pas un
+filtre de visibilité. Une nouvelle autorisation de compilation n’est pas exigée
+pour afficher un firmware déjà publié. Les contrôles de provenance, d’empreintes,
+de partitions et de carte restent exécutés avant le flash.
+
+`publications.json` enrichit les libellés avec le canal, le tag et la date. Son
+absence, une erreur HTTP (dont 503) ou un JSON invalide ne masque jamais le
+catalogue valide. Le registre indisponible ne masque pas non plus la liste ; la
+vérification nécessaire au flash peut alors demander de réessayer. Sans date,
+le libellé indique « date indisponible » plutôt que d’inventer une date. La
+restauration durable accepte aussi les Releases stables, vérifie le tag source,
+et préserve les octets des firmwares. Les anciennes métadonnées restent lisibles.
+
+Le diagnostic du 16 novembre a confirmé deux défauts : une réponse 503 sur les
+métadonnées optionnelles masquait la liste ; le nom `C/C++ Format`, utilisé comme
+filtre glob sans échappement, empêchait le démarrage du publisher. Le filtre est
+maintenant `C/C\+\+ Format`, sans changement du nom du workflow/check.
+
+Les trois profils supportés (`s3-gateway`, `c3-rover-usb`, `c3-rover-uart`) sont
+compilés et reproduits automatiquement par la CI native sur PR et push dev/main,
+quelle que soit la future désignation alpha/bêta/stable. C3 Relay reste différé.
+Compilation de validation et autorisation de publication restent distinctes.
+
+Validation de la correction : 265 tests de politique/générateur, 12 tests JS du
+portail, 6 tests JS de configuration portable. Chromium desktop/mobile sur les
+véritables binaires publiés a vérifié six scénarios : métadonnées 503, 404 et JSON
+invalide, liste visible et quatre segments effectivement vérifiés à chaque fois.
+Ces essais utilisent un site local restauré depuis la Release durable ; ils ne
+prétendent pas que le correctif est déjà déployé sur Pages avant sa fusion.
