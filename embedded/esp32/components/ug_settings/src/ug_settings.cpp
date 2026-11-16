@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_settings.hpp"
+#include "ug_rtcm_rules.hpp"
 extern "C" {
 #include "ug_pairing.h"
 }
@@ -250,6 +251,23 @@ bool OnlyKeys(const cJSON* node, std::initializer_list<const char*> keys)
 Settings DefaultSettings(const Capabilities& c)
 {
   Settings s;
+  // Public Centipede preset requested for fresh installations. Never auto-connect.
+  // https://docs.centipede.fr/docs/proprietaire/ (public shared service credentials).
+  s.upstream.host = "crtk.net";
+  s.upstream.port = 2101;
+  s.upstream.mountpoint = "NEAR";
+  s.upstream.username = "centipede";
+  s.upstream.password = "centipede";
+  for (auto& publisher : s.publishers)
+  {
+    publisher.endpoint.host = "crtk.net";
+    publisher.endpoint.port = 2101;
+    publisher.endpoint.username = "centipede";
+    publisher.endpoint.password = "centipede";
+    publisher.endpoint.mountpoint.clear();
+    publisher.rtcm_messages = "1004,1005(10),1006(10),1008(10),1012,1019,1020,1033(10),1042,1045,"
+                              "1046,1077,1087,1097,1127,1230(10)";
+  }
   (void)c;  // Compile capability never authorizes an unconfigured physical UART.
   return s;
 }
@@ -286,6 +304,9 @@ bool ValidateSettings(const Settings& s, const Capabilities& c, std::string& err
   for (std::size_t i = 0; i < s.publishers.size(); ++i)
   {
     const auto& p = s.publishers[i];
+    RtcmRules filter;
+    if (!filter.Configure(p.rtcm_messages, error))
+      return false;
     if (!Endpoint(p.endpoint, p.enabled) ||
         (p.enabled && (i >= c.publisher_slots || p.endpoint.mountpoint.empty() ||
                        p.endpoint.password.empty() || !Text(p.endpoint.password, 128, false))))
@@ -424,7 +445,7 @@ bool DecodeSettings(std::string_view json,
     for (auto* item = array->child; item; item = item->next)
     {
       Reader p{item, error};
-      if (!p.Keys({"slot", "enabled", "endpoint"}))
+      if (!p.Keys({"slot", "enabled", "endpoint", "rtcm_messages"}))
         return false;
       unsigned slot = 99;
       p.Integer("slot", slot, 0, 4);
@@ -432,6 +453,7 @@ bool DecodeSettings(std::string_view json,
         return false;
       seen[slot] = true;
       p.Bool("enabled", s.publishers[slot].enabled);
+      p.String("rtcm_messages", s.publishers[slot].rtcm_messages, 512);
       if (auto* e = p.Get("endpoint"))
         if (!ReadEndpoint(e, s.publishers[slot].endpoint, error))
           return false;
@@ -572,6 +594,7 @@ bool EncodeSettings(const Settings& s, std::string& output, const bool secrets)
     }
     b.Number(p, "slot", i);
     b.Bool(p, "enabled", s.publishers[i].enabled);
+    b.String(p, "rtcm_messages", s.publishers[i].rtcm_messages);
     b.Endpoint(b.Object(p, "endpoint"), s.publishers[i].endpoint, secrets);
   }
   auto* c = b.Object(n, "caster");
@@ -625,5 +648,16 @@ bool EncodeSettings(const Settings& s, std::string& output, const bool secrets)
     output.assign(text, size);
   cJSON_free(text);
   return ok;
+}
+const universal_gnss_ntrip::NtripConfig* FindNtripEndpoint(const Settings& settings,
+                                                           const Capabilities& capabilities,
+                                                           std::string_view target)
+{
+  if (target == "upstream")
+    return &settings.upstream;
+  if (target.size() != 1 || target.front() < '0' || target.front() > '4')
+    return nullptr;
+  const auto slot = static_cast<std::size_t>(target.front() - '0');
+  return slot < capabilities.publisher_slots ? &settings.publishers[slot].endpoint : nullptr;
 }
 }  // namespace ug::embedded

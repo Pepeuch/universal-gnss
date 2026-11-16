@@ -1,7 +1,8 @@
 # WebUI native ESP32 : navigation et validation
 
 La WebUI reste constituée de trois assets HTML/CSS/JavaScript, compressés en
-Flash et servis exclusivement par HTTPS. Aucun framework, CDN ou SVG interactif
+Flash et servis par HTTPS dans le profil standard. Une variante S3 HTTP explicite
+est également validée, voir la section dédiée ci-dessous. Aucun framework, CDN ou SVG interactif
 de brochage n'est ajouté. La réparation HTTPS est un commit séparé :
 `59f53a54c27bca9af6df48956c4259ed439dbb19` ; voir son
 [rapport matériel](../../docs/analysis/ESP32_S3_HTTPS_REPAIR.md).
@@ -169,3 +170,32 @@ S3, automatise UGCFG/1 et ne présente jamais une écriture partielle comme une
 association complète. Les essais physiques et les coûts d'authentification S3
 sont distingués des tests simulés dans le
 [rapport dédié](../../docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md).
+
+## Connexion unique et publications RTCM
+
+Le lot local de [connexion unique et filtrage par caster](../../docs/analysis/ESP32_WEBUI_SESSION_NTRIP.md)
+prépare un écran de connexion séparé, une expiration glissante par inactivité,
+et un éditeur de messages RTCM indépendant pour chacune des cinq publications.
+Le rapport distingue validation logicielle et essais matériels encore requis.
+
+Le champ NTRIP permet aussi Afficher/Masquer le mot de passe enregistré après
+authentification, à la demande et pour la seule connexion sélectionnée. Cette
+lecture n’inclut aucun secret dans les exports ordinaires.
+
+Le [correctif de coexistence radio/HTTPS](../../docs/analysis/ESP32_RADIO_HTTPS_COEXISTENCE.md)
+rétablit le démarrage HTTPS avec la radio, mais le critère du bloc libre de 32 Kio
+sous requêtes n’est pas atteint. Le support actuel
+reste limité à un pair chiffré ; une liste de clients et le broadcast optionnel
+sont demandés, sans être encore implémentés.
+
+
+Une [variante HTTP S3 explicite](../../docs/analysis/ESP32_HTTP_ADMIN_EXPERIMENT.md)
+est construite pour comparer le transport, sans repli automatique sur HTTP ni
+changement de NVS/TLS client NTRIP. HTTPS reste le défaut publié pendant l’essai.
+Web Serial demande HTTPS ou localhost ; le mode HTTP LAN affiche cette limite.
+
+Le propriétaire confirme ce parcours en HTTP sur le S3, y compris les six onglets
+et Afficher/Masquer NTRIP. La [réduction du temps de connexion](../../docs/analysis/ESP32_LOGIN_LATENCY.md)
+est mesurée sur le S3 : médiane 36,84 s pour le vecteur public et 38,58 s pour
+une vérification HTTP invalide. Le gain est réel, mais la latence reste excessive ;
+l’opérateur confirme sa connexion avec le mot de passe habituel après redémarrage.

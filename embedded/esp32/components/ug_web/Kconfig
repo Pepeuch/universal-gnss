@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: LGPL-3.0-only
+menu "Universal GNSS administration"
+    config UG_WEB_HTTP
+        bool "Explicit experimental HTTP administration on the S3 LAN"
+        depends on IDF_TARGET_ESP32S3
+        default n
+        help
+            Selects HTTP at build time. Credentials and sessions cross the LAN
+            without encryption. This is never a fallback from a TLS failure.
+            Existing NVS identities and TLS for NTRIP are retained. Web Serial
+            is unavailable from an HTTP LAN origin; use a separate USB tool.
+endmenu

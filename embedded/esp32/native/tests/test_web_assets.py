@@ -26,7 +26,8 @@ class WebAssets(unittest.TestCase):
           const setInterval = () => {};
           const setTimeout = (fn,delay) => {const id=++timerId;timers.set(id,{fn,delay});return id;}, clearTimeout = id => timers.delete(id);
           class AbortController {constructor(){this.signal={};}abort(){}}
-          let authRestricted=false; let hold_selftest = false, release_selftest;
+          let authRestricted=false, authExpired=false; let hold_selftest = false, release_selftest;
+          let hold_ntrip_password=false, release_ntrip_password;
           let hold_commands = false, release_commands;
           let hold_status = false, release_status, pressure = 'normal', hold_events = false, release_events, hold_ntrip_history = false, release_ntrip_history, hold_config_post = false, release_config_post, reject_config_post = false;
           const confirm = () => true;
@@ -34,9 +35,15 @@ class WebAssets(unittest.TestCase):
           class FormData {constructor(value){this.value=value;} get(key){return this.value[key] ?? '';}
                           has(key){return Boolean(this.value[key]);}}
           const fetch = async (path, options) => {
+            if(authExpired && path==='/api/auth/session')return {ok:false,status:401,text:async()=> 'expired'};
             calls.push({path,options});
             if(path==='/api/auth/login')return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({token:'a'.repeat(64),password_change_required:authRestricted})};
             if(path==='/api/auth/logout')return {ok:true,status:200,headers:{get:()=> 'text/plain'},text:async()=> 'closed'};
+            if(path.startsWith('/api/ntrip/password/')) {
+              const response={ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({password:'stored-'+path.split('/').pop()})};
+              if(hold_ntrip_password)return new Promise(resolve=>{release_ntrip_password=()=>resolve(response)});
+              return response;
+            }
             if(path==='/api/config/portable' || path==='/api/config/portable/preview')return {ok:true,status:200,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify(path.endsWith('preview')?JSON.parse(options.body):UGPortable.defaults('waveshare-s3-eth'))};
             if(path==='/api/config/portable/apply')return {ok:true,status:200,headers:{get:()=> 'text/plain'},text:async()=> 'saved'};
             if (path === '/api/config' && options.method === 'POST') {
@@ -79,17 +86,89 @@ class WebAssets(unittest.TestCase):
         self.drain(vm)
         return vm
 
+    def test_one_login_screen_and_no_business_poll_until_authenticated(self):
+        vm=self.make_vm()
+        self.assertTrue(vm.eval("elements.webui.hidden"))
+        self.assertFalse(vm.eval("elements['login-screen'].hidden"))
+        self.assertEqual(json.loads(vm.eval('JSON.stringify(calls.map(c=>c.path))')),['/api/capabilities'])
+        self.login(vm)
+        self.assertFalse(vm.eval('elements.webui.hidden'))
+        self.assertTrue(vm.eval("elements['login-screen'].hidden"))
+        for tab in ('rtcm','settings','network','gnss','dashboard'):
+            vm.eval('selectTab('+json.dumps(tab)+');');self.drain(vm)
+            self.assertFalse(vm.eval('elements.webui.hidden'))
+        self.assertEqual(vm.eval("calls.filter(c=>c.path==='/api/auth/login').length"),1)
+    def test_reboot_or_expired_session_returns_to_single_login(self):
+        vm=self.make_vm();self.login(vm)
+        vm.eval("authExpired=true;refresh();")
+        self.drain(vm)
+        self.assertTrue(vm.eval('elements.webui.hidden'))
+        self.assertFalse(vm.eval("elements['login-screen'].hidden"))
+        self.assertEqual(vm.eval('token'),'')
+        self.assertEqual(vm.eval('timers.size'),0)
+
     def test_fresh_login_restricts_sensitive_operations(self):
         vm=self.make_vm()
         vm.eval("authRestricted=true; $('username').value='admin'; $('password').value='admin';elements.login.onclick();")
         self.drain(vm)
-        self.assertEqual(vm.eval('activeTab'),'settings')
+        self.assertTrue(vm.eval("elements['webui'].hidden"));self.assertFalse(vm.eval("elements['login-password-slot'].hidden"))
         self.assertTrue(vm.eval('passwordChangeRequired'))
         self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/config')"))
         vm.eval("elements['functions-save'].onclick?.();elements.load.onclick();")
         self.drain(vm)
         self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/config')"))
         self.assertEqual(vm.eval('elements.password.value'),'')
+
+    def test_restricted_session_is_probed_without_loading_business_data(self):
+        vm=self.make_vm()
+        vm.eval("authRestricted=true; $('username').value='admin'; $('password').value='admin';elements.login.onclick();")
+        self.drain(vm)
+        vm.eval("calls.length=0; refresh();");self.drain(vm)
+        self.assertEqual(json.loads(vm.eval('JSON.stringify(calls.map(c=>c.path))')),['/api/auth/session'])
+        self.assertTrue(vm.eval('timers.size>0'))
+        vm.eval('authExpired=true;refresh();');self.drain(vm)
+        self.assertEqual(vm.eval('token'),'')
+        self.assertFalse(vm.eval("elements['login-form'].hidden"))
+        self.assertTrue(vm.eval("elements['login-password-slot'].hidden"))
+        self.assertEqual(vm.eval('timers.size'),0)
+
+    def test_restricted_password_change_can_be_cancelled_without_mutation(self):
+        vm=self.make_vm()
+        vm.eval("authRestricted=true; $('username').value='admin'; $('password').value='admin';elements.login.onclick();")
+        self.drain(vm)
+        vm.eval("$('current-password').value='private';$('restricted-logout').onclick();");self.drain(vm)
+        self.assertEqual(vm.eval('token'),'')
+        self.assertFalse(vm.eval("$('login-form').hidden"))
+        self.assertEqual(vm.eval("$('current-password').value"),'')
+        self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/config' || c.path==='/api/auth/password')"))
+
+    def test_ntrip_saved_password_is_revealed_only_on_demand(self):
+        vm=self.make_vm();self.login(vm)
+        self.assertFalse(vm.eval("calls.some(c=>c.path.startsWith('/api/ntrip/password/'))"))
+        vm.eval("$('ntrip-password-toggle').onclick();");self.drain(vm)
+        self.assertEqual(vm.eval("$('ntrip-password').value"),'stored-upstream')
+        self.assertEqual(vm.eval("$('ntrip-password').type"),'text')
+        self.assertEqual(vm.eval("calls.filter(c=>c.path.startsWith('/api/ntrip/password/'))[0].options.headers.Authorization"),'Bearer '+'a'*64)
+        vm.eval("$('ntrip-password-toggle').onclick();");self.drain(vm)
+        self.assertEqual(vm.eval("$('ntrip-password').type"),'password')
+        vm.eval("$('ntrip-target').value='0';$('ntrip-target').onchange();");self.drain(vm)
+        self.assertEqual(vm.eval("$('ntrip-password').value"),'')
+        vm.eval("$('ntrip-password-toggle').onclick();");self.drain(vm)
+        self.assertEqual(vm.eval("$('ntrip-password').value"),'stored-0')
+        vm.eval("$('logout').onclick();");self.drain(vm)
+        self.assertEqual(vm.eval("$('ntrip-password').value"),'')
+        self.assertEqual(vm.eval("$('ntrip-password').type"),'password')
+
+    def test_late_ntrip_password_does_not_replace_edits_or_new_target_or_session(self):
+        for action in ("$('ntrip-password').value='typed';listeners.input();",
+                       "$('ntrip-target').value='0';$('ntrip-target').onchange();",
+                       "$('logout').onclick();"):
+            with self.subTest(action=action):
+                vm=self.make_vm();self.login(vm)
+                vm.eval("hold_ntrip_password=true;$('ntrip-password-toggle').onclick();");self.drain(vm)
+                vm.eval(action+'release_ntrip_password();');self.drain(vm)
+                self.assertNotIn('stored-',vm.eval("$('ntrip-password').value"))
+                self.assertEqual(vm.eval("$('ntrip-password').type"),'password')
 
     def test_password_change_confirmation_and_secret_clearing(self):
         vm=self.make_vm();self.login(vm)
@@ -269,13 +348,13 @@ class WebAssets(unittest.TestCase):
         self.assertFalse(vm.eval("calls.some(c=>c.path==='/api/diagnostics/wire-selftest')"))
         vm.eval("pressure='critical'; calls.length=0; refresh();")
         self.drain(vm)
-        self.assertEqual(vm.eval('calls.length'), 1)
-        self.assertEqual(vm.eval('calls[0].path'), '/api/resources')
+        self.assertEqual(vm.eval('calls.length'), 2)
+        self.assertEqual(vm.eval('calls[0].path'), '/api/auth/session');self.assertEqual(vm.eval('calls[1].path'), '/api/resources')
         self.assertTrue(vm.eval("elements['ntrip-save'].disabled"))
         self.assertIn('Pression mémoire', vm.eval('elements.notice.textContent'))
         vm.eval("elements['ntrip-endpoint'].onsubmit();")
         self.drain(vm)
-        self.assertEqual(vm.eval('calls.length'), 1)
+        self.assertEqual(vm.eval('calls.length'), 2)
         self.assertTrue(vm.eval("elements['base-submit'].disabled"))
         self.assertEqual(vm.eval("elements['satellite-rows'].children.length"), 0)
         vm.eval("pressure='normal'; refresh();")
@@ -472,7 +551,7 @@ class WebAssets(unittest.TestCase):
         vm=self.make_vm();self.login(vm)
         vm.eval("pressure='unknown';calls.length=0;refresh();")
         self.drain(vm)
-        self.assertEqual(json.loads(vm.eval('JSON.stringify(calls.map(c=>c.path))')),['/api/resources'])
+        self.assertEqual(json.loads(vm.eval('JSON.stringify(calls.map(c=>c.path))')),['/api/auth/session','/api/resources'])
         self.assertTrue(vm.eval("elements['functions-save'].disabled"))
         vm.eval('renderStatus({});')
         self.assertIn('inconnu',vm.eval("elements['card-global'].textContent"))
@@ -496,6 +575,14 @@ class WebAssets(unittest.TestCase):
         self.assertEqual(json.loads(vm.eval("$('network-status').textContent"))['ethernet']['state'],'running')
         vm.eval("renderStatus({services:{ethernet_driver:{state:'failed'}}});")
         self.assertEqual(vm.eval("$('card-ethernet').textContent"),'Service : failed')
+
+    def test_http_status_is_not_presented_as_running_https(self):
+        vm=self.make_vm()
+        vm.eval("renderStatus({web_transport:'http',services:{http:{state:'running'},https:{state:'disabled'}}});")
+        self.assertEqual(vm.eval("$('card-https').textContent"),'HTTP : running')
+        self.assertEqual(json.loads(vm.eval("$('network-status').textContent"))['transport'],'http')
+        vm.eval("renderStatus({web_transport:'https',services:{https:{state:'failed'}}});")
+        self.assertEqual(vm.eval("$('card-https').textContent"),'HTTPS : failed')
 
     @staticmethod
     def drain(vm):

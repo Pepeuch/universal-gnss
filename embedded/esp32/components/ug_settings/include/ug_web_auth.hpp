@@ -31,7 +31,7 @@ class WebAuth
 {
 public:
   static constexpr unsigned kIterations = 600000;
-  static constexpr std::int64_t kLifetime = 1800000000LL, kIdle = 600000000LL;
+  static constexpr std::int64_t kIdle = 600000000LL;
   explicit WebAuth(AuthBackend& backend) : backend_(backend)
   {
   }

@@ -5,6 +5,10 @@
 #include "freertos/task.h"
 #include "lwip/opt.h"
 #include "sdkconfig.h"
+#if CONFIG_IDF_TARGET_ESP32S3
+#include "esp_heap_caps.h"
+#include "ug_queue_payload.hpp"
+#endif
 #include "ug_configuration.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_network_budget.hpp"
@@ -95,10 +99,23 @@ struct Outbox
 {
   QueueHandle_t queue{};
   StaticQueue_t control{};
+#if CONFIG_IDF_TARGET_ESP32S3
+  QueuePayload<kQueueDepth * sizeof(Gateway::Frame)> storage;
+#else
   std::array<std::uint8_t, kQueueDepth * sizeof(Gateway::Frame)> storage{};
+#endif
   std::size_t slot{};
   bool Create()
   {
+#if CONFIG_IDF_TARGET_ESP32S3
+    // Called before publishing this queue to a worker/destination. Payload is
+    // task-only, not DMA/ISR storage. Queue control remains internal. No free
+    // while producers/consumers can hold the queue, including disabled services.
+    if (!storage.Reserve([](std::size_t size) -> void* {
+          return heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }))
+      return false;
+#endif
     queue = xQueueCreateStatic(kQueueDepth, sizeof(Gateway::Frame), storage.data(), &control);
     return queue;
   }
@@ -205,10 +222,13 @@ void PublisherWorker(void* context)
       link_generation = link;
       const bool enabled = config->publishers[slot].enabled && network_ready.load();
       const bool configured = publisher.Configure(
-          config->publishers[slot].endpoint, enabled, [config_generation, link_generation] {
+          config->publishers[slot].endpoint,
+          enabled,
+          [config_generation, link_generation] {
             return !network_ready.load() || network_generation.load() != link_generation ||
                    Configuration()->revision != config_generation;
-          });
+          },
+          config->publishers[slot].rtcm_messages);
       if (enabled && configured)
         SetCorrectionDestination(1 + slot, Outbox::Enqueue, &box);
     }
@@ -218,13 +238,14 @@ void PublisherWorker(void* context)
       xQueueReset(box.queue);
       source = Gateway::kSources;
       incarnation = 0;
-      publisher.Configure(config->publishers[slot].endpoint,
-                          config->publishers[slot].enabled && network_ready.load(),
-                          [config_generation, link_generation] {
-                            return !network_ready.load() ||
-                                   network_generation.load() != link_generation ||
-                                   Configuration()->revision != config_generation;
-                          });
+      publisher.Configure(
+          config->publishers[slot].endpoint,
+          config->publishers[slot].enabled && network_ready.load(),
+          [config_generation, link_generation] {
+            return !network_ready.load() || network_generation.load() != link_generation ||
+                   Configuration()->revision != config_generation;
+          },
+          config->publishers[slot].rtcm_messages);
     }
     publisher.Tick(Now());
     // Consume even while disconnected, so a reconnect never drains an old backlog.

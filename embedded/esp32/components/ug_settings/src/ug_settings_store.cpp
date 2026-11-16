@@ -49,8 +49,12 @@ RecordStatus DecodeRecord(const std::vector<std::uint8_t>& record,
     return RecordStatus::kInvalid;
   const std::string_view payload(reinterpret_cast<const char*>(record.data() + 20),
                                  record.size() - 23);
-  if (payload.find("{\"schema\":1,") != 0 ||
-      !DecodeSettings(payload, DefaultSettings(caps), caps, out, error))
+  auto prior = DefaultSettings(caps);
+  // Legacy stored records did not filter publishers. Omission must keep pass-all,
+  // whereas fresh installations may offer a disabled preset in the editor.
+  for (auto& publisher : prior.publishers)
+    publisher.rtcm_messages.clear();
+  if (payload.find("{\"schema\":1,") != 0 || !DecodeSettings(payload, prior, caps, out, error))
     return RecordStatus::kInvalid;
   generation = gen;
   return RecordStatus::kValid;

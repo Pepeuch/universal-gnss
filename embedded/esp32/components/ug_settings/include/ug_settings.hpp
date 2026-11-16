@@ -16,6 +16,7 @@ struct Capabilities
 struct PublisherSettings
 {
   bool enabled{false};
+  std::string rtcm_messages{};  // Empty: all available frames; otherwise type(interval_s).
   universal_gnss_ntrip::NtripConfig endpoint{};
 };
 struct Settings
@@ -48,6 +49,9 @@ struct Settings
   std::int8_t lora_power_dbm{14};
 };
 Settings DefaultSettings(const Capabilities& capabilities);
+// Exact Web editor targets only; returned data borrows the immutable settings snapshot.
+const universal_gnss_ntrip::NtripConfig*
+FindNtripEndpoint(const Settings&, const Capabilities&, std::string_view target);
 bool ValidateSettings(const Settings&, const Capabilities&, std::string& error);
 // Patch an immutable prior snapshot; unknown/duplicate fields and invalid values fail atomically.
 bool DecodeSettings(std::string_view json,

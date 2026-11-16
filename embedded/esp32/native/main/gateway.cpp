@@ -164,7 +164,9 @@ extern "C" void app_main()
 #if UG_LOCAL_GNSS
       {ServiceId::kGnss, 0, [](void*) -> std::int32_t { return StartGnssService(); }},
 #endif
-      {ServiceId::kHttps, network, [](void*) -> std::int32_t { return StartWebService(); }}};
+      {WebUsesHttps() ? ServiceId::kHttps : ServiceId::kHttp, network, [](void*) -> std::int32_t {
+         return StartWebService();
+       }}};
   const auto boot = RunBoot(steps, sizeof(steps) / sizeof(steps[0]), ObserveBoot);
   if (!boot.plan_valid)
     ObserveBoot(ServiceId::kNetworkCore, ServiceState::kFailed, ESP_ERR_INVALID_ARG, nullptr);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_supervisor.hpp"
 #include <cassert>
+#include <string_view>
 using namespace ug::embedded;
 std::int64_t now_us = 1;
 int added = 0, fed = 0, removed = 0, add_error = 0, reset_error = 0;
@@ -46,6 +47,8 @@ static std::int32_t Fail(void* context)
 }
 int main()
 {
+  static_assert(ServiceBit(ServiceId::kHttps) != ServiceBit(ServiceId::kHttp));
+  assert(std::string_view(ServiceName(ServiceId::kHttp)) == "http");
   int core = 0, network = 0, gnss = 0, console = 0;
   const BootStep steps[] = {
       {ServiceId::kNetworkCore, 0, Fail, &core},

@@ -1,7 +1,15 @@
 'use strict';
-let passwordChangeRequired=false, passwordLogin=false;
+let passwordChangeRequired=false, passwordLogin=false, webTransport='https';
 let token = '', sessionGeneration = 0, refreshing = false, receiverPlans = null;
 let portableCandidate=null;
+function sessionView() {
+  const restricted=Boolean(token)&&passwordChangeRequired;
+  $('webui').hidden=!token||restricted;
+  $('login-screen').hidden=Boolean(token)&&!restricted;
+  $('login-form').hidden=restricted;
+  $('login-password-slot').hidden=!restricted;
+  (restricted?$('login-password-slot'):$('settings-password-slot')).appendChild($('password-section'));
+}
 function clearPortable(){portableCandidate=null;$('portable-file').value='';$('portable-apply').disabled=true;$('portable-preview').textContent='Aucun import préparé';}
 let wireSelfTestRunning = false, wireSelfTestAllowed = false;
 let ntripConfig = null, ntripSlots = 0, ntripGnss = false, ntripSaving = false, ntripMutationAllowed = false;
@@ -16,8 +24,11 @@ function ntripTarget() {
   if (!/^[0-4]$/.test(target) || Number(target) >= ntripSlots) throw new Error('Publication indisponible sur cette carte');
   return Number(target);
 }
+let ntripSecretGeneration=0;
 function clearNtripSecret() {
-  $('ntrip-password').value = ''; $('ntrip-password-clear').checked = false;
+  ++ntripSecretGeneration;
+  $('ntrip-password').value = ''; $('ntrip-password').type='password'; $('ntrip-password-clear').checked = false;
+  $('ntrip-password-toggle').textContent='Afficher';$('ntrip-password-toggle').setAttribute('aria-pressed','false');
 }
 function renderNtrip() {
   clearNtripSecret();
@@ -31,7 +42,10 @@ function renderNtrip() {
   $('ntrip-send_gga').disabled = !ntripGnss;
   $('ntrip-gga_interval_s').value = String(endpoint.gga_interval_s || 5);
   $('ntrip-gga').hidden = slot !== null;
-  $('ntrip-password-status').textContent = endpoint.password_set ? 'Mot de passe enregistré ; valeur masquée.' : 'Aucun mot de passe enregistré.';
+  $('ntrip-messages-field').hidden = slot === null;
+  $('ntrip-messages').value = owner?.rtcm_messages || '';
+  $('ntrip-password-status').textContent = endpoint.password_set ? 'Mot de passe enregistré. Afficher pour le consulter, ou saisir pour le modifier.' : 'Aucun mot de passe enregistré.';
+  $('ntrip-password-toggle').disabled=!token||!ntripConfig;
   $('ntrip-save').disabled = !token || !ntripConfig || ntripSaving || !ntripMutationAllowed;
 }
 function clearFunctions(){
@@ -96,7 +110,7 @@ const periods = [5000,3000,5000,5000,5000,10000];
 let activeTab = 'dashboard', viewGeneration = 0, refreshTimer;
 function scheduleRefresh(delay = periods[tabs.indexOf(activeTab)]) {
   clearTimeout(refreshTimer);
-  if (!document.hidden) refreshTimer = setTimeout(() => refresh(), delay);
+  if (!document.hidden && token) refreshTimer = setTimeout(() => refresh(), delay);
 }
 function selectTab(name) {
   if (!tabs.includes(name)) return;
@@ -116,9 +130,11 @@ function unavailable() {
 function renderStatus(status) {
   $('status').textContent = print(status);
   $('services-status').textContent = print(status.services || {});
-  $('network-status').textContent = print({ethernet:status.services?.ethernet_driver,https:status.services?.https,espnow:status.espnow});
+  const transport=['http','https'].includes(status.web_transport)?status.web_transport:webTransport;
+  $('network-status').textContent = print({ethernet:status.services?.ethernet_driver,transport,http:status.services?.http,https:status.services?.https,espnow:status.espnow});
   $('card-global').textContent = status.degraded === false ? 'Services réactifs' : 'État dégradé / inconnu';
-  for (const [card,service] of [['ethernet','ethernet_driver'],['https','https']]) $('card-' + card).textContent = 'Service : ' + (status.services?.[service]?.state || 'inconnu');
+  $('card-ethernet').textContent='Service : '+(status.services?.ethernet_driver?.state||'inconnu');
+  $('card-https').textContent=transport.toUpperCase()+' : '+(status.services?.[transport]?.state||'inconnu');
   $('card-rtcm').textContent = `${status.rtcm_frames ?? '?'} trames · ${status.rtcm_rejected ?? '?'} rejetées`;
   $('card-ntrip').textContent = status.upstream_flowing ? 'Flux entrant observé' : status.upstream_connected ? 'Connecté, flux non confirmé' : 'Pas de connexion entrante';
 }
@@ -128,11 +144,15 @@ function renderReceiver(receiver) {
     `${['Inconnu','Aucun FIX','FIX','RTK FLOAT','RTK FIX','Estimé','2D','3D','DGPS'][receiver.fix_type] || 'Inconnu'} · âge ${receiver.position_observation_age_ms ?? '?'} ms`;
 }
 async function refresh() {
-  if (refreshing || document.hidden || pairingController) return;
+  if (refreshing || document.hidden || pairingController || !token) return;
   refreshing = true;
   const generation = sessionGeneration, view = viewGeneration, tab = activeTab;
   const current = () => generation === sessionGeneration && view === viewGeneration && !document.hidden;
   try {
+    await call('/api/auth/session');
+    if (!current()) return;
+    // Restricted sessions may only renew/check their validity, never load station data.
+    if (passwordChangeRequired) return;
     const resources = await call('/api/resources', undefined, false);
     if (!current()) return;
     $('resources').textContent = print(resources);
@@ -204,27 +224,32 @@ async function load(expectedEdit = editGeneration) {
   }
 }
 function handle(fn) { return async event => { event?.preventDefault(); const generation = sessionGeneration; try { await fn(event, editGeneration); } catch (e) { if (generation === sessionGeneration) show(e.message); } }; }
-function closeSession() { $('session-state').textContent = 'Session fermée'; unavailable(); wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('password').value = ''; for(const id of ['current-password','new-password','confirm-password'])$(id).value=''; passwordChangeRequired=false; $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); }
-$('logout').onclick = async () => {
+function closeSession() { $('session-state').textContent = 'Session fermée'; unavailable(); wireSelfTestAllowed = false; $('wire-selftest').disabled = true; $('wire-selftest-result').textContent = 'Session fermée'; $('command-history').textContent = 'Session fermée'; $('ntrip-runtime').textContent = 'Session fermée'; $('ntrip-history').textContent = 'Session fermée'; $('events').textContent = 'Session fermée'; ++sessionGeneration; token = ''; clearFunctions(); clearPortable(); clearPairingForm(); clearNtripForm(); receiverPlans = null; $('receiver-plans').textContent = 'Session fermée'; $('base-submit').disabled = true; $('base-disable').disabled = true; $('telemetry-submit').disabled = true; $('password').value = ''; for(const id of ['current-password','new-password','confirm-password'])$(id).value=''; passwordChangeRequired=false; sessionView(); clearTimeout(refreshTimer); $('config').value = ''; $('tls-pem').value = ''; $('receiver').textContent = 'Session fermée'; $('satellite-rows').replaceChildren(); $('satellite-summary').textContent = 'Session fermée'; show('Session fermée'); }
+const logout = async () => {
   const pending = token && passwordLogin ? call('/api/auth/logout', {}) : Promise.resolve();
   closeSession(); await pending.catch(()=>{});
 };
+$('logout').onclick = logout;
+$('restricted-logout').onclick = logout;
 let loginPending=false;
-$('login').onclick = async () => {
+$('login').onclick = event => {event?.preventDefault(); return login();};
+$('login-form').onsubmit = event => {event.preventDefault();return login();};
+async function login() {
   if(loginPending)return;
   const username=$('username').value, password=$('password').value;
-  closeSession(); loginPending=true; $('login').disabled=true;
+  closeSession(); loginPending=true; $('login').disabled=true; $('session-state').textContent='Connexion en cours…';show('Vérification des identifiants…');
   const generation=sessionGeneration;
   try {
     const result=passwordLogin?await call('/api/auth/login',{username,password},false):{token:password,password_change_required:false};
     if(generation!==sessionGeneration)return;
     if(typeof result.token!=='string' || (passwordLogin?!/^[a-f0-9]{64}$/.test(result.token):!/^[A-Za-z0-9_-]{32,128}$/.test(result.token)) || typeof result.password_change_required!=='boolean')throw Error('Réponse de connexion invalide');
-    token=result.token; passwordChangeRequired=result.password_change_required;
+    token=result.token; passwordChangeRequired=result.password_change_required; sessionView();
     if(passwordChangeRequired){
-      selectTab('settings'); $('auth-state').textContent='Changement obligatoire : cette session autorise uniquement le choix du nouveau mot de passe.';
+      $('auth-state').textContent='Changement obligatoire : cette session autorise uniquement le choix du nouveau mot de passe.';
       $('session-state').textContent='Mot de passe à changer'; show('Changer le mot de passe dans Paramètres avant toute opération sensible.');
+      refresh();
     } else {
-      await load(); await refresh();
+      selectTab('dashboard'); await load(); await refresh();
       if(pairingPendingVerification){
         const pending=pairingPendingVerification, state=await call('/api/radio/pairing');
         if(generation===sessionGeneration && token){
@@ -238,7 +263,7 @@ $('login').onclick = async () => {
     }
   } catch(e){if(generation===sessionGeneration){closeSession();show(e.message);}}
   finally { loginPending=false; $('login').disabled=false; }
-};
+}
 $('password-form').onsubmit=handle(async()=>{
   const current_password=$('current-password').value, new_password=$('new-password').value, confirmation=$('confirm-password').value;
   for(const id of ['current-password','new-password','confirm-password'])$(id).value='';
@@ -312,6 +337,8 @@ $('transport').onsubmit = handle(async (_, edit) => {
   show(await call('/api/config', value)); await load(edit);
 });
 call('/api/capabilities', undefined, false).then(caps => {
+  webTransport=['http','https'].includes(caps.web_transport)?caps.web_transport:'https';
+  $('transport-state').textContent=webTransport==='http'?'HTTP · réseau local':'HTTPS';
   passwordLogin=caps.password_authentication===true; $('login').disabled=false; $('password-section').hidden=!passwordLogin; $('pairing-start').disabled=!passwordLogin;
   if(!passwordLogin)$('auth-state').textContent='Profil historique : mot de passe = jeton existant, aucun changement d’identifiants ici.';
   $('gnss').hidden = !caps.gnss; $('gnss-unavailable').hidden = Boolean(caps.gnss);
@@ -340,7 +367,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { unavailable(); $('freshness').textContent = 'En pause — onglet masqué'; $('connection-state').textContent = 'En pause'; }
   else refresh();
 });
-refresh();
+sessionView();
 
 $('telemetry').onsubmit = handle(async (_, edit) => {
   const value = {rate_hz: Number($('telemetry-rate').value), persist: $('telemetry-persist').checked,
@@ -417,6 +444,27 @@ $('ntrip-history-read').onclick = handle(() => readReport('ntrip-history', '/api
 
 $('ntrip-target').value = 'upstream';
 $('ntrip-target').onchange = handle(async (_, edit) => { renderNtrip(); });
+$('ntrip-password-toggle').onclick = handle(async (_, edit) => {
+  if(!token||!ntripConfig)return;
+  const field=$('ntrip-password'), button=$('ntrip-password-toggle');
+  if(field.type==='text'){
+    field.type='password';button.textContent='Afficher';button.setAttribute('aria-pressed','false');return;
+  }
+  const slot=ntripTarget(), owner=slot===null?ntripConfig.upstream:ntripConfig.publishers?.find(p=>p.slot===slot);
+  if(!field.value && owner?.endpoint?.password_set){
+    const generation=sessionGeneration, secretGeneration=ntripSecretGeneration;
+    button.disabled=true;
+    try {
+      const value=await call('/api/ntrip/password/'+(slot===null?'upstream':slot));
+      if(generation!==sessionGeneration||secretGeneration!==ntripSecretGeneration||edit!==editGeneration||!token)return;
+      if(typeof value.password!=='string'||value.password.length>128)throw Error('Réponse de mot de passe invalide');
+      field.value=value.password;
+    } finally {
+      if(generation===sessionGeneration && secretGeneration===ntripSecretGeneration)button.disabled=!token||!ntripConfig;
+    }
+  }
+  field.type='text';button.textContent='Masquer';button.setAttribute('aria-pressed','true');
+});
 $('ntrip-endpoint').onsubmit = handle(async (_, edit) => {
   if (ntripSaving) return;
   const password = $('ntrip-password').value, erase = $('ntrip-password-clear').checked;
@@ -433,6 +481,7 @@ $('ntrip-endpoint').onsubmit = handle(async (_, edit) => {
     endpoint.gga_interval_s = Number($('ntrip-gga_interval_s').value);
   }
   const owner = {enabled:$('ntrip-enabled').checked, endpoint};
+  if(slot!==null) owner.rtcm_messages=$('ntrip-messages').value;
   const patch = slot === null ? {upstream:owner} : {publishers:[{slot,...owner}]};
   if (!confirm('Sauvegarder cette connexion NTRIP ? Les connexions seront reconfigurées et les corrections peuvent être interrompues. La source RTCM choisie reste inchangée.')) return;
   ntripSaving = true; $('ntrip-save').disabled = true;
@@ -458,7 +507,7 @@ $('pairing-start').onclick=async () => {
   if (!passwordLogin) { output.textContent='Appairage USB disponible sur le Gateway S3.'; return; }
   if (!token || !ntripMutationAllowed) { output.textContent='Session et mémoire disponibles requises'; return; }
   if (!globalThis.isSecureContext || !navigator.serial || !crypto?.getRandomValues) {
-    output.textContent='Web Serial indisponible : utiliser Chromium sur une origine HTTPS de confiance.'; return;
+    output.textContent='Web Serial indisponible sur cette origine : appairage USB depuis HTTPS ou localhost requis. L’administration réseau reste disponible.'; return;
   }
   const controller=new AbortController(); pairingController=controller;
   button.textContent='Annuler l’appairage'; clearTimeout(refreshTimer);
