@@ -25,10 +25,18 @@ class RepoStatusTests(unittest.TestCase):
         self.assertIn("OPEN: 99", result.stdout)
         self.assertIn("PARTIAL: 20", result.stdout)
         self.assertIn("Remaining: 172", result.stdout)
-        self.assertIn("ACTIVE:   4", result.stdout)
-        self.assertIn("BLOCKED:  3", result.stdout)
-        self.assertIn("RETAINED: 3", result.stdout)
-        self.assertIn("CLOSED:   1", result.stdout)
+        for lifecycle in ("active", "blocked", "retained", "closed"):
+            with self.subTest(lifecycle=lifecycle):
+                directory = ROOT / ".agent/shared/checkpoints" / lifecycle
+                expected = sum(
+                    1
+                    for path in directory.glob("*.md")
+                    if path.is_file() and not path.is_symlink() and path.name != "README.md"
+                )
+                self.assertRegex(
+                    result.stdout,
+                    rf"(?m)^  {lifecycle.upper()}:[ \t]+{expected}$",
+                )
 
 
 if __name__ == "__main__":

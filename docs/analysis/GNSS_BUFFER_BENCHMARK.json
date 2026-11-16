@@ -1,0 +1,352 @@
+{
+  "base": "e5cb849dd2e1830d98dfb5ec893af2648a91bd40",
+  "candidate_head": "e5cb849dd2e1830d98dfb5ec893af2648a91bd40",
+  "candidate_validation_tree": "2275b09f614a0894f396811b7c9f92c4a608e692",
+  "host": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "compiler": "c++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "runs": 7,
+  "harness_sha256": "77680fd7a8a3e295f5a014d92fe76d41a6196dd0e22785fb7002de5603d76712",
+  "trace_sha256": "86761c8636356d95acf4be1a026d5ee75fd9b2e4f77cfdeec5e3d5c6ebe23a44",
+  "benchmark_binaries_sha256": {
+    "baseline": "becc909667411fb26c0634a2185a1ef817e8a69652ac0bb5d9eac1858f8a6b39",
+    "candidate": "7e37c804798582bd1cabbce5c71cb313fa9de5fa8f2abd49aca8ea5590a38acb"
+  },
+  "timing_process_cpu_s": {
+    "baseline": [
+      {
+        "user_s": 0.797113,
+        "system_s": 0.012032000000000015
+      },
+      {
+        "user_s": 0.796335,
+        "system_s": 0.012005000000000043
+      },
+      {
+        "user_s": 0.8464749999999999,
+        "system_s": 0.01000599999999996
+      },
+      {
+        "user_s": 0.788926,
+        "system_s": 0.013980999999999966
+      },
+      {
+        "user_s": 0.7924410000000002,
+        "system_s": 0.013990000000000002
+      },
+      {
+        "user_s": 0.7937739999999991,
+        "system_s": 0.010010000000000019
+      },
+      {
+        "user_s": 0.8175580000000018,
+        "system_s": 0.009994000000000003
+      }
+    ],
+    "candidate": [
+      {
+        "user_s": 0.8804289999999999,
+        "system_s": 0.0010000000000000009
+      },
+      {
+        "user_s": 0.8958810000000001,
+        "system_s": 0.0010009999999999741
+      },
+      {
+        "user_s": 0.9470580000000002,
+        "system_s": 0.0040000000000000036
+      },
+      {
+        "user_s": 0.8844710000000005,
+        "system_s": 0.0009990000000000276
+      },
+      {
+        "user_s": 0.8792449999999992,
+        "system_s": 0.0019990000000000285
+      },
+      {
+        "user_s": 0.886457,
+        "system_s": 0.0009989999999999721
+      },
+      {
+        "user_s": 0.8909329999999986,
+        "system_s": 0.0040000000000000036
+      }
+    ]
+  },
+  "scenario_count": 222,
+  "candidate_committed": false,
+  "optimization": "Release (-O3 -DNDEBUG), C++17; allocation instrumentation disabled for timing",
+  "allocation_metric": "C++ operator new/new[] requested bytes and malloc_usable_size payloads; excludes allocator headers, libc-internal malloc, process RSS and stacks",
+  "memory_intervals": "FeedBytes and Finalize only; retained/capacity snapshots before Finalize, after Finalize and after Reset. sizeof(session) reported separately.",
+  "cpu_metric": "getrusage child user+system, timing-only harness including loop, clocks and CSV; seven alternating process pairs",
+  "timestamp_modes": {
+    "0": "all absent",
+    "1": "constant123456789ns",
+    "3": "1000+Feed-index ns; absent every third Feed"
+  },
+  "capacity_units": {
+    "baseline_byte_capacity": "BufferedByte element slots (24 bytes each on measured ABIs)",
+    "candidate_byte_capacity": "uint8_t slots",
+    "candidate_run_capacity": "timestamp-run slots (16 bytes each on measured ABIs)"
+  },
+  "source_inputs_sha256": {
+    "core/gnss_driver/include/universal_gnss_driver/base_config_profile_builder.hpp": "0c2dddd0a8bb525ac3f27d0a6d689203c027a965709e9c56a101753809b587b4",
+    "core/gnss_driver/include/universal_gnss_driver/detail/timestamped_byte_buffer.hpp": "33170e975bd631e85b85b7ea38eb64c4489fb02bc0b261c98babe34764ef7f15",
+    "core/gnss_driver/include/universal_gnss_driver/nmea_driver.hpp": "e3f30122b6380ca7f17f26f79b7989d9fe98c4d173a895b3c367fa2fc25f2597",
+    "core/gnss_driver/include/universal_gnss_driver/nmea_session.hpp": "b6b06580454db1f7a21780475476ed7644d7ddfa48be77e89d916f9dd104ffc2",
+    "core/gnss_driver/include/universal_gnss_driver/position_payload_freshness.hpp": "ae822b99fe93043b8cc655f281b67e511e72cb1cd6214c9b29fed13df59211cc",
+    "core/gnss_driver/include/universal_gnss_driver/protocol_support.hpp": "80b663f39366a36f7d6e4eb13505817c5c6d858adae8faf55277f0e606deeb71",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_auto_config.hpp": "a77c89d685577aa573a83893197568ee2dc62b17fe30acb57cf03d379fcd97e4",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_capabilities.hpp": "463f0e87e4853ab1742149c18cb0848f84de0d858c23d11f9c0705907bb5a347",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_command.hpp": "90b09ab1536218bc36b813ebf2b502401dd0358bf503a26c5695255a66baab4a",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_command_dispatcher.hpp": "e4ff0b62da60612c567307d84163e6ed3de5e7a04b16888e1f7157cb38b16ed4",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_command_response.hpp": "3fda34003a7557d915d1b463f5bf520c1bd24e765622ae958aac8a6257a3a5e2",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_command_transaction.hpp": "26b62e1db7f4b8e6f06c7abb1566dfe03a9ee614d4464285cba537161777491e",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_command_transaction_engine.hpp": "998b0160ab8842bec40581e2cc9d139e2a3f29d8f25f9efe48121e29236fbf3a",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_config_application.hpp": "f200adfb4d4613ddf0c282e262751db274c9d13e668a3a847c6e066a4ab864ee",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_config_profile.hpp": "c57c49ce7d336a2b5d2d93cfc5ab48eab56edeb430a53cd2473551e46269f849",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_discovery.hpp": "51cb2d75e60197f6c7f054296bb2479404d722d884bf5e91eb52821920035fa8",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_driver.hpp": "b58d462e0e8010f98e9da4a7d1d37dedab7ff9c30319618f2d7947086b7501e6",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_profile.hpp": "69105f8d6a9f2a2b6f8f9ad4fdb16bec92220e998fc1d34b79ab1d0fa41dfe64",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_profiles.hpp": "d5d30092adbd3788ff9782b8559975a52828b033436d918c266a0a2a54095f54",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_response_causality.hpp": "51bb2f6b837932591bf7e1d122a709c0b89d128efad173897c1be19f4a4cc991",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_session.hpp": "2c9441866c42856006d9d375790707990d615302c9f5204ce5f38da23866a31c",
+    "core/gnss_driver/include/universal_gnss_driver/receiver_session_runner.hpp": "0946884df387c1f0e87a6bf3a070592480ed4fad8650df8af8d5826c7eda9680",
+    "core/gnss_driver/include/universal_gnss_driver/stream_detector.hpp": "3c13a7b8ad294a367f4478726f5adc138b9965f91d3316dacbd48cf4adf7b497",
+    "core/gnss_driver/include/universal_gnss_driver/ublox_config_profile_builder.hpp": "eca399fa7b63093e2835a43ca9c2fb37ef5facf1a5e97066035c0a2aaf151a99",
+    "core/gnss_driver/include/universal_gnss_driver/ublox_driver.hpp": "df3ad28db42ef7ee08d4260e7ab1682efd15d8b8ce5681bdcc5225af598429cc",
+    "core/gnss_driver/include/universal_gnss_driver/ublox_response_router.hpp": "bf8c0c2a2f958b159003fa397a1b7100c5ad45c0ba01c789ce8fafd39cbb55cc",
+    "core/gnss_driver/include/universal_gnss_driver/ublox_session.hpp": "0e1bbdd47098942d11560ba369603ae91ac29fba2e8c1ae8d787a5287430c186",
+    "core/gnss_driver/include/universal_gnss_driver/ubx_command_response_mapper.hpp": "e6047cb6cd6fa56d55f29e223434f18a9a7698b8b520a8bb3085b0b748e91f28",
+    "core/gnss_driver/include/universal_gnss_driver/unicore_config_profile_builder.hpp": "bc774fce149f96fbf12f5be8be0e0546d3b79ff431c5bc295824ce095d4441d2",
+    "core/gnss_driver/include/universal_gnss_driver/unicore_driver.hpp": "1a4240be7b56356ac380b3024aae9f6956b5b395b2ecca6e9868738ddf8aab3c",
+    "core/gnss_driver/include/universal_gnss_driver/unicore_model_profile.hpp": "54a3539ad5c63a5446eda5033a2aae48fb185993a2defdb6e11363ca5ef8e3ee",
+    "core/gnss_driver/include/universal_gnss_driver/unicore_response_router.hpp": "743c21ca2d41b6d033f6678ad1f89fe0ed0ee472722bafb112830c9abcf54e5d",
+    "core/gnss_driver/include/universal_gnss_driver/unicore_session.hpp": "544690cfd3542e37b60fcc21b8a3dae06d32ae32443fc67a85a9be7dd5627fc1",
+    "core/gnss_driver/src/base_config_profile_builder.cpp": "908766678e27de92c3c1e71032b401152de00ed856913f625fac651f79ae2916",
+    "core/gnss_driver/src/nmea_driver.cpp": "89e6e5abe871e65dc40f009a65bf001b0829b78b22b60e08f10cd9e0e3d7e979",
+    "core/gnss_driver/src/nmea_session.cpp": "26b473c4d8fe64ab4e27065851a75a6b444ed45340320836fab1d197dfe46eb2",
+    "core/gnss_driver/src/receiver_auto_config.cpp": "53278d1db62374daaa56399376fff3ec6b95f238f58d96af123ef30e34684d1f",
+    "core/gnss_driver/src/receiver_command_dispatcher.cpp": "c604ddf45ed971b9bb0599eb95968773d244849e18d40d267def72b08a253816",
+    "core/gnss_driver/src/receiver_command_transaction_engine.cpp": "1e9d6f12cc3160253c478beeba53f785b14b48e361a31b3b2906ee4316fe6e2d",
+    "core/gnss_driver/src/receiver_config_application.cpp": "a5f33c1021377d9251cbbdea597d2ec13cc2e64d00501c540ba89e5b6d42e024",
+    "core/gnss_driver/src/receiver_discovery.cpp": "3af1061ebec47e80bbe2c833b9a632d06bfe0d7715d00f953df0ad89be21c3ad",
+    "core/gnss_driver/src/receiver_profiles.cpp": "0616bb0ab5006e9ef10e1043cb3525b7ff572fa3998b0b2ae7b9872ff4894342",
+    "core/gnss_driver/src/receiver_session.cpp": "7edfb6139ae24626029770c8ab267fbbc008307be7e84803f3d73fd012ff9589",
+    "core/gnss_driver/src/receiver_session_runner.cpp": "22a5a6ac0f73e45d378eee6b674a7b3f9f8ec60e4ddfa7eda53e3eca4369f56b",
+    "core/gnss_driver/src/stream_detector.cpp": "f01e493061e2376aa8a1b58bf4f218a2aa57a5d52f4fc8fcc0d89e72ff599014",
+    "core/gnss_driver/src/ublox_config_profile_builder.cpp": "d08d2f075b1603d5676505a82fc0f2bf57356a7c36e8365313391a0d85bf0e3b",
+    "core/gnss_driver/src/ublox_driver.cpp": "a9c74112f81e711afa45d6e97f77a34543b1386c5fd58048515e6e703fe1b1e0",
+    "core/gnss_driver/src/ublox_response_router.cpp": "55ac8a713adc2d40dfbda28e3bda0610fdecc01549f8eca5fa06c0d61cefa996",
+    "core/gnss_driver/src/ublox_session.cpp": "4624b3dc383ca5750583f9d7e0599d8deb63c91affc3af325f199dfe7adb0f6b",
+    "core/gnss_driver/src/ubx_command_response_mapper.cpp": "0aad476707f947ad95c05fc12c6e5e602974a1916392b78643e8a427e4094174",
+    "core/gnss_driver/src/unicore_ascii_validation.hpp": "accc4c3cb5bcafc5c3922cac50def8b4c1c5cb7d0c80ef079bbab7d32aaee42f",
+    "core/gnss_driver/src/unicore_config_profile_builder.cpp": "bb6d95f4d0638bdb4f1f18831002680c4630ee3c2689bd4fc93bfd5cb2683825",
+    "core/gnss_driver/src/unicore_driver.cpp": "1208a262797143b2ebfe047cfe6ab77a64b8748e10793fd6b3d0756bef335fed",
+    "core/gnss_driver/src/unicore_model_profile.cpp": "36f81d268d33fb0af1246a3ddbef5a0b85d526087a05ac6bbd250d818fd80372",
+    "core/gnss_driver/src/unicore_response_router.cpp": "650e2b68a0d11ab250215b8fb67cce5775fbd0de7017ab7e86f3dad5d6f36ec0",
+    "core/gnss_driver/src/unicore_session.cpp": "9a751ab86e2d3f7900bc98542ff2fbf4c562da58c2d63e7dc9c3895ab9a1ac0a"
+  },
+  "fixtures_sha256": {
+    "testdata/README.md": "5c7812d776c152a4e2c54d26ef980ab2ca46bf13946ce6907c00b2a53482184a",
+    "testdata/comparison/receiver_a.nmea": "138531f57e549567dc053b5f93f807d8a5861a63414ee53384ff0e653910aba6",
+    "testdata/comparison/receiver_b.nmea": "10451c0c13a6a138d6803422370f5aa8bcac27d909c26fe566ec6732639d323a",
+    "testdata/mixed/nmea_ubx_rtcm_unicore.bin": "85fb56a3cb3bc872bc4c36a1fcb9112ebfd63d33cd36f2f75ad7d6c5893fee0a",
+    "testdata/nmea/basic_fix.nmea": "7a5f5da408ee2fea3950380abb53bbda0ddca3b6be00e8185612a9b704175c5f",
+    "testdata/rtcm/basic_msm.rtcm": "2b070e662ac650670ea6604bcaa74f4d06e577afc3dee9749aef8da8b74bf1ec",
+    "testdata/ubx/nav_pvt_sat_monrf.ubx": "2106a2e52f8b05d1cde53025831584f8e041c3d3835ff6b222d46c80e9769db5",
+    "testdata/unicore/basic_ascii.log": "1ad119b8b0302f1666231beea4be1813839926363baf9957b8446ecedd647efd"
+  },
+  "sdk": {
+    "http": {
+      "source_object": "2275b09f614a0894f396811b7c9f92c4a608e692",
+      "source_type": "tree",
+      "source_tree": "2275b09f614a0894f396811b7c9f92c4a608e692",
+      "source_commit": null,
+      "variant": "s3-gateway",
+      "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+      "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+      "build_and_verify": "pass",
+      "reproducibility": "pass",
+      "host_tests": "pass",
+      "network_during_build_and_tests": "disconnected_no_interfaces",
+      "source_mounts": false,
+      "flash_or_publication": false,
+      "binary": {
+        "profile": "gateway",
+        "local_gnss": true,
+        "app_bytes": 1485792,
+        "app_slots": [
+          {
+            "label": "ota_0",
+            "offset": 131072,
+            "size": 3145728
+          },
+          {
+            "label": "ota_1",
+            "offset": 3276800,
+            "size": 3145728
+          }
+        ],
+        "sha256": "cacc1196f0b8445bb6f013e6b3303312d21446d53e8296e0df3595d371bb2e0c",
+        "ug_crc_definitions": [
+          "420507a4 T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+        ],
+        "driver_source_count": 22,
+        "compile_units": 861,
+        "project_language_standards": {
+          "c": [
+            "gnu17"
+          ],
+          "cxx": [
+            "gnu++17"
+          ]
+        },
+        "hardware": "NOT_TESTED",
+        "rover_ROM_bytes": "not applicable",
+        "portable_configuration_schema": 1,
+        "radio_configuration": "runtime_nvs_encrypted_unicast",
+        "web_assets": [
+          {
+            "name": "index.html",
+            "source_bytes": 16031,
+            "gzip_bytes": 4876
+          },
+          {
+            "name": "app.js",
+            "source_bytes": 50806,
+            "gzip_bytes": 14926
+          },
+          {
+            "name": "style.css",
+            "source_bytes": 3286,
+            "gzip_bytes": 1258
+          }
+        ],
+        "web_transport": "http",
+        "network_capacity": {
+          "sockets": 20,
+          "tcp_active": 16,
+          "tcp_listeners": 16,
+          "udp_pcbs": 16,
+          "mdns_socket_mode": false
+        },
+        "boot_memory": {
+          "main_stack_bytes": 32768,
+          "tls_external": true
+        }
+      },
+      "part_sha256": {
+        "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+        "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+        "universal-gnss-esp32.bin": "cacc1196f0b8445bb6f013e6b3303312d21446d53e8296e0df3595d371bb2e0c"
+      },
+      "flash_offsets": {
+        "bootloader/bootloader.bin": 0,
+        "partition_table/partition-table.bin": 32768,
+        "ota_data_initial.bin": 61440,
+        "universal-gnss-esp32.bin": 131072
+      }
+    },
+    "https": {
+      "source_object": "2275b09f614a0894f396811b7c9f92c4a608e692",
+      "source_type": "tree",
+      "source_tree": "2275b09f614a0894f396811b7c9f92c4a608e692",
+      "source_commit": null,
+      "variant": "s3-gateway",
+      "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+      "host_dependencies": "libssl-dev:amd64\t3.0.13-0ubuntu3.16",
+      "build_and_verify": "pass",
+      "reproducibility": "pass",
+      "host_tests": "pass",
+      "network_during_build_and_tests": "disconnected_no_interfaces",
+      "source_mounts": false,
+      "flash_or_publication": false,
+      "binary": {
+        "profile": "gateway",
+        "local_gnss": true,
+        "app_bytes": 1490544,
+        "app_slots": [
+          {
+            "label": "ota_0",
+            "offset": 131072,
+            "size": 3145728
+          },
+          {
+            "label": "ota_1",
+            "offset": 3276800,
+            "size": 3145728
+          }
+        ],
+        "sha256": "d09d7bc4d2f00a2b68df22b8f86ce1c8e01762ec617e4dea7ecb3dd9c8f1e627",
+        "ug_crc_definitions": [
+          "42051058 T universal_gnss_protocols::ComputeRtcmCrc24Q(unsigned char const*, unsigned int)"
+        ],
+        "driver_source_count": 22,
+        "compile_units": 861,
+        "project_language_standards": {
+          "c": [
+            "gnu17"
+          ],
+          "cxx": [
+            "gnu++17"
+          ]
+        },
+        "hardware": "NOT_TESTED",
+        "rover_ROM_bytes": "not applicable",
+        "portable_configuration_schema": 1,
+        "radio_configuration": "runtime_nvs_encrypted_unicast",
+        "web_assets": [
+          {
+            "name": "index.html",
+            "source_bytes": 16031,
+            "gzip_bytes": 4876
+          },
+          {
+            "name": "app.js",
+            "source_bytes": 50806,
+            "gzip_bytes": 14926
+          },
+          {
+            "name": "style.css",
+            "source_bytes": 3286,
+            "gzip_bytes": 1258
+          }
+        ],
+        "web_transport": "https",
+        "network_capacity": {
+          "sockets": 20,
+          "tcp_active": 16,
+          "tcp_listeners": 16,
+          "udp_pcbs": 16,
+          "mdns_socket_mode": false
+        },
+        "boot_memory": {
+          "main_stack_bytes": 32768,
+          "tls_external": true
+        }
+      },
+      "part_sha256": {
+        "bootloader/bootloader.bin": "e168deaab4c71add7c89aa20bf3f16c50ff29949a1fa0624587fc8d422716231",
+        "partition_table/partition-table.bin": "d829e863bbf3cc9e1b177a3c6d8705bf723e5a4af0367dd752ec6a2ff3ab99e7",
+        "ota_data_initial.bin": "7d2c7ac4888bfd75cd5f56e8d61f69595121183afc81556c876732fd3782c62f",
+        "universal-gnss-esp32.bin": "d09d7bc4d2f00a2b68df22b8f86ce1c8e01762ec617e4dea7ecb3dd9c8f1e627"
+      },
+      "flash_offsets": {
+        "bootloader/bootloader.bin": 0,
+        "partition_table/partition-table.bin": 32768,
+        "ota_data_initial.bin": 61440,
+        "universal-gnss-esp32.bin": 131072
+      }
+    }
+  },
+  "xtensa_layout": {
+    "ug_layout_buffer": 28,
+    "ug_layout_byte": 24,
+    "ug_layout_receiver": 4728,
+    "ug_layout_run": 16,
+    "ug_layout_ublox": 1408,
+    "ug_layout_unicore": 1464
+  }
+}

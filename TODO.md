@@ -79,11 +79,14 @@ The [UG Build & Flash portal source](docs/flasher.html) now uses bounded generic
 S3 Gateway and C3 USB/UART Rover profiles. Runtime pairing is separate from ROM
 identity. Local packaging verifies actual IDF offsets, partitions and qualified
 binary hashes; the browser freezes verified bytes before offering installation.
-A [manual alpha publication pipeline](docs/flasher/ALPHA.md) now couples two real
-builds, a generated nonempty catalogue, immutable prerelease assets and Pages
-verification. Its main-only dispatch is the publication authority; no second
-manual register approval is required. Public deployment remains pending main
-integration and the maintainer's dispatch; no published firmware is claimed.
+The [alpha publication pipeline](docs/flasher/ALPHA.md) couples two real builds,
+a nonempty catalogue, immutable Release assets and Pages verification. Manual
+main-only publication and automatic post-CI publication retain their explicit
+source-authority checks; a green merge alone does not approve a new firmware.
+Actual S3/C3 publication and Pages verification were recorded for authorized source
+`52aea50a098a1839b6028a247229d273a92ee302`; see the
+[retained recovery evidence](.agent/shared/checkpoints/retained/UG-ESP32-PUBLICATION-RECOVERY.md).
+This does not publish the later local administration or compact-buffer changes.
 S3 function switches remain configurable without connected GNSS hardware, while
 requested activation and observed service state stay distinct. The first
 [S3 hardware trial](embedded/esp32/HARDWARE_ALPHA.md) verified corrected boot,
@@ -107,10 +110,11 @@ first HTTPS GET and a larger contiguous block, preserving the shared snapshot.
 The [S3 radio-storage phase](docs/analysis/ESP32_S3_ESPNOW_MEMORY.md) qualifies
 conditional internal allocation with radio disabled: 13760 additional free bytes
 at the first HTTPS GET, largest block retained at 34816 bytes, and simulated
-lifecycle/failure/late-ACK tests. Active-radio memory qualification is deferred
-until a real pairing exists; the idle saving is not an active-radio saving.
-Long-duration and live GNSS/RTCM latency qualification, further S3 optimization
-and shared-core optimization remain pending. The C3 relay is
+lifecycle/failure/late-ACK tests. That inactive-only campaign originally deferred
+activation until pairing existed. Later paired HTTPS and HTTP trials failed the
+32768-byte largest-block criterion at 31744 bytes; active-radio acceptance remains
+open. The idle saving is not an active-radio saving. Long-duration/live GNSS/RTCM
+latency qualification and further memory optimization remain pending. The C3 relay is
 deferred and does not constrain the S3. Existing Rover profiles remain unchanged.
 No release metric changes.
 The [WebUI pairing/authentication work](docs/analysis/ESP32_WEBUI_PAIRING_AUTH.md)
@@ -119,12 +123,15 @@ sessions on a separate feature branch. Software checks and physical acceptance
 are tracked separately; hardware pairing and acceptable S3 password latency remain
 pending; the requested account is verified on hardware. No release gate or hardware milestone is marked complete by this work.
 
-ESP32 Web Flasher publication P0: automatic publication after the seven required
-main validations and explicit source/tree approval is prepared on a dedicated PR.
-Durable history and full SHA/date/status selection are covered by software tests.
-Acceptance remains open until the authorized S3/C3 firmware is built, archived and
-verified on public Pages; no hardware or release milestone is marked complete.
-See [publication policy](docs/flasher/README.md).
+ESP32 Web Flasher P0: the listing/glob fixes are merged and the authorized
+`52aea50a098a1839b6028a247229d273a92ee302` S3/C3 firmware was actually archived and
+verified on public Pages, with older images preserved. Tag creation initially
+failed with 403; a specifically authorized tag push recovered that source.
+General authority for future automatic tags on historical workflow-changing commits
+remains [OPEN](.agent/shared/checkpoints/active/UG-ESP32-PUBLICATION-AUTHORITY.md).
+This recorded publication is not a new remote check, a publication of the current
+branch, or completion of any GNSS/RTK hardware gate. See
+[publication policy](docs/flasher/README.md).
 
 ESP32 single-login WebUI and independent per-publisher RTCM interval filters are
 validated in software on a dedicated branch, including authenticated on-demand
@@ -141,6 +148,19 @@ remain open. A [compatible login optimization](docs/analysis/ESP32_LOGIN_LATENCY
 is measured on S3: public-vector median 36.84 s and negative HTTP login 38.58 s
 versus historical ~86–88 s. The owner confirms positive login with the existing password after reboot. This
 remains too slow; acceptable login latency remains open.
+
+Common-engine memory optimization now takes priority over further S3-specific PSRAM
+work. A [compact GNSS buffer proposal](docs/analysis/GNSS_BUFFER_MEMORY_OPTIMIZATION.md)
+is software-tested across the three receiver sessions: 4096 pending bytes with one
+timestamp retain 4112 bytes instead of 98304. Per-byte timestamp stress remains
+slower; accepting that CPU tradeoff and physical GNSS/RTCM qualification are open.
+Linux/ROS2/ESP32 software evidence is recorded separately from hardware acceptance.
+The proposal is committed for GitHub review; integration/CPU-tradeoff acceptance
+remains open. No release metric, firmware publication or hardware state is changed.
+
+Current resumable findings and preserved validation baselines are indexed in the
+[shared checkpoints](.agent/shared/checkpoints/INDEX.md#esp32-and-compact-buffer-handoff--reconciled-2026-11-16).
+Checkpoint maintenance changes no UGA, roadmap or release completion count.
 
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.

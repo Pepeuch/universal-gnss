@@ -41,14 +41,16 @@ struct ProbeResult
 template <typename FramerT, typename RecordT, typename AcceptFn>
 std::optional<VendorDetectionCandidate>
 DetectVendorCandidate(FramerT& framer,
-                      const std::vector<ReceiverSession::BufferedByte>& bytes,
+                      const detail::TimestampedByteBuffer& bytes,
                       const ReceiverSessionKind kind,
                       AcceptFn&& accept)
 {
   framer.Reset();
-  for (std::size_t index = 0u; index < bytes.size(); ++index)
+  std::size_t consumed = 0;
+  for (auto input = bytes.cursor(); input.valid(); input.next())
   {
-    const auto result = framer.PushByte(bytes[index].value, bytes[index].timestamp_ns);
+    ++consumed;
+    const auto result = framer.PushByte(input.value(), input.timestamp());
     if (result.status != ParserStatus::kRecordReady || !result.record.has_value())
     {
       continue;
@@ -59,21 +61,10 @@ DetectVendorCandidate(FramerT& framer,
       continue;
     }
 
-    return VendorDetectionCandidate{kind, index + 1u};
+    return VendorDetectionCandidate{kind, consumed};
   }
 
   return std::nullopt;
-}
-
-std::vector<std::uint8_t> ToByteVector(const std::vector<ReceiverSession::BufferedByte>& bytes)
-{
-  std::vector<std::uint8_t> values;
-  values.reserve(bytes.size());
-  for (const auto& byte : bytes)
-  {
-    values.push_back(byte.value);
-  }
-  return values;
 }
 
 bool IsSupportedUnicoreCandidate(const UnicoreFrame& frame)
@@ -164,6 +155,7 @@ void ReceiverSession::Finalize()
   else
   {
     pending_auto_detect_bytes_.clear();
+    pending_auto_detect_bytes_.ConstrainCapacity(config_.max_auto_detect_buffer_bytes);
   }
 
   RefreshMetricsFromSelectedSession();
@@ -175,6 +167,7 @@ void ReceiverSession::Reset()
   ublox_session_.Reset();
   unicore_session_.Reset();
   pending_auto_detect_bytes_.clear();
+  pending_auto_detect_bytes_.ConstrainCapacity(config_.max_auto_detect_buffer_bytes);
   metrics_ = ReceiverSessionMetrics{};
   InitializeSelectionFromConfig();
 }
@@ -265,36 +258,28 @@ void ReceiverSession::RouteBufferedBytesToSelectedSession()
     return;
   }
 
-  for (const auto& byte : pending_auto_detect_bytes_)
+  for (auto input = pending_auto_detect_bytes_.cursor(); input.valid(); input.next())
   {
-    RouteToSelectedSession(&byte.value, 1u, byte.timestamp_ns);
+    const auto value = input.value();
+    RouteToSelectedSession(&value, 1u, input.timestamp());
   }
   pending_auto_detect_bytes_.clear();
+  pending_auto_detect_bytes_.ConstrainCapacity(config_.max_auto_detect_buffer_bytes);
 }
 
 void ReceiverSession::AppendPendingBytes(const std::uint8_t* data,
                                          const std::size_t size,
                                          const std::optional<std::int64_t> timestamp_ns)
 {
-  pending_auto_detect_bytes_.reserve(pending_auto_detect_bytes_.size() + size);
-  for (std::size_t index = 0u; index < size; ++index)
-  {
-    pending_auto_detect_bytes_.push_back(BufferedByte{data[index], timestamp_ns});
-  }
+  pending_auto_detect_bytes_.Append(data, size, timestamp_ns);
 }
 
 void ReceiverSession::TrimPendingBytesIfNeeded()
 {
-  if (pending_auto_detect_bytes_.size() <= config_.max_auto_detect_buffer_bytes)
-  {
-    return;
-  }
-
-  const std::size_t bytes_to_drop =
-      pending_auto_detect_bytes_.size() - config_.max_auto_detect_buffer_bytes;
-  pending_auto_detect_bytes_.erase(pending_auto_detect_bytes_.begin(),
-                                   pending_auto_detect_bytes_.begin() +
-                                       static_cast<std::ptrdiff_t>(bytes_to_drop));
+  if (pending_auto_detect_bytes_.size() > config_.max_auto_detect_buffer_bytes)
+    pending_auto_detect_bytes_.ErasePrefix(pending_auto_detect_bytes_.size() -
+                                           config_.max_auto_detect_buffer_bytes);
+  pending_auto_detect_bytes_.ConstrainCapacity(config_.max_auto_detect_buffer_bytes);
 }
 
 void ReceiverSession::TrySelectSessionFromPendingBytes()
@@ -305,8 +290,8 @@ void ReceiverSession::TrySelectSessionFromPendingBytes()
   }
 
   const StreamDetector detector;
-  const auto byte_values = ToByteVector(pending_auto_detect_bytes_);
-  const StreamDetectionResult earliest_detection = detector.Detect(byte_values);
+  const StreamDetectionResult earliest_detection =
+      detector.Detect(pending_auto_detect_bytes_.data(), pending_auto_detect_bytes_.size());
   if (earliest_detection.protocol == DetectedStreamProtocol::kUbx)
   {
     SelectSession(ReceiverSessionKind::kUblox);
