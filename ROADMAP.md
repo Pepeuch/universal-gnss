@@ -139,14 +139,23 @@ is measured on S3: public-vector median 36.84 s and negative HTTP login 38.58 s
 versus historical ~86–88 s. The owner confirms positive login with the existing password after reboot. This
 remains too slow; acceptable login latency remains open.
 
-Common-engine memory optimization now takes priority over further S3-specific PSRAM
-work. A [compact GNSS buffer proposal](docs/analysis/GNSS_BUFFER_MEMORY_OPTIMIZATION.md)
+The common-engine [compact GNSS buffer proposal](docs/analysis/GNSS_BUFFER_MEMORY_OPTIMIZATION.md)
 is software-tested across the three receiver sessions: 4096 pending bytes with one
 timestamp retain 4112 bytes instead of 98304. Per-byte timestamp stress remains
 slower; accepting that CPU tradeoff and physical GNSS/RTCM qualification are open.
 Linux/ROS2/ESP32 software evidence is recorded separately from hardware acceptance.
 The proposal is committed for GitHub review; integration/CPU-tradeoff acceptance
 remains open. No release metric, firmware publication or hardware state is changed.
+
+The current native S3 followup is a local [routing-storage candidate](docs/analysis/ESP32_S3_NATIVE_BUFFERS.md)
+on `perf/esp32-s3-native-buffers`: explicit boot PSRAM allocation removes 28224 bytes
+of static DRAM, with 76 native host tests, 265 policy tests and reproducible S3
+HTTP/HTTPS builds passing. No shared core, WebUI, C3-specific source, NVS or guard
+change. Actual heap/largest-block/stack/RTCM/radio load qualification remains
+HARDWARE_REQUIRED; the previous active-radio failure is not closed. Initial BASE
+load planning evaluates 460800 baud without changing any physical configuration.
+Commit/push for review is now authorized; no flash or firmware publication is
+included, and physical acceptance remains open.
 
 Current resumable findings and preserved validation baselines are indexed in the
 [shared checkpoints](.agent/shared/checkpoints/INDEX.md#esp32-and-compact-buffer-handoff--reconciled-2026-11-16).
