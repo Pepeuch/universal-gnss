@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Prepare or publish real alpha firmware. A manual main workflow is the authority.
+"""Publish explicitly authorized main firmware after mandatory CI succeeds.
 
-Local `stage` never publishes. `release` is only callable by the trusted manual
-main workflow, after both builds and all bundle checks. It never replaces tags
-or assets. Hardware qualification is pending and does not disable alpha installs.
+Manual and automatic main workflows share the same authority and immutable
+release checks. Local stage never publishes; hardware qualification remains
+pending and installations are full-only, with NVS-preserving updates unqualified.
 """
 import argparse
 import hashlib
@@ -70,7 +70,7 @@ def remote_tag(repo,tag):
 
 def release(repo,site,assets,env=os.environ):
     if env.get('GITHUB_EVENT_NAME') not in ('workflow_dispatch','workflow_run') or env.get('GITHUB_REF')!='refs/heads/main' or env.get('GITHUB_REPOSITORY')!=REPO:
-        raise ValueError('publication requires the maintainer manual workflow on main')
+        raise ValueError('publication requires an authorized main workflow')
     if env.get('GITHUB_EVENT_NAME') in ('workflow_run','workflow_dispatch'):
         spec=importlib.util.spec_from_file_location('release_authority',ROOT/'tools/branches/esp32_publication_gate.py')
         gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
