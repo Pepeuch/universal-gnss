@@ -6,6 +6,12 @@ Le succès du déploiement et de sa vérification HTTP est la preuve de disponib
 pas la présence de ce lien. Au démarrage de cette préparation, cette URL retournait
 HTTP 404 ; aucun déploiement public n’est effectué depuis la branche de préparation.
 
+La **compilation de développement** reste indépendante de la publication : le
+workflow `ESP32 native validation` compile S3 Gateway, C3 Rover USB et C3 Rover
+UART sur **chaque push de toute branche ou tag**, même sans PR, ainsi que sur les
+PR. Aucun registre d'approbation ni appartenance à `main` n'est requis pour ces
+builds. Leurs échecs restent signalés ; ils n'autorisent pas une publication.
+
 ## Publication normale : publier la Release
 
 Le parcours courant utilise le workflow existant

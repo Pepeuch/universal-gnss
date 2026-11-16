@@ -4,7 +4,9 @@ Automatic PR validation and pushes to `dev`/`main` now use Lyrical only for
 ROS2 distribution builds and production Docker validation. The six automatic
 workflows retain their names, PR events and stable-branch push filters.
 The standalone `ROS 2 Kilted validation` workflow keeps its job and commands,
-but runs only through `workflow_dispatch`. Feature-branch pushes remain silent.
+but runs only through `workflow_dispatch`. Other ordinary workflows remain silent
+on feature-branch pushes; native ESP32 explicitly builds every push on every
+branch (and tags), plus PRs, without source approval or a publication requirement.
 This is a CI scheduling change, not removal of Kilted compatibility.
 
 The distribution workflow retains three stages and their existing check names:
@@ -152,13 +154,15 @@ repositories without a private cache, registry or preinstalled UG overlay.
 
 # CI-04A — Validation events
 
-The seven ordinary workflows (native CMake, ROS2 Lyrical, ROS2 Kilted,
-distributions, Docker, formatting and backlog) run on `pull_request` and on
+The six ordinary workflows (native CMake, ROS2 Lyrical, distributions, Docker,
+formatting and backlog) run on `pull_request` and on
 pushes to `dev` or `main` only. Pull requests retain their default activity
 types, including opening and new commits, with no target-branch or path filter;
 fork pull requests retain the same event and job configuration.
 
-A push to a working branch does not start an additional push campaign. Open a
+Except for native ESP32, a push to a working branch does not start an additional
+push campaign. Native ESP32 intentionally runs on every branch push even without
+a PR; if a PR exists its push and PR builds may both run. Open a
 pull request to obtain automatic validation. Merging into `dev` or `main` still
 starts validation of the resulting commit. A permanently open `dev` to `main`
 pull request can still produce both a push campaign and a pull-request campaign
@@ -166,12 +170,13 @@ when `dev` changes; this policy does not promise absolute deduplication.
 
 Only event filters change. Workflow/check names, jobs, matrices, permissions,
 concurrency, build/test commands and the fail-closed `always()` distribution gate
-are preserved. Ordinary validation no longer runs on tag pushes; the separate
+are preserved. Other ordinary validation no longer runs on tag pushes; the separate
 tag/manual Docker release workflow, publication conditions and permissions are
 unchanged. This policy grants no publication authority.
 
 `tests/test_workflow_events.py` checks every ordinary workflow and rejects
-unrestricted/working-branch pushes, missing stable branches, path/tag filters,
+unrestricted/working-branch pushes for the six ordinary workflows, missing stable
+branches, path/tag filters,
 filtered pull-request activity and privileged alternative triggers. Existing
 gate tests retain all sixteen prerequisite-result combinations. These local
 checks validate configuration; actual GitHub event dispatch must be confirmed
@@ -583,9 +588,12 @@ registry artifact or official distribution publication is qualified by this lot.
 
 ## Native ESP32 validation
 
-The additional [native ESP32 workflow](../../.github/workflows/esp32.yml) follows
-ordinary PR and push-dev/main event policy, with read-only permissions and its
-own fail-closed gate. Four bounded profiles use the [isolated SDK recipe](../../embedded/esp32/native/CI.md).
+The additional [native ESP32 workflow](../../.github/workflows/esp32.yml) runs
+on **every push, on every branch and tag**, and on every PR. There are no branch,
+path, main-ancestry, approval-register or publication gates for compilation. It
+uses read-only permissions and its
+own fail-closed gate. Three automatic profiles (S3 Gateway, C3 USB and C3 UART;
+C3 Relay remains deferred) use the [isolated SDK recipe](../../embedded/esp32/native/CI.md).
 No existing distribution/ROS2/Release job or publication permission changes.
 Firmware is neither uploaded nor published; branch protections are not updated.
 Local execution passed, while GitHub qualification awaits an authorized push/PR.

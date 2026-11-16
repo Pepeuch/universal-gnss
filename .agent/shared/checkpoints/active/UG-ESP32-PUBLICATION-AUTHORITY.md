@@ -18,7 +18,9 @@ qualification and immutable additive assets remain required. Legacy alpha
 retains explicit approval; existing revocations are not overridden.
 
 ADAPT the existing esp32-alpha workflow, not a second publication infrastructure.
-The source builds and docker-release.yml remain unchanged. Release assets are
+The build commands and docker-release.yml remain unchanged. Native ESP32 now
+compiles on every branch/tag push and every PR, without source approval or main
+ancestry. Release publication is a separate authorized path. Release assets are
 namespaced esp32-*, checked before writes and read back; a final completion marker
 controls catalogue eligibility. Interrupted uploads resume the original verified
 site archive without rebuild or overwrite. Web-only updates retain firmware history.
@@ -37,7 +39,7 @@ preserving main. No release/tag/firmware/board mutation or dispatch occurred.
 Local deterministic tests cover trigger, trusted maintainer, strict identities,
 seven CI results, failed/cancelled/skipped build recovery, immutable assets,
 partial-upload resume and synthetic S3/C3 packaging through catalogue verification.
-291/291 generator/CI tests, 44 maintenance tests, 87 local links, syntax,
+293/293 generator/CI tests, 44 maintenance tests, 94 local links, syntax,
 checkpoint/dashboard and diff checks passed. This is not hosted publication evidence.
 
 ## Exact next step

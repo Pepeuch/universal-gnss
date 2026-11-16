@@ -1,5 +1,11 @@
 # Publication ROS2 / ESP32 par Release RC
 
+La **compilation de développement** reste indépendante de la publication : le
+workflow `ESP32 native validation` compile S3 Gateway, C3 Rover USB et C3 Rover
+UART sur **chaque push de toute branche ou tag**, même sans PR, ainsi que sur les
+PR. Aucun registre d'approbation ni appartenance à `main` n'est requis pour ces
+builds. Leurs échecs restent signalés ; ils n'autorisent pas une publication.
+
 ## Parcours courant
 
 Publier une Release `vX.Y.Z-RCn` depuis un compte mainteneur `admin` ou `maintain`.
@@ -128,9 +134,10 @@ sont simulés : ce test n'est ni une compilation réelle ni une publication dist
 Les tests de conflit, interruption, corruption et refus d'autorité prouvent que
 le marqueur/catalogue n'est pas validé après un échec.
 
-Résultats locaux : **291/291 tests générateur/politique CI**, dont 24 nouveaux
-cas Release et deux nouveaux cas tag/catalogue RC, réussis en 24,039 secondes.
-Les **44 tests de maintenance** (34 + 10), les **87 liens locaux**, la syntaxe
+Résultats locaux : **293/293 tests générateur/politique CI**, dont 24 nouveaux
+cas Release, deux nouveaux cas tag/catalogue RC et deux cas déclenchement ESP32
+sans filtre, réussis en 23,584 secondes.
+Les **44 tests de maintenance** (34 + 10), les **94 liens locaux**, la syntaxe
 Python/YAML/Bash, l'audit des checkpoints (19 entrées, zéro problème), le dashboard
 et `git diff --check` réussissent. Aucun firmware n'est flashé,
 aucune NVS/partition/clé/configuration n'est modifiée. Aucun build ROS2/ESP32 n'est
