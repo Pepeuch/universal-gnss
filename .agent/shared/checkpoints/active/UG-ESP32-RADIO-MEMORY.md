@@ -23,9 +23,8 @@ Current last-known pairing is preserved, radio disabled, NTRIP restored.
 
 ## Required delta / exact next step
 
-Review internal permanent allocations and fragmentation from existing ELF and
-measurements after the common-buffer review. Keep DMA/control/piles internal and
-all guards unchanged. Do not shrink RTCM capacity or claim a PSRAM allocation is
+Review the native routing candidate below, then its physical
+qualification plan. Keep DMA/control/piles internal and all guards unchanged. Do not shrink RTCM capacity or claim a PSRAM allocation is
 safe without its owner/callback/ISR contract. The current compact-core host gain
 is not proof of S3 SRAM savings or a fix for this radio finding.
 Before any future physical trial: new authorization, exact app/board verification,
@@ -35,3 +34,27 @@ Acceptance includes >=32768-byte largest block, service stability and measured
 latencies; real GNSS/RTCM and endurance are separate campaigns. No C3 Relay work.
 [Recorded baseline](../retained/UG-ESP32-QUALIFIED-BASELINE.md) prevents restoring an
 obsolete image or treating an old live-test checkpoint as a current instruction.
+
+## Native S3 candidate — software evidence, not active-radio acceptance
+
+Current work branch `perf/esp32-s3-native-buffers`, base
+`19541b77f8d565d95bb40e250b5acdee798b3c4a` (PR51 test-only correction; its seven
+workflows were verified successful). Commit/push for review is now authorized;
+no flash or firmware publication is authorized for this memory phase.
+[Candidate report and physical matrix](../../../../docs/analysis/ESP32_S3_NATIVE_BUFFERS.md),
+[numerical provenance](../../../../docs/analysis/ESP32_S3_NATIVE_BUFFERS_MEASUREMENTS.json).
+One explicit checked SPIRAM/8BIT boot block contains Gateway, ingress and owner
+scratch frames. ELF DRAM BSS70608→42384 (−28224 B); requested PSRAM28240 B.
+Controls/locks/piles/DMA stay internal; no shared UG, WebUI, NVS or C3-specific edit.
+76 native sanitizer tests, 265 policy tests and two reproducible builds per S3
+HTTP/HTTPS variant pass. The exact compiled-input tree is
+`14d053ae0b36ec9b59044b56656fd4fa3a8eedbc`; no firmware installed. Host A/B ordinary
+RAM overhead about +1% on small frames, not a PSRAM/radio timing proof.
+The ESP-NOW bundle itself stays INTERNAL and keeps its existing lifecycle.
+
+Next: review source/measurements, obtain separate application-only flash approval
+for fixed baseline/candidate images, then execute the report's bounded read-only
+radio-off campaign. Radio/publishers load needs a reviewed volatile test mechanism
+or distinct authorization for configuration; current persistent APIs must not bypass
+the no-NVS-change constraint. Existing 31744 B active failure and real RTCM/GNSS
+acceptance remain OPEN. Do not repeat successful SDK builds merely after doc edits.
