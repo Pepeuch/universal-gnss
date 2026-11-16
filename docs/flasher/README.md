@@ -304,6 +304,17 @@ pas cette vérification publique réelle. Une indisponibilité des dépendances 
 APT ou des services GitHub bloque la livraison sans fallback sur un firmware
 nouvellement non qualifié.
 
+État consigné le 16 novembre 2026 : ce critère a été atteint pour la source
+`52aea50a098a1839b6028a247229d273a92ee302`, après correction de la liste/glob et
+récupération explicitement autorisée du tag. La Release durable, le déploiement
+Pages, les deux manifestes et les huit nouveaux segments ont été vérifiés ; les
+anciennes images sont conservées. Voir le
+[bilan de reprise](../../.agent/shared/checkpoints/retained/UG-ESP32-PUBLICATION-RECOVERY.md).
+Cette observation antérieure n'est pas une nouvelle vérification du site public.
+Le refus 403 initial n'est pas résolu de manière générale pour les futurs tags
+historiques : [suivi de l'autorité](../../.agent/shared/checkpoints/active/UG-ESP32-PUBLICATION-AUTHORITY.md).
+Aucun firmware plus récent de la branche de travail n'est publié par ce constat.
+
 Validation P0 locale : 262 tests générateur/politique et 10 tests JavaScript du
 portail ; autorité réelle des sept validations main vérifiée pour le SHA autorisé.
 Les essais HTTP bout en bout utilisent des réponses synthétiques comparées octet
