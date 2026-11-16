@@ -53,10 +53,11 @@ texte utilisateur. Le registre [approved-sources.json](approved-sources.json)
 contient uniquement des SHA complets, arbres Git, références de revue et droits
 de publication explicitement approuvés par le mainteneur.
 
-Pour publier les deux firmwares alpha, utiliser désormais la
-[procédure alpha](ALPHA.md) : le lancement manuel **ESP32 alpha publication** sur
-`main` autorise les builds, génère leur registre, archive les images durablement
-et déploie Pages. Aucune seconde édition manuelle du registre n’est requise.
+Pour publier les deux firmwares, suivre la [procédure Release/alpha](ALPHA.md) :
+un mainteneur publie une Release RC existante sur un SHA de `main`, les sept CI
+sont vérifiées, puis les builds sont archivés et Pages actualisé. La Release
+constitue l’approbation RC ; les protections de tags sont reportées. La maintenance
+manuelle sur `main` et le registre explicite du parcours alpha restent disponibles.
 
 Le workflow de revue seul reste disponible pour une demande particulière sans
 publication. Sa procédure est distincte :
@@ -137,8 +138,9 @@ La compatibilité effective Web Serial/Blob manifeste reste à accepter sur mat�
 
 La politique reste `dev → main → distributions générées`. La chaîne
 [`esp32-alpha.yml`](../../.github/workflows/esp32-alpha.yml) reçoit cette
-autorisation par son déclenchement volontaire sur `main`, pour un SHA exact
-contenu dans `main`. Elle conserve les deux bundles, le code source correspondant,
+autorisation par une Release RC publiée par un mainteneur, ou par le registre
+explicite pour l’alpha historique, pour un SHA exact contenu dans `main`. Elle
+conserve les deux bundles, le code source correspondant,
 les notices et empreintes dans une prépublication immuable, vérifie les assets
 retéléchargés puis déploie Pages. Une archive Actions temporaire ne la remplace
 pas. La qualification matérielle manquante est affichée comme limite alpha,
@@ -161,7 +163,9 @@ Le workflow alpha déploie **ce répertoire préparé**, jamais tout le dépôt.
 commande locale ci-dessus reste une préparation sans publication.
 Les ressources sont relatives et `.nojekyll` est inclus. Le chemin envisagé est
 `https://pepeuch.github.io/universal-gnss/flasher.html` ; il n’est pas déclaré actif.
-Aucune intégration avec le workflow Release Docker n’est ajoutée.
+Le workflow Release Docker est inchangé ; le tag RC désigne le même SHA pour les
+images ROS2 et les firmwares. Le [contrat Release](../releases/esp32-release-publication.md)
+décrit leur déclenchement distinct.
 
 ## Licences et limites
 
@@ -233,7 +237,8 @@ manuel est également limité à `main`. Ce workflow ne compile ni n’autorise 
 firmware ; ses permissions de contenu sont en lecture seule.
 
 La source durable est la plus récente Release publiée non brouillon contenant
-`esp32-site.zip` (ou le nom historique `esp32-alpha-site.zip`) et `SHA256SUMS` (par date de publication, parmi les 100
+`esp32-site.zip` (ou le nom historique `esp32-alpha-site.zip`) et ses sommes
+`esp32-SHA256SUMS` pour une RC complète, `SHA256SUMS` pour une archive historique (par date de publication, parmi les 100
 Releases retournées). Une source absente, incomplète ou invalide bloque tout
 upload Pages : aucun catalogue vide de secours. L’archive est vérifiée par ses
 sommes et, lorsqu’elle est fournie, l’empreinte de l’asset GitHub. Les approbations,
@@ -267,27 +272,35 @@ sept workflows obligatoires de `main`. Il reconsulte l’API Actions, ne confond
 un succès de PR avec un succès `push/main`, et exige le succès de la plus récente
 exécution de chaque workflow, sur la source autorisée et sur le main portant
 le code de publication. Un échec, une annulation, un skip ou une exécution
-encore en cours ne permet pas de publier. L’entrée de publication doit également
-figurer explicitement dans `approved-sources.json` avec SHA complet, arbre exact
-et `main_approved`. Un merge vert seul n’autorise donc pas un nouveau firmware.
-Le candidat est la révision autorisée la plus récente dans l’historique main ;
-aucun fallback sur une ancienne révision si ses validations ne sont pas terminées.
+encore en cours ne permet pas de publier. Pour les RC, la publication de la Release
+par un mainteneur est l’autorisation ; le tag existant, son objet Git, son SHA et
+l’identité de la Release sont figés et revérifiés. Pour l’alpha historique, l’entrée
+doit figurer dans `approved-sources.json` avec SHA complet, arbre exact et
+`main_approved`. Un merge vert seul n’autorise donc pas un nouveau firmware.
+Une Release RC sélectionne son SHA exact ; la reprise post-CI sélectionne la RC
+publiée la plus récente. Sans RC, le parcours alpha sélectionne la révision
+explicitement approuvée la plus récente de `main`. Aucun fallback sur une
+ancienne révision ne contourne des validations manquantes.
 L’autorité est vérifiée avant build puis de nouveau avant création des assets.
 
 L’autorisation ajoutée par ce lot concerne exclusivement
 `52aea50a098a1839b6028a247229d273a92ee302` (demande P0 du mainteneur). Les commits
-ultérieurs exigent leur propre entrée revue ; l’automatisation n’ajoute pas
-elle-même d’approbation. Les profils construits restent S3 Gateway et C3 Rover USB.
+ultérieurs du parcours alpha historique exigent leur propre entrée revue ;
+le parcours RC est autorisé par le mainteneur publiant la Release, sans édition
+répétitive du registre. L’automatisation ne modifie pas le registre versionné.
+Les profils construits restent S3 Gateway et C3 Rover USB.
 Une Release complète préexistante évite les builds/publications firmware répétés :
 son catalogue durable est revérifié puis redéployé sans compilation ;
-une publication partielle requiert une récupération explicite. Aucune réécriture
+une publication RC partielle reprend les fichiers manquants depuis son archive
+initiale vérifiée, sans recompilation ni écrasement. Aucune réécriture
 d’asset ou de tag n’est autorisée. Les Releases précédentes restent disponibles.
 
 Avant archivage, le staging réimporte et revalide le catalogue durable précédent,
 unionne les sources approuvées et conserve tous ses fichiers firmware. Tout conflit
 d’identité ou d’octets et toute limite de capacité bloque la publication, sans
 suppression de l’historique. `publications.json` enregistre les sources, leur date
-UTC de préparation pour publication et leur statut `validated_authorized_alpha`.
+UTC de préparation pour l’alpha (`validated_authorized_alpha`) ; une RC conserve
+la date fixe de sa Release et le statut `validated_authorized_rc`, canal `RC`.
 Pour l’ancienne Release, sa date GitHub est récupérée. Le portail affiche le SHA
 complet, la date et le statut logiciel ; la révision publiée la plus récente connue est sélectionnée par défaut. Chaque flash revérifie les vrais
 manifestes, binaires, offsets et empreintes. Cette validation ne prouve pas le RTK.

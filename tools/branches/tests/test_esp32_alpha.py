@@ -47,6 +47,12 @@ class Alpha(unittest.TestCase):
         (roots[0]/'qualification.json').write_text(json.dumps({'binary':{}}))
         with patch.object(a.s,'inspect_bundle',return_value=({'source_sha':self.sha,'profile':{'variant':'s3-gateway'}},roots[0],None)):
             with self.assertRaisesRegex(ValueError,'memory corrections'):a.stage(self.root,self.sha,roots,self.root/'unsafe')
+    def test_rc_tag_must_already_exist_and_match_exact_main_source(self):
+        with self.assertRaisesRegex(ValueError,'already exist'):a.source(self.root,self.sha,'v0.7.5-RC1')
+        self.git('tag','v0.7.5-RC1')
+        self.assertEqual(a.source(self.root,self.sha,'v0.7.5-RC1')['source_sha'],self.sha)
+        for tag in ('v0.7.5-RC0','v0.7.5-rc1','v0.7.5-RC01','v00.7.5-RC1'):
+            with self.assertRaises(ValueError):a.source(self.root,self.sha,tag)
     def test_release_rejects_every_untrusted_event_before_io_or_publication(self):
         for env in ({},{'GITHUB_EVENT_NAME':'pull_request','GITHUB_REF':'refs/heads/main','GITHUB_REPOSITORY':a.REPO},{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/dev','GITHUB_REPOSITORY':a.REPO}):
             with patch.object(a.subprocess,'run') as execute:
@@ -54,11 +60,11 @@ class Alpha(unittest.TestCase):
                 execute.assert_not_called()
     def test_workflow_is_manual_main_two_real_builds_and_durable_before_pages(self):
         flow=yaml.load((ROOT/'.github/workflows/esp32-alpha.yml').read_text(),Loader=yaml.BaseLoader)
-        self.assertEqual(set(flow['on']),{'workflow_dispatch','workflow_run'});self.assertEqual(flow['permissions'],{'contents':'read'})
+        self.assertEqual(set(flow['on']),{'workflow_dispatch','workflow_run','release'});self.assertEqual(flow['permissions'],{'contents':'read'})
         self.assertEqual(flow['jobs']['build']['strategy']['matrix']['variant'],list(a.VARIANTS))
         build=flow['jobs']['build'];self.assertIn('refs/heads/main',build['steps'][0]['run']);self.assertIn("needs.authorize.outputs.source_sha",build['if'])
         self.assertIn('native/ci.py',build['steps'][2]['run']);self.assertIn('--bundle-output',build['steps'][2]['run'])
-        job=flow['jobs']['publish'];self.assertEqual(job['needs'],['authorize','build']);self.assertNotIn('if',job)
+        job=flow['jobs']['publish'];self.assertEqual(job['needs'],['authorize','build']);self.assertIn('always()',job['if']);self.assertIn("needs.build.result == 'success'",job['if'])
         self.assertEqual(job['permissions'],{'contents':'write','pages':'write','id-token':'write','actions':'read'})
         self.assertEqual(job['environment']['name'],'github-pages')
         commands=str(job['steps']);self.assertLess(commands.index('esp32_alpha.py release'),commands.index('deploy-pages@'))

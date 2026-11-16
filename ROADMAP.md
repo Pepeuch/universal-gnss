@@ -71,8 +71,12 @@ identity. Local packaging verifies actual IDF offsets, partitions and qualified
 binary hashes; the browser freezes verified bytes before offering installation.
 The [alpha publication pipeline](docs/flasher/ALPHA.md) couples two real builds,
 a nonempty catalogue, immutable Release assets and Pages verification. Manual
-main-only publication and automatic post-CI publication retain their explicit
-source-authority checks; a green merge alone does not approve a new firmware.
+main-only maintenance and automatic post-CI publication retain their authority
+checks. The [RC Release path](docs/releases/esp32-release-publication.md) uses a
+trusted maintainer’s published Release as approval, followed by seven exact-SHA
+main validations; no repeated registry edit is required. Tag rulesets are
+explicitly deferred by the maintainer. End-to-end hosted RC publication remains
+to qualify after main deployment; a green merge alone does not publish firmware.
 Actual S3/C3 publication and Pages verification were recorded for authorized source
 `52aea50a098a1839b6028a247229d273a92ee302`; see the
 [retained recovery evidence](.agent/shared/checkpoints/retained/UG-ESP32-PUBLICATION-RECOVERY.md).

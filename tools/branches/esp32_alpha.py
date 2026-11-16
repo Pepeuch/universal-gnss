@@ -13,10 +13,13 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from types import SimpleNamespace
 import zipfile
 ROOT=Path(__file__).resolve().parents[2]
 SPEC=importlib.util.spec_from_file_location('alpha_site',ROOT/'tools/branches/prepare_esp32_site.py')
 s=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(s)
+SPEC=importlib.util.spec_from_file_location('versioned_release',ROOT/'tools/branches/esp32_release.py')
+v=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(v)
 REPO='Pepeuch/universal-gnss'
 VARIANTS=('s3-gateway','c3-rover-usb')
 ENV={**os.environ,'GIT_NO_REPLACE_OBJECTS':'1','GIT_NO_LAZY_FETCH':'1','GIT_TERMINAL_PROMPT':'0'}
@@ -28,18 +31,21 @@ def source(repo,sha,tag='',main_ref='origin/main'):
     for path in ('embedded/esp32/native/ci.py','embedded/esp32/migration/dependencies.json','embedded/esp32/native/main/gateway.cpp','embedded/esp32/native/main/rover.c'):
         subprocess.run(['git','-C',str(repo),'cat-file','-e',sha+':'+path],env=ENV,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     derived='esp32-alpha-'+sha[:12];tag=tag or derived
-    if tag not in (derived,'0.7.5-a01'):raise ValueError('alpha tag must identify this exact source; v* publication excluded')
+    if tag not in (derived,'0.7.5-a01') and not v.RC_TAG.fullmatch(tag):raise ValueError('canonical RC or exact alpha tag required')
     exists=subprocess.run(['git','-C',str(repo),'show-ref','--verify','--quiet','refs/tags/'+tag],env=ENV).returncode==0
     if exists and git(repo,'rev-parse','refs/tags/'+tag+'^{commit}')!=sha:raise ValueError('existing tag targets another commit; never move it')
-    if tag=='0.7.5-a01' and not exists:raise ValueError('0.7.5-a01 must already exist at the selected source')
+    if (tag=='0.7.5-a01' or v.RC_TAG.fullmatch(tag)) and not exists:raise ValueError('versioned tag must already exist at the selected source')
     return {'source_sha':sha,'source_tree':tree,'release_tag':tag,'release_url':'https://github.com/'+REPO+'/releases/tag/'+tag}
 def require_s3_memory(entry,directory):
     if entry['profile']['variant']=='s3-gateway':
         memory=s.p.load(directory/'qualification.json').get('binary',{}).get('boot_memory',{})
         if memory.get('main_stack_bytes',0)<32768 or memory.get('tls_external') is not True:
             raise ValueError('S3 alpha requires the boot-stack and TLS memory corrections')
-def stage(repo,sha,bundles,output,tag='',review='manual workflow_dispatch'):
+def stage(repo,sha,bundles,output,tag='',review='manual workflow_dispatch',release_identity=None):
     identity=source(repo,sha,tag)
+    if v.RC_TAG.fullmatch(identity['release_tag']):
+        if not release_identity or any(release_identity.get(k)!=value for k,value in identity.items()):raise ValueError('authorized Release identity required for RC staging')
+        identity=release_identity
     if len(bundles)!=2:raise ValueError('both real S3 and C3 bundles are required')
     approvals={'schema':1,'sources':[{'source_sha':sha,'source_tree':identity['source_tree'],'review':review,'publication':'main_approved'}]}
     seen=set()
@@ -52,7 +58,7 @@ def stage(repo,sha,bundles,output,tag='',review='manual workflow_dispatch'):
     if seen!=set(VARIANTS):raise ValueError('incomplete alpha build matrix')
     result=s.prepare(output,approvals,bundles,repo)
     (result/'index.html').write_text('<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=flasher.html"><a href="flasher.html">UG ESP32 ALPHA Web Flasher</a>\n')
-    (result/'alpha-publication.json').write_bytes(s.p.json_bytes({**identity,'channel':'ALPHA','hardware':'qualification_pending','publisher_source':git(repo,'rev-parse','HEAD')}))
+    (result/'alpha-publication.json').write_bytes(s.p.json_bytes({**identity,'channel':identity.get('channel','ALPHA'),'hardware':'qualification_pending','publisher_source':git(repo,'rev-parse','HEAD')}))
     return identity,result
 
 def deterministic_zip(directory,path):
@@ -68,7 +74,7 @@ def remote_tag(repo,tag):
     refs={line.split()[1]:line.split()[0] for line in rows if line}
     return refs.get('refs/tags/'+tag+'^{}',refs.get('refs/tags/'+tag))
 
-def release(repo,site,assets,env=os.environ):
+def legacy_release(repo,site,assets,env=os.environ):
     if env.get('GITHUB_EVENT_NAME') not in ('workflow_dispatch','workflow_run') or env.get('GITHUB_REF')!='refs/heads/main' or env.get('GITHUB_REPOSITORY')!=REPO:
         raise ValueError('publication requires an authorized main workflow')
     if env.get('GITHUB_EVENT_NAME') in ('workflow_run','workflow_dispatch'):
@@ -125,6 +131,30 @@ def release(repo,site,assets,env=os.environ):
         if hashlib.sha256((verify/name).read_bytes()).hexdigest()!=digest:raise ValueError('durable release verification failed')
     return identity
 
+def release(repo,site,assets,env=os.environ):
+    event=env.get('GITHUB_EVENT_NAME')
+    if env.get('GITHUB_REPOSITORY')!=REPO or event not in ('release','workflow_dispatch','workflow_run'):
+        raise ValueError('publication requires an authorized main workflow')
+    if event!='release' and env.get('GITHUB_REF')!='refs/heads/main':
+        raise ValueError('publication requires an authorized main workflow')
+    meta=s.p.load(Path(site)/'alpha-publication.json')
+    if not v.RC_TAG.fullmatch(meta['release_tag']):
+        return legacy_release(repo,site,assets,env)
+    if event=='release' and env.get('GITHUB_REF')!='refs/tags/'+meta['release_tag']:
+        raise ValueError('Release event tag mismatch')
+    spec=importlib.util.spec_from_file_location('release_authority',ROOT/'tools/branches/esp32_publication_gate.py')
+    gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
+    def reauthorize():
+        identity,_=v.authorize(gate.a,gate.api,gate.require_ci,repo,meta['source_sha'],meta['release_tag'],
+            actor=env.get('GITHUB_ACTOR') if event in ('release','workflow_dispatch') else None,
+            release_id=meta['release_id'],tag_object_sha=meta['tag_object_sha'])
+        return identity
+    identity=reauthorize()
+    current=v.get_release(gate.api,meta['release_tag'])
+    v.materialize(gate.a,
+                  repo,site,assets,identity)
+    return v.append_assets(current,identity,assets,gate.api,reauthorize,env)
+
 def verify_online(site,url):
     import urllib.request,time
     if not isinstance(url,str) or not url.startswith('https://pepeuch.github.io/universal-gnss/'):
@@ -151,7 +181,7 @@ def verify_online(site,url):
     return {'url':base+'flasher.html','verified_public_files':len(paths)}
 
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=('validate','stage','release','verify-online'))
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=('validate','stage','release','resume','verify-online'))
     p.add_argument('--source-sha');p.add_argument('--release-tag',default='');p.add_argument('--bundle',type=Path,action='append',default=[])
     p.add_argument('--output',type=Path);p.add_argument('--site',type=Path);p.add_argument('--assets',type=Path);p.add_argument('--review',default='manual workflow_dispatch');p.add_argument('--url')
     a=p.parse_args(argv)
@@ -159,11 +189,15 @@ def main(argv=None):
     try:
         if a.command=='validate':result=source(ROOT,a.source_sha,a.release_tag)
         elif a.command=='stage':
-            result=stage(ROOT,a.source_sha,a.bundle,a.output,a.release_tag,a.review)[0]
+            result=stage(ROOT,a.source_sha,a.bundle,a.output,a.release_tag,a.review,json.loads(os.environ['PUBLICATION_IDENTITY']) if os.environ.get('PUBLICATION_IDENTITY') else None)[0]
             spec=importlib.util.spec_from_file_location('catalog_history',ROOT/'tools/branches/esp32_catalog_history.py')
             history=importlib.util.module_from_spec(spec);spec.loader.exec_module(history)
             history.merge(a.output)
         elif a.command=='release':result=release(ROOT,a.site,a.assets)
+        elif a.command=='resume':
+            identity=json.loads(os.environ['PUBLICATION_IDENTITY'])
+            current=v.get_release(v.api,identity['release_tag'])
+            result={'site':str(v.resume_site(SimpleNamespace(ROOT=ROOT,s=s,require_s3_memory=require_s3_memory),current,identity,a.output))}
         else:result=verify_online(a.site,a.url)
     except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError,zipfile.BadZipFile) as e:p.error(str(e))
     print(json.dumps(result,sort_keys=True));return 0

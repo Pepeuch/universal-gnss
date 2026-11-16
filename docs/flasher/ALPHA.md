@@ -6,89 +6,71 @@ Le succès du déploiement et de sa vérification HTTP est la preuve de disponib
 pas la présence de ce lien. Au démarrage de cette préparation, cette URL retournait
 HTTP 404 ; aucun déploiement public n’est effectué depuis la branche de préparation.
 
-## Un déclenchement manuel, deux vrais firmwares
+## Publication normale : publier la Release
 
-Après revue de la PR vers `dev`, intégration puis promotion explicitement décidée
-vers `main`, le mainteneur lance **Actions → ESP32 alpha publication → Run workflow**
-sur **main**. Il indique le SHA Git complet à construire, contenu dans `main`.
-Ce déclenchement autorise à la fois la compilation et la publication de cet alpha ;
-il ne faut pas éditer ensuite un registre d’approbation pour la même opération.
+Le parcours courant utilise le workflow existant
+[`esp32-alpha.yml`](../../.github/workflows/esp32-alpha.yml), sans infrastructure
+supplémentaire : un mainteneur publie une Release `vX.Y.Z-RCn`, la chaîne attend
+les sept validations `push/main` sur son SHA exact, construit S3 Gateway et C3
+Rover USB, archive leurs fichiers dans **cette Release**, puis actualise Pages.
+Une Release publiée avant la fin des CI est réexaminée à leur achèvement.
 
-Le workflow :
+La publication de la Release par un compte `admin` ou `maintain` constitue
+l'autorisation : aucune entrée d'approbation par version n'est requise pour ce
+parcours RC. Le mainteneur a explicitement reporté les rulesets de tags ; leur
+protection n'est donc pas revendiquée. Les contrôles de SHA/arbre, d'appartenance
+à `main`, de CI et d'intégrité restent obligatoires. Une ancienne révocation
+explicite n'est pas annulée automatiquement.
 
-1. Fige son contrôleur au commit du workflow et vérifie le SHA source sélectionné.
-2. Construit réellement `s3-gateway` (W5500/GNSS/NTRIP/ESP-NOW) et
-   `c3-rover-usb` (ESP-NOW, USB/UART runtime) avec le SDK 6.1 et les dépendances
-   épinglés. Il utilise le runner natif existant : utilisateur non-root, sources
-   archivées, aucun montage hôte/périphérique et réseau déconnecté après
-   provisionnement, tests et deux reconstructions des quatre segments IDF.
-3. Accepte uniquement les deux bundles complets et réussis pour ce même SHA.
-   Il génère le registre depuis ce choix du mainteneur et un catalogue non vide.
-4. Conserve durablement les ZIP S3/C3, le site complet, le catalogue, le registre,
-   les sommes SHA256 et une archive exacte du code source correspondant dans une
-   **GitHub Release préliminaire**. Les artefacts Actions intermédiaires expirent
-   après sept jours ; ils ne sont pas l’archive permanente.
-5. Retélécharge et vérifie ces assets avant de déployer Pages, puis contrôle les
-   fichiers publics et les octets de chaque segment par HTTP.
+Les deux firmwares réutilisent le runner natif et le SDK épinglé : utilisateur
+non-root, sources archivées, aucun périphérique ou montage des sources hôtes,
+réseau déconnecté après provisionnement et double reconstruction reproductible.
+Le profil C3 UART conserve son workflow de demande existant. Les images Docker
+Kilted/Lyrical AMD64/ARM64 continuent d'être construites par `docker-release.yml`
+sur le tag `v*`, sans modification de ce workflow ni second build Docker.
 
-Une compilation échouée, annulée ou ignorée empêche le job de publication.
-Les bundles S3 doivent aussi attester les corrections de pile de démarrage et
-d’allocation TLS : une ancienne image antérieure à ces corrections est refusée.
-La qualification physique manquante n’empêche pas l’installation : l’interface
-annonce **ALPHA — qualification matérielle en cours**, garde le consentement,
-les contrôles de puce, les offsets/partitions et les empreintes. Aucun contenu
-d’issue publique n’est exécuté ; aucun PAT n’est embarqué dans le navigateur.
+## Rattrapage et maintenance
 
-Le jeton en écriture existe uniquement dans le job de publication. Les jobs de
-build restent `contents: read`. Les permissions Pages/OIDC sont limitées au job
-qui archive et déploie. Aucun workflow Docker Release n’est modifié.
+Le lancement manuel **Actions → ESP32 alpha publication → Run workflow** reste
+accessible depuis `main`. Pour une RC, indiquer son **tag existant** et son **SHA
+complet** ; les mêmes contrôles s'appliquent. Il permet notamment le rattrapage
+de `v0.7.5-RC1` après déploiement du workflow sur `main`, car un ancien événement
+`published` n'est pas rejoué par GitHub.
 
-## Tags et immutabilité
+Sans tag RC, le parcours alpha historique `esp32-alpha-<SHA court>` reste soumis
+au registre explicite `approved-sources.json`. `0.7.5-a01` n'est accepté que si
+son tag existant correspond au SHA sélectionné. Aucun tag RC n'est créé ou déplacé.
 
-Le tag existant `0.7.5-a01` pointe vers
-`758273b28869bf7aaaf1246d1d8809fe582e3909`, qui précède les applications natives
-ESP32. Il ne convient pas au firmware actuel et reste intact.
+## Archive, reprise et Pages
 
-Le champ optionnel du workflow accepte ce tag seulement s’il correspond
-exactement au SHA choisi. Sinon le workflow emploie le tag dédié
-`esp32-alpha-<12 premiers caractères du SHA>`. Il le crée au SHA choisi ou
-vérifie un tag existant identique. Il ne déplace jamais un tag et n’écrase aucun
-asset. Un conflit de contenu arrête la publication. Ce nom de publication
-expérimentale ne modifie pas la version fonctionnelle globale UG et ne correspond
-pas au motif `v*` du workflow Docker Release.
+La chaîne RC ajoute uniquement des fichiers `esp32-*`, sans remplacer les assets,
+le titre, la description ou le tag de la Release. Elle publie d'abord l'archive du
+site, puis les bundles, manifestes, provenances, qualifications, segments binaires,
+source et sommes SHA256. Le marqueur `esp32-publication.json` arrive **en dernier**,
+après relecture et vérification de tous les fichiers. Pages n'est déployé qu'ensuite.
 
-Le workflow peut être relancé pour une panne de déploiement ; il vérifie les
-assets déjà présents avant de les réutiliser. Si un nouveau contrôleur ou des
-métadonnées reconstruits divergent de l’archive immuable, sélectionner un nouveau
-commit source pour une nouvelle publication plutôt que remplacer les anciens
-assets. Le site de cette première chaîne expose les deux images du SHA publié ;
-les anciennes publications restent téléchargeables dans les Releases.
+Une relance vérifie les fichiers existants et ajoute seulement les manquants.
+Après interruption, l'archive initiale est réutilisée et revalidée, sans reconstruire
+les firmwares ni changer leurs métadonnées. Un conflit d'octets ou un upload incomplet
+non vérifiable arrête l'opération sans écrasement. L'API GitHub ne propose pas de
+transaction multi-assets : des fichiers en attente peuvent être visibles dans la
+Release pendant l'upload, mais ne constituent pas une publication complète tant
+que le marqueur manque. Le workflow Web seul les ignore.
 
-## GitHub Pages
+Le catalogue conserve les versions précédentes et tous leurs octets. Les deux
+workflows Pages partagent le verrou `esp32-alpha-publication`, sans annulation
+d'un déploiement en cours. La date RC est celle de publication de la Release,
+avec SHA complet, canal `RC` et statut logiciel. Une modification HTML/CSS/JS
+n'autorise et ne compile aucun firmware.
 
-Si Pages n’est pas déjà activé :
-**Repository → Settings → Pages → Build and deployment → Source → GitHub Actions**.
-L’environnement `github-pages` doit autoriser le déploiement depuis `main`.
-Aucune règle de protection ni approbation d’environnement supplémentaire n’est
-ajoutée par ce lot. Une règle GitHub déjà configurée reste sous contrôle du
-mainteneur ; les journaux du workflow indiquent si elle bloque le déploiement.
+L'environnement `github-pages` doit autoriser les branches `main` et les tags
+`v*-RC*`. C'est un réglage unique de compatibilité du déploiement, pas une
+approbation à répéter pour chaque version. Les permissions d'écriture restent
+limitées aux jobs de publication ; les builds restent `contents: read`.
 
-Le workflow utilise `configure-pages@v5`, `upload-pages-artifact@v3` et
-`deploy-pages@v4`. Le site contient seulement les ressources publiques prévues et
-les bundles vérifiés ; aucune configuration locale, sauvegarde Flash ou preuve
-privée ne doit être placée dans ce répertoire.
-
-Une préparation locale avec de vrais bundles déjà qualifiés est possible depuis
-la racine, sans publier :
-
-```bash
-python3 tools/branches/esp32_alpha.py stage --source-sha COMMIT_MAIN_COMPLET \
-  --bundle /tmp/bundle-s3 --bundle /tmp/bundle-c3 --output /tmp/alpha-site-neuf
-```
-
-Cette commande ne compile ni ne flashe ; les bundles doivent provenir des
-véritables builds `native/ci.py --bundle-output`. Un catalogue incomplet est refusé.
-Les commandes de publication restent réservées au workflow manuel depuis main.
+Le [rapport et contrat Release](../releases/esp32-release-publication.md) précise
+les tests, la politique actuelle, les limites et le rattrapage de RC1. Aucun essai
+logiciel ne qualifie le RTK, le câblage, la portée radio ou une mise à jour NVS.
 
 ## Installation et configuration locale
 

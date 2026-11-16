@@ -54,9 +54,16 @@ def merge(site):
             channel='stable' if not release['prerelease'] else ('beta' if 'beta' in tag.lower() else 'alpha')
             publications=[{'source_sha':old_meta['source_sha'],'published_at':published,'status':'published','channel':channel,'release_tag':tag}]
         meta=w.a.s.p.load(site/'alpha-publication.json')
-        if not any(row['source_sha']==meta['source_sha'] for row in publications):
-            publications.append({'source_sha':meta['source_sha'],'published_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                                 'status':'validated_authorized_alpha','release_tag':meta['release_tag']})
+        publication={'source_sha':meta['source_sha'],'published_at':meta.get('published_at') or datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                     'status':'validated_authorized_rc' if meta.get('channel')=='RC' else 'validated_authorized_alpha',
+                     'channel':meta.get('channel','ALPHA'),'release_tag':meta['release_tag']}
+        existing=next((row for row in publications if row['source_sha']==meta['source_sha']),None)
+        if existing is None:
+            publications.append(publication)
+        elif meta.get('channel')=='RC' and publication['published_at']>=existing['published_at']:
+            # A later RC can name an already-published SHA without duplicating or
+            # rewriting any firmware payload. Display its latest Release metadata.
+            existing.update(publication)
         publications.sort(key=lambda row:datetime.datetime.fromisoformat(row['published_at'].replace('Z','+00:00')).timestamp(),reverse=True)
         order={row['source_sha']:i for i,row in enumerate(publications)}
         images=sorted(rows.values(),key=lambda row:(order.get(row['source_sha'],999),row['build_key']))

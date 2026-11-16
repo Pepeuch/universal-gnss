@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -43,6 +44,19 @@ class History(unittest.TestCase):
         with patch.object(h.w,'durable_archive',side_effect=ValueError('bad checksum')):
             with self.assertRaises(ValueError):h.merge(new)
         self.assertEqual(before,(new/'flasher/catalog.json').read_bytes())
+    def test_rc_of_an_existing_source_updates_label_and_fixed_date_without_payload_change(self):
+        _,new=self.setup_sites();old=new.parent/'previous';shutil.copytree(new,old)
+        (old/'flasher/publications.json').write_text(json.dumps({'schema':1,'publications':[
+            {'source_sha':'c'*40,'published_at':'2026-01-01T00:00:00Z','channel':'ALPHA','status':'published','release_tag':'old-alpha'}]}))
+        meta=json.loads((new/'alpha-publication.json').read_bytes())
+        meta.update(channel='RC',release_tag='v0.7.5-RC1',published_at='2026-11-16T22:06:51Z')
+        (new/'alpha-publication.json').write_text(json.dumps(meta))
+        before={str(p.relative_to(new)):p.read_bytes() for p in (new/'flasher/published').rglob('*') if p.is_file()}
+        with patch.object(h.w,'durable_archive',return_value=(b'verified','old-alpha')),patch.object(h.w,'refresh',return_value=old):h.merge(new)
+        rows=json.loads((new/'flasher/publications.json').read_bytes())['publications']
+        self.assertEqual(len(rows),1);self.assertEqual(rows[0]['channel'],'RC')
+        self.assertEqual(rows[0]['published_at'],meta['published_at']);self.assertEqual(rows[0]['release_tag'],meta['release_tag'])
+        for name,data in before.items():self.assertEqual((new/name).read_bytes(),data)
     def test_public_verification_fetches_and_compares_manifest_and_binary_bytes(self):
         old,new=self.setup_sites()
         with patch.object(h.w.a.s.p,'load',wraps=h.w.a.s.p.load),patch('urllib.request.urlopen',side_effect=lambda url,timeout:io.BytesIO((new/url.split('/universal-gnss/')[1]).read_bytes())):

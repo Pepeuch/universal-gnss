@@ -33,14 +33,22 @@ def durable_archive():
     with urllib.request.urlopen('https://api.github.com/repos/'+a.REPO+'/releases?per_page=100', timeout=30) as response:
         releases = json.load(response)
     candidates = [r for r in releases if not r['draft'] and
+                  (not a.v.RC_TAG.fullmatch(r['tag_name']) or any(x['name']==a.v.MARKER for x in r['assets'])) and
                   any(x['name'] in ('esp32-site.zip','esp32-alpha-site.zip') for x in r['assets'])]
     if not candidates:
         raise ValueError('no durable firmware catalogue available')
     release = max(candidates, key=lambda r: r['published_at'])
     assets = {x['name']: x for x in release['assets']}
     name='esp32-site.zip' if 'esp32-site.zip' in assets else 'esp32-alpha-site.zip'
+    if a.v.RC_TAG.fullmatch(release['tag_name']):
+        release = a.v.get_release(a.v.api, release['tag_name'])
+        marker = a.v.verify_marker(release)
+        target, obj = a.v.tag_identity(a.v.api, release['tag_name'])
+        if marker['source_sha']!=target or marker['tag_object_sha']!=obj:
+            raise ValueError('completed Release tag identity changed')
+        assets = a.v.asset_map(release)
     archive = download(assets[name]['browser_download_url'], 512*1024*1024)
-    sums = download(assets['SHA256SUMS']['browser_download_url'], 65536).decode('ascii')
+    sums = download(assets[a.v.SUMS if a.v.RC_TAG.fullmatch(release['tag_name']) else 'SHA256SUMS']['browser_download_url'], 65536).decode('ascii')
     checks = dict((name, sha) for sha, name in (line.split() for line in sums.splitlines()))
     if checks.get(name) != hashlib.sha256(archive).hexdigest():
         raise ValueError('durable archive checksum mismatch')
