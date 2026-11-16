@@ -75,7 +75,7 @@ class Browser(unittest.TestCase):
   class Blob{constructor(parts){this.text=parts.join('')}}
   class URL{constructor(path){this.origin=location.origin;this.path=path}static createObjectURL(blob){blobs.push(blob.text);return 'blob:fixture'}static revokeObjectURL(){}}
   class URLSearchParams{constructor(fields){this.fields=fields}toString(){return JSON.stringify(this.fields)}}
-  async function fetch(url,options){requests.push(url.path);return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>new TextEncoder().encode(JSON.stringify(url.path.includes('catalog')?{schema:2,images:[]}:{schema:1,sources:[]})).buffer};}
+  async function fetch(url,options){requests.push(url.path);if(url.path==='flasher/publications.json')return {ok:false,status:404,headers:{get:()=>null}};if(!['flasher/catalog.json','flasher/approved-sources.json'].includes(url.path))throw Error('unexpected network request');return {ok:true,headers:{get:()=>null},arrayBuffer:async()=>new TextEncoder().encode(JSON.stringify(url.path.includes('catalog')?{schema:2,images:[]}:{schema:1,sources:[]})).buffer};}
   ''')
   vm.eval((ROOT/'docs/flasher/app.js').read_text())
   def drain():
@@ -91,10 +91,10 @@ class Browser(unittest.TestCase):
   # The missing-firmware request includes only the generic ROM profile, never runtime pins/channel.
   self.assertNotIn('uart_tx',vm.eval('elements.request.href'))
   self.assertNotIn('radio_channel',vm.eval('elements.request.href'))
-  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/approved-sources.json','flasher/catalog.json'])
+  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/approved-sources.json','flasher/catalog.json','flasher/publications.json'])
   vm.eval("elements['portable-import'].change({target:{value:'private',files:[{size:300,text:async()=>JSON.stringify({...UGPortable.defaults('supermini-c3'),ssid:'PRIVATE_SENTINEL'})}]}});")
   drain();self.assertIn('Import refusé',vm.eval("elements['portable-info'].textContent"));self.assertNotIn('PRIVATE_SENTINEL',vm.eval("elements['portable-info'].textContent"))
-  self.assertEqual(vm.eval('requests.length'),2)
+  self.assertEqual(vm.eval('requests.length'),3)
  def test_configuration_never_enters_network_or_persistent_storage(self):
   source=(ROOT/'docs/flasher/provision.js').read_text()+(ROOT/'docs/flasher/portable.js').read_text()
   for forbidden in ('fetch(', 'localStorage','sessionStorage','console.log','setSignals','write-flash'):

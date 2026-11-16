@@ -109,6 +109,13 @@ sessions on a separate feature branch. Software checks and physical acceptance
 are tracked separately; hardware pairing and acceptable S3 password latency remain
 pending; the requested account is verified on hardware. No release gate or hardware milestone is marked complete by this work.
 
+ESP32 Web Flasher publication P0: automatic publication after the seven required
+main validations and explicit source/tree approval is prepared on a dedicated PR.
+Durable history and full SHA/date/status selection are covered by software tests.
+Acceptance remains open until the authorized S3/C3 firmware is built, archived and
+verified on public Pages; no hardware or release milestone is marked complete.
+See [publication policy](docs/flasher/README.md).
+
 Current prerelease: **`v0.7.4-rc6`** at
 `d02e23f17d34e58f75f4c7a7f72f8d34ea766bfa`.
 

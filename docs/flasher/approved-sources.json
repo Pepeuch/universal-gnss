@@ -1,4 +1,11 @@
 {
   "schema": 1,
-  "sources": []
+  "sources": [
+    {
+      "source_sha": "52aea50a098a1839b6028a247229d273a92ee302",
+      "source_tree": "cafb82ba7c5f5b3982fab436387b1df6a5573147",
+      "publication": "main_approved",
+      "review": "Maintainer P0 authorization, 2026-11-16: publish latest validated main S3 Gateway and C3 Rover USB; full installation alpha only."
+    }
+  ]
 }

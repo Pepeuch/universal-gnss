@@ -258,3 +258,54 @@ l’environnement github-pages. Aucun essai matériel n’est requis ou effectu�
 Tests locaux : 250 tests générateur/politique et 9 tests JavaScript du portail
 réussis ; contrôle HTML des ressources, montage depuis la Release réelle et
 `git diff --check` réussis. Aucun SDK ou firmware reconstruit.
+
+
+## Publication firmware autorisée après validation de main (P0)
+
+`esp32-alpha.yml` conserve son lancement manuel et écoute désormais la fin des
+sept workflows obligatoires de `main`. Il reconsulte l’API Actions, ne confond pas
+un succès de PR avec un succès `push/main`, et exige le succès de la plus récente
+exécution de chaque workflow, sur la source autorisée et sur le main portant
+le code de publication. Un échec, une annulation, un skip ou une exécution
+encore en cours ne permet pas de publier. L’entrée de publication doit également
+figurer explicitement dans `approved-sources.json` avec SHA complet, arbre exact
+et `main_approved`. Un merge vert seul n’autorise donc pas un nouveau firmware.
+Le candidat est la révision autorisée la plus récente dans l’historique main ;
+aucun fallback sur une ancienne révision si ses validations ne sont pas terminées.
+L’autorité est vérifiée avant build puis de nouveau avant création des assets.
+
+L’autorisation ajoutée par ce lot concerne exclusivement
+`52aea50a098a1839b6028a247229d273a92ee302` (demande P0 du mainteneur). Les commits
+ultérieurs exigent leur propre entrée revue ; l’automatisation n’ajoute pas
+elle-même d’approbation. Les profils construits restent S3 Gateway et C3 Rover USB.
+Une Release complète préexistante évite les builds/publications firmware répétés :
+son catalogue durable est revérifié puis redéployé sans compilation ;
+une publication partielle requiert une récupération explicite. Aucune réécriture
+d’asset ou de tag n’est autorisée. Les Releases précédentes restent disponibles.
+
+Avant archivage, le staging réimporte et revalide le catalogue durable précédent,
+unionne les sources approuvées et conserve tous ses fichiers firmware. Tout conflit
+d’identité ou d’octets et toute limite de capacité bloque la publication, sans
+suppression de l’historique. `publications.json` enregistre les sources, leur date
+UTC de préparation pour publication et leur statut `validated_authorized_alpha`.
+Pour l’ancienne Release, sa date GitHub est récupérée. Le portail affiche le SHA
+complet, la date et le statut logiciel ; la révision publiée la plus récente ayant
+les deux profils est sélectionnée par défaut. Chaque flash revérifie les vrais
+manifestes, binaires, offsets et empreintes. Cette validation ne prouve pas le RTK.
+
+Le workflow Web uniquement conserve aussi cet historique et n’approuve ni ne
+recompile aucun firmware. Les deux workflows gardent leur verrou partagé. Le
+format reste une **installation complète** : une mise à jour préservant NVS reste
+`not_qualified`. Certificats/configurations doivent toujours être sauvegardés.
+
+Le critère P0 reste ouvert jusqu’à fusion du correctif, réussite des builds alpha,
+archivage durable et contrôle HTTP du nouveau catalogue et de chaque segment
+publié par `verify-online`. Les tests synthétiques de transport HTTP ne remplacent
+pas cette vérification publique réelle. Une indisponibilité des dépendances SDK,
+APT ou des services GitHub bloque la livraison sans fallback sur un firmware
+nouvellement non qualifié.
+
+Validation P0 locale : 262 tests générateur/politique et 10 tests JavaScript du
+portail ; autorité réelle des sept validations main vérifiée pour le SHA autorisé.
+Les essais HTTP bout en bout utilisent des réponses synthétiques comparées octet
+par octet, pas un nouveau firmware déjà publié.
