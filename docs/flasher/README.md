@@ -223,3 +223,38 @@ n’a été ajouté pour ce lot du portail. Les résultats CI distants de l’an
 commit ne deviennent pas verts par l’effet d’un commit local. Autorisation de
 push, intégration à la branche par défaut, approbations, stockage durable et
 acceptation matérielle restent nécessaires avant mise à disposition publique.
+
+
+## Actualisation automatique de l’interface Pages
+
+Après fusion sur `main`, `esp32-web-pages.yml` actualise l’interface lorsque ses
+ressources ou scripts de staging changent. Les PR ne déploient pas. Le lancement
+manuel est également limité à `main`. Ce workflow ne compile ni n’autorise aucun
+firmware ; ses permissions de contenu sont en lecture seule.
+
+La source durable est la plus récente Release alpha non brouillon contenant
+`esp32-alpha-site.zip` et `SHA256SUMS` (par date de publication, parmi les 100
+Releases retournées). Une source absente, incomplète ou invalide bloque tout
+upload Pages : aucun catalogue vide de secours. L’archive est vérifiée par ses
+sommes et, lorsqu’elle est fournie, l’empreinte de l’asset GitHub. Les approbations,
+ascendance dans main, qualifications, manifestes, ZIP, tailles, offsets et SHA-256
+sont revalidés par les vérificateurs existants. Le registre versionné vide n’est
+pas substitué au registre publié. Catalogue, approbations et tous les octets du
+payload publié sont conservés à l’identique.
+
+Les URL des ressources locales HTML comportent leur SHA-256 ; modifier JavaScript
+ou le logo change leur URL. La publication alpha manuelle utilise le même staging
+et conserve ses contrôles. Les deux workflows partagent le verrou global
+`esp32-alpha-publication`, sans annulation d’un déploiement en cours. Cela sérialise
+également les builds alpha ; les files GitHub ne garantissent pas l’ordre FIFO et
+peuvent remplacer une exécution en attente. Le cache du document HTML reste celui
+de GitHub Pages : un rechargement peut être nécessaire pendant sa propagation.
+
+La validation locale de ce lot a restauré la véritable Release
+`esp32-alpha-a9962cab58ab`, sans publication ni build firmware. Le premier
+push/merge du nouveau workflow doit encore qualifier le déploiement Actions et
+l’environnement github-pages. Aucun essai matériel n’est requis ou effectué ici.
+
+Tests locaux : 250 tests générateur/politique et 9 tests JavaScript du portail
+réussis ; contrôle HTML des ressources, montage depuis la Release réelle et
+`git diff --check` réussis. Aucun SDK ou firmware reconstruit.

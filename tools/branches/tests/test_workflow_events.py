@@ -54,7 +54,7 @@ class WorkflowEventTests(unittest.TestCase):
 
     def test_workflow_inventory_keeps_release_outside_ordinary_policy(self):
         actual = {path.name for path in WORKFLOWS.iterdir() if path.suffix in ('.yml', '.yaml')}
-        self.assertEqual(actual, set(VALIDATIONS) | set(MANUAL_VALIDATIONS) | set(CONTROLLED_BUILDS) | {'docker-release.yml'})
+        self.assertEqual(actual, set(VALIDATIONS) | set(MANUAL_VALIDATIONS) | set(CONTROLLED_BUILDS) | {'docker-release.yml', 'esp32-web-pages.yml'})
 
     def test_historical_workflow_retains_its_name_and_is_manual_only(self):
         for filename, name in MANUAL_VALIDATIONS.items():
