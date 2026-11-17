@@ -278,7 +278,7 @@ def validate_site(alpha, site, identity, repo=None):
             checked, folder, _ = alpha.s.inspect_bundle(root, approvals)
             alpha.require_s3_memory(checked, folder)
             record = next(r for r in approvals['sources'] if r['source_sha'] == entry['source_sha'])
-            alpha.s.require_main(repo or alpha.ROOT, entry['source_sha'], record['source_tree'])
+            alpha.s.require_source(repo or alpha.ROOT, entry['source_sha'], record['source_tree'], record['publication'])
             if entry['source_sha'] == identity['source_sha'] and entry['profile']['variant'] in VARIANTS:
                 selected.append(entry)
     if len(selected) != 2 or {e['profile']['variant'] for e in selected} != set(VARIANTS):

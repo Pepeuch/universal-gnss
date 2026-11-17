@@ -19,8 +19,11 @@ retains explicit approval; existing revocations are not overridden.
 
 ADAPT the existing esp32-alpha workflow, not a second publication infrastructure.
 The build commands and docker-release.yml remain unchanged. Native ESP32 now
-compiles on every branch/tag push and every PR, without source approval or main
-ancestry. Release publication is a separate authorized path. Release assets are
+accepts every branch/tag push and PR without source approval or main ancestry;
+work-branch/PR SDK builds require changed firmware inputs, while main/dev/tag
+qualification always compiles. A trusted data-only collector archives successful
+branch bundles in one technical Release and exposes them in the Flasher selector.
+Release publication remains a separate authorized path. Release assets are
 namespaced esp32-*, checked before writes and read back; a final completion marker
 controls catalogue eligibility. Interrupted uploads resume the original verified
 site archive without rebuild or overwrite. Web-only updates retain firmware history.
@@ -34,19 +37,24 @@ No general automatic creation of historical tags is claimed or needed for RCs.
 RC1 exists on e632, ID447677079, initially no assets. Seven source CI workflows
 and Docker release 43966826035 succeeded. Rulesets API returned []; none added.
 Pages deployment policy was relaxed once to permit tag pattern v*-RC* while
-preserving main. No release/tag/firmware/board mutation or dispatch occurred.
+preserving main. No release/tag/firmware/board mutation or dispatch occurred during preparation.
+The technical CI Release/tag will be created only by the deployed main controller.
 
 Local deterministic tests cover trigger, trusted maintainer, strict identities,
 seven CI results, failed/cancelled/skipped build recovery, immutable assets,
 partial-upload resume and synthetic S3/C3 packaging through catalogue verification.
-293/293 generator/CI tests, 44 maintenance tests, 94 local links, syntax,
+Chromium regression caught stale ready status during catalogue reload: reload now
+invalidates old responses immediately; search/branch switches reset consent/blobs.
+306/306 generator/CI tests, 44 maintenance tests, 44 JS/assets tests, eight Chromium
+scenarios and 95 local links, syntax,
 checkpoint/dashboard and diff checks passed. This is not hosted publication evidence.
 
 ## Exact next step
 
 Review and merge through dev, promote to main, wait for seven push/main successes,
-then manually catch up the existing RC1 using its unchanged SHA e632686c9c2e8dd5d4dc5b8d15f641dc1a633824
-and tag v0.7.5-RC1. Verify the 22 durable assets, completion marker and public
+verify automatic branch collection after a code-only change and a docs-only
+skip, then catch up the existing RC1 if needed using its unchanged SHA e632686c9c2e8dd5d4dc5b8d15f641dc1a633824
+and tag v0.7.5-RC1. Verify the 22 versioned Release assets, completion marker and public
 catalogue/firmware bytes. Do not recreate the Release, retag, flash, or claim this
 qualification before that run. Future published RCs should then trigger directly.
 

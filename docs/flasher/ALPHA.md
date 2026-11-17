@@ -6,11 +6,19 @@ Le succès du déploiement et de sa vérification HTTP est la preuve de disponib
 pas la présence de ce lien. Au démarrage de cette préparation, cette URL retournait
 HTTP 404 ; aucun déploiement public n’est effectué depuis la branche de préparation.
 
-La **compilation de développement** reste indépendante de la publication : le
-workflow `ESP32 native validation` compile S3 Gateway, C3 Rover USB et C3 Rover
-UART sur **chaque push de toute branche ou tag**, même sans PR, ainsi que sur les
-PR. Aucun registre d'approbation ni appartenance à `main` n'est requis pour ces
-builds. Leurs échecs restent signalés ; ils n'autorisent pas une publication.
+La **compilation de développement** est indépendante de la publication RC :
+le workflow natif accepte toute branche. Sur une branche de travail ou une PR,
+seuls les changements d'entrées firmware (code, scripts/assets, configuration de
+build, dépendances, fixtures/tests) déclenchent les trois compilations S3/C3.
+Une modification documentaire seule les ignore explicitement. Les pushes sur
+`main`, `dev` et les tags compilent toujours pour qualifier les Releases.
+Aucune approbation ni appartenance à `main` n'est requise pour compiler une branche.
+
+Le Web Flasher propose `main`, `dev` et les branches du dépôt. Il affiche le
+**dernier build CI réussi de la branche**, son SHA complet et son statut de
+développement, séparément du HEAD actuel. Les commits documentaires suivants ne
+font donc pas disparaître le firmware disponible. Une branche sans build reste
+visible avec une indication explicite ; aucun firmware n'est inventé.
 
 ## Publication normale : publier la Release
 

@@ -202,6 +202,7 @@ class Assets(unittest.TestCase):
         (self.directory / r.MARKER).write_bytes(a.s.p.json_bytes(marker))
 
     def api(self, path):
+        if path=='releases?per_page=100':return [copy.deepcopy(self.release)]
         if path.startswith('releases/tags/'):
             return copy.deepcopy(self.release)
         if path.startswith('releases/42/assets?'):

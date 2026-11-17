@@ -24,6 +24,7 @@
   <h2 id="config-heading">Profil du firmware</h2>
   <div class="fields">
    <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB / UART runtime</option></select></div>
+   <div><label for="branch">Branche Git</label><select id="branch"><option value="main">main</option><option value="dev">dev</option></select><small>Releases et builds CI de la branche sélectionnée.</small></div>
    <div><label for="version">Version du firmware</label><select id="version"><option value="none">Chargement des firmwares publiés…</option></select><small>Toutes les versions publiées compatibles : alpha, bêta et stable.</small></div>
    <div><label for="source">Source de corrections (S3)</label><select id="source"><option value="local">GNSS local — BASE RTK</option><option value="ntrip">NTRIP entrant — mode relais</option></select><small>Mode choisi après installation ; un même firmware S3 peut fournir les deux chemins.</small></div>
    <div><label for="receiver">Récepteur GNSS (S3)</label><select id="receiver"><option value="unicore">Unicore UM980 / UM982</option><option value="ublox">u-blox ZED-F9P</option></select><small>Choix de configuration à l'exécution : même moteur UG.</small></div>
@@ -56,12 +57,12 @@
  </section>
 </div>
 <aside>
- <section class="panel"><h2>État de la sélection</h2><div id="status" class="status" role="status" aria-live="polite">Chargement du catalogue…</div><div class="actions"><a id="request" class="button secondary hidden" href="https://github.com/Pepeuch/universal-gnss/issues/new" rel="noopener noreferrer" target="_blank">Demander ce build sur GitHub</a></div><p class="muted">Cette demande crée une issue suivie par le mainteneur ; elle ne compile pas. Après approbation d’un SHA, le workflow manuel effectue une vraie compilation isolée. Il doit être intégré à la branche par défaut avant utilisation. Aucun jeton GitHub dans cette page.</p></section>
+ <section class="panel"><h2>État de la sélection</h2><div id="status" class="status" role="status" aria-live="polite">Chargement du catalogue…</div><div class="actions"><a id="request" class="button secondary hidden" href="https://github.com/Pepeuch/universal-gnss/actions/workflows/esp32.yml" rel="noopener noreferrer" target="_blank">Voir la compilation CI</a></div><p class="muted">Choisir une branche pour afficher son dernier firmware construit par la CI, avec son SHA exact. Sur les branches de travail, les changements de code déclenchent automatiquement les builds ; les modifications documentaires seules ne les relancent pas. Aucune approbation manuelle pour ces préversions de développement.</p></section>
  <section class="panel"><h2>Configuration normalisée</h2><dl id="summary"></dl><p class="muted">Les paramètres d'exécution (modèle GNSS, SOURCE NTRIP) ne multiplient pas inutilement les ROM. Le canal et le pair ESP-NOW sont configurés localement en NVS après installation. La sortie UART et ses paramètres sont configurés après installation dans la ROM C3 générique. Ces choix GNSS/NTRIP ne sont pas appliqués par le flash.</p></section>
  <section class="panel"><h2>État du projet</h2><p>Priorité : <strong>S3 BASE / Relais + C3 Rover</strong> par ESP-NOW.</p><p>Les images ne doivent être publiées qu'après contrôles CI, vérification des partitions et validation de la cible matérielle.</p><a href="https://github.com/Pepeuch/universal-gnss/pull/33">Suivre la migration ESP32 (PR #33)</a></section>
 </aside>
 </div>
-<footer>Universal GNSS · Firmwares ALPHA expérimentaux · Aucun firmware historique ESP32 RTK Gateway n'est proposé comme image UG.</footer>
+<footer>Universal GNSS · Firmwares expérimentaux · Aucun firmware historique ESP32 RTK Gateway n'est proposé comme image UG.</footer>
 </main>
 <script defer src="flasher/portable.js"></script>
 <script defer src="flasher/provision.js"></script>

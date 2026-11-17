@@ -5,8 +5,9 @@ ROS2 distribution builds and production Docker validation. The six automatic
 workflows retain their names, PR events and stable-branch push filters.
 The standalone `ROS 2 Kilted validation` workflow keeps its job and commands,
 but runs only through `workflow_dispatch`. Other ordinary workflows remain silent
-on feature-branch pushes; native ESP32 explicitly builds every push on every
-branch (and tags), plus PRs, without source approval or a publication requirement.
+on feature-branch pushes; native ESP32 accepts pushes on every branch (and tags), plus PRs, without source
+approval. Work-branch/PR firmware compilation is selected only when build inputs
+change; stable-branch and tag pushes always compile for Release qualification.
 This is a CI scheduling change, not removal of Kilted compatibility.
 
 The distribution workflow retains three stages and their existing check names:
@@ -161,8 +162,9 @@ types, including opening and new commits, with no target-branch or path filter;
 fork pull requests retain the same event and job configuration.
 
 Except for native ESP32, a push to a working branch does not start an additional
-push campaign. Native ESP32 intentionally runs on every branch push even without
-a PR; if a PR exists its push and PR builds may both run. Open a
+push campaign. Native ESP32 intentionally checks inputs on every branch push even without
+a PR; documentation-only work changes skip SDK builds. If firmware inputs change
+and a PR exists, its push and PR builds may both run. Open a
 pull request to obtain automatic validation. Merging into `dev` or `main` still
 starts validation of the resulting commit. A permanently open `dev` to `main`
 pull request can still produce both a push campaign and a pull-request campaign
@@ -588,12 +590,28 @@ registry artifact or official distribution publication is qualified by this lot.
 
 ## Native ESP32 validation
 
-The additional [native ESP32 workflow](../../.github/workflows/esp32.yml) runs
-on **every push, on every branch and tag**, and on every PR. There are no branch,
-path, main-ancestry, approval-register or publication gates for compilation. It
-uses read-only permissions and its
-own fail-closed gate. Three automatic profiles (S3 Gateway, C3 USB and C3 UART;
-C3 Relay remains deferred) use the [isolated SDK recipe](../../embedded/esp32/native/CI.md).
-No existing distribution/ROS2/Release job or publication permission changes.
-Firmware is neither uploaded nor published; branch protections are not updated.
-Local execution passed, while GitHub qualification awaits an authorized push/PR.
+The [native ESP32 workflow](../../.github/workflows/esp32.yml) accepts every
+branch/tag push and PR without a publication approval or main-ancestry condition.
+A lightweight input selector skips SDK jobs for documentation-only work-branch/PR
+changes. C/C++, native scripts/assets, build files, SDK configuration, dependency
+pins and fixtures trigger compilation. Main/dev and tag pushes always build.
+The gate permits a skip only after successful explicit input selection; a missing,
+failed or cancelled selector or a skipped required build remains non-green.
+
+Three automatic profiles (S3 Gateway, C3 USB, C3 UART; C3 Relay remains deferred)
+use the [isolated SDK recipe](../../embedded/esp32/native/CI.md). The producer is
+read-only and archives qualified bundles as seven-day Actions artifacts. These
+are intermediates, not the durable Flasher source.
+
+The existing ESP32 publication workflow's trusted-main data-only job collects
+successful same-repository native push builds. It never executes branch scripts
+with a write token. Bundles are revalidated and durably archived in one technical
+`esp32-ci-builds` Release before the Pages catalogue is updated. A completion
+marker is written last; partial archives cannot replace a complete catalogue.
+The collector catches pending builds from other branches too, so a replaced
+GitHub concurrency callback does not silently lose a branch publication.
+
+The Flasher selects main/dev/work branches and exposes the last verified CI SHA
+with a development label. Documentation-only commits retain that exact build;
+branch HEAD is displayed separately. Stable Release history and source approval
+remain distinct. See the [Release and branch contract](../../docs/releases/esp32-release-publication.md).

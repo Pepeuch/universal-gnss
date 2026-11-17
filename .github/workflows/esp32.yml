@@ -12,7 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: ESP32 build input selection
+    runs-on: ubuntu-latest
+    outputs:
+      build_required: ${{ steps.inputs.outputs.build_required }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: inputs
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
+        run: python3 tools/branches/esp32_changes.py --event "$GITHUB_EVENT_PATH" --ref "$SOURCE_REF" --sha "$SOURCE_SHA"
+
   firmware:
+    needs: changes
+    if: needs.changes.outputs.build_required == 'true'
+
     name: ESP32 native (${{ matrix.variant }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -37,18 +56,40 @@ jobs:
           set -euo pipefail
           test "$(id -u)" != 0
           PYTHONDONTWRITEBYTECODE=1 python3 embedded/esp32/native/ci.py \
-            --source-ref "$SOURCE_SHA" --variant "$VARIANT"
+            --source-ref "$SOURCE_SHA" --variant "$VARIANT" \
+            --bundle-output "$RUNNER_TEMP/esp32-bundle"
+
+      - name: Retain qualified development firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.variant }}
+          path: ${{ runner.temp }}/esp32-bundle
+          if-no-files-found: error
+          retention-days: 7
 
   gate:
     name: ESP32 native validation gate
     if: always()
-    needs: [firmware]
+    needs: [changes, firmware]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Require every native configuration
         env:
           FIRMWARE_RESULT: ${{ needs.firmware.result }}
+          SELECTION_RESULT: ${{ needs.changes.result }}
+          BUILD_REQUIRED: ${{ needs.changes.outputs.build_required }}
+          SOURCE_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
-          test "$FIRMWARE_RESULT" = success
+          test "$SELECTION_RESULT" = success
+          case "$SOURCE_REF" in
+            refs/heads/main|refs/heads/dev|refs/tags/*) test "$BUILD_REQUIRED" = true ;;
+          esac
+          if test "$BUILD_REQUIRED" = true; then
+            test "$FIRMWARE_RESULT" = success
+          elif test "$BUILD_REQUIRED" = false; then
+            test "$FIRMWARE_RESULT" = skipped
+          else
+            exit 1
+          fi

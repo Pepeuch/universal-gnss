@@ -59,12 +59,12 @@ class WorkflowEventTests(unittest.TestCase):
                 self.assertEqual(workflow['name'], name)
                 require_validation_events(workflow['on'])
 
-    def test_esp32_builds_every_push_and_pr_without_branch_or_path_authority_filter(self):
+    def test_esp32_accepts_every_branch_event_and_selects_builds_only_by_inputs(self):
         for filename, name in ALL_BRANCH_VALIDATIONS.items():
             workflow = yaml.load((WORKFLOWS / filename).read_text(), Loader=yaml.BaseLoader)
             self.assertEqual(workflow['name'], name)
             require_all_branch_events(workflow['on'])
-            self.assertNotIn('if', workflow['jobs']['firmware'])
+            self.assertEqual(workflow['jobs']['firmware']['if'],"needs.changes.outputs.build_required == 'true'")
 
     def test_esp32_rejects_reintroduction_of_working_branch_or_path_filters(self):
         for push in ({'branches': ['main', 'dev']}, {'branches-ignore': ['feature/*']},

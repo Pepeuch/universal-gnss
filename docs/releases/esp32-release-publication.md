@@ -1,10 +1,18 @@
 # Publication ROS2 / ESP32 par Release RC
 
-La **compilation de développement** reste indépendante de la publication : le
-workflow `ESP32 native validation` compile S3 Gateway, C3 Rover USB et C3 Rover
-UART sur **chaque push de toute branche ou tag**, même sans PR, ainsi que sur les
-PR. Aucun registre d'approbation ni appartenance à `main` n'est requis pour ces
-builds. Leurs échecs restent signalés ; ils n'autorisent pas une publication.
+La **compilation de développement** est indépendante de la publication RC :
+le workflow natif accepte toute branche. Sur une branche de travail ou une PR,
+seuls les changements d'entrées firmware (code, scripts/assets, configuration de
+build, dépendances, fixtures/tests) déclenchent les trois compilations S3/C3.
+Une modification documentaire seule les ignore explicitement. Les pushes sur
+`main`, `dev` et les tags compilent toujours pour qualifier les Releases.
+Aucune approbation ni appartenance à `main` n'est requise pour compiler une branche.
+
+Le Web Flasher propose `main`, `dev` et les branches du dépôt. Il affiche le
+**dernier build CI réussi de la branche**, son SHA complet et son statut de
+développement, séparément du HEAD actuel. Les commits documentaires suivants ne
+font donc pas disparaître le firmware disponible. Une branche sans build reste
+visible avec une indication explicite ; aucun firmware n'est inventé.
 
 ## Parcours courant
 
@@ -16,7 +24,7 @@ le format canonique : nombres sans zéro initial, `RC` majuscule et numéro ≥ 
   Kilted/Lyrical, plateformes AMD64/ARM64. Les deux chaînes utilisent le même SHA
   résolu depuis le tag ; elles ne partagent pas un numéro de build mutable.
 - `esp32-alpha.yml` reçoit `release: published`, conserve la maintenance manuelle
-  et réexamine les RC lorsque les CI `main` se terminent. Aucun nouveau workflow.
+  et réexamine les RC lorsque les CI `main` se terminent. Aucun nouveau workflow ; un job de données réutilise les builds de branche.
 - La publication de la Release par un mainteneur constitue son autorisation.
   Conformément à la décision du mainteneur pendant ce lot, les rulesets de tags
   sont **reportés**, sans seconde approbation ni édition de registre par version.
@@ -78,6 +86,47 @@ Les binaires et leurs manifestes qualifiés ne sont pas réécrits pour changer 
 étiquette ALPHA historique : le canal RC est une métadonnée de publication,
 aucune nouvelle qualification matérielle n'est revendiquée.
 
+## Firmwares des branches de développement
+
+Les producteurs CI conservent `contents: read`, sans secrets ni permission de
+publication. Après leurs vrais builds/tests/reconstructions, ils déposent les
+bundles S3, C3 USB et C3 UART (sept jours). Le job ajouté au **workflow existant**
+repart de `main`, collecte les builds natifs `push` réussis du même dépôt et ne
+traite les bundles que comme données. Il vérifie le workflow, le SHA, l'ascendance
+dans la branche annoncée, les trois profils, le SDK, les CRC/empreintes/offsets,
+les partitions et la qualification. Aucun code de branche n'est exécuté avec
+le jeton d'écriture ; les forks/PR ne sont pas des sources de publication CI.
+
+Les builds de branche ne nécessitent pas les six autres validations obligatoires
+pour une Release. Ils restent clairement des **préversions de développement**,
+jamais une preuve de qualification complète `main` ou matérielle.
+
+Une seule Release technique `esp32-ci-builds` archive les snapshots et sources
+avec empreintes, noms immuables et marqueur final par run. Son tag est une
+référence de stockage sur `main`, **pas le SHA du firmware** ni une nouvelle version
+UG. Les vrais SHA/arbre/branche/run figurent dans les métadonnées du build.
+La première exécution crée cette archive technique si nécessaire ; les suivantes
+ajoutent seulement les snapshots manquants. Aucune Release produit par branche,
+aucun service externe et aucun token dans le navigateur.
+
+Le collecteur traite les succès en attente de toutes les branches et conserve
+l'historique des Releases dans chaque nouveau snapshot. Cela évite qu'un callback
+GitHub remplacé par un autre perde un build. Les fichiers sont relus avant le
+marqueur ; relance et reprise n'écrasent jamais une archive différente. Un build
+expiré avant archivage n'est pas inventé : un nouveau build de code sera nécessaire.
+Le catalogue actif garde le dernier build CI par branche et toutes les versions
+formellement publiées ; les anciens snapshots CI restent archivés, sans suppression
+d’assets. Cette rotation explicite évite de saturer la mémoire du catalogue à
+chaque commit. Les limites de 512 MiB/512 images/128 sources restent des erreurs
+explicites si les branches répertoriées et les Releases les dépassent.
+
+Le navigateur récupère la liste publique des branches, sans authentification
+GitHub, puis les binaires depuis Pages. Les changements de branche annulent les
+lectures précédentes, révoquent les blobs, remettent le consentement à zéro et
+revérifient les quatre segments. La conservation NVS n'est toujours pas qualifiée.
+Cette voie devient effective après intégration du contrôleur sur `main`, puis
+un premier build produisant les bundles ; les anciens événements ne sont pas rejoués.
+
 ## Réglage Pages et état distant constaté
 
 Audit du 16 novembre 2026 :
@@ -126,7 +175,7 @@ RC, révocation explicite, format de tag, SHA/objet/ID modifiés, sept validatio
 source et contrôleur, déclenchement Release, rattrapage manuel, attente de CI,
 permission read-only des builds et reprise fail-closed.
 
-Le test de bout en bout utilise de **petits binaires IDF synthétiques**, mais les
+Les tests de bout en bout Release et branche utilisent de **petits binaires IDF synthétiques**, mais les
 vrais empaqueteurs, inspecteurs de bundles, staging, archive, sommes et vérificateur
 public. Il contrôle les deux profils, les manifestes/offsets, les assets relus,
 le catalogue durable RC et une relance sans écriture. Les accès GitHub et Pages
@@ -134,13 +183,17 @@ sont simulés : ce test n'est ni une compilation réelle ni une publication dist
 Les tests de conflit, interruption, corruption et refus d'autorité prouvent que
 le marqueur/catalogue n'est pas validé après un échec.
 
-Résultats locaux : **293/293 tests générateur/politique CI**, dont 24 nouveaux
-cas Release, deux nouveaux cas tag/catalogue RC et deux cas déclenchement ESP32
-sans filtre, réussis en 23,584 secondes.
-Les **44 tests de maintenance** (34 + 10), les **94 liens locaux**, la syntaxe
+Résultats locaux : **306/306 tests générateur/politique CI**, dont les contrôles Release, branches CI et sélection des entrées de build,
+réussis en 24,364 secondes. Les **44 tests JavaScript/assets** (15 Flasher,
+6 configuration portable, 23 assets Web) et **huit scénarios Chromium**
+(1280/390 px × métadonnées valides/503/404/invalides) passent : main/dev/branche,
+HEAD documentaire plus récent, absence de build, changement rapide, relecture
+du catalogue par « Chercher » et remise à zéro du consentement. Chromium 141 a réellement tourné avec Playwright 1.56
+et le binaire Ubuntu 24 compatible sur cet environnement Ubuntu 26.
+Les **44 tests de maintenance** (34 + 10), les **95 liens locaux**, la syntaxe
 Python/YAML/Bash, l'audit des checkpoints (19 entrées, zéro problème), le dashboard
 et `git diff --check` réussissent. Aucun firmware n'est flashé,
 aucune NVS/partition/clé/configuration n'est modifiée. Aucun build ROS2/ESP32 n'est
-rejoué localement pour ce changement Python/YAML : les sources et commandes de
-build sont inchangées. La qualification hébergée du parcours RC complet reste à
+rejoué localement pour ce changement Python/YAML/HTML/JS : le code métier et les
+commandes de compilation sont inchangés, seuls les bundles CI sont désormais exportés. La qualification hébergée du parcours RC complet reste à
 réaliser après déploiement sur `main`, sans confondre CI de PR et publication réelle.

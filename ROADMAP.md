@@ -76,7 +76,11 @@ checks. The [RC Release path](docs/releases/esp32-release-publication.md) uses a
 trusted maintainer’s published Release as approval, followed by seven exact-SHA
 main validations; no repeated registry edit is required. Tag rulesets are
 explicitly deferred by the maintainer. End-to-end hosted RC publication remains
-to qualify after main deployment; a green merge alone does not publish firmware.
+to qualify after main deployment; a green merge alone does not authorize an RC.
+The Flasher also exposes successful native CI firmware by main/dev/work branch,
+with a separate development label and exact SHA. Work branches compile only when
+firmware inputs change; docs-only commits retain the last build. One technical
+CI archive supplies durable preview bytes, without per-build source approvals.
 Actual S3/C3 publication and Pages verification were recorded for authorized source
 `52aea50a098a1839b6028a247229d273a92ee302`; see the
 [retained recovery evidence](.agent/shared/checkpoints/retained/UG-ESP32-PUBLICATION-RECOVERY.md).

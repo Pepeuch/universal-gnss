@@ -6,7 +6,6 @@ on:
   workflow_run:
     workflows: [Backlog Status, CMake, Distribution validation, Docker image validation, 'C/C\+\+ Format', ROS 2 Lyrical validation, ESP32 native validation]
     types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       source_sha:
@@ -210,3 +209,46 @@ jobs:
         env:
           PAGE_URL: ${{ steps.deploy.outputs.page_url }}
         run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/restored-site" --url "$PAGE_URL"
+
+  preview:
+    name: Publish development branch firmware to Web Flasher
+    needs: [authorize, publish, restore]
+    if: >-
+      always() && github.repository == 'Pepeuch/universal-gnss'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive pending successful branch builds
+        id: firmware
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/branches/esp32_preview.py --collect --output "$RUNNER_TEMP/preview-site"
+      - uses: actions/configure-pages@v5
+        if: steps.firmware.outputs.ready == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.firmware.outputs.ready == 'true'
+        with:
+          path: ${{ runner.temp }}/preview-site
+      - id: deploy
+        if: steps.firmware.outputs.ready == 'true'
+        uses: actions/deploy-pages@v4
+      - name: Verify public branch catalogue and firmware bytes
+        if: steps.firmware.outputs.ready == 'true'
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/preview-site" --url "$PAGE_URL"

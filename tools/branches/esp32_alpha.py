@@ -24,10 +24,11 @@ REPO='Pepeuch/universal-gnss'
 VARIANTS=('s3-gateway','c3-rover-usb')
 ENV={**os.environ,'GIT_NO_REPLACE_OBJECTS':'1','GIT_NO_LAZY_FETCH':'1','GIT_TERMINAL_PROMPT':'0'}
 def git(repo,*args):return subprocess.check_output(['git','-C',str(repo),*args],env=ENV,text=True).strip()
-def source(repo,sha,tag='',main_ref='origin/main'):
+def source(repo,sha,tag='',main_ref='origin/main',development=False):
     if not isinstance(sha,str) or not re.fullmatch('[a-f0-9]{40}',sha):raise ValueError('exact lowercase main commit required')
     if git(repo,'cat-file','-t',sha)!='commit':raise ValueError('source must be a commit')
-    tree=git(repo,'rev-parse',sha+'^{tree}');s.require_main(repo,sha,tree,main_ref)
+    tree=git(repo,'rev-parse',sha+'^{tree}')
+    if not development:s.require_main(repo,sha,tree,main_ref)
     for path in ('embedded/esp32/native/ci.py','embedded/esp32/migration/dependencies.json','embedded/esp32/native/main/gateway.cpp','embedded/esp32/native/main/rover.c'):
         subprocess.run(['git','-C',str(repo),'cat-file','-e',sha+':'+path],env=ENV,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     derived='esp32-alpha-'+sha[:12];tag=tag or derived
@@ -84,7 +85,7 @@ def legacy_release(repo,site,assets,env=os.environ):
     site=Path(site);meta=s.p.load(site/'alpha-publication.json');identity=source(repo,meta['source_sha'],meta['release_tag'])
     if meta['source_tree']!=identity['source_tree']:raise ValueError('publication tree changed')
     catalog=s.p.load(site/'flasher/catalog.json')
-    if len([v for v in catalog['images'] if v['source_sha']==identity['source_sha']])!=2 or {v['profile']['variant'] for v in catalog['images']}!=set(VARIANTS):raise ValueError('nonempty complete catalogue required')
+    if len([entry for entry in catalog['images'] if entry['source_sha']==identity['source_sha'] and entry['profile']['variant'] in VARIANTS])!=2:raise ValueError('nonempty complete catalogue required')
     # Reconstruct and revalidate the review bundles from the exact prepared site.
     import tempfile,shutil
     with tempfile.TemporaryDirectory(prefix='ug-alpha-check-') as temp:
@@ -100,7 +101,7 @@ def legacy_release(repo,site,assets,env=os.environ):
     subprocess.run(['git','-C',str(repo),'archive','--format=tar.gz','--output='+str((assets/'firmware-source.tar.gz').resolve()),identity['source_sha']],check=True,env=ENV)
     for name in ('catalog.json','approved-sources.json'):shutil.copyfile(site/'flasher'/name,assets/name)
     for entry in catalog['images']:
-        if entry['source_sha']!=identity['source_sha']:continue
+        if entry['source_sha']!=identity['source_sha'] or entry['profile']['variant'] not in VARIANTS:continue
         shutil.copyfile(site/entry['bundle'],assets/(entry['profile']['variant']+'.zip'))
     sums={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(assets.iterdir())}
     (assets/'SHA256SUMS').write_text(''.join(value+'  '+key+'\n' for key,value in sums.items()))
@@ -163,7 +164,8 @@ def verify_online(site,url):
     site=Path(site);paths=['flasher.html','flasher/catalog.json','flasher/approved-sources.json','flasher/app.js','flasher/portable.js','flasher/provision.js']
     catalog=s.p.load(site/'flasher/catalog.json')
     if not catalog['images']:raise ValueError('public alpha catalogue must not be empty')
-    if (site/'flasher/publications.json').exists():paths.append('flasher/publications.json')
+    for name in ('publications.json','branches.json'):
+        if (site/'flasher'/name).exists():paths.append('flasher/'+name)
     for entry in catalog['images']:
         prefix='flasher/published/'+entry['build_key']+'/'
         paths.extend(prefix+name for name in ('manifest.json','provenance.json','qualification.json','bundle.zip'))

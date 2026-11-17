@@ -81,20 +81,20 @@ class Browser(unittest.TestCase):
   def drain():
    for _ in range(200):
     if not vm.execute_pending_job():break
-  drain();self.assertIn('Aucune image',vm.eval("elements.status.textContent"))
+  drain();self.assertIn('Aucun firmware CI',vm.eval("elements.status.textContent"))
   vm.eval("elements.device.value='c3-rover-usb';elements.device.change();")
   drain()
   value={**p.defaults('supermini-c3'),'output':'uart','uart_tx':7,'uart_baud':460800}
   vm.eval("elements['portable-import'].change({target:{value:'file',files:[{size:300,text:async()=>"+json.dumps(json.dumps(value))+"}]}});")
   drain();vm.eval("elements['portable-export'].click();")
   self.assertEqual(json.loads(vm.eval('blobs[0]')),value)
-  # The missing-firmware request includes only the generic ROM profile, never runtime pins/channel.
+  # The CI link and catalogue/branch reads never include portable settings or secrets.
   self.assertNotIn('uart_tx',vm.eval('elements.request.href'))
   self.assertNotIn('radio_channel',vm.eval('elements.request.href'))
-  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/catalog.json','flasher/approved-sources.json','flasher/publications.json'])
+  self.assertEqual(json.loads(vm.eval('JSON.stringify(requests)')),['flasher/catalog.json','flasher/approved-sources.json','flasher/publications.json','flasher/branches.json','https://api.github.com/repos/Pepeuch/universal-gnss/branches?per_page=100&page=1'])
   vm.eval("elements['portable-import'].change({target:{value:'private',files:[{size:300,text:async()=>JSON.stringify({...UGPortable.defaults('supermini-c3'),ssid:'PRIVATE_SENTINEL'})}]}});")
   drain();self.assertIn('Import refusé',vm.eval("elements['portable-info'].textContent"));self.assertNotIn('PRIVATE_SENTINEL',vm.eval("elements['portable-info'].textContent"))
-  self.assertEqual(vm.eval('requests.length'),3)
+  self.assertEqual(vm.eval('requests.length'),5)
  def test_configuration_never_enters_network_or_persistent_storage(self):
   source=(ROOT/'docs/flasher/provision.js').read_text()+(ROOT/'docs/flasher/portable.js').read_text()
   for forbidden in ('fetch(', 'localStorage','sessionStorage','console.log','setSignals','write-flash'):

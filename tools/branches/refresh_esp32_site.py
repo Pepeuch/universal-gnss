@@ -30,14 +30,22 @@ def download(url, limit):
 
 def durable_archive():
     # Include published alpha, beta and stable releases; drafts are never public.
-    with urllib.request.urlopen('https://api.github.com/repos/'+a.REPO+'/releases?per_page=100', timeout=30) as response:
-        releases = json.load(response)
+    releases = a.v.api('releases?per_page=100')
     candidates = [r for r in releases if not r['draft'] and
                   (not a.v.RC_TAG.fullmatch(r['tag_name']) or any(x['name']==a.v.MARKER for x in r['assets'])) and
                   any(x['name'] in ('esp32-site.zip','esp32-alpha-site.zip') for x in r['assets'])]
-    if not candidates:
+    spec=importlib.util.spec_from_file_location('durable_preview',ROOT/'tools/branches/esp32_preview.py')
+    preview=importlib.util.module_from_spec(spec);spec.loader.exec_module(preview)
+    ci_release=next((item for item in releases if not item['draft'] and item['tag_name']==preview.TAG),None)
+    ci=preview.latest(ci_release) if ci_release else None
+    def completion(item):
+        marker=next((asset for asset in item['assets'] if asset['name']==a.v.MARKER),{})
+        return marker.get('created_at') or item['published_at']
+    release=max(candidates,key=completion) if candidates else None
+    if ci and (not release or ci[1]['archived_at']>completion(release)):
+        return ci[0],preview.TAG
+    if not release:
         raise ValueError('no durable firmware catalogue available')
-    release = max(candidates, key=lambda r: r['published_at'])
     assets = {x['name']: x for x in release['assets']}
     name='esp32-site.zip' if 'esp32-site.zip' in assets else 'esp32-alpha-site.zip'
     if a.v.RC_TAG.fullmatch(release['tag_name']):
@@ -87,8 +95,14 @@ def refresh(data, tag, output, repo=ROOT):
         root = Path(temp); old = root/'old'; old.mkdir()
         unpack(data, old)
         meta = a.s.p.load(old/'alpha-publication.json')
-        identity = a.source(repo, meta['source_sha'])
-        if a.remote_tag(repo,tag)!=meta['source_sha']:
+        development=meta.get('channel')=='DEV'
+        if development:a.s.require_source(repo,meta['source_sha'],meta['source_tree'],'ci_preview')
+        identity = a.source(repo, meta['source_sha'],development=development)
+        actual_tag=a.remote_tag(repo,tag)
+        if development:
+            if tag!='esp32-ci-builds' or actual_tag!=meta.get('technical_tag_sha'):raise ValueError('development archive origin mismatch')
+            a.s.require_main(repo,actual_tag,a.git(repo,'rev-parse',actual_tag+'^{tree}'))
+        if not development and actual_tag!=meta['source_sha']:
             raise ValueError('published release tag/source mismatch')
         if meta['release_tag'] != tag or meta['source_tree'] != identity['source_tree']:
             raise ValueError('durable publication identity mismatch')
@@ -115,8 +129,9 @@ def refresh(data, tag, output, repo=ROOT):
         # Preserve exact authoritative catalogue and every published firmware byte.
         for path in ('flasher/catalog.json', 'flasher/approved-sources.json', 'alpha-publication.json'):
             shutil.copyfile(old/path, staged/path)
-        if (old/'flasher/publications.json').exists():
-            shutil.copyfile(old/'flasher/publications.json',staged/'flasher/publications.json')
+        for name in ('publications.json','branches.json'):
+            if (old/'flasher'/name).exists():
+                shutil.copyfile(old/'flasher'/name,staged/'flasher'/name)
         if (old/'index.html').exists():
             shutil.copyfile(old/'index.html', staged/'index.html')
         old_files = {p.relative_to(old/'flasher/published'): p.read_bytes()

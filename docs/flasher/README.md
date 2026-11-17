@@ -6,6 +6,15 @@ image installable, URL Pages active ou publication n’est annoncée. Le portail
 nécessite HTTPS (ou localhost), WebCrypto et, pour le flash, un navigateur avec
 Web Serial. Les téléchargements restent indépendants du support Web Serial.
 
+Le sélecteur de branche affiche `main`, `dev` et les branches de travail. Les
+firmwares de branche proviennent de leurs builds CI natifs réussis, sans entrée
+manuelle d'approbation. Seuls les changements d'entrées firmware recompilent les
+branches de travail ; les modifications documentaires gardent le dernier build
+avec son SHA exact. Ces images sont signalées comme développement CI, distinctes
+des Releases. Les bundles sont archivés durablement dans une seule Release
+technique avant exposition sur Pages ; aucun jeton GitHub n'entre dans le navigateur.
+Voir le [contrat de publication et de branche](../releases/esp32-release-publication.md).
+
 ## Configuration portable actuelle
 
 Le [contrat portable v1](../../embedded/esp32/PORTABLE_CONFIG.md) définit le fichier
@@ -50,8 +59,9 @@ un paramètre appliqué par le flash. Voir le [contrat d’appairage](../../embe
 Une page publique ne contient aucun jeton GitHub. Son lien de demande crée une
 **issue de revue**, pas une compilation. Aucun événement `issues` n’exécute de
 texte utilisateur. Le registre [approved-sources.json](approved-sources.json)
-contient uniquement des SHA complets, arbres Git, références de revue et droits
-de publication explicitement approuvés par le mainteneur.
+contient des SHA complets, arbres Git et droits explicites : `main_approved`
+pour les publications formelles, `ci_preview` pour les vrais builds de branche
+archivés automatiquement. Les préversions CI ne sont pas une approbation de Release.
 
 Pour publier les deux firmwares, suivre la [procédure Release/alpha](ALPHA.md) :
 un mainteneur publie une Release RC existante sur un SHA de `main`, les sept CI
@@ -148,8 +158,10 @@ sans désactiver une installation dont les images et la cible ont été vérifi�
 
 [prepare_esp32_site.py](../../tools/branches/prepare_esp32_site.py) prépare un
 répertoire statique local, sans déployer. Sans bundle, il produit un site source
-au catalogue vide. Avec des bundles, il exige l’approbation `main_approved`,
-l’ascendance Git réelle dans `origin/main` et l’identité de l’arbre. Il vérifie
+au catalogue vide. Les publications formelles exigent `main_approved`,
+l’ascendance Git réelle dans `origin/main` et l’identité de l’arbre. La voie
+`ci_preview` valide le commit/arbre exact de la branche et les mêmes bundles
+qualifiés ; son contrôleur vérifie le vrai run CI, sans exiger une ascendance main. Il vérifie
 les fichiers et le ZIP, refuse doublons et écrasements ; le miroir Pages est
 borné à 512 images/512 MiB, sans se substituer au stockage durable.
 
