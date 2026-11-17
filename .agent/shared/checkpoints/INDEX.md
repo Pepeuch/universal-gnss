@@ -61,7 +61,8 @@ performed for this documentation reconciliation.
 - `active/UG-ESP32-NTRIP-QUALIFICATION.md` — independent filters proven in software;
   rover GGA return, real receiver output and physical routing budgets unqualified.
 - `active/UG-ESP32-PUBLICATION-AUTHORITY.md` — one-off historical tag recovery is
-  complete; general future authority/policy remains undecided.
+  complete; maintainer-authorized RC Release path is implemented locally, with
+  hosted qualification pending main deployment. Tag hardening is explicitly deferred.
 - `retained/UG-ESP32-QUALIFIED-BASELINE.md` — bounded HTTPS/HTTP/WebUI/memory
   evidence and last recorded installed S3 state; prevents obsolete recovery steps.
 - `retained/UG-ESP32-PUBLICATION-RECOVERY.md` — listing/glob defects and actual

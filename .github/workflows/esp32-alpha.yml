@@ -1,18 +1,19 @@
 name: ESP32 alpha publication
 
 on:
+  release:
+    types: [published]
   workflow_run:
     workflows: [Backlog Status, CMake, Distribution validation, Docker image validation, 'C/C\+\+ Format', ROS 2 Lyrical validation, ESP32 native validation]
     types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact main commit to build and publish as experimental alpha
+        description: Exact main commit (must equal the existing RC tag when selected)
         required: true
         type: string
       release_tag:
-        description: Optional existing compatible 0.7.5-a01; otherwise esp32-alpha-<source SHA prefix>
+        description: Existing vX.Y.Z-RCn for Release catch-up, or legacy alpha tag
         required: false
         default: ''
         type: string
@@ -26,7 +27,9 @@ concurrency:
 
 jobs:
   authorize:
-    if: github.repository == 'Pepeuch/universal-gnss' && github.ref == 'refs/heads/main'
+    if: >-
+      github.repository == 'Pepeuch/universal-gnss' &&
+      ((github.event_name == 'release' && github.event.action == 'published') || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,6 +37,10 @@ jobs:
     outputs:
       source_sha: ${{ steps.authority.outputs.source_sha }}
       already_published: ${{ steps.authority.outputs.already_published }}
+      resume_archive: ${{ steps.authority.outputs.resume_archive }}
+      release_tag: ${{ steps.authority.outputs.release_tag }}
+      identity: ${{ steps.authority.outputs.identity }}
+      publisher_sha: ${{ steps.authority.outputs.publisher_sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -44,17 +51,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REQUESTED_SHA: ${{ inputs.source_sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           if test "$EVENT" = workflow_dispatch; then
-            python3 tools/branches/esp32_publication_gate.py --source-sha "$REQUESTED_SHA"
+            python3 tools/branches/esp32_publication_gate.py --source-sha "$REQUESTED_SHA" --release-tag "$RELEASE_TAG"
           else
             python3 tools/branches/esp32_publication_gate.py
           fi
   build:
     needs: authorize
-    if: needs.authorize.outputs.source_sha != '' && needs.authorize.outputs.already_published != 'true'
+    if: needs.authorize.outputs.source_sha != '' && needs.authorize.outputs.already_published != 'true' && needs.authorize.outputs.resume_archive != 'true'
     name: Build real alpha (${{ matrix.variant }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -66,18 +74,24 @@ jobs:
       - name: Require publication from main
         env:
           WORKFLOW_REF: ${{ github.ref }}
+          EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ needs.authorize.outputs.release_tag }}
         run: |
           set -euo pipefail
-          test "$WORKFLOW_REF" = refs/heads/main
+          if test "$EVENT" = release; then
+            test "$WORKFLOW_REF" = "refs/tags/$RELEASE_TAG"
+          else
+            test "$WORKFLOW_REF" = refs/heads/main
+          fi
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.authorize.outputs.publisher_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Validate source and build real isolated firmware
         env:
           SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.authorize.outputs.release_tag }}
           VARIANT: ${{ matrix.variant }}
         run: |
           set -euo pipefail
@@ -96,6 +110,11 @@ jobs:
   publish:
     name: Archive alpha and deploy Web Flasher
     needs: [authorize, build]
+    if: >-
+      always() && needs.authorize.result == 'success' &&
+      needs.authorize.outputs.source_sha != '' && needs.authorize.outputs.already_published != 'true' &&
+      (needs.build.result == 'success' ||
+       (needs.authorize.outputs.resume_archive == 'true' && needs.build.result == 'skipped'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -109,17 +128,26 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.authorize.outputs.publisher_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@v8
+        if: needs.authorize.outputs.resume_archive != 'true'
         with:
           pattern: alpha-*
           path: ${{ runner.temp }}/alpha-builds
+      - name: Resume exact immutable archive after interrupted upload
+        if: needs.authorize.outputs.resume_archive == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLICATION_IDENTITY: ${{ needs.authorize.outputs.identity }}
+        run: python3 tools/branches/esp32_alpha.py resume --output "$RUNNER_TEMP/alpha-site"
       - name: Assemble catalogue from both successful builds
+        if: needs.authorize.outputs.resume_archive != 'true'
         env:
           SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.authorize.outputs.release_tag }}
+          PUBLICATION_IDENTITY: ${{ needs.authorize.outputs.identity }}
           REVIEW_URL: https://github.com/Pepeuch/universal-gnss/actions/workflows/esp32-alpha.yml
         run: |
           set -euo pipefail
@@ -164,7 +192,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ needs.authorize.outputs.publisher_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Restore durable verified catalogue
@@ -181,3 +209,46 @@ jobs:
         env:
           PAGE_URL: ${{ steps.deploy.outputs.page_url }}
         run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/restored-site" --url "$PAGE_URL"
+
+  preview:
+    name: Publish development branch firmware to Web Flasher
+    needs: [authorize, publish, restore]
+    if: >-
+      always() && github.repository == 'Pepeuch/universal-gnss'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive pending successful branch builds
+        id: firmware
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 tools/branches/esp32_preview.py --collect --output "$RUNNER_TEMP/preview-site"
+      - uses: actions/configure-pages@v5
+        if: steps.firmware.outputs.ready == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.firmware.outputs.ready == 'true'
+        with:
+          path: ${{ runner.temp }}/preview-site
+      - id: deploy
+        if: steps.firmware.outputs.ready == 'true'
+        uses: actions/deploy-pages@v4
+      - name: Verify public branch catalogue and firmware bytes
+        if: steps.firmware.outputs.ready == 'true'
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python3 tools/branches/esp32_alpha.py verify-online --site "$RUNNER_TEMP/preview-site" --url "$PAGE_URL"

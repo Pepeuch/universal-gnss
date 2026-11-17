@@ -39,14 +39,14 @@
       if (!row || Object.keys(row).sort().join(',')!=='publication,review,source_sha,source_tree' ||
           !sha(row.source_sha) || !sha(row.source_tree) || seen.has(row.source_sha) ||
           typeof row.review!=='string' || !row.review.length || row.review.length>256 ||
-          !['main_approved','not_authorized'].includes(row.publication)) throw Error('Approbation invalide ou dupliquée');
+          !['main_approved','not_authorized','ci_preview'].includes(row.publication)) throw Error('Approbation invalide ou dupliquée');
       seen.add(row.source_sha);
     }
     return data.sources;
   }
   async function verifyPublished(entry,selected,approval,getBytes) {
     const profile=normalize(entry.profile);
-    if (canonical(profile)!==canonical(normalize(selected)) || !approval || approval.publication!=='main_approved' ||
+    if (canonical(profile)!==canonical(normalize(selected)) || !approval || !['main_approved','ci_preview'].includes(approval.publication) ||
         approval.source_sha!==entry.source_sha || !sha(entry.source_sha) || !hash(entry.sha256) ||
         !hash(entry.partition_sha256) || !hash(entry.manifest_sha256) ||
         entry.qualification!=='software_only' || entry.install_mode!=='full' || entry.nvs_preservation!=='not_qualified' ||
@@ -93,9 +93,9 @@
     if (ordered.some((part,i)=>i && ordered[i-1].offset+ordered[i-1].bytes.byteLength>part.offset)) throw Error('Segments superposés');
     return {entry,manifest,parts:data};
   }
-  async function boundedFetch(path,limit,signal) {
+  async function boundedFetch(path,limit,signal,branchAPI=false) {
     const url=new URL(path,document.baseURI);
-    if (url.origin!==location.origin) throw Error('Ressource hors du portail');
+    if (url.origin!==location.origin && !(branchAPI && url.origin==='https://api.github.com' && url.pathname==='/repos/Pepeuch/universal-gnss/branches')) throw Error('Ressource hors du portail');
     const response=await fetch(url,{cache:'no-store',credentials:'omit',signal});
     if (!response.ok || Number(response.headers.get('Content-Length') || 0)>limit) throw Error('Ressource indisponible ou trop grande (HTTP '+response.status+')');
     if (!response.body?.getReader) {
@@ -130,17 +130,35 @@
     }
     return [...rows.values()].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0));
   }
+  function branchVersions(branch,catalog,registry,history,mapping,heads={}) {
+    if(branch==='main'&&!Array.isArray(registry?.sources))return publishedVersions(registry,catalog,history);
+    const preview=mapping?.schema===1?mapping.branches?.[branch]:null;
+    const current=sha(preview?.source_sha)?preview.source_sha:null;
+    const allowed=new Set(current?[current]:[]);
+    if(branch==='main')for(const row of registry?.sources||[])if(row?.publication==='main_approved'&&sha(row.source_sha))allowed.add(row.source_sha);
+    return publishedVersions(registry,catalog,history).filter(row=>allowed.has(row.source_sha));
+  }
+  async function loadBranchHeads(signal) {
+    const heads=Object.create(null);
+    for(let page=1;page<=10;page++) {
+      const rows=json(await boundedFetch('https://api.github.com/repos/Pepeuch/universal-gnss/branches?per_page=100&page='+page,1048576,signal,true));
+      if(!Array.isArray(rows))throw Error('Liste des branches invalide');
+      for(const row of rows)if(typeof row.name==='string'&&sha(row.commit?.sha))heads[row.name]=row.commit.sha;
+      if(rows.length<100)return heads;
+    }
+    throw Error('Liste des branches trop grande');
+  }
   async function loadCatalogue(signal) {
     const catalog=json(await boundedFetch('flasher/catalog.json',2097152,signal));
     if(!catalog||catalog.schema!==2||!Array.isArray(catalog.images)||catalog.images.length>512)throw Error('Catalogue invalide');
     const optional=async(path)=>{try{return json(await boundedFetch(path,65536,signal));}catch{return null;}};
-    const [registry,history]=await Promise.all([optional('flasher/approved-sources.json'),optional('flasher/publications.json')]);
+    const [registry,history,branches]=await Promise.all([optional('flasher/approved-sources.json'),optional('flasher/publications.json'),optional('flasher/branches.json')]);
     let sources=[];
     try {sources=approvals(registry);}catch{}
-    return {catalog,registry,history,sources,versions:publishedVersions(registry,catalog,history)};
+    return {catalog,registry,history,branches,sources,versions:publishedVersions(registry,catalog,history)};
   }
   function initialize() {
-    const $=id=>document.getElementById(id);let images=[],sources=[],generation=0,controller=null,current=null,urls=[];
+    const $=id=>document.getElementById(id);let images=[],sources=[],generation=0,controller=null,current=null,urls=[],loadedState=null,branchHeads={},catalogueGeneration=0,catalogueController=null;
     const status=text=>{$('status').textContent=text;};
     function clear() {
       controller?.abort();controller=null;current=null;
@@ -154,17 +172,23 @@
       return normalize(input);
     }
     function request(profile,source) {
-      const approved=sources.some(s=>s.source_sha===source);
-      const body={source_sha:approved?source:null,profile};
-      $('request').href='https://github.com/Pepeuch/universal-gnss/issues/new?'+new URLSearchParams({
-        title:approved?'[ESP32 build request] '+profile.variant+' '+source.slice(0,12):'[ESP32 source approval request] '+profile.variant,
-        body:'Demande mainteneur contrôlée. Aucune compilation déclenchée par cette issue.\n\n```json\n'+JSON.stringify(body,null,2)+'\n```\n\nJoindre ici le lien du workflow après approbation et exécution. Aucun secret, MAC ou canal radio. Publication distincte et soumise à autorisation.'});
-      $('request').textContent=approved?'Demander cette compilation sur GitHub':'Demander une source approuvée';
+      $('request').href='https://github.com/Pepeuch/universal-gnss/actions/workflows/esp32.yml?'+new URLSearchParams({query:'branch:'+$('branch').value});
+      $('request').textContent='Voir la compilation CI de cette branche';
       $('request').classList.remove('hidden');
+    }
+    function selectBranch() {
+      clear();$('version').replaceChildren();
+      if(!loadedState)return;
+      const versions=branchVersions($('branch').value,loadedState.catalog,loadedState.registry,loadedState.history,loadedState.branches,branchHeads);
+      for(const item of (versions.length?versions:[{source_sha:'none'}])) {
+        const option=document.createElement('option');option.value=item.source_sha;
+        option.textContent=sha(item.source_sha)?$('branch').value+' — '+(sources.find(s=>s.source_sha===item.source_sha)?.publication==='ci_preview'?'DERNIER BUILD CI':(item.channel||'Publié').toUpperCase())+' — '+(item.release_tag&&item.release_tag!=='esp32-ci-builds'?item.release_tag+' — ':'')+item.source_sha+' — '+(item.published_at||'date indisponible'):'Aucun build CI disponible pour cette branche';
+        $('version').append(option);
+      }
     }
     function summary() {
       const p=selected();$('summary').replaceChildren();
-      for(const [label,value] of Object.entries({Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
+      for(const [label,value] of Object.entries({Branche:$('branch').value,'HEAD branche':branchHeads[$('branch').value]||'indisponible',Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
         const a=document.createElement('dt'),b=document.createElement('dd');a.textContent=label;b.textContent=value;$('summary').append(a,b);
       }
     }
@@ -175,7 +199,7 @@
       $('tx-block').classList.add('hidden');$('baud-block').classList.add('hidden');summary();request(p,source);
       const approval=sources.find(s=>s.source_sha===source);
       const candidates=images.filter(e=>e.source_sha===source && canonical(normalize(e.profile))===canonical(p));
-      if(candidates.length!==1){status(candidates.length?'Catalogue ambigu : flash refusé.':'Aucune image publiée pour cette source/profil. La demande GitHub nécessite une approbation mainteneur.');return}
+      if(candidates.length!==1){status(candidates.length?'Catalogue ambigu : flash refusé.':'Aucun firmware CI disponible pour cette branche/profil. Attendre la compilation automatique ; aucun accord de publication n’est nécessaire pour un build de branche.');return}
       if(!approval){$('request').classList.add('hidden');status('Firmware publié disponible ; registre de provenance indisponible. Réessayez pour vérifier les binaires.');return}
       const requestController=new AbortController();controller=requestController;const signal=requestController.signal,timer=setTimeout(()=>requestController.abort(),30000);
       status('Vérification de la source, des partitions et de tous les segments…');
@@ -190,7 +214,7 @@
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
         $('image-info').textContent=`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète.`;
         $('request').classList.add('hidden');
-        status('Firmware publié — octets et provenance vérifiés. Qualification matérielle distincte. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
+        status((approval.publication==='ci_preview'?'Build de développement CI — ':'Firmware publié — ')+'branche '+$('branch').value+' ; octets et provenance vérifiés. Qualification matérielle distincte. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
       finally {clearTimeout(timer);}
     }
@@ -254,25 +278,36 @@
       if(ready)$('installer').setAttribute('manifest',current.manifestUrl);else $('installer').removeAttribute('manifest');
     });
     for(const id of ['device','version','tx','baud'])$(id).addEventListener('change',()=>render().catch(e=>status(e.message)));
-    $('check').addEventListener('click',()=>render().catch(e=>status(e.message)));
+    $('branch').addEventListener('change',()=>{selectBranch();render().catch(e=>status(e.message));});
+    $('check').addEventListener('click',()=>reloadCatalogue());
     for(const id of ['source','receiver'])$(id).addEventListener('change',summary);
     $('download-profile').addEventListener('click',()=>{
       const p=selected(),url=URL.createObjectURL(new Blob([JSON.stringify(p,null,2)+'\n'],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download=p.variant+'-profile.json';a.click();URL.revokeObjectURL(url);
     });
-    (async()=>{
-      const timeout=new AbortController(),timer=setTimeout(()=>timeout.abort(),15000);
+    async function reloadCatalogue(){
+      const load=++catalogueGeneration;catalogueController?.abort();++generation;clear();status('Actualisation du catalogue…');
+      const timeout=new AbortController();catalogueController=timeout;
+      const timer=setTimeout(()=>timeout.abort(),15000);
       try {
         const loaded=await loadCatalogue(timeout.signal);
-        sources=loaded.sources;images=loaded.catalog.images;
+        let heads={};try{heads=await loadBranchHeads(timeout.signal);}catch{}
+        if(load!==catalogueGeneration)return;
+        const wanted=$('branch').value||'main';
+        sources=loaded.sources;images=loaded.catalog.images;loadedState=loaded;branchHeads=heads;
         for(const entry of images)normalize(entry.profile);
-        const versions=loaded.versions;
-        $('version').replaceChildren();
-        for(const item of (versions.length?versions:[{source_sha:'none'}])){const option=document.createElement('option');option.value=item.source_sha;option.textContent=sha(item.source_sha)?(item.channel||item.status?.match(/alpha|beta|stable/i)?.[0]||'Publié').toUpperCase()+' — '+(item.release_tag?item.release_tag+' — ':'')+item.source_sha+' — '+(item.published_at||'date indisponible'):'Aucun firmware publié';$('version').append(option)}
+        const branches=new Set(['main','dev',...Object.keys(loaded.branches?.branches||{}),...Object.keys(branchHeads)]);
+        $('branch').replaceChildren();
+        for(const branch of [...branches].sort((a,b)=>(a==='main'?-1:b==='main'?1:a==='dev'?-1:b==='dev'?1:a.localeCompare(b)))) {
+          const option=document.createElement('option');option.value=branch;option.textContent=branch;$('branch').append(option);
+        }
+        if(branches.has(wanted))$('branch').value=wanted;
+        selectBranch();
         await render();
-      } catch(error){clear();status('Portail non disponible : '+error.message)}finally{clearTimeout(timer)}
-    })();
+      } catch(error){if(load===catalogueGeneration){clear();status('Portail non disponible : '+error.message)}}finally{clearTimeout(timer)}
+    }
+    reloadCatalogue();
   }
-  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished,publishedVersions,loadCatalogue};
+  globalThis.UGFlasher={normalize,keyFor,approvals,verifyPublished,publishedVersions,loadCatalogue,branchVersions,loadBranchHeads};
   if(typeof document!=='undefined')initialize();
 })();

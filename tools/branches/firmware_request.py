@@ -36,7 +36,7 @@ def approval_register(approvals):
             not isinstance(row['source_sha'],str) or not re.fullmatch('[a-f0-9]{40}',row['source_sha']) or
             not isinstance(row['source_tree'],str) or not re.fullmatch('[a-f0-9]{40}',row['source_tree']) or
             not isinstance(row['review'],str) or not 1<=len(row['review'])<=256 or
-            row['publication'] not in ('not_authorized','main_approved') or row['source_sha'] in sources):
+            row['publication'] not in ('not_authorized','main_approved','ci_preview') or row['source_sha'] in sources):
             raise ValueError('invalid or duplicate approval entry')
         sources[row['source_sha']]=row
     return sources
