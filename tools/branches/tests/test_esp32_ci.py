@@ -99,29 +99,33 @@ class NativeCI(unittest.TestCase):
     def test_workflow_has_exact_supported_matrix_and_no_publication(self):
         workflow = yaml.load((ROOT/'.github/workflows/esp32.yml').read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(workflow['permissions'], {'contents':'read'})
-        self.assertEqual(set(workflow['jobs']), {'firmware','gate'})
+        self.assertEqual(set(workflow['jobs']), {'changes','firmware','gate'})
         job = workflow['jobs']['firmware']
-        self.assertNotIn('if', job)
+        self.assertEqual(job['if'],"needs.changes.outputs.build_required == 'true'")
         # The relay remains buildable manually but is deliberately deferred in CI.
         self.assertIn('c3-relay', ci.VARIANTS)
         self.assertEqual(job['strategy'], {'fail-fast':'false','matrix':{
             'variant':['s3-gateway','c3-rover-usb','c3-rover-uart']}})
         self.assertEqual(job['steps'][0]['with']['persist-credentials'], 'false')
-        self.assertEqual(len(job['steps']), 2)
+        self.assertEqual(len(job['steps']), 3)
+        self.assertIn('--bundle-output', job['steps'][1]['run'])
+        self.assertEqual(job['steps'][2]['with']['retention-days'], '7')
+        self.assertEqual(job['steps'][2]['with']['if-no-files-found'], 'error')
         self.assertIn('embedded/esp32/native/ci.py', job['steps'][1]['run'])
         self.assertIn('test "$(id -u)" != 0', job['steps'][1]['run'])
         self.assertNotIn('pull_request_target', workflow['on'])
         self.assertNotIn('secrets.', json.dumps(workflow))
-        self.assertNotIn('upload-artifact', json.dumps(workflow))
+        self.assertIn('upload-artifact', job['steps'][2]['uses'])
+        self.assertNotIn('contents: write', json.dumps(workflow))
 
     def test_gate_is_always_and_fail_closed_for_every_matrix_result(self):
         workflow = yaml.load((ROOT/'.github/workflows/esp32.yml').read_text(), Loader=yaml.BaseLoader)
         gate = workflow['jobs']['gate']
         self.assertEqual(gate['if'], 'always()')
-        self.assertEqual(gate['needs'], ['firmware'])
+        self.assertEqual(gate['needs'], ['changes','firmware'])
         script = gate['steps'][0]['run']
         for state in ('success','failure','cancelled','skipped',''):
-            result = subprocess.run(['bash','-c',script], env={**os.environ,'FIRMWARE_RESULT':state})
+            result = subprocess.run(['bash','-c',script], env={**os.environ,'FIRMWARE_RESULT':state,'SELECTION_RESULT':'success','BUILD_REQUIRED':'true','SOURCE_REF':'refs/heads/feature/test'})
             self.assertEqual(result.returncode == 0, state == 'success')
 
     def test_variants_preserve_minimal_rover_and_explicit_uart(self):

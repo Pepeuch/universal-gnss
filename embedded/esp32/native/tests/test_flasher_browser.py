@@ -80,6 +80,29 @@ class Flasher(unittest.TestCase):
             self.assertEqual(vm.eval('loaded.versions[0].source_sha'),'a'*40)
     def test_actual_packager_and_browser_agree(self):
         result,paths=self.evaluate();self.assertEqual(result,{'ok':True,'count':4});self.assertEqual(len(paths),7)
+    def test_ci_preview_uses_the_same_binary_partition_and_provenance_checks(self):
+        row=dict(self.approval,publication='ci_preview')
+        result,paths=self.evaluate(approval=row)
+        self.assertEqual(result,{'ok':True,'count':4});self.assertEqual(len(paths),7)
+        files=copy.deepcopy(self.files);path=next(name for name in files if name.endswith('universal-gnss-esp32.bin'))
+        files[path][-1]^=1
+        self.assertIn('error',self.evaluate(approval=row,files=files)[0])
+    def test_main_dev_and_work_branches_show_their_own_successful_build(self):
+        vm=self.vm()
+        catalog={'images':[{'source_sha':value*40} for value in ('a','b','c')]}
+        registry={'schema':1,'sources':[dict(self.approval),dict(self.approval,source_sha='b'*40,publication='ci_preview'),
+                                      dict(self.approval,source_sha='c'*40,publication='ci_preview')]}
+        mapping={'schema':1,'branches':{'dev':{'source_sha':'b'*40},'feature/rtcm':{'source_sha':'c'*40}}}
+        for branch,expected in [('main',['a'*40]),('dev',['b'*40]),('feature/rtcm',['c'*40]),('unbuilt',[])]:
+            expr='UGFlasher.branchVersions('+','.join(json.dumps(value) for value in (branch,catalog,registry,None,mapping))+').map(row=>row.source_sha)'
+            self.assertEqual(json.loads(vm.eval('JSON.stringify('+expr+')')),expected)
+        # A later docs commit has no firmware build. Keep the last exact CI SHA.
+        expr='UGFlasher.branchVersions('+','.join(json.dumps(value) for value in ('feature/rtcm',catalog,registry,None,mapping,{'feature/rtcm':'d'*40}))+')'
+        self.assertEqual(vm.eval(expr+'[0].source_sha'),'c'*40)
+    def test_missing_registry_never_hides_the_existing_main_catalogue(self):
+        vm=self.vm()
+        expr='UGFlasher.branchVersions("main",'+json.dumps({'images':[self.entry]})+',null,null,null)'
+        self.assertEqual(vm.eval(expr+'.length'),1)
     def test_unapproved_source_never_downloads_images(self):
         for field,value in [('publication','not_authorized'),('source_sha','c'*40)]:
             row=copy.deepcopy(self.approval);row[field]=value

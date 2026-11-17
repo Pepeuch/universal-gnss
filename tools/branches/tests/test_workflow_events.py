@@ -14,9 +14,9 @@ VALIDATIONS = {
     'distributions.yml': 'Distribution validation',
     'docker.yml': 'Docker image validation',
     'format.yml': 'C/C++ Format',
-    'esp32.yml': 'ESP32 native validation',
     'ros2-lyrical.yml': 'ROS 2 Lyrical validation',
 }
+ALL_BRANCH_VALIDATIONS = {'esp32.yml': 'ESP32 native validation'}
 MANUAL_VALIDATIONS = {'ros2-kilted.yml': 'ROS 2 Kilted validation'}
 CONTROLLED_BUILDS = {'esp32-request.yml': 'ESP32 requested firmware validation', 'esp32-alpha.yml':'ESP32 alpha publication'}
 
@@ -40,6 +40,13 @@ def require_validation_events(events):
         raise ValueError('pull_request must remain unfiltered')
 
 
+def require_all_branch_events(events):
+    if not isinstance(events, dict) or set(events) != {'push', 'pull_request'}:
+        raise ValueError('native ESP32 requires push and pull_request')
+    if any(value not in ('', None, {}) for value in events.values()):
+        raise ValueError('native ESP32 events must have no branch/path/tag filter')
+
+
 class WorkflowEventTests(unittest.TestCase):
     def setUp(self):
         self.events = {'push': {'branches': ['dev', 'main']}, 'pull_request': ''}
@@ -52,9 +59,24 @@ class WorkflowEventTests(unittest.TestCase):
                 self.assertEqual(workflow['name'], name)
                 require_validation_events(workflow['on'])
 
+    def test_esp32_accepts_every_branch_event_and_selects_builds_only_by_inputs(self):
+        for filename, name in ALL_BRANCH_VALIDATIONS.items():
+            workflow = yaml.load((WORKFLOWS / filename).read_text(), Loader=yaml.BaseLoader)
+            self.assertEqual(workflow['name'], name)
+            require_all_branch_events(workflow['on'])
+            self.assertEqual(workflow['jobs']['firmware']['if'],"needs.changes.outputs.build_required == 'true'")
+
+    def test_esp32_rejects_reintroduction_of_working_branch_or_path_filters(self):
+        for push in ({'branches': ['main', 'dev']}, {'branches-ignore': ['feature/*']},
+                     {'paths': ['embedded/**']}, {'tags': ['v*']}):
+            with self.subTest(push=push), self.assertRaisesRegex(ValueError, 'no branch/path/tag filter'):
+                require_all_branch_events({'push': push, 'pull_request': ''})
+        with self.assertRaisesRegex(ValueError, 'no branch/path/tag filter'):
+            require_all_branch_events({'push': '', 'pull_request': {'branches': ['main']}})
+
     def test_workflow_inventory_keeps_release_outside_ordinary_policy(self):
         actual = {path.name for path in WORKFLOWS.iterdir() if path.suffix in ('.yml', '.yaml')}
-        self.assertEqual(actual, set(VALIDATIONS) | set(MANUAL_VALIDATIONS) | set(CONTROLLED_BUILDS) | {'docker-release.yml', 'esp32-web-pages.yml'})
+        self.assertEqual(actual, set(VALIDATIONS) | set(ALL_BRANCH_VALIDATIONS) | set(MANUAL_VALIDATIONS) | set(CONTROLLED_BUILDS) | {'docker-release.yml', 'esp32-web-pages.yml'})
 
     def test_historical_workflow_retains_its_name_and_is_manual_only(self):
         for filename, name in MANUAL_VALIDATIONS.items():

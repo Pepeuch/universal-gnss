@@ -22,7 +22,7 @@ def inspect_bundle(root,approvals):
     root=Path(root).resolve(strict=True);entry=p.load(root/'catalog-entry.json')
     profile=p.profiles.normalize(entry['profile'])
     request=r.validate(entry['source_sha'],profile['variant'],profile.get('uart_tx',4),profile.get('uart_baud',115200),approvals)
-    if request['publication']!='main_approved' or entry.get('build_key')!=request['build_key']:
+    if request['publication'] not in ('main_approved','ci_preview') or entry.get('build_key')!=request['build_key']:
         raise ValueError('publication approval required; review artifacts are not a catalogue')
     key=request['build_key'];directory=root/'published'/key
     if entry.get('manifest')!=f'flasher/published/{key}/manifest.json' or entry.get('bundle')!=f'flasher/published/{key}/bundle.zip':
@@ -90,6 +90,20 @@ def require_main(repo,source,tree,main_ref='origin/main'):
     if subprocess.run(['git','-C',str(repo),'merge-base','--is-ancestor',source,main_ref],env=env).returncode:
         raise ValueError('official catalogue source must be contained in main')
 
+def require_source(repo,source,tree,publication):
+    if publication=='main_approved':
+        return require_main(repo,source,tree)
+    if publication!='ci_preview':raise ValueError('source not authorized for staging')
+    env={**os.environ,'GIT_NO_REPLACE_OBJECTS':'1','GIT_NO_LAZY_FETCH':'1','GIT_TERMINAL_PROMPT':'0'}
+    if not re.fullmatch('[a-f0-9]{40}',source) or not re.fullmatch('[a-f0-9]{40}',tree):
+        raise ValueError('exact development source/tree required')
+    available=subprocess.run(['git','-C',str(repo),'cat-file','-e',source+'^{commit}'],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    if available.returncode:
+        subprocess.run(['git','-C',str(repo),'fetch','--no-tags','origin',source],env=env,check=True,timeout=90)
+    if subprocess.check_output(['git','-C',str(repo),'cat-file','-t',source],env=env,text=True).strip()!='commit':raise ValueError('development source must be a commit')
+    actual=subprocess.check_output(['git','-C',str(repo),'rev-parse',source+'^{tree}'],env=env,text=True).strip()
+    if actual!=tree:raise ValueError('development source/tree mismatch')
+
 def prepare(output,approvals,bundles=(),repo=ROOT):
     # Validate everything before creating the destination; no partial public catalogue.
     output=Path(output).resolve()
@@ -101,7 +115,7 @@ def prepare(output,approvals,bundles=(),repo=ROOT):
     for root in bundles:
         entry,directory,files=inspect_bundle(root,approvals)
         row=next(row for row in approvals['sources'] if row['source_sha']==entry['source_sha'])
-        require_main(repo,entry['source_sha'],row['source_tree'])
+        require_source(repo,entry['source_sha'],row['source_tree'],row['publication'])
         if entry['build_key'] in keys:raise ValueError('duplicate firmware identity')
         total+=sum((directory/name).stat().st_size for name in files)
         if total>512*1024*1024:raise ValueError('local Pages mirror exceeds 512 MiB budget')

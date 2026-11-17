@@ -89,20 +89,84 @@ def select(repo=ROOT):
     return ''
 
 
+def release_candidate(tag, sha='', repo=ROOT, actor=None, release_id=None, event_sha=None):
+    release = a.v.get_release(api, tag)
+    target, _ = a.v.tag_identity(api, tag)
+    if (sha and sha != target) or (event_sha and event_sha != target):
+        raise ValueError('requested/event SHA differs from Release tag')
+    identity, release = a.v.authorize(a, api, require_ci, repo, target, tag,
+                                     actor=actor, release_id=release_id)
+    assets = a.v.asset_map(release)
+    complete = a.v.MARKER in assets
+    if complete:
+        a.v.verify_marker(release, identity)
+    return identity, complete, a.v.ARCHIVE in assets and not complete
+
+
+def choose(args, env=os.environ):
+    """Release and maintenance entry points share all immutable authority checks."""
+    event = env.get('GITHUB_EVENT_NAME')
+    if env.get('GITHUB_REPOSITORY') != a.REPO:
+        raise ValueError('publication repository mismatch')
+    if event not in ('release', 'workflow_dispatch', 'workflow_run'):
+        raise ValueError('unsupported publication event')
+    if event != 'release' and env.get('GITHUB_REF') != 'refs/heads/main':
+        raise ValueError('publication controller must run from main')
+    tag, sha, release_id, event_sha = args.release_tag, args.source_sha, None, None
+    if event == 'release':
+        payload = a.s.p.load(Path(env['GITHUB_EVENT_PATH']))
+        if payload.get('action') != 'published':
+            raise ValueError('published Release event required')
+        tag = payload['release']['tag_name']
+        if not a.v.RC_TAG.fullmatch(tag):
+            return {}, False, False
+        release_id = payload['release']['id']
+        event_sha = env.get('GITHUB_SHA')
+        if env.get('GITHUB_REF') != 'refs/tags/' + tag or not event_sha:
+            raise ValueError('Release event ref/SHA mismatch')
+    elif event == 'workflow_run':
+        releases = a.v.pages(api, 'releases')
+        candidates = [r for r in releases if not r.get('draft') and
+                      a.v.RC_TAG.fullmatch(r.get('tag_name', ''))]
+        if candidates:
+            # CI may complete after Release publication. Never use an older RC
+            # to bypass the newest candidate's missing validation/authority.
+            tag = max(candidates, key=lambda r: r['published_at'])['tag_name']
+    if tag and a.v.RC_TAG.fullmatch(tag):
+        if event != 'workflow_run' and not env.get('GITHUB_ACTOR'):
+            raise ValueError('publication actor required')
+        try:
+            return release_candidate(tag, sha, actor=env.get('GITHUB_ACTOR')
+                                     if event != 'workflow_run' else None,
+                                     release_id=release_id, event_sha=event_sha)
+        except NotReady as error:
+            if event == 'workflow_dispatch':
+                raise
+            print('Publication deferred: ' + str(error))
+            return {}, False, False
+    if event == 'workflow_dispatch':
+        identity = authorize(sha)
+        return a.source(ROOT, sha, tag), False, False
+    selected = select()
+    return (a.source(ROOT, selected) if selected else {}), ALREADY_PUBLISHED, False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-sha')
+    parser.add_argument('--release-tag', default='')
     args = parser.parse_args()
-    if args.source_sha:
-        authorize(args.source_sha)
-        sha = args.source_sha
-    else:
-        sha = select()
+    identity, complete, resume = choose(args)
+    sha = identity.get('source_sha', '')
     print(sha)
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
             out.write('source_sha='+sha+'\n')
-            out.write('already_published='+str(ALREADY_PUBLISHED).lower()+'\n')
+            out.write('already_published='+str(complete).lower()+'\n')
+            out.write('resume_archive='+str(resume).lower()+'\n')
+            out.write('release_tag='+identity.get('release_tag', '')+'\n')
+            out.write('identity='+json.dumps(identity, sort_keys=True, separators=(',', ':'))+'\n')
+            out.write('publisher_sha='+a.git(ROOT, 'rev-parse', 'HEAD')+'\n')
 
 
 if __name__ == '__main__':
