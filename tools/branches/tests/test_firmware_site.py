@@ -16,6 +16,15 @@ class Site(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             dest=s.prepare(Path(root)/'site',{'schema':1,'sources':[]})
             self.assertTrue((dest/'flasher.html').exists());self.assertTrue((dest/'.nojekyll').exists())
+            for name in ('boards.js', 'configurator.js', 'configurator.css'):
+                self.assertTrue((dest/'flasher/pinout'/name).is_file())
+            for name in (
+                'waveshare-esp32-s3-eth-pinout-high-resolution.svg',
+                'esp32-c3-super-mini-plus-pinout-high-resolution.svg',
+                'esp32-c6-super-mini-pinout-high-resolution.svg',
+            ):
+                self.assertTrue((dest/'flasher/assets/boards'/name).is_file())
+            self.assertTrue((dest/'flasher/ESPBOARDS-CREDITS.md').is_file())
             self.assertEqual(s.p.load(dest/'flasher/catalog.json'),{'schema':2,'images':[]})
             self.assertFalse((dest/'flasher/published').exists())
             with self.assertRaises(ValueError):s.prepare(dest,{'schema':1,'sources':[]})

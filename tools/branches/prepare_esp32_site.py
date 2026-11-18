@@ -124,6 +124,10 @@ def prepare(output,approvals,bundles=(),repo=ROOT):
     for name in ('flasher.html','UG_logo.png'):shutil.copyfile(ROOT/'docs'/name,output/name)
     (output/'flasher').mkdir()
     for name in ('app.js','portable.js','provision.js','README.md'):shutil.copyfile(ROOT/'docs/flasher'/name,output/'flasher'/name)
+    # Include versioned Pin Configurator resources in the isolated Pages staging.
+    shutil.copytree(ROOT/'docs/flasher/pinout', output/'flasher/pinout')
+    shutil.copytree(ROOT/'docs/flasher/assets/boards', output/'flasher/assets/boards')
+    shutil.copyfile(ROOT/'docs/flasher/ESPBOARDS-CREDITS.md', output/'flasher/ESPBOARDS-CREDITS.md')
     (output/'.nojekyll').write_text('')
     (output/'flasher/approved-sources.json').write_bytes(p.json_bytes(approvals))
     (output/'flasher/catalog.json').write_bytes(p.json_bytes({'schema':2,'images':sorted(entries,key=lambda e:e['build_key'])}))
