@@ -1,0 +1,60 @@
+/* Extension isolee du flasher existant */
+main:has(.ug-pin-panel) { max-width: 1400px; }
+.ug-pin-panel { margin-bottom: 24px; }
+.ug-pin-panel h3 { margin: 0 0 10px; font-size: 1rem; }
+.ug-pin-controls { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 16px 0; }
+.ug-pin-workspace { display:grid; grid-template-columns: minmax(0, 3fr) minmax(245px, 1fr); gap: 16px; align-items:start; }
+.ug-pin-svg { padding: 10px; min-height: 180px; border: 1px solid var(--stroke); background: #f8fafc; border-radius:12px; overflow:auto; }
+.ug-pin-svg svg { width: 100%; height:auto; display:block; }
+.ug-pin-sidebar { background:var(--panel2); border:1px solid var(--stroke); border-radius:12px; padding: 14px; }
+.ug-pin-assignments { display:flex; flex-direction:column; gap:8px; padding:0; margin:0; list-style:none; }
+.ug-pin-assignment { display:flex; gap:10px; align-items:center; justify-content:space-between; border-bottom:1px solid var(--stroke); padding-bottom:8px; }
+.ug-pin-assignment button { padding: 4px 8px; font-size: 0.82rem; }
+.ug-pin-label { font-size: 0.91rem; overflow-wrap:anywhere; }
+.ug-pin-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:14px 0; }
+.ug-pin-import-label { display:inline-flex; padding:10px 15px; background:#304964; color:var(--text); border-radius:9px; cursor:pointer; font-weight:750; }
+.ug-pin-import-label:focus-within { outline: 3px solid var(--blue); }
+.ug-pin-import-label input { position:absolute; width:1px; height:1px; opacity:0; }
+.ug-pin-legend { display:flex; flex-wrap:wrap; gap:12px; font-size:0.86rem; margin-top:10px; color:var(--muted); }
+.ug-pin-dot { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:5px; vertical-align:middle; }
+.ug-pin-note { margin-top:10px; }
+.ug-pin-svg .bpad[data-gpio],.ug-pin-svg .prow[data-slot] { cursor:pointer; }
+.ug-pin-svg .bpad.ug-pin-locked,.ug-pin-svg .prow.ug-pin-locked { opacity:0.48; cursor:not-allowed; }
+.ug-pin-svg .prow.ug-pin-assigned > rect:first-of-type { fill:var(--ug-pin-color)!important; stroke:#111827!important; stroke-width:2!important; }
+.ug-pin-svg .bpad.ug-pin-assigned circle:first-of-type { stroke:var(--ug-pin-color)!important; stroke-width:4!important; }
+.ug-pin-svg .ug-pin-role { pointer-events:none; user-select:none; }
+.ug-pin-svg .bpad:focus-visible,.ug-pin-svg .prow:focus-visible { outline:3px solid #2563eb; }
+.ug-pin-svg .ug-pin-assigned { filter:brightness(1.02); }
+@media (max-width:1000px) { .ug-pin-controls { grid-template-columns: repeat(2, minmax(0,1fr)); } .ug-pin-workspace { grid-template-columns: 1fr; } }
+@media (max-width:600px) { .ug-pin-controls { grid-template-columns:1fr; } }
+
+/* Démonstration CDN non interactive : recadrage CSS de la planche ESPBoards.
+   La zone du dessin provient du viewBox interne : x=40 y=157 w=1545.196 h=305.307
+   Le SVG externe reste un <img> isolé : aucun fetch/CORS ni modification interne. */
+.ug-cdn-test { margin-bottom: 24px; }
+.ug-cdn-heading {display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;}
+.ug-cdn-heading h2 {margin:0;}
+.ug-cdn-toggle {display:inline-flex; align-items:center; gap:9px; color:var(--text); font-weight:600; margin:10px 0; cursor:pointer;}
+.ug-cdn-toggle input {width:18px; height:18px; margin:0; padding:0; border:0; background:initial; accent-color:var(--blue);}
+.ug-cdn-scroller {max-width:100%; overflow-x:auto; background:#fff; border:1px solid var(--stroke); border-radius:12px;}
+.ug-cdn-crop {position:relative; width:100%; min-width:760px; aspect-ratio:1545.196 / 305.307; overflow:hidden; background:#fff;}
+.ug-cdn-crop > img {position:absolute; display:block; max-width:none; height:auto; width:105.177%; left:-2.5887%; top:-51.424%;}
+.ug-cdn-test:has(.ug-cdn-show-full:checked) .ug-cdn-crop {aspect-ratio:1625.196 / 596.307;}
+.ug-cdn-test:has(.ug-cdn-show-full:checked) .ug-cdn-crop > img {width:100%; left:0; top:0;}
+.ug-cdn-credit {margin-top:8px; font-size:.85rem; color:var(--muted);}
+.ug-cdn-credit a {color:#8acbff;}
+.ug-cdn-note {font-size:.88rem; color:var(--muted);}
+
+/* Fichiers ESPBoards locaux : SVG non modifiés, légendes recadrées en DOM seulement. */
+.ug-pin-view-options {display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between;align-items:center;margin:8px 0;font-size:.84rem;color:var(--muted)}
+.ug-pin-view-options label {display:inline-flex;gap:7px;align-items:center;margin:0;cursor:pointer;font-weight:500}
+.ug-pin-view-options input[type="checkbox"] {width:auto;accent-color:var(--blue)}
+.ug-pin-fixed {display:flex;flex-direction:column;gap:7px;margin:10px 0 16px}
+.ug-pin-fixed-group {border:1px solid var(--stroke);border-radius:7px;background:#112038;padding:7px 9px}
+.ug-pin-fixed-group summary {cursor:pointer;display:flex;gap:6px;flex-wrap:wrap;justify-content:space-between;align-items:baseline;font-size:.88rem}
+.ug-pin-fixed-group summary strong {font-weight:700}
+.ug-pin-fixed-group p {margin:7px 0 0;font-size:.82rem;line-height:1.4}
+.ug-pin-fixed-state {font-size:.72rem;color:var(--muted)}
+.ug-pin-sidebar .ug-pin-custom-title {font-size:.95rem;margin:12px 0 7px}
+.ug-pin-svg .prow[data-slot^="CO"] {cursor:pointer}
+@media (max-width:650px) {.ug-pin-view-options {flex-direction:column;align-items:flex-start}}
