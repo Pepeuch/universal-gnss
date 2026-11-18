@@ -1,0 +1,25 @@
+/* Test unitaire sans navigateur, lance : node tests/validate-pin-config.cjs */
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const folder = path.join(__dirname, '../flasher/pinout');
+const ctx = { window:{}, document:{getElementById:()=>({})}, console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(path.join(folder,'boards.js'),'utf8'),ctx);
+let code = fs.readFileSync(path.join(folder,'configurator.js'),'utf8');
+const cut = code.indexOf('  restore();\n  fillBoardOptions();');
+assert.ok(cut>0, 'Point d’insertion du test non trouve');
+code = code.slice(0,cut)+'  window.ugTest={validateProfile};\n})();';
+vm.runInContext(code,ctx);
+const validate = ctx.window.ugTest.validateProfile;
+const base = {schema:'ug-pin-config-v1', board:'s3-gateway', gnss_uart:'UART1'};
+assert.equal(validate({...base, assignments:{'UART1.TX':17,'UART1.RX':16}}).assignments['UART1.RX'],16);
+assert.throws(()=>validate({...base,assignments:{'UART1.TX':17,'UART1.RX':17}}),/Conflit/);
+assert.throws(()=>validate({...base,assignments:{'UART1.TX':33}}),/PSRAM/);
+assert.throws(()=>validate({...base,assignments:{'UART1.TX':46}}),/entree seule/);
+assert.throws(()=>validate({...base,assignments:{'SPI2.CS0':18}}),/reserve/);
+assert.throws(()=>validate({...base,assignments:{'UART1.TX':6}}),/non expose/);
+assert.throws(()=>validate({...base,board:'c3-rover-usb',assignments:{'UART1.TX':17}}),/non expose/);
+assert.equal(validate({...base,board:'c6-future',gnss_uart:null,assignments:{}}).board,'c6-future');
+console.log('8 tests de validation GPIO/profil : PASS');
