@@ -6,6 +6,7 @@
   'use strict';
   const variants = {
     's3-gateway': {chip:'ESP32-S3',board:'waveshare-s3-eth',profile:'gateway',output:'espnow',flash_mb:16,psram_mb:8,ethernet:'w5500'},
+    's3-gateway-http': {chip:'ESP32-S3',board:'waveshare-s3-eth',profile:'gateway',output:'espnow',flash_mb:16,psram_mb:8,ethernet:'w5500'},
     'c3-rover-usb': {chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'usb',flash_mb:4,psram_mb:0,ethernet:'none'},
     'c3-rover-uart': {chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'uart',flash_mb:4,psram_mb:0,ethernet:'none'}
   };
@@ -64,10 +65,15 @@
         qualification.source_tree!==approval.source_tree || qualification.variant!==profile.variant || qualification.sdk_image!==entry.sdk_image ||
         qualification.build_and_verify!=='pass' || qualification.reproducibility!=='pass' || qualification.source_mounts!==false ||
         qualification.network_during_build_and_tests!=='disconnected_no_interfaces' || qualification.flash_or_publication!==false ||
-        (profile.variant==='s3-gateway' && qualification.host_tests!=='pass') ||
+        (profile.variant.startsWith('s3-gateway') && qualification.host_tests!=='pass') ||
         qualification.binary?.portable_configuration_schema!==1 || qualification.binary?.sha256!==entry.sha256 || qualification.binary?.radio_configuration!=='runtime_nvs_encrypted_unicast' ||
         qualification.binary?.profile!==profile.profile || qualification.binary?.local_gnss!==(profile.profile==='gateway') ||
         (profile.profile==='rover' && Object.keys(output).some(k=>qualification.binary?.rover_output?.[k]!==output[k]))) throw Error('Provenance ou qualification incompatible');
+    if(profile.profile==='gateway' && (qualification.binary?.web_transport||'https')!==(profile.variant==='s3-gateway-http'?'http':'https'))throw Error('Transport Web incompatible avec la variante');
+    const identityKey=value=>value?canonical(value):'';
+    if(identityKey(entry.firmware_identity)!==identityKey(provenance.firmware_identity) || identityKey(entry.firmware_identity)!==identityKey(qualification.binary?.firmware_identity) || entry.first_boot_tls!==provenance.first_boot_tls || entry.first_boot_tls!==qualification.binary?.first_boot_tls)throw Error('Identité du firmware incohérente');
+    const firmware=entry.firmware_identity;
+    if(firmware && (firmware.source_sha!==entry.source_sha || firmware.source_tree!==approval.source_tree || firmware.modified!==false || firmware.hardware_variant!==profile.board || firmware.profile!==profile.profile || firmware.esp_idf!=='6.1' || firmware.web_transport!==(profile.profile==='rover'?'none':profile.variant==='s3-gateway-http'?'http':'https')))throw Error('Identité firmware/source incompatible');
     if (Object.keys(manifest).sort().join(',')!=='builds,name,new_install_prompt_erase,version' || manifest.new_install_prompt_erase!==true ||
         !Array.isArray(manifest.builds) || manifest.builds.length!==1 || Object.keys(manifest.builds[0]).sort().join(',')!=='chipFamily,parts' || manifest.builds[0].chipFamily!==profile.chip ||
         !Array.isArray(manifest.builds[0].parts) || manifest.builds[0].parts.length!==4) throw Error('Manifeste matériel incompatible');
@@ -188,12 +194,13 @@
     }
     function summary() {
       const p=selected();$('summary').replaceChildren();
-      for(const [label,value] of Object.entries({Branche:$('branch').value,'HEAD branche':branchHeads[$('branch').value]||'indisponible',Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
+      for(const [label,value] of Object.entries({Branche:$('branch').value,'HEAD branche':branchHeads[$('branch').value]||'indisponible',Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Transport:p.profile==='gateway'?(p.variant==='s3-gateway-http'?'HTTP · LAN non chiffré':'HTTPS · identité unique au premier démarrage'):'USB / UART',Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
         const a=document.createElement('dt'),b=document.createElement('dd');a.textContent=label;b.textContent=value;$('summary').append(a,b);
       }
     }
     async function render() {
       const version=++generation;clear();const p=selected(),source=$('version').value;
+      if(($('install-mode')?.value||'full')!=='full'){status('Mise à jour indisponible : qualification matérielle et contrôle USB préalables requis.');return;}
       portableForm(p.board);
       $('source').disabled=p.profile!=='gateway';$('receiver').disabled=p.profile!=='gateway';
       $('tx-block').classList.add('hidden');$('baud-block').classList.add('hidden');summary();request(p,source);
@@ -212,7 +219,10 @@
         const manifestUrl=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));urls.push(manifestUrl);
         current={manifestUrl};
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
-        $('image-info').textContent=`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète.`;
+        const fw=verified.entry.firmware_identity;
+        const identityInfo=fw?`UG ${fw.ug_version} · ${fw.hardware_variant} · ${fw.web_transport.toUpperCase()} · ESP-IDF ${fw.esp_idf} · `:'';
+        const startup=p.profile==='gateway' && p.variant!=='s3-gateway-http' ? (verified.entry.first_boot_tls==='automatic_unique_nvs'?'Identité TLS créée automatiquement si absente ; certificat local autosigné à accepter. Première connexion admin/admin, changement obligatoire. Validation matérielle distincte.':'Ancienne image : après effacement NVS, provisionnement TLS USB obligatoire avant accès Web. Installation seule non opérationnelle.') : '';
+        $('image-info').textContent=identityInfo+`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète. `+startup;
         $('request').classList.add('hidden');
         status((approval.publication==='ci_preview'?'Build de développement CI — ':'Firmware publié — ')+'branche '+$('branch').value+' ; octets et provenance vérifiés. Qualification matérielle distincte. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
@@ -273,10 +283,11 @@
       finally{button.disabled=false;}
     });
     $('consent').addEventListener('change',()=>{
-      const ready=Boolean(current && $('consent').checked);
+      const ready=Boolean(current && $('consent').checked && ($('install-mode')?.value||'full')==='full');
       $('flash-available').classList.toggle('hidden',!ready);$('flash-unavailable').classList.toggle('hidden',ready);
       if(ready)$('installer').setAttribute('manifest',current.manifestUrl);else $('installer').removeAttribute('manifest');
     });
+    $('install-mode')?.addEventListener('change',()=>render().catch(e=>status(e.message)));
     for(const id of ['device','version','tx','baud'])$(id).addEventListener('change',()=>render().catch(e=>status(e.message)));
     $('branch').addEventListener('change',()=>{selectBranch();render().catch(e=>status(e.message));});
     $('check').addEventListener('click',()=>reloadCatalogue());

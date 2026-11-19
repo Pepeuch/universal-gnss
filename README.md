@@ -36,12 +36,13 @@ Universal GNSS is a modular GNSS/RTK runtime stack designed for ROS 2, embedded 
 The goal is to provide a vendor-agnostic GNSS layer capable of parsing, normalizing, configuring, and exposing GNSS data from multiple receiver families through a common runtime model.
 
 The [ESP32 ALPHA Web Flasher](https://pepeuch.github.io/universal-gnss/flasher.html)
-installs experimental S3 Gateway and C3 Rover images published through the
-[manual alpha workflow](.github/workflows/esp32-alpha.yml). Each publication builds
-both native firmwares from an exact `main` commit, checks integrity/reproducibility,
-archives prerelease assets, then deploys Pages. Hardware qualification remains
-in progress; see the [publication and first-install guide](docs/flasher/ALPHA.md).
-The public URL is usable after the maintainer's first successful publication run.
+selects published branch builds with their exact source SHA. S3 Gateway has explicit
+HTTPS and HTTP variants; C3 Rover remains supported. HTTPS creates a unique local TLS
+identity at first boot and retains valid identities. The blank-install correction is
+software-tested; the first erased S3 HTTPS boot/login passes, while
+[full physical first-install/update acceptance remains open](docs/analysis/ESP32_S3_FRESH_INSTALL.md).
+HTTP is an explicit unencrypted LAN choice, never an HTTPS fallback. See the
+[publication and first-install guide](docs/flasher/ALPHA.md).
 
 ## Local source distributions
 

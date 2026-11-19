@@ -26,6 +26,7 @@ extern "C" {
 #include "ug_resource_policy.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
+#include "ug_tls_bootstrap.hpp"
 #include "ug_web_auth_platform.hpp"
 #include "ug_wire_selftest.hpp"
 #if UG_LOCAL_GNSS
@@ -237,8 +238,22 @@ esp_err_t Status(httpd_req_t* req)
   cJSON_AddStringToObject(root.get(), "board", BoardCapabilities().board.c_str());
   cJSON_AddStringToObject(root.get(), "role", BoardCapabilities().role.c_str());
   cJSON_AddStringToObject(root.get(), "web_transport", WebTransportName());
+  auto* firmware = cJSON_AddObjectToObject(root.get(), "firmware");
+  if (!firmware)
+    return Fail(req, "503 Service Unavailable", "memory unavailable");
+  if (!cJSON_AddStringToObject(firmware, "ug_version", UG_FIRMWARE_VERSION) ||
+      !cJSON_AddStringToObject(firmware, "source_sha", UG_SOURCE_SHA) ||
+      !cJSON_AddStringToObject(firmware, "hardware_variant", UG_HARDWARE_VARIANT) ||
+      !cJSON_AddStringToObject(firmware, "web_transport", WebTransportName()) ||
+      !cJSON_AddStringToObject(firmware, "esp_idf", esp_get_idf_version()) ||
+      !cJSON_AddBoolToObject(firmware, "modified", UG_SOURCE_MODIFIED))
+    return Fail(req, "503 Service Unavailable", "firmware identity memory unavailable");
   cJSON_AddBoolToObject(root.get(), "configuration_writable", ConfigurationWritable());
+#if CONFIG_IDF_TARGET_ESP32S3
+  cJSON_AddBoolToObject(root.get(), "admin_configured", WebAdministratorConfigured());
+#else
   cJSON_AddBoolToObject(root.get(), "admin_configured", !config->admin_token_sha256.empty());
+#endif
   cJSON_AddNumberToObject(root.get(), "uptime_s", esp_timer_get_time() / 1000000);
   cJSON_AddNumberToObject(root.get(), "heap_free", esp_get_free_heap_size());
   cJSON_AddNumberToObject(root.get(), "heap_min", esp_get_minimum_free_heap_size());
@@ -347,6 +362,7 @@ esp_err_t GnssCapabilitiesReply(httpd_req_t* req)
   cJSON_AddBoolToObject(root.get(), "survey_in", plans.survey_in);
   cJSON_AddBoolToObject(root.get(), "time_optimization", plans.time_optimization);
   cJSON_AddBoolToObject(root.get(), "disable_base", plans.disable_base);
+  cJSON_AddBoolToObject(root.get(), "restart", plans.restart);
   cJSON_AddBoolToObject(root.get(), "signal_groups_configurable", false);
   cJSON_AddStringToObject(root.get(),
                           "signal_groups_scope",
@@ -719,7 +735,8 @@ esp_err_t PairingMutation(httpd_req_t* req, std::string_view uri, const std::str
   pairing_window.Close();
   return PairingReply(req);
 }
-void PairingRestart(void*)
+bool system_restart_pending = false;  // Single HTTP owner, shared by both restart routes.
+void SystemRestart(void*)
 {
   vTaskDelay(pdMS_TO_TICKS(750));
   esp_restart();
@@ -733,13 +750,29 @@ esp_err_t PairingRestartReply(httpd_req_t* req, const std::string& body)
       !Confirmed(root.get(), "RESTART_AFTER_PAIRING") || !config->radio_enabled ||
       config->radio_peer.empty() || config->radio_key.empty())
     return Fail(req, "409 Conflict", "confirmed saved pairing required");
-  static bool pending = false;  // HTTP handlers execute on the single server task.
-  if (pending)
+  if (system_restart_pending)
     return Fail(req, "409 Conflict", "restart already pending");
-  if (xTaskCreate(PairingRestart, "ug_pair_restart", 2048, nullptr, 2, nullptr) != pdPASS)
+  if (xTaskCreate(SystemRestart, "ug_pair_restart", 2048, nullptr, 2, nullptr) != pdPASS)
     return Fail(req, "503 Service Unavailable", "restart allocation failed");
-  pending = true;
+  system_restart_pending = true;
   return Fail(req, "200 OK", "pairing restart scheduled");
+}
+esp_err_t SystemRestartReply(httpd_req_t* req, const std::string& body)
+{
+  std::string error;
+  auto root = ParseBoundedObject(body, error);
+  if (!root || !OnlyKeys(root.get(), {"confirm"}) || !Confirmed(root.get(), "REBOOT_ESP32"))
+    return Fail(req, "400 Bad Request", "explicit REBOOT_ESP32 confirmation required");
+#if UG_LOCAL_GNSS
+  if (ReceiverOperationPending())
+    return Fail(req, "409 Conflict", "GNSS operation pending; wait before restarting ESP32");
+#endif
+  if (system_restart_pending)
+    return Fail(req, "409 Conflict", "restart already pending");
+  if (xTaskCreate(SystemRestart, "ug_web_restart", 2048, nullptr, 2, nullptr) != pdPASS)
+    return Fail(req, "503 Service Unavailable", "restart allocation failed");
+  system_restart_pending = true;
+  return Fail(req, "202 Accepted", "ESP32 restart scheduled; configuration retained");
 }
 esp_err_t NetworkHistoryReply(httpd_req_t* req)
 {
@@ -1029,6 +1062,8 @@ esp_err_t Post(httpd_req_t* req)
 #endif
   if (!Authenticated(req))
     return Fail(req, "401 Unauthorized", "administrator bearer token required");
+  if (system_restart_pending)
+    return Fail(req, "409 Conflict", "ESP32 restart pending");
   const std::string_view uri(req->uri);
   const auto work =
       uri == "/api/diagnostics/wire-selftest" ? WebWork::kDetailedDiagnostics : WebWork::kMutation;
@@ -1072,6 +1107,8 @@ esp_err_t Post(httpd_req_t* req)
 #endif
   if (uri == "/api/radio/pairing/restart")
     return PairingRestartReply(req, body);
+  if (uri == "/api/system/reboot")
+    return SystemRestartReply(req, body);
   if (uri == "/api/radio/pairing/window" || uri == "/api/radio/pairing/apply" ||
       uri == "/api/radio/pairing/remove")
     return PairingMutation(req, uri, body);
@@ -1172,6 +1209,18 @@ esp_err_t Post(httpd_req_t* req)
     return Fail(req,
                 "202 Accepted",
                 "read-only detection queued; local corrections may pause; quarantine is preserved");
+  }
+  if (uri == "/api/gnss/restart")
+  {
+    if (!DecodeReceiverRestart(body, error))
+      return Fail(req, "400 Bad Request", error.c_str());
+    const auto receiver = ReceiverSnapshot();
+    if (!receiver.present || !receiver.model_verified || receiver.busy || receiver.quarantined ||
+        !InspectReceiverPlans(receiver.model, receiver.model_verified).restart ||
+        !QueueReceiverRestart())
+      return Fail(
+          req, "409 Conflict", "restart requires an idle verified ZED-F9P without quarantine");
+    return Fail(req, "202 Accepted", "GNSS-only hot restart queued; no reset ACK, follow status");
   }
   if (uri == "/api/gnss/telemetry/apply")
   {
@@ -1275,6 +1324,11 @@ esp_err_t StartWebService()
   // Keep provisioned identities in NVS; client-side NTRIP TLS is independent.
   httpd_config_t httpd = ug_http_defaults();
 #else
+#if CONFIG_IDF_TARGET_ESP32S3
+  const auto bootstrap = WebIdentityBootStatus();
+  if (!bootstrap.ok())
+    return FinishHttpsStartup(bootstrap.reason, bootstrap.sdk_error);
+#endif
   const auto loaded = LoadWebIdentity(identity);
   if (!loaded.ok())
     return FinishHttpsStartup(loaded.reason, loaded.sdk_error);  // No plaintext fallback.

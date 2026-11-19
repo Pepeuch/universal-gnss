@@ -37,7 +37,7 @@ def inspect_bundle(root,approvals):
         qualification.get('network_during_build_and_tests')!='disconnected_no_interfaces' or qualification.get('source_mounts') is not False or
         qualification.get('flash_or_publication') is not False or qualification.get('binary',{}).get('radio_configuration')!='runtime_nvs_encrypted_unicast' or qualification.get('binary',{}).get('portable_configuration_schema')!=1 or
         qualification.get('binary',{}).get('sha256')!=entry['sha256'] or
-        (profile['variant']=='s3-gateway' and qualification.get('host_tests')!='pass') or
+        (profile['variant'].startswith('s3-gateway') and qualification.get('host_tests')!='pass') or
         any(provenance.get(k)!=entry.get(k) for k in ('sdk_image','sha256','manifest','manifest_sha256','partition_sha256','qualification','build_key','nvs_preservation')) or
         qualification.get('binary',{}).get('profile')!=profile['profile'] or
         qualification.get('binary',{}).get('local_gnss') is not (profile['profile']=='gateway') or
@@ -48,6 +48,19 @@ def inspect_bundle(root,approvals):
         provenance.get('install_mode')!='full' or entry.get('install_mode')!='full' or
         entry.get('nvs_preservation')!='not_qualified'):
         raise ValueError('bundle qualification/source mismatch')
+    if profile['profile']=='gateway':
+        expected_transport='http' if profile['variant']=='s3-gateway-http' else 'https'
+        actual=qualification.get('binary',{}).get('web_transport','https')
+        if actual!=expected_transport:raise ValueError('S3 transport/variant mismatch')
+    if entry.get('firmware_identity')!=qualification.get('binary',{}).get('firmware_identity') or provenance.get('firmware_identity')!=entry.get('firmware_identity'):
+        raise ValueError('firmware identity/provenance mismatch')
+    identity=entry.get('firmware_identity')
+    if identity and (entry.get('first_boot_tls')!=qualification['binary'].get('first_boot_tls') or
+            entry.get('first_boot_tls')!=provenance.get('first_boot_tls') or identity.get('source_sha')!=entry['source_sha'] or identity.get('source_tree')!=request['source_tree'] or
+            identity.get('modified') is not False or identity.get('hardware_variant')!=profile['board'] or
+            identity.get('profile')!=profile['profile'] or identity.get('esp_idf')!='6.1' or
+            identity.get('web_transport')!=('none' if profile['profile']=='rover' else expected_transport)):
+        raise ValueError('firmware identity does not describe this source/profile')
     manifest_bytes=(directory/'manifest.json').read_bytes()
     if p.digest(manifest_bytes)!=entry['manifest_sha256']:raise ValueError('manifest checksum mismatch')
     manifest=p.load(directory/'manifest.json')

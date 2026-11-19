@@ -38,7 +38,7 @@ def source(repo,sha,tag='',main_ref='origin/main',development=False):
     if (tag=='0.7.5-a01' or v.RC_TAG.fullmatch(tag)) and not exists:raise ValueError('versioned tag must already exist at the selected source')
     return {'source_sha':sha,'source_tree':tree,'release_tag':tag,'release_url':'https://github.com/'+REPO+'/releases/tag/'+tag}
 def require_s3_memory(entry,directory):
-    if entry['profile']['variant']=='s3-gateway':
+    if entry['profile']['variant'].startswith('s3-gateway'):
         memory=s.p.load(directory/'qualification.json').get('binary',{}).get('boot_memory',{})
         if memory.get('main_stack_bytes',0)<32768 or memory.get('tls_external') is not True:
             raise ValueError('S3 alpha requires the boot-stack and TLS memory corrections')

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "ug_base_operation.hpp"
+#include "universal_gnss_driver/receiver_discovery.hpp"
 #include <array>
 namespace ug::embedded
 {
+universal_gnss_driver::ReceiverDetectedFamily
+SelectReadOnlyQueryFamily(universal_gnss_driver::ReceiverDetectedFamily detected,
+                          std::string_view selector);
 struct TelemetryOperation
 {
   std::uint8_t rate_hz{1}, receiver_port{1};
@@ -16,9 +20,11 @@ bool DecodeTelemetryOperation(std::string_view, TelemetryOperation&, std::string
 universal_gnss_driver::BaseConfigPlan
 BuildTelemetryPlan(const TelemetryOperation&, std::string_view verified_model, bool model_verified);
 bool DecodeDetectionOperation(std::string_view, std::string& error);
+bool DecodeReceiverRestart(std::string_view, std::string& error);
+universal_gnss_driver::BaseConfigPlan BuildReceiverRestart(std::string_view model, bool verified);
 struct ReceiverPlanCapabilities
 {
-  bool telemetry{}, fixed{}, survey_in{}, time_optimization{}, disable_base{};
+  bool telemetry{}, fixed{}, survey_in{}, time_optimization{}, disable_base{}, restart{};
 };
 ReceiverPlanCapabilities InspectReceiverPlans(std::string_view verified_model, bool verified);
 struct GnssOperation
@@ -28,7 +34,8 @@ struct GnssOperation
     kBase,
     kTelemetry,
     kDetect,
-    kBaseDisable
+    kBaseDisable,
+    kRestart
   };
   Kind kind{Kind::kBase};
   BaseOperation base{};

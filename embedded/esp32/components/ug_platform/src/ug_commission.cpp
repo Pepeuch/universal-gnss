@@ -122,7 +122,11 @@ void Handle(std::string_view command)
     std::printf("UG_LOCAL https_startup=%s sdk_error=%ld admin_configured=%d\n",
                 HttpsStartupReasonName(https.reason),
                 static_cast<long>(https.sdk_error),
+#if CONFIG_IDF_TARGET_ESP32S3
+                WebAdministratorConfigured());
+#else
                 !Configuration()->admin_token_sha256.empty());
+#endif
     ok = true;
   }
   else if (command == "memory")
@@ -167,8 +171,25 @@ void Handle(std::string_view command)
     std::printf("UG_LOCAL tls_identity=%s sdk_error=%ld admin_configured=%d https_startup=%s\n",
                 HttpsStartupReasonName(read.reason),
                 static_cast<long>(read.sdk_error),
+#if CONFIG_IDF_TARGET_ESP32S3
+                WebAdministratorConfigured(),
+#else
                 !Configuration()->admin_token_sha256.empty(),
+#endif
                 HttpsStartupReasonName(boot.reason));
+    if (read.ok())
+    {
+      std::array<std::uint8_t, 32> fingerprint{};
+      if (WebCertificateFingerprint(stored, fingerprint))
+      {
+        std::printf("UG_LOCAL certificate_sha256=");
+        for (const auto byte : fingerprint)
+          std::printf("%02x", unsigned(byte));
+        std::printf("\n");
+      }
+      else
+        std::puts("UG_LOCAL certificate_sha256=unavailable");
+    }
     ok = true;  // Read-only diagnostic succeeded even when no identity exists.
   }
   else if (command == "events")

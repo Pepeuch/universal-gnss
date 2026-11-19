@@ -19,20 +19,24 @@ spec.loader.exec_module(ci)
 
 class NativeCI(unittest.TestCase):
     def test_project_commands_follow_disconnect_and_host_failure_stops_firmware_build(self):
-        identity = {'source_object':'f'*40}
+        identity = {'source_object':'f'*40,'source_commit':'f'*40,'source_tree':'e'*40,'source_type':'commit'}
         inventory = {'host_test_only':{'quickjs':{'version':'1.19.4'}}}
         info = {'Config':{'User':f'{os.getuid()}:{os.getgid()}'},'Mounts':[],
                 'HostConfig':{'Devices':[], 'Privileged':False},'NetworkSettings':{'Networks':{}}}
-        for fail_host in (False, True):
-            events=[]
+        for modern,failure in ((True,None),(True,'host-tests'),(True,'sdk-tls-emulator'),(False,None)):
+            events=[];scripts=[]
             def execute(command, **kwargs):
                 if command[:3] == ['docker','network','disconnect']: events.append('disconnect')
-                output=json.dumps([info]).encode() if command[:2] == ['docker','inspect'] else b'archive'
+                output=json.dumps([info]).encode() if command[:2] == ['docker','inspect'] else b'def firmware_identity(' if modern and any(str(arg).endswith(':embedded/esp32/native/build.py') for arg in command) else b'archive'
                 return subprocess.CompletedProcess(command,0,output)
             def sdk_execute(cid, script, **kwargs):
+                scripts.append(script)
                 if 'cmake -S' in script:
                     events.append('host-tests')
-                    if fail_host: raise subprocess.CalledProcessError(9, ['host-tests'])
+                    if failure=='host-tests': raise subprocess.CalledProcessError(9, ['host-tests'])
+                elif '/ug-tls-test-project' in script:
+                    events.append('sdk-tls-emulator')
+                    if failure=='sdk-tls-emulator': raise subprocess.CalledProcessError(9,['sdk-tls-emulator'])
                 elif 'idf.py -C' in script:
                     events.append('firmware-build')
                 elif '/build.py --output /tmp/ug-ci-b' in script:
@@ -41,14 +45,21 @@ class NativeCI(unittest.TestCase):
                 return subprocess.CompletedProcess([],0,output)
             with patch.object(ci,'sdk_container',return_value=nullcontext('owned')), \
                  patch.object(ci,'run',side_effect=execute), patch.object(ci,'sdk',side_effect=sdk_execute):
-                if fail_host:
+                if failure:
                     with self.assertRaises(subprocess.CalledProcessError):
                         ci.validate_container(ROOT,identity,inventory,'base','deps','s3-gateway')
-                    self.assertEqual(events, ['disconnect','host-tests'])
+                    self.assertEqual(events, ['disconnect','host-tests']+(['sdk-tls-emulator'] if failure=='sdk-tls-emulator' else []))
                 else:
                     report=ci.validate_container(ROOT,identity,inventory,'base','deps','s3-gateway')
                     self.assertEqual(report['host_tests'],'pass')
-                    self.assertEqual(events, ['disconnect','host-tests','firmware-build','reconstruction'])
+                    self.assertEqual(events, ['disconnect','host-tests']+(['sdk-tls-emulator'] if modern else [])+['firmware-build','reconstruction'])
+                    self.assertEqual(any('--source-sha' in script for script in scripts),modern)
+                    self.assertEqual(any('/ug-tls-test-project' in script for script in scripts),modern)
+
+    def test_historical_builders_keep_their_original_argument_contract(self):
+        for body,expected in ((b'def build(output):',False),(b'def firmware_identity(profile):',True)):
+            with patch.object(ci,'run',return_value=subprocess.CompletedProcess([],0,body)):
+                self.assertEqual(ci.source_has_identity(ROOT,'a'*40),expected)
 
     def test_host_dependency_image_has_empty_context_and_no_project_build(self):
         recipe = (ROOT/'embedded/esp32/native/Dockerfile.ci').read_bytes()
@@ -105,8 +116,9 @@ class NativeCI(unittest.TestCase):
         # The relay remains buildable manually but is deliberately deferred in CI.
         self.assertIn('c3-relay', ci.VARIANTS)
         self.assertEqual(job['strategy'], {'fail-fast':'false','matrix':{
-            'variant':['s3-gateway','c3-rover-usb','c3-rover-uart']}})
+            'variant':['s3-gateway','s3-gateway-http','c3-rover-usb','c3-rover-uart']}})
         self.assertEqual(job['steps'][0]['with']['persist-credentials'], 'false')
+        self.assertEqual(job['steps'][0]['with']['fetch-depth'], '0')
         self.assertEqual(len(job['steps']), 3)
         self.assertIn('--bundle-output', job['steps'][1]['run'])
         self.assertEqual(job['steps'][2]['with']['retention-days'], '7')
@@ -129,8 +141,11 @@ class NativeCI(unittest.TestCase):
             self.assertEqual(result.returncode == 0, state == 'success')
 
     def test_variants_preserve_minimal_rover_and_explicit_uart(self):
-        self.assertEqual(set(ci.VARIANTS), {'s3-gateway','c3-relay','c3-rover-usb','c3-rover-uart'})
+        self.assertEqual(set(ci.VARIANTS), {'s3-gateway','s3-gateway-http','c3-relay','c3-rover-usb','c3-rover-uart'})
         self.assertIn('--local-gnss', ci.build_arguments('s3-gateway'))
+        self.assertIn('--web-transport http',ci.build_arguments('s3-gateway-http'))
+        self.assertIn('--web-transport http',ci.verify_arguments('s3-gateway-http'))
+        self.assertNotIn('--web-transport http',ci.build_arguments('s3-gateway'))
         for name in ('c3-relay','c3-rover-usb','c3-rover-uart'):
             self.assertNotIn('--local-gnss', ci.build_arguments(name))
         self.assertNotIn('--rover-uart-tx', ci.build_arguments('c3-rover-usb'))

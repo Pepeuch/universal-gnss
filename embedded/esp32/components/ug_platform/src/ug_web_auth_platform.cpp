@@ -187,6 +187,19 @@ bool InitializeWebSessionRandom()
   random_ready = true;
   return true;
 }
+AuthRead StoredWebPasswordState()
+{
+  PasswordRecord record{};
+  const auto state = backend.Read(record);
+  Wipe(&record, sizeof(record));
+  return state;
+}
+bool WebAdministratorConfigured()
+{
+  const auto state = StoredWebPasswordState();
+  return state == AuthRead::kFound ||
+         (state == AuthRead::kMissing && !Configuration()->admin_token_sha256.empty());
+}
 WebAuth& WebAuthentication()
 {
   static bool initialized = false;

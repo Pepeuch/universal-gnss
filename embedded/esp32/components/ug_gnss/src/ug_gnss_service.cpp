@@ -56,6 +56,8 @@ void Owner(void*)
   bool configured_enabled = false;
   std::string selector;
   bool enabled = false, local = false, query_done = false, transaction = false;
+  bool restart_transaction = false, restart_verification = false;
+  std::int64_t restart_deadline = 0;
   std::int64_t probe_started = Now(), last_bytes = 0;
   std::uint64_t drain_limits = 0;
   std::int64_t last_survey_poll = 0;
@@ -78,6 +80,13 @@ void Owner(void*)
   };
   for (;;)
   {
+    // Evaluate even when a UART fault takes the early discovery-error path.
+    if (restart_verification && Now() >= restart_deadline)
+    {
+      restart_verification = false;
+      pending = false;
+      Error("GNSS restart verification timeout; persistent quarantine retained");
+    }
     const auto settings = Configuration();
     if (baud != settings->gnss_baud || selector != settings->gnss_model ||
         configured_enabled != settings->gnss_enabled || tx_pin != settings->gnss_tx_pin ||
@@ -123,8 +132,8 @@ void Owner(void*)
               !receiver.indeterminate();
       epoch = BeginCorrectionSource(0, local);
     }
-    const bool route_local =
-        enabled && settings->local_input && !ReceiverJournalBlocked() && !receiver.indeterminate();
+    const bool route_local = enabled && settings->local_input && !restart_verification &&
+                             !ReceiverJournalBlocked() && !receiver.indeterminate();
     if (local != route_local)
     {
       local = route_local;
@@ -157,14 +166,7 @@ void Owner(void*)
       // Active queries are read-only vendor polls. No configured model string proves identity.
       auto candidate = MakeExplicitReceiverPortCandidate("board:uart1");
       const auto detected = AnalyzeReceiverProbeBytes(candidate, baud, probe);
-      family = detected.detected_family;
-      if (family == ReceiverDetectedFamily::kUnknown)
-      {
-        if (selector == "ZED-F9P")
-          family = ReceiverDetectedFamily::kUblox;
-        else if (selector == "UM980" || selector == "UM981" || selector == "UM982")
-          family = ReceiverDetectedFamily::kUnicore;
-      }
+      family = SelectReadOnlyQueryFamily(detected.detected_family, selector);
       BeginCorrectionSource(0, false);
       // Discovery consumes UART bytes outside Feed. Discard parser/cache state
       // across that gap; this still cannot release a command quarantine.
@@ -194,6 +196,8 @@ void Owner(void*)
         identity.model_verified = false;
         Error("verified model does not match configured selector");
       }
+      else if (identity.model_verified && !restart_verification)
+        Error("");
       if (uart.TakeFault())
       {
         invalidate_input();
@@ -204,6 +208,18 @@ void Owner(void*)
       }
       epoch = BeginCorrectionSource(0, local);
       query_done = true;
+      if (restart_verification)
+      {
+        // CFG-RST has no reliable ACK. This proves communication after dispatch,
+        // not a hardware reset or a trusted prior-byte cutoff.
+        if (identity.model_verified && identity.identity.model.value_or("") == "ZED-F9P" &&
+            !receiver.indeterminate() && CompleteReceiverJournal())
+          Error("GNSS restart dispatched; identity re-read (no reset ACK)");
+        else
+          Error("GNSS restart not verified; persistent quarantine retained");
+        restart_verification = false;
+        pending = false;
+      }
       std::lock_guard<std::mutex> lock(status_guard);
       status.model_verified = identity.model_verified;
       status.model = identity.identity.model.value_or("");
@@ -255,7 +271,9 @@ void Owner(void*)
       {
         BaseConfigPlan plan;
         const std::string model = identity.identity.model.value_or("");
-        if (operation.kind == GnssOperation::Kind::kTelemetry)
+        if (operation.kind == GnssOperation::Kind::kRestart)
+          plan = BuildReceiverRestart(model, true);
+        else if (operation.kind == GnssOperation::Kind::kTelemetry)
           plan = BuildTelemetryPlan(operation.telemetry, model, true);
         else if (operation.kind == GnssOperation::Kind::kBaseDisable)
         {
@@ -310,13 +328,16 @@ void Owner(void*)
           epoch = BeginCorrectionSource(0, false);
           receiver.InvalidateObservations();
           auto purpose = CommandPurpose::kTelemetry;
-          if (operation.kind == GnssOperation::Kind::kBaseDisable)
+          if (operation.kind == GnssOperation::Kind::kRestart)
+            purpose = CommandPurpose::kRestart;
+          else if (operation.kind == GnssOperation::Kind::kBaseDisable)
             purpose = CommandPurpose::kBaseDisable;
           else if (operation.kind == GnssOperation::Kind::kBase)
             purpose = operation.base.mode == BaseMode::kFixed      ? CommandPurpose::kBaseFixed
                       : operation.base.mode == BaseMode::kSurveyIn ? CommandPurpose::kBaseSurvey
                                                                    : CommandPurpose::kBaseTime;
           transaction = receiver.Start(std::move(plan.commands), Now(), purpose);
+          restart_transaction = transaction && operation.kind == GnssOperation::Kind::kRestart;
           if (!transaction)
           {
             Error("configuration dispatch failed; journal retained");
@@ -336,7 +357,17 @@ void Owner(void*)
     if (transaction && (state == ReceiverConfigApplicationState::kCompleted ||
                         state == ReceiverConfigApplicationState::kFailed))
     {
-      if (state == ReceiverConfigApplicationState::kCompleted && !receiver.indeterminate())
+      if (restart_transaction && state == ReceiverConfigApplicationState::kCompleted &&
+          !receiver.indeterminate())
+      {
+        // Invalidate all observations and correction epochs before rediscovery.
+        // Keep the journal closed to other mutations until communication returns.
+        invalidate_input();
+        restart_verification = true;
+        restart_deadline = Now() + 10000000000LL;
+        Error("GNSS restart dispatched; awaiting read-only identity verification");
+      }
+      else if (state == ReceiverConfigApplicationState::kCompleted && !receiver.indeterminate())
       {
         if (!CompleteReceiverJournal())
           Error("configuration acknowledged; persistent journal could not be cleared");
@@ -344,7 +375,8 @@ void Owner(void*)
       else
         Error("configuration incomplete; persistent quarantine retained");
       transaction = false;
-      pending = false;
+      restart_transaction = false;
+      pending = restart_verification;
     }
     // Poll NAV-SVIN only for a verified F9P, never while a mutation is pending
     // or quarantined. This read-only poll changes no receiver output settings.
@@ -437,6 +469,16 @@ bool QueueReceiverDetection()
   GnssOperation request;
   request.kind = GnssOperation::Kind::kDetect;
   return QueueOperation(request);
+}
+bool QueueReceiverRestart()
+{
+  GnssOperation request;
+  request.kind = GnssOperation::Kind::kRestart;
+  return QueueOperation(request);
+}
+bool ReceiverOperationPending()
+{
+  return pending.load();
 }
 ReceiverSatelliteReport ReceiverSatellites()
 {

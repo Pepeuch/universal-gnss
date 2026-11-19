@@ -5,6 +5,7 @@ import re
 
 VARIANTS = {
     's3-gateway': dict(chip='ESP32-S3',board='waveshare-s3-eth',profile='gateway',output='espnow',flash_mb=16,psram_mb=8,ethernet='w5500'),
+    's3-gateway-http': dict(chip='ESP32-S3',board='waveshare-s3-eth',profile='gateway',output='espnow',flash_mb=16,psram_mb=8,ethernet='w5500'),
     'c3-rover-usb': dict(chip='ESP32-C3',board='supermini-c3',profile='rover',output='usb',flash_mb=4,psram_mb=0,ethernet='none'),
     'c3-rover-uart': dict(chip='ESP32-C3',board='supermini-c3',profile='rover',output='uart',flash_mb=4,psram_mb=0,ethernet='none'),
 }

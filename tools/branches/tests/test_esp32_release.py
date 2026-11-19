@@ -392,7 +392,7 @@ class Pipeline(unittest.TestCase):
                 source_object=self.identity['source_sha'], source_tree=self.identity['source_tree'], variant=variant)
             fixture.profile = f.p.profiles.from_variant(variant)
             if variant == 's3-gateway':
-                fixture.verified.update(profile='gateway', local_gnss=True,
+                fixture.verified.update(profile='gateway', local_gnss=True, web_transport='https',
                                         boot_memory={'main_stack_bytes': 32768, 'tls_external': True})
                 fixture.qualification['host_tests'] = 'pass'
                 fixture.flash['extra_esptool_args']['chip'] = 'esp32s3'

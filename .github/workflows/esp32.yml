@@ -40,12 +40,14 @@ jobs:
       matrix:
         variant:
           - s3-gateway
+          - s3-gateway-http
           - c3-rover-usb
           - c3-rover-uart
     steps:
       - name: Check out immutable validation source
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Provision, isolate, compile, test and reproduce native firmware

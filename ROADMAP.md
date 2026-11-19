@@ -1,5 +1,18 @@
 # Roadmap
 
+
+S3 fresh-install P0 is **PARTIAL / HARDWARE_REQUIRED**: [autonomous TLS bootstrap,
+explicit HTTP/HTTPS identities and the acceptance plan](docs/analysis/ESP32_S3_FRESH_INSTALL.md)
+are implemented/tested in software; the first authorized erased S3 HTTPS boot,
+certificate generation, application-only update, reboot controls and three
+cold boots pass. Two further erased installations, HTTP hardware and browser
+update integration remain open. Original operator access was restored and confirmed.
+Valid credentials/configuration are retained;
+no HTTP fallback or partition change. NVS-preserving browser update remains disabled
+until USB compatibility integration and the destructive-install/update/F9P campaign
+are complete, with explicit hardware authorization.
+No release or roadmap completion is counted from this preparation.
+
 ## Current phase
 
 A single future `esp32` distribution is planned with compilation profiles
@@ -49,7 +62,7 @@ Native wire helpers now omit routine per-fragment INFO console output while
 retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
 Native Unicore SIGNALGROUP mutation is now refused: it can persist and reset
 automatically. Ordinary telemetry and F9P constellation requests remain available.
-The native ESP32 CI recipe now validates four bounded variants with disconnected
+The native ESP32 CI recipe now validates four bounded variants (S3 HTTPS/HTTP, C3 USB/UART) with disconnected
 non-root builds, host tests and independent reconstruction; GitHub qualification
 is pending an authorized push/PR. No firmware is published.
 Native ESP-NOW now defaults to unpaired/off and stores an explicit peer/channel/

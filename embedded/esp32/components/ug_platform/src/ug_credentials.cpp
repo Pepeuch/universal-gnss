@@ -71,44 +71,44 @@ bool Sha256(std::string_view bytes, std::array<std::uint8_t, 32>& out)
                           &length) == PSA_SUCCESS &&
          length == out.size();
 }
-bool StoreWebIdentity(const WebIdentity& identity, std::string& error)
+HttpsStartupStatus PersistWebIdentity(std::string_view certificate, std::string_view key)
 {
   std::lock_guard<std::mutex> lock(credential_writer);
-  const auto validated = Validate(identity.certificate_pem.c_str(),
-                                  identity.certificate_pem.size(),
-                                  identity.private_key_pem.c_str(),
-                                  identity.private_key_pem.size());
+  // Callers provide NUL-terminated PEM spans (NUL excluded from the views).
+  const auto validated = Validate(certificate.data(), certificate.size(), key.data(), key.size());
   if (!validated.ok())
-  {
-    error = HttpsStartupReasonName(validated.reason);
-    return false;
-  }
-  std::vector<std::uint8_t> blob(4 + identity.certificate_pem.size() +
-                                 identity.private_key_pem.size());
-  blob[0] = identity.certificate_pem.size();
-  blob[1] = identity.certificate_pem.size() >> 8;
-  blob[2] = identity.private_key_pem.size();
-  blob[3] = identity.private_key_pem.size() >> 8;
-  std::memcpy(blob.data() + 4, identity.certificate_pem.data(), identity.certificate_pem.size());
-  std::memcpy(blob.data() + 4 + identity.certificate_pem.size(),
-              identity.private_key_pem.data(),
-              identity.private_key_pem.size());
+    return validated;
+  const auto size = 4 + certificate.size() + key.size();
+  std::unique_ptr<std::uint8_t, SecureIdentityDelete> blob{
+      static_cast<std::uint8_t*>(std::malloc(size)), {size}};
+  if (!blob)
+    return {HttpsStartupReason::kNoMemory, ESP_ERR_NO_MEM};
+  blob.get()[0] = certificate.size();
+  blob.get()[1] = certificate.size() >> 8;
+  blob.get()[2] = key.size();
+  blob.get()[3] = key.size() >> 8;
+  std::memcpy(blob.get() + 4, certificate.data(), certificate.size());
+  std::memcpy(blob.get() + 4 + certificate.size(), key.data(), key.size());
   nvs_handle_t handle{};
-  bool ok = nvs_open("ug_identity", NVS_READWRITE, &handle) == ESP_OK;
-  if (ok)
+  auto code = nvs_open("ug_identity", NVS_READWRITE, &handle);
+  if (code == ESP_OK)
   {
-    ok = nvs_set_blob(handle, "https", blob.data(), blob.size()) == ESP_OK &&
-         nvs_commit(handle) == ESP_OK;
+    // One atomic blob: interruption cannot expose a new certificate with an old key.
+    code = nvs_set_blob(handle, "https", blob.get(), size);
+    if (code == ESP_OK)
+      code = nvs_commit(handle);
     nvs_close(handle);
   }
-  mbedtls_platform_zeroize(blob.data(), blob.size());
-  if (!ok)
-  {
-    error = "TLS identity persistence failed";
-    return false;
-  }
-  error.clear();
-  return true;
+  return {code == ESP_OK           ? HttpsStartupReason::kReady
+          : code == ESP_ERR_NO_MEM ? HttpsStartupReason::kNoMemory
+                                   : HttpsStartupReason::kIdentityPersistenceFailed,
+          code};
+}
+bool StoreWebIdentity(const WebIdentity& identity, std::string& error)
+{
+  const auto result = PersistWebIdentity(identity.certificate_pem, identity.private_key_pem);
+  error = result.ok() ? "" : HttpsStartupReasonName(result.reason);
+  return result.ok();
 }
 HttpsStartupStatus LoadWebIdentity(LoadedWebIdentity& identity)
 {
@@ -166,6 +166,22 @@ HttpsStartupStatus LoadWebIdentity(LoadedWebIdentity& identity)
   if (valid.ok())
     identity = std::move(next);
   return valid;
+}
+bool WebCertificateFingerprint(const LoadedWebIdentity& identity,
+                               std::array<std::uint8_t, 32>& fingerprint)
+{
+  if (!identity.bytes)
+    return false;
+  mbedtls_x509_crt cert;
+  mbedtls_x509_crt_init(&cert);
+  const auto parsed =
+      mbedtls_x509_crt_parse(&cert,
+                             reinterpret_cast<const unsigned char*>(identity.certificate_pem()),
+                             identity.certificate_size + 1);
+  const bool ok = parsed == 0 && cert.raw.p && cert.raw.len &&
+                  Sha256({reinterpret_cast<const char*>(cert.raw.p), cert.raw.len}, fingerprint);
+  mbedtls_x509_crt_free(&cert);
+  return ok;
 }
 bool StoreTlsObject(std::string_view name,
                     std::string_view pem,

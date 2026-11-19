@@ -3,10 +3,67 @@
 #include "ug_json.hpp"
 #include "universal_gnss_driver/ublox_config_profile_builder.hpp"
 #include "universal_gnss_driver/unicore_config_profile_builder.hpp"
+#include "universal_gnss_protocols/ubx_checksum.hpp"
 #include <cmath>
 #include <cstring>
 namespace ug::embedded
 {
+universal_gnss_driver::ReceiverDetectedFamily
+SelectReadOnlyQueryFamily(universal_gnss_driver::ReceiverDetectedFamily detected,
+                          std::string_view selector)
+{
+  using Family = universal_gnss_driver::ReceiverDetectedFamily;
+  // NMEA identifies a protocol, not its manufacturer. The configured selector
+  // can choose a read-only vendor query, but never proves the returned identity.
+  if (detected == Family::kUnknown || detected == Family::kNmea)
+  {
+    if (selector == "ZED-F9P")
+      return Family::kUblox;
+    if (selector == "UM980" || selector == "UM981" || selector == "UM982")
+      return Family::kUnicore;
+  }
+  return detected;
+}
+bool DecodeReceiverRestart(std::string_view body, std::string& error)
+{
+  auto root = ParseBoundedObject(body, error);
+  if (!root)
+    return false;
+  error = "explicit RESTART_GNSS confirmation required; no raw/reset options accepted";
+  if (!OnlyKeys(root.get(), {"confirm"}))
+    return false;
+  const auto* confirm = cJSON_GetObjectItemCaseSensitive(root.get(), "confirm");
+  if (!cJSON_IsString(confirm) || std::strcmp(confirm->valuestring, "RESTART_GNSS") != 0)
+    return false;
+  error.clear();
+  return true;
+}
+universal_gnss_driver::BaseConfigPlan BuildReceiverRestart(std::string_view model, bool verified)
+{
+  using namespace universal_gnss_driver;
+  BaseConfigPlan plan;
+  if (!verified || model != "ZED-F9P")
+  {
+    plan.error = "GNSS restart requires a verified ZED-F9P";
+    return plan;
+  }
+  // UBX-18010854, CFG-RST: hot start, GNSS-only software restart.
+  // Keep BBR, UART and current configuration. This command has no reliable ACK.
+  ReceiverCommand command;
+  command.kind = ReceiverCommandKind::kReset;
+  command.target.vendor = ReceiverVendor::kUblox;
+  command.target.model = "ZED-F9P";
+  command.explicit_safety_confirmation = true;
+  command.expected_response = ReceiverResponseKind::kNone;
+  command.retry_policy.max_retries = 0;
+  std::vector<std::uint8_t> bytes{0xb5, 0x62, 0x06, 0x04, 4, 0, 0, 0, 2, 0};
+  const auto checksum = universal_gnss_protocols::ComputeUbxChecksum(bytes.data() + 2, 8);
+  bytes.push_back(checksum.ck_a);
+  bytes.push_back(checksum.ck_b);
+  SetBinaryPayload(command, std::move(bytes));
+  plan.commands.push_back(std::move(command));
+  return plan;
+}
 bool DecodeDetectionOperation(std::string_view body, std::string& error)
 {
   auto root = ParseBoundedObject(body, error);
@@ -25,6 +82,7 @@ ReceiverPlanCapabilities InspectReceiverPlans(std::string_view model, bool verif
 {
   using namespace universal_gnss_driver;
   ReceiverPlanCapabilities out;
+  out.restart = verified && model == "ZED-F9P";
   out.telemetry = BuildTelemetryPlan({}, model, verified).ok();
   if (!verified)
     return out;

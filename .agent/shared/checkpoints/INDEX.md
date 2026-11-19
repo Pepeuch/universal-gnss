@@ -67,3 +67,8 @@ performed for this documentation reconciliation.
   evidence and last recorded installed S3 state; prevents obsolete recovery steps.
 - `retained/UG-ESP32-PUBLICATION-RECOVERY.md` — listing/glob defects and actual
   approved S3/C3 Release/Pages recovery, distinct from later local firmware.
+- `active/UG-ESP32-FRESH-INSTALL-P0.md` — autonomous S3 TLS bootstrap and explicit
+  HTTP/HTTPS candidate; first authorized erased S3 install, HTTPS/login and SDK
+  evidence pass, including update, three cold boots and F9P communication. Two more
+  erased installs, HTTP hardware and browser-update integration remain open;
+  source commit/push requested; operator access restored and confirmed.

@@ -8,6 +8,13 @@
 using namespace universal_gnss_driver;
 int main()
 {
+  using Family = ReceiverDetectedFamily;
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kNmea, "ZED-F9P") == Family::kUblox);
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kUnknown, "ZED-F9P") == Family::kUblox);
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kNmea, "UM982") == Family::kUnicore);
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kNmea, "auto") == Family::kNmea);
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kNmea, "NMEA") == Family::kNmea);
+  assert(ug::embedded::SelectReadOnlyQueryFamily(Family::kUnicore, "ZED-F9P") == Family::kUnicore);
   assert(ug::embedded::InspectReceiverPlans("ZED-F9P", true).disable_base);
   assert(!ug::embedded::InspectReceiverPlans("ZED-F9P", false).disable_base);
   assert(ug::embedded::InspectReceiverPlans("UM982", true).disable_base);
@@ -15,6 +22,35 @@ int main()
   assert(!ug::embedded::InspectReceiverPlans("UM982", false).disable_base);
   assert(!ug::embedded::InspectReceiverPlans("UM981", true).disable_base);
   assert(!ug::embedded::InspectReceiverPlans("NMEA", true).disable_base);
+
+  // A restart is a bounded runtime command, never a cold/factory reset or retry.
+  std::string restart_error;
+  assert(ug::embedded::DecodeReceiverRestart(R"({"confirm":"RESTART_GNSS"})", restart_error));
+  for (auto text : {R"({})",
+                    R"({"confirm":"REBOOT_ESP32"})",
+                    R"({"confirm":"RESTART_GNSS","cold":true})",
+                    R"({"confirm":"RESTART_GNSS","raw":"FRESET"})"})
+    assert(!ug::embedded::DecodeReceiverRestart(text, restart_error));
+  for (auto model : {"UM980", "UM982", "NMEA", "ZED-F9P"})
+    assert(!ug::embedded::BuildReceiverRestart(model, false).ok());
+  assert(!ug::embedded::BuildReceiverRestart("UM982", true).ok());
+  auto restart = ug::embedded::BuildReceiverRestart("ZED-F9P", true);
+  assert(restart.ok() && restart.commands.size() == 1);
+  const auto& reset = restart.commands[0];
+  const std::vector<std::uint8_t> hot_gnss{0xb5, 0x62, 6, 4, 4, 0, 0, 0, 2, 0, 0x10, 0x68};
+  assert(reset.payload.binary == hot_gnss);
+  assert(reset.kind == ReceiverCommandKind::kReset && reset.explicit_safety_confirmation);
+  assert(reset.safety_level == ReceiverCommandSafetyLevel::kRuntime);
+  assert(reset.expected_response == ReceiverResponseKind::kNone && !reset.retry_policy.max_retries);
+  universal_gnss_transport::MemoryByteSink restart_sink;
+  ug::embedded::Receiver restarting(restart_sink);
+  assert(restarting.Start(restart.commands, 1, ug::embedded::CommandPurpose::kRestart));
+  restarting.Step(2);
+  assert(restart_sink.written_bytes() == hot_gnss);
+  assert(restarting.application().state() == ReceiverConfigApplicationState::kCompleted);
+  restarting.Step(10000000000LL);
+  assert(restart_sink.written_bytes() == hot_gnss);  // No ACK wait and no resend.
+  assert(!restarting.indeterminate());
 
   ug::embedded::TelemetryOperation op, before;
   std::string error;

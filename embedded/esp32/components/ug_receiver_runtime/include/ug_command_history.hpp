@@ -13,7 +13,8 @@ enum class CommandPurpose : std::uint8_t
   kBaseFixed,
   kBaseSurvey,
   kBaseTime,
-  kBaseDisable
+  kBaseDisable,
+  kRestart
 };
 inline const char* CommandPurposeName(CommandPurpose purpose)
 {
@@ -31,6 +32,8 @@ inline const char* CommandPurposeName(CommandPurpose purpose)
       return "base_time";
     case CommandPurpose::kBaseDisable:
       return "base_disable";
+    case CommandPurpose::kRestart:
+      return "gnss_restart_dispatch";
   }
   return "invalid";
 }

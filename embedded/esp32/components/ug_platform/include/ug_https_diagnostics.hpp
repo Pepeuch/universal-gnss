@@ -15,7 +15,9 @@ enum class HttpsStartupReason : std::int32_t
   kNoMemory,
   kCryptoUnavailable,
   kServerStartFailed,
-  kRouteRegistrationFailed
+  kRouteRegistrationFailed,
+  kIdentityGenerationFailed,
+  kIdentityPersistenceFailed
 };
 constexpr const char* HttpsStartupReasonName(HttpsStartupReason reason)
 {
@@ -39,6 +41,10 @@ constexpr const char* HttpsStartupReasonName(HttpsStartupReason reason)
       return "server_start_failed";
     case HttpsStartupReason::kRouteRegistrationFailed:
       return "route_registration_failed";
+    case HttpsStartupReason::kIdentityGenerationFailed:
+      return "identity_generation_failed";
+    case HttpsStartupReason::kIdentityPersistenceFailed:
+      return "identity_persistence_failed";
   }
   return "unspecified";
 }
