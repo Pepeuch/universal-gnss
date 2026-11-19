@@ -1,5 +1,50 @@
 # Universal GNSS — TODO
 
+## Active ESP32 functional exercises — planned scope, outside historical counters
+
+Planning update (2026-11-19). This register follows the active direction in
+[ROADMAP.md](ROADMAP.md). It does not change the existing v0.7/v0.8 checklists,
+UGA metrics, UG-PLAN dispositions or historical acceptance. Each row is one
+complete exercise under `AGENTS.md`: implement, compile, test on hardware, debug
+and retest within the same exercise. Existing checkpoints remain authoritative
+for resumable work. The criteria below are scope/acceptance descriptions, not
+independent checklist items or newly claimed evidence.
+
+| Exercise | Status | Scope and acceptance |
+| --- | --- | --- |
+| ESP-01 | IMPLEMENTED | Locally qualified fresh-install P0: three erased HTTPS installations, nine electrical boots, HTTP hardware, real Web Serial preserving update and automatic reboot. Original credentials/TLS/settings restored and operator login confirmed. Review, commit and hosted CI of the completion patch remain before integration. |
+| ESP-02 | OPEN | Move dispersed technical reports into Journals; retain summaries and controls on dedicated pages. Filter, copy individual/all, export TXT/JSON/CSV and sanitized support bundles. Use bounded records, timestamps and loss counters. Preserve/test existing ESP32 and verified-F9P restart buttons; add reset causes and safe reconnect, address slow KDF without weakening credentials. Add official F9P firmware/documentation and u-center links to Web Flasher, warning about exact hardware compatibility; no proprietary binary hosting or receiver flashing. |
+| ESP-03 | OPEN | Reuse common parser/session accounting for observed GNSS message types, counts, frequencies, freshness, bytes/s RX/TX, valid/invalid/unsupported frames and RTCM ingress/egress. Distinguish identification timeout, unknown model and mismatch. Bounded snapshots, no second parser; test on F9P and available Unicore, project to WebUI and portable consumers. |
+| ESP-04 | OPEN | Transparent UART UDP/TCP RX/TX and read-only modes, bounded queues, exclusive authenticated time-limited maintenance, no exposed unauthenticated writes, preserve single physical owner and invalidate stale state after mutations. Test loss/reconnect and vendor tools. Investigate USB Host/CDC and board/VBUS/console coexistence; implement only on qualified hardware. |
+| ESP-05 | OPEN | Select microSD or SMB2/3 NAS; async storage owner, bounded PSRAM buffers, secure credentials, file browsing/streaming, rotation/quotas, full/unavailable media and clean restart behavior. Qualify SD/W5500 coexistence, SMB library/SDK/license and internal heap/socket costs. Storage failure must not block GNSS/RTCM; count losses. |
+| ESP-06 | OPEN | Capture original receiver bytes with recorded gaps/provenance, UBX RAWX/SFRBX and qualified Unicore observations/navigation, optional RTCM/NMEA. Metadata for antenna/station/time, integrity checks, loss accounting, Linux conversion to RINEX, continuous 24-hour acquisition and validate against current Centipede criteria; evaluate Onocoy separately. Native RINEX feasibility only. |
+| ESP-07 | OPEN | Authenticated OTA with image integrity/authenticity, board/layout/version checks, known-good rollback, persistence and power-loss recovery; qualify update on real S3 without requiring rooftop access. |
+| ESP-08 | OPEN | Complete outstanding embedded field acceptance: live BASE/RELAY/ROVER, active ESP-NOW with existing SRAM thresholds, multi-peer/broadcast, GGA NEAR, NTRIP/caster and combined recording/maintenance/endurance; profile each supported board and no-PSRAM feasibility. MQTT remains open and LoRa deferred; do not close existing blocked safety findings by inference. |
+
+### Shared receiver security — OSNMA study (OPEN)
+
+Audit exact u-blox variant and firmware support (HPG 1.50/1.51 family where
+applicable), `CFG-GAL-USE_OSNMA`, `UBX-SEC-OSNMA`,
+`UBX-MGA-GAL-OSNMA_PUBKEY`, `UBX-MGA-GAL-OSNMA_MERKLE`, trusted time and official
+key update/revocation material. Determine which are supported on each target.
+Evaluate Unicore separately. Plan receiver-native authentication status and
+portable diagnostics (unsupported/unknown/pending/authenticated/failed as
+supported by vendor semantics), then ROS2/WebUI projections. Never equate
+navigation-message authentication with a verified position or RTCM signature;
+no mandatory enforcement or cryptographic implementation on the S3 is planned
+without an explicit decision. No receiver firmware update is authorized here.
+
+Reference: [GSC OSNMA resources](https://www.gsc-europa.eu/galileo/services/galileo-open-service-navigation-message-authentication-osnma),
+[official F9P firmware/resources](https://www.u-blox.com/en/product/zed-f9p-module?legacy=Current#Documentation-&-resources),
+[u-center](https://www.u-blox.com/en/product/u-center),
+[Holybro OSNMA guide](https://docs.holybro.com/gps-and-rtk-system/zed-f9p-h-rtk-series/galileo-osnma-support).
+
+When the embedded station baseline is qualified, resume the existing deployment
+sequence and remaining core/ROS2/backend work below rather than introducing a
+second independent product roadmap. All historical gates retain their evidence
+requirements. No release publication, implementation or hardware action is
+implied by this planning change.
+
 ## Current status
 
 A single future `esp32` distribution is planned with compilation profiles
@@ -49,7 +94,7 @@ Native wire helpers now omit routine per-fragment INFO console output while
 retaining warnings and ESP-NOW startup diagnostics; rover logging stays disabled.
 Native Unicore SIGNALGROUP mutation is now refused: it can persist and reset
 automatically. Ordinary telemetry and F9P constellation requests remain available.
-The native ESP32 CI recipe now validates four bounded variants with disconnected
+The native ESP32 CI recipe now validates four bounded variants (S3 HTTPS/HTTP, C3 USB/UART) with disconnected
 non-root builds, host tests and independent reconstruction; GitHub qualification
 is pending an authorized push/PR. No firmware is published.
 Native ESP-NOW now defaults to unpaired/off and stores an explicit peer/channel/
@@ -174,6 +219,16 @@ HARDWARE_REQUIRED; the previous active-radio failure is not closed. Initial BASE
 load planning evaluates 460800 baud without changing any physical configuration.
 Commit/push for review is now authorized; no flash or firmware publication is
 included, and physical acceptance remains open.
+
+
+S3 fresh-install P0 is **IMPLEMENTED / locally qualified**: [completion evidence](docs/analysis/ESP32_S3_FRESH_INSTALL.md)
+covers three erased HTTPS installations, nine confirmed cold boots, HTTP hardware,
+real Chromium/Web Serial application-only updates, automatic USB reboot and NVS,
+TLS/password/settings preservation. Original operator state is restored and usual
+login confirmed. Final clean952 BIN/ELF/MAP match and are archived outside Git.
+The Flasher completion patch awaits review, commit and hosted CI. Contact quality,
+slow authentication, RTK/endurance and the resource refactor remain separate work.
+Historical release/roadmap counters are unchanged by this independent ESP32 block.
 
 Current resumable findings and preserved validation baselines are indexed in the
 [shared checkpoints](.agent/shared/checkpoints/INDEX.md#esp32-and-compact-buffer-handoff--reconciled-2026-11-16).

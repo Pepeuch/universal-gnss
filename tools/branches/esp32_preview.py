@@ -5,6 +5,7 @@ Producer jobs have no write token. This trusted-main controller handles data onl
 qualified CI bundles -> one durable development Release -> Pages catalogue.
 """
 import argparse
+import ast
 import datetime
 import hashlib
 import importlib.util
@@ -28,7 +29,7 @@ spec = importlib.util.spec_from_file_location('preview_history', ROOT / 'tools/b
 history = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(history)
 TAG = 'esp32-ci-builds'
-VARIANTS = ('s3-gateway', 'c3-rover-usb', 'c3-rover-uart')
+VARIANTS = ('s3-gateway', 's3-gateway-http', 'c3-rover-usb', 'c3-rover-uart')
 
 
 def write(path, value):
@@ -66,11 +67,23 @@ def authorize(repo, run_id):
             'finished_at': run['updated_at']}
 
 
-def available_run(run_id):
+def source_variants(repo, sha):
+    # Read literal key names only; never import or execute branch firmware code.
+    code=a.git(repo,'show',sha+':embedded/esp32/native/profiles.py')
+    tree=ast.parse(code)
+    values=[node.value for node in tree.body if isinstance(node,ast.Assign) and
+            any(isinstance(target,ast.Name) and target.id=='VARIANTS' for target in node.targets)]
+    if len(values)!=1 or not isinstance(values[0],ast.Dict):raise ValueError('nonliteral firmware profile inventory')
+    keys={ast.literal_eval(key) for key in values[0].keys}
+    legacy=set(VARIANTS)-{'s3-gateway-http'}
+    if keys not in (legacy,set(VARIANTS)):raise ValueError('unsupported source firmware inventory')
+    return tuple(variant for variant in VARIANTS if variant in keys)
+
+def available_run(run_id, repo=ROOT):
     run=r.api('actions/runs/'+str(run_id))
     if run.get('event')!='push' or run.get('conclusion')!='success':return False
     names={item['name'] for item in r.pages(lambda path:r.api(path)['artifacts'],'actions/runs/'+str(run_id)+'/artifacts') if not item.get('expired')}
-    expected={'native-'+variant for variant in VARIANTS}
+    expected={'native-'+variant for variant in source_variants(repo,run['head_sha'])}
     if not names.intersection(expected):return False  # Intentional docs-only skip, or old producer without bundles.
     if not expected<=names:raise ValueError('incomplete native artifact matrix')
     try:r.api('branches/'+urllib.parse.quote(run['head_branch'],safe=''))
@@ -160,15 +173,16 @@ def publish(repo, run_id, bundles, output):
     approvals = {'schema': 1, 'sources': [{'source_sha': identity['source_sha'],
         'source_tree': identity['source_tree'], 'review': 'Native CI run ' + str(run_id),
         'publication': 'ci_preview'}]}
+    selected_variants=source_variants(repo,identity['source_sha'])
     site_name = 'esp32-ci-site-' + str(run_id) + '.zip'
     if site_name not in files:
-        if len(bundles) != len(VARIANTS):
-            raise ValueError('all three native CI bundles required')
+        if len(bundles) != len(selected_variants):
+            raise ValueError('all four native CI bundles required')
         seen = set()
         for bundle in bundles:
             entry, directory, _ = a.s.inspect_bundle(bundle, approvals)
             variant = entry['profile']['variant']
-            if entry['source_sha'] != identity['source_sha'] or variant not in VARIANTS or variant in seen:
+            if entry['source_sha'] != identity['source_sha'] or variant not in selected_variants or variant in seen:
                 raise ValueError('wrong/duplicate development firmware')
             a.require_s3_memory(entry, directory)
             seen.add(variant)
@@ -255,7 +269,7 @@ def collect(repo, output):
         if branch in seen or run.get('head_repository', {}).get('full_name') != a.REPO:
             continue
         if ('esp32-ci-'+str(run['id'])+'.json' in recorded or
-                'esp32-ci-site-'+str(run['id'])+'.zip' in recorded or available_run(run['id'])):
+                'esp32-ci-site-'+str(run['id'])+'.zip' in recorded or available_run(run['id'],repo)):
             candidates.append(run['id'])
             seen.add(branch)
     if not candidates:
@@ -272,7 +286,7 @@ def collect(repo, output):
         for run_id in pending:
             root = temp / str(run_id)
             bundles = []
-            for variant in (() if 'esp32-ci-site-'+str(run_id)+'.zip' in recorded else VARIANTS):
+            for variant in (() if 'esp32-ci-site-'+str(run_id)+'.zip' in recorded else source_variants(repo,r.api('actions/runs/'+str(run_id))['head_sha'])):
                 directory = root / variant
                 subprocess.run(['gh', 'run', 'download', str(run_id), '--repo', a.REPO,
                     '--name', 'native-' + variant, '--dir', str(directory)], check=True, timeout=180,

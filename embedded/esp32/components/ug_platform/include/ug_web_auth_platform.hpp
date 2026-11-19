@@ -6,6 +6,10 @@ namespace ug::embedded
 // S3 startup only, before ADC/Wi-Fi/BT/peripheral tasks. Never called on demand.
 bool InitializeWebSessionRandom();
 WebAuth& WebAuthentication();
+// Read only the persisted record state, wiping the temporary proof immediately.
+// Safe for local diagnostics; does not initialize/mutate the Web-owner sessions.
+AuthRead StoredWebPasswordState();
+bool WebAdministratorConfigured();
 // Read-only fixed-vector diagnostic, never reads/writes an operator password.
 bool BenchmarkWebPassword(std::int64_t& elapsed_us);
 }  // namespace ug::embedded

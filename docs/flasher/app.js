@@ -6,6 +6,7 @@
   'use strict';
   const variants = {
     's3-gateway': {chip:'ESP32-S3',board:'waveshare-s3-eth',profile:'gateway',output:'espnow',flash_mb:16,psram_mb:8,ethernet:'w5500'},
+    's3-gateway-http': {chip:'ESP32-S3',board:'waveshare-s3-eth',profile:'gateway',output:'espnow',flash_mb:16,psram_mb:8,ethernet:'w5500'},
     'c3-rover-usb': {chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'usb',flash_mb:4,psram_mb:0,ethernet:'none'},
     'c3-rover-uart': {chip:'ESP32-C3',board:'supermini-c3',profile:'rover',output:'uart',flash_mb:4,psram_mb:0,ethernet:'none'}
   };
@@ -60,14 +61,20 @@
     const output={transport:profile.output==='uart'?'uart1-tx':'usb-serial-jtag',tx_pin:profile.uart_tx??null,baud:profile.uart_baud??null};
     if (canonical(normalize(provenance.profile))!==canonical(profile) ||
         ['source_sha','sha256','partition_sha256','manifest_sha256','build_key','sdk_image','install_mode','nvs_preservation','qualification'].some(k=>provenance[k]!==entry[k]) ||
+        provenance.settings_schema!==entry.settings_schema || qualification.binary?.settings_schema!==entry.settings_schema ||
         qualification.source_type!=='commit' || qualification.source_commit!==entry.source_sha || qualification.source_object!==entry.source_sha ||
         qualification.source_tree!==approval.source_tree || qualification.variant!==profile.variant || qualification.sdk_image!==entry.sdk_image ||
         qualification.build_and_verify!=='pass' || qualification.reproducibility!=='pass' || qualification.source_mounts!==false ||
         qualification.network_during_build_and_tests!=='disconnected_no_interfaces' || qualification.flash_or_publication!==false ||
-        (profile.variant==='s3-gateway' && qualification.host_tests!=='pass') ||
+        (profile.variant.startsWith('s3-gateway') && qualification.host_tests!=='pass') ||
         qualification.binary?.portable_configuration_schema!==1 || qualification.binary?.sha256!==entry.sha256 || qualification.binary?.radio_configuration!=='runtime_nvs_encrypted_unicast' ||
         qualification.binary?.profile!==profile.profile || qualification.binary?.local_gnss!==(profile.profile==='gateway') ||
         (profile.profile==='rover' && Object.keys(output).some(k=>qualification.binary?.rover_output?.[k]!==output[k]))) throw Error('Provenance ou qualification incompatible');
+    if(profile.profile==='gateway' && (qualification.binary?.web_transport||'https')!==(profile.variant==='s3-gateway-http'?'http':'https'))throw Error('Transport Web incompatible avec la variante');
+    const identityKey=value=>value?canonical(value):'';
+    if(identityKey(entry.firmware_identity)!==identityKey(provenance.firmware_identity) || identityKey(entry.firmware_identity)!==identityKey(qualification.binary?.firmware_identity) || entry.first_boot_tls!==provenance.first_boot_tls || entry.first_boot_tls!==qualification.binary?.first_boot_tls)throw Error('Identité du firmware incohérente');
+    const firmware=entry.firmware_identity;
+    if(firmware && (firmware.source_sha!==entry.source_sha || firmware.source_tree!==approval.source_tree || firmware.modified!==false || firmware.hardware_variant!==profile.board || firmware.profile!==profile.profile || firmware.esp_idf!=='6.1' || firmware.web_transport!==(profile.profile==='rover'?'none':profile.variant==='s3-gateway-http'?'http':'https')))throw Error('Identité firmware/source incompatible');
     if (Object.keys(manifest).sort().join(',')!=='builds,name,new_install_prompt_erase,version' || manifest.new_install_prompt_erase!==true ||
         !Array.isArray(manifest.builds) || manifest.builds.length!==1 || Object.keys(manifest.builds[0]).sort().join(',')!=='chipFamily,parts' || manifest.builds[0].chipFamily!==profile.chip ||
         !Array.isArray(manifest.builds[0].parts) || manifest.builds[0].parts.length!==4) throw Error('Manifeste matériel incompatible');
@@ -164,7 +171,7 @@
       controller?.abort();controller=null;current=null;
       for(const url of urls)URL.revokeObjectURL(url);urls=[];
       $('installer').removeAttribute('manifest');$('flash-available').classList.add('hidden');$('flash-unavailable').classList.remove('hidden');
-      $('image-info').textContent='';$('downloads').replaceChildren();$('consent').checked=false;
+      $('update-start').disabled=true;$('image-info').textContent='';$('downloads').replaceChildren();$('consent').checked=false;
     }
     function selected() {
       const variant=$('device').value==='c3-rover-uart'?'c3-rover-usb':$('device').value,input={schema:2,variant,...variants[variant]};
@@ -188,12 +195,13 @@
     }
     function summary() {
       const p=selected();$('summary').replaceChildren();
-      for(const [label,value] of Object.entries({Branche:$('branch').value,'HEAD branche':branchHeads[$('branch').value]||'indisponible',Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
+      for(const [label,value] of Object.entries({Branche:$('branch').value,'HEAD branche':branchHeads[$('branch').value]||'indisponible',Profil:p.variant,Flash:p.flash_mb+' MB',PSRAM:p.psram_mb+' MB',Ethernet:p.ethernet,Transport:p.profile==='gateway'?(p.variant==='s3-gateway-http'?'HTTP · LAN non chiffré':'HTTPS · identité unique au premier démarrage'):'USB / UART',Version:$('version').value,UART:p.uart_tx===undefined?'non':`GPIO${p.uart_tx} / ${p.uart_baud}`})) {
         const a=document.createElement('dt'),b=document.createElement('dd');a.textContent=label;b.textContent=value;$('summary').append(a,b);
       }
     }
     async function render() {
       const version=++generation;clear();const p=selected(),source=$('version').value;
+      const update=$('install-mode').value==='update';$('consent').closest('label').classList.toggle('hidden',update);$('update-panel').classList.toggle('hidden',!update);$('update-start').disabled=true;
       portableForm(p.board);
       $('source').disabled=p.profile!=='gateway';$('receiver').disabled=p.profile!=='gateway';
       $('tx-block').classList.add('hidden');$('baud-block').classList.add('hidden');summary();request(p,source);
@@ -210,9 +218,17 @@
         const parts=verified.parts.map(part=>{const path=URL.createObjectURL(new Blob([part.bytes]));urls.push(path);return {path,offset:part.offset}});
         const manifest={...verified.manifest,builds:[{chipFamily:p.chip,parts}]};
         const manifestUrl=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));urls.push(manifestUrl);
-        current={manifestUrl};
+        current={manifestUrl,verified};
+        if(update){
+          $('update-start').disabled=p.board!=='waveshare-s3-eth' || verified.entry.settings_schema!==1;
+          status($('update-start').disabled?'Mise à jour refusée : compatibilité de configuration absente pour cette version.':'Mise à jour S3 : fournir la sauvegarde et l’application installée, puis vérifier la carte par USB.');
+          return;
+        }
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
-        $('image-info').textContent=`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète.`;
+        const fw=verified.entry.firmware_identity;
+        const identityInfo=fw?`UG ${fw.ug_version} · ${fw.hardware_variant} · ${fw.web_transport.toUpperCase()} · ESP-IDF ${fw.esp_idf} · `:'';
+        const startup=p.profile==='gateway' && p.variant!=='s3-gateway-http' ? (verified.entry.first_boot_tls==='automatic_unique_nvs'?'Identité TLS créée automatiquement si absente ; certificat local autosigné à accepter. Première connexion admin/admin, changement obligatoire. Validation matérielle distincte.':'Ancienne image : après effacement NVS, provisionnement TLS USB obligatoire avant accès Web. Installation seule non opérationnelle.') : '';
+        $('image-info').textContent=identityInfo+`Source ${source} · SHA256 ${verified.entry.sha256} · qualification logicielle uniquement · installation complète. `+startup;
         $('request').classList.add('hidden');
         status((approval.publication==='ci_preview'?'Build de développement CI — ':'Firmware publié — ')+'branche '+$('branch').value+' ; octets et provenance vérifiés. Qualification matérielle distincte. Confirmer la carte et accepter l’installation complète avant d’activer le flash.');
       } catch(error) {if(version===generation){clear();status('Image refusée : '+error.message)}}
@@ -273,9 +289,44 @@
       finally{button.disabled=false;}
     });
     $('consent').addEventListener('change',()=>{
-      const ready=Boolean(current && $('consent').checked);
+      const ready=Boolean(current && $('consent').checked && ($('install-mode')?.value||'full')==='full');
       $('flash-available').classList.toggle('hidden',!ready);$('flash-unavailable').classList.toggle('hidden',ready);
       if(ready)$('installer').setAttribute('manifest',current.manifestUrl);else $('installer').removeAttribute('manifest');
+    });
+    $('install-mode')?.addEventListener('change',()=>render().catch(e=>status(e.message)));
+    $('update-start').addEventListener('click',async()=>{
+      if(!navigator.serial){status('Web Serial nécessite Chromium sur HTTPS.');return;}
+      const candidate=current?.verified,backupFile=$('update-backup').files[0],oldFile=$('update-current').files[0];
+      if(!candidate || !backupFile || backupFile.size!==16777216 || !oldFile || oldFile.size>3145728){status('Sauvegarde complète et application archivée requises.');return;}
+      let port,transport,backup,old;const controls=[...document.querySelectorAll('button,input,select')].map(element=>({element,disabled:element.disabled}));
+      try {
+        port=await navigator.serial.requestPort({filters:[{usbVendorId:0x303a}]});
+        controls.forEach(c=>c.element.disabled=true);
+        backup=new Uint8Array(await backupFile.arrayBuffer());old=new Uint8Array(await oldFile.arrayBuffer());
+        const oldHash=await digest(old),references=images.filter(e=>e.sha256===oldHash && e.settings_schema===1 && e.profile.board==='waveshare-s3-eth');
+        let baseline;
+        if(references.length===1) {
+          baseline=references[0];const approval=sources.find(s=>s.source_sha===baseline.source_sha);
+          await verifyPublished(baseline,baseline.profile,approval,(path,limit)=>boundedFetch(path,limit));
+        } else {
+          const referenceFile=$('update-reference').files[0];
+          if(references.length || !referenceFile || referenceFile.size>65536)throw Error('Rapport de validation de la version installée requis');
+          const reference=JSON.parse(await referenceFile.text());
+          baseline=UGUpdate.baseline(reference,oldHash,old.length);
+        }
+        const {ESPLoader,Transport}=await import('https://unpkg.com/esptool-js@0.6.0/bundle.js');
+        transport=new Transport(port);
+        const loader=new ESPLoader({transport,baudrate:115200,terminal:{clean(){},write(){},writeLine(){}}});
+        await loader.main();
+        await UGUpdate.run(loader,backup,old,candidate,baseline,async()=>confirm('La carte et la sauvegarde correspondent. Écrire uniquement l’application et conserver NVS, identifiants, certificat et paramètres ?'),status);
+        await UGUpdate.restart(transport);
+        status('Application vérifiée sur la carte ; NVS, bootloader, partitions et sélection OTA identiques. Vérifier la WebUI après redémarrage.');
+      } catch(error){status('Mise à jour arrêtée : '+error.message+'. La carte peut rester en mode USB. Après une annulation avant écriture, redémarrer la carte ; après une écriture interrompue, utiliser la sauvegarde pour la récupération.');}
+      finally {
+        backup?.fill(0);old?.fill(0);$('update-backup').value='';$('update-current').value='';$('update-reference').value='';
+        if(transport)try{await transport.disconnect();}catch{}
+        controls.forEach(c=>c.element.disabled=c.disabled);
+      }
     });
     for(const id of ['device','version','tx','baud'])$(id).addEventListener('change',()=>render().catch(e=>status(e.message)));
     $('branch').addEventListener('change',()=>{selectBranch();render().catch(e=>status(e.message));});

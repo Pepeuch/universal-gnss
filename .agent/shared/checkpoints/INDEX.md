@@ -67,3 +67,11 @@ performed for this documentation reconciliation.
   evidence and last recorded installed S3 state; prevents obsolete recovery steps.
 - `retained/UG-ESP32-PUBLICATION-RECOVERY.md` — listing/glob defects and actual
   approved S3/C3 Release/Pages recovery, distinct from later local firmware.
+- `retained/UG-ESP32-FRESH-INSTALL-P0.md` — locally completed autonomous TLS,
+  three erased HTTPS installations/nine cold boots, HTTP hardware, real preserving
+  Web Serial updates and automatic reboot. Original operator NVS/TLS/settings and
+  login restored; clean952 matching BIN/ELF/MAP archived. Completion patch awaits
+  review and source publication; contact quality/RTK field work remain distinct.
+- `retained/UG-ESP32-RESOURCE-ARCHITECTURE.md` — S3 Gateway allocation and worker
+  ownership audit, measured idle-radio-link evidence and the paired qualification
+  protocol for a future network lifecycle refactor.

@@ -13,7 +13,9 @@ namespace
 {
 int open_error{}, info_error{}, read_error{}, crypto_error{}, cert_error{}, pair_error{};
 unsigned closes{}, writes{};
-bool fail_malloc{}, weak_key{};
+bool fail_malloc{}, weak_key{}, writable{};
+int commit_error{}, write_error{};
+std::vector<unsigned char> pending;
 std::size_t reported_size{};
 void* watched{};
 std::size_t watched_size{};
@@ -23,7 +25,9 @@ void Good()
 {
   open_error = info_error = read_error = crypto_error = cert_error = pair_error = 0;
   closes = writes = 0;
-  weak_key = fail_malloc = false;
+  weak_key = fail_malloc = writable = false;
+  write_error = commit_error = 0;
+  pending.clear();
   blob = {4, 0, 3, 0, 'C', 'E', 'R', 'T', 'K', 'E', 'Y'};
   reported_size = blob.size();
 }
@@ -62,7 +66,7 @@ extern "C" void __wrap_free(void* pointer)
 esp_err_t nvs_open(const char* name, int mode, nvs_handle_t* handle)
 {
   assert(std::strcmp(name, "ug_identity") == 0);
-  assert(mode == NVS_READONLY);
+  assert(mode == (writable ? NVS_READWRITE : NVS_READONLY));
   *handle = 1;
   return open_error;
 }
@@ -85,15 +89,23 @@ void nvs_close(nvs_handle_t)
 {
   ++closes;
 }
-esp_err_t nvs_set_blob(nvs_handle_t, const char*, const void*, std::size_t)
+esp_err_t nvs_set_blob(nvs_handle_t, const char* name, const void* data, std::size_t size)
 {
+  assert(writable && std::strcmp(name, "https") == 0);
   ++writes;
-  return ESP_FAIL;
+  const auto* bytes = static_cast<const unsigned char*>(data);
+  pending.assign(bytes, bytes + size);
+  return write_error;
 }
 esp_err_t nvs_commit(nvs_handle_t)
 {
   ++writes;
-  return ESP_FAIL;
+  if (!commit_error)
+  {
+    blob = pending;
+    reported_size = blob.size();
+  }
+  return commit_error;
 }
 esp_err_t nvs_erase_key(nvs_handle_t, const char*)
 {
@@ -215,6 +227,27 @@ int main()
   open_error = ESP_ERR_NVS_NOT_FOUND;
   assert(LoadWebIdentity(identity).reason == HttpsStartupReason::kIdentityMissing);
   assert(wiped == 1 && !identity.bytes && !writes);
+  // Persistence uses one existing-format atomic blob; failed commits retain it.
+  Good();
+  writable = true;
+  assert(PersistWebIdentity("CERT", "KEY").ok() && writes == 2);
+  writable = false;
+  assert(LoadWebIdentity(identity).ok());
+  const auto saved = blob;
+  Good();
+  writable = true;
+  commit_error = ESP_FAIL;
+  assert(PersistWebIdentity("CERT", "KEY").reason ==
+         HttpsStartupReason::kIdentityPersistenceFailed);
+  assert(blob == saved);
+  Good();
+  writable = true;
+  write_error = ESP_ERR_NO_MEM;
+  assert(PersistWebIdentity("CERT", "KEY").reason == HttpsStartupReason::kNoMemory && writes == 1);
+  Good();
+  writable = true;
+  fail_malloc = true;
+  assert(PersistWebIdentity("CERT", "KEY").reason == HttpsStartupReason::kNoMemory && writes == 0);
   assert(HttpsServerFailureReason(ESP_ERR_NO_MEM, false) == HttpsStartupReason::kNoMemory);
   assert(HttpsServerFailureReason(ESP_ERR_HTTPD_ALLOC_MEM, false) == HttpsStartupReason::kNoMemory);
   assert(HttpsServerFailureReason(ESP_ERR_INVALID_STATE, false) ==

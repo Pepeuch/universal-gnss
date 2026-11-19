@@ -50,7 +50,8 @@ def run(artifacts=None):
             page.on('requestfinished', lambda request: pending.discard(request))
             page.on('requestfailed', lambda request: pending.discard(request))
             page.on('pageerror', lambda error: errors.append(str(error)))
-            page.on('dialog', lambda dialog: dialog.accept('SAVE_RECEIVER_CONFIGURATION' if dialog.type == 'prompt' else None))
+            accept_dialog = [True]
+            page.on('dialog', lambda dialog: dialog.accept('SAVE_RECEIVER_CONFIGURATION' if dialog.type == 'prompt' else None) if accept_dialog[0] else dialog.dismiss())
 
             def route_handler(route):
                 url = urlparse(route.request.url)
@@ -84,6 +85,11 @@ def run(artifacts=None):
                     return
                 if path == '/api/auth/session':
                     route.fulfill(body='session active');return
+                if path in ('/api/system/reboot','/api/gnss/restart'):
+                    assert route.request.method == 'POST'
+                    assert route.request.post_data_json == {'confirm':'REBOOT_ESP32' if path.endswith('reboot') else 'RESTART_GNSS'}
+                    route.fulfill(status=202,body='restart queued; physical reset not inferred')
+                    return
                 if path.startswith('/api/ntrip/password/'):
                     target=path.rsplit('/',1)[-1]
                     owner=config['upstream'] if target=='upstream' else config['publishers'][int(target)]
@@ -132,16 +138,16 @@ def run(artifacts=None):
                         owner.pop('password', None)
                         owner.get('endpoint', {}).pop('password', None)
                 elif path == '/api/capabilities':
-                    value = {'web_transport':transport,'password_authentication':True,'gnss': gnss, 'publishers': 5, 'gnss_allowed_pins': [16, 17] if gnss else []}
+                    value = {'firmware':{'ug_version':'v0.7.5-RC1','source_sha':'b'*40,'hardware_variant':'waveshare-s3-eth','web_transport':transport,'esp_idf':'v6.1','modified':False},'web_transport':transport,'password_authentication':True,'gnss': gnss, 'publishers': 5, 'gnss_allowed_pins': [16, 17] if gnss else []}
                 elif path == '/api/resources':
                     value = {'pressure': 'normal', 'internal_free': 110000, 'internal_largest': 40000, 'psram_total': 8388608 if gnss else 0, 'web_mutations_allowed': True, 'satellites_allowed': True}
                 elif path == '/api/status':
-                    value = {'web_transport':transport,'role': 'gateway' if gnss else 'relay-ntrip', 'degraded': False, 'rtcm_frames': 21, 'rtcm_rejected': 0, 'upstream_connected': False,
+                    value = {'firmware':{'ug_version':'v0.7.5-RC1','source_sha':'b'*40,'hardware_variant':'waveshare-s3-eth','web_transport':transport,'esp_idf':'v6.1','modified':False},'web_transport':transport,'role': 'gateway' if gnss else 'relay-ntrip', 'degraded': False, 'rtcm_frames': 21, 'rtcm_rejected': 0, 'upstream_connected': False,
                              'services': {'ethernet_driver': {'state': 'running'}, 'https': {'state': 'running' if transport=='https' else 'disabled'}, 'http': {'state':'running' if transport=='http' else 'disabled'}}, 'espnow': {'started': False, 'configured_enabled': False}}
                 elif path == '/api/gnss/status':
                     value = receiver
                 elif path == '/api/gnss/capabilities':
-                    value = {'model': receiver['model'], 'model_verified': receiver['model_verified'], 'fixed': receiver['model_verified']}
+                    value = {'model': receiver['model'], 'model_verified': receiver['model_verified'], 'fixed': receiver['model_verified'], 'restart':receiver['model_verified'] and receiver['model']=='ZED-F9P'}
                 elif path == '/api/gnss/satellites':
                     value = {'available': False, 'stale': True, 'satellites': []}
                 elif path == '/api/ntrip/runtime':
@@ -173,7 +179,22 @@ def run(artifacts=None):
             expect(page.locator('#tab-dashboard')).to_be_visible()
             expect(page.locator('#card-https')).to_contain_text('running')
             expect(page.locator('#card-ethernet')).to_have_text('Service : running')
+            expect(page.locator('#firmware-identity')).to_contain_text('b'*40)
+            expect(page.locator('#firmware-identity')).to_contain_text('v0.7.5-RC1')
+            expect(page.locator('#firmware-identity')).to_contain_text(transport)
             expect(page.locator('#status')).to_contain_text('synthetic_memory_only')
+            expect(page.locator('#system-reboot')).to_be_enabled()
+            before_reboot=sum(p=='/api/system/reboot' for p,_ in calls)
+            accept_dialog[0]=False
+            page.locator('#system-reboot').click()
+            assert sum(p=='/api/system/reboot' for p,_ in calls)==before_reboot
+            accept_dialog[0]=True
+            page.locator('#system-reboot').click()
+            expect(page.locator('#login-screen')).to_be_visible()
+            assert sum(p=='/api/system/reboot' for p,_ in calls)==before_reboot+1
+            page.locator('#password').fill('a'*64)
+            page.locator('#login').click()
+            expect(page.locator('#webui')).to_be_visible()
             for tab in ('gnss', 'rtcm', 'network', 'diagnostics', 'settings', 'dashboard'):
                 page.locator('#nav-' + tab).click()
                 expect(page.locator('#tab-' + tab)).to_be_visible()
@@ -183,6 +204,22 @@ def run(artifacts=None):
             if gnss:
                 expect(page.locator('#transport')).to_be_visible()
                 expect(page.locator('#base-submit')).to_be_disabled()
+                expect(page.locator('#receiver-restart')).to_be_disabled()
+                receiver.update(model='ZED-F9P',model_verified=True,present=True)
+                page.evaluate('receiverPlans=null;refresh()')
+                expect(page.locator('#receiver-restart')).to_be_enabled()
+                before_restart=sum(p=='/api/gnss/restart' for p,_ in calls)
+                accept_dialog[0]=False
+                page.locator('#receiver-restart').click()
+                assert sum(p=='/api/gnss/restart' for p,_ in calls)==before_restart
+                accept_dialog[0]=True
+                page.locator('#receiver-restart').click()
+                expect(page.locator('#notice')).to_contain_text('restart queued')
+                assert sum(p=='/api/gnss/restart' for p,_ in calls)==before_restart+1
+                receiver.update(model='',model_verified=False,present=False)
+                page.evaluate('receiverPlans=null;refresh()')
+                expect(page.locator('#receiver-restart')).to_be_disabled()
+
                 page.locator('#gnss-tx').select_option('17')
                 page.locator('#gnss-rx').select_option('16')
                 page.locator('#transport button').click()
@@ -313,7 +350,7 @@ def run(artifacts=None):
             for name in ('current-password','new-password','confirm-password'):
                 expect(page.locator('#'+name)).to_have_value('')
             if artifacts:
-                page.locator('#nav-dashboard').click()
+                expect(page.locator('#login-screen')).to_be_visible()
                 Path(artifacts).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(Path(artifacts) / f'{"gateway" if gnss else "relay"}-{width}.png'), full_page=True)
             assert peak[0] <= 1, ('concurrent API requests', peak[0])

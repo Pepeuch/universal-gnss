@@ -1,6 +1,7 @@
 """Shared JS validator and explicit USB restoration protocol (no physical port)."""
 import importlib.util
 import json
+import re
 from pathlib import Path
 import unittest
 import quickjs
@@ -65,8 +66,24 @@ class Browser(unittest.TestCase):
   result,calls=self.provision('supermini-c3',cleanup_fail=True);self.assertIn('Nettoyage',result['error'])
  def test_portal_import_export_runtime_uart_does_not_change_rom_or_send_config(self):
   vm=self.vm()
+  tags={node_id:tag.upper() for tag,node_id in re.findall(r'<(input|button|select)\b[^>]*\bid="([^"]+)"',(ROOT/'docs/flasher.html').read_text())}
+  vm.eval('const controlTags='+json.dumps(tags)+';')
   vm.eval(r'''const elements={},requests=[],blobs=[];
-  const document={baseURI:'https://example.invalid/flasher.html',getElementById(id){return elements[id] ||= {value:id==='device'?'s3-gateway':'',classList:{add(){},remove(){},toggle(){}},children:[],get options(){return this.children},append(x){this.children.push(x)},replaceChildren(){this.children=[]},removeAttribute(){},setAttribute(){},addEventListener(kind,fn){this[kind]=fn}}},createElement(){return {click(){}}}};
+  function element(tagName='DIV',parentElement=null){
+   const classes=new Set(),attributes={};
+   return {tagName,parentElement,value:'',disabled:false,checked:false,files:[],children:[],
+    classList:{add(c){classes.add(c)},remove(c){classes.delete(c)},contains(c){return classes.has(c)},toggle(c,force){const enabled=force===undefined?!classes.has(c):Boolean(force);if(enabled)classes.add(c);else classes.delete(c);return enabled}},
+    get options(){return this.children},append(...nodes){for(const node of nodes){node.parentElement=this;this.children.push(node)}},replaceChildren(...nodes){for(const node of this.children)node.parentElement=null;this.children=[];this.append(...nodes)},
+    closest(selector){for(let node=this;node;node=node.parentElement)if(node.tagName.toLowerCase()===selector)return node;return null},
+    removeAttribute(name){delete attributes[name]},setAttribute(name,value){attributes[name]=String(value)},getAttribute(name){return attributes[name]??null},
+    addEventListener(kind,fn){this[kind]=fn},click(){}};
+  }
+  const consentLabel=element('LABEL');
+  const document={baseURI:'https://example.invalid/flasher.html',getElementById(id){
+   if(!elements[id]){const node=element(controlTags[id]||'DIV');node.value=id==='device'?'s3-gateway':id==='install-mode'?'full':'';elements[id]=node;if(id==='consent')consentLabel.append(node)}return elements[id];
+  },createElement(tag){return element(tag.toUpperCase())},querySelectorAll(selector){if(selector!=='button,input,select')throw Error('unsupported fixture selector');return Object.values(elements).filter(node=>['BUTTON','INPUT','SELECT'].includes(node.tagName))}};
+  for(const id of Object.keys(controlTags))document.getElementById(id);
+  const navigator={};
   const location={origin:'https://example.invalid'};
   function setTimeout(){return 1}function clearTimeout(){}
   class AbortController{constructor(){this.signal={}}abort(){}}
@@ -82,6 +99,22 @@ class Browser(unittest.TestCase):
    for _ in range(200):
     if not vm.execute_pending_job():break
   drain();self.assertIn('Aucun firmware CI',vm.eval("elements.status.textContent"))
+  self.assertTrue(vm.eval("document.querySelectorAll('button,input,select').includes(elements['update-start'])"))
+  self.assertEqual(vm.eval("elements['update-backup'].files.length"),0)
+  self.assertTrue(vm.eval("elements.consent.closest('label')===consentLabel"))
+  self.assertTrue(vm.eval("consentLabel.closest('input')===null"))
+  self.assertFalse(vm.eval("consentLabel.classList.contains('hidden')"))
+  self.assertTrue(vm.eval("elements['update-panel'].classList.contains('hidden')"))
+  vm.eval("elements['install-mode'].value='update';elements['install-mode'].change();")
+  drain()
+  self.assertTrue(vm.eval("consentLabel.classList.contains('hidden')"))
+  self.assertFalse(vm.eval("elements['update-panel'].classList.contains('hidden')"))
+  self.assertTrue(vm.eval("elements['update-start'].disabled"))
+  vm.eval("elements['update-start'].click();")
+  drain();self.assertIn('Web Serial nécessite Chromium',vm.eval("elements.status.textContent"))
+  vm.eval("elements['install-mode'].value='full';elements['install-mode'].change();")
+  drain();self.assertIn('Aucun firmware CI',vm.eval("elements.status.textContent"))
+
   vm.eval("elements.device.value='c3-rover-usb';elements.device.change();")
   drain()
   value={**p.defaults('supermini-c3'),'output':'uart','uart_tx':7,'uart_baud':460800}

@@ -18,6 +18,33 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_immutable_firmware_identity_and_separate_transports(self):
+        for transport in ('http','https'):
+            identity=builder.firmware_identity('gateway','waveshare-s3-eth',transport,'a'*40,'b'*40,'v0.7.5-RC1')
+            self.assertEqual(identity['source_sha'],'a'*40)
+            self.assertEqual(identity['source_tree'],'b'*40)
+            self.assertEqual(identity['web_transport'],transport)
+            self.assertFalse(identity['modified'])
+        self.assertTrue(builder.firmware_identity('gateway','waveshare-s3-eth','https','a'*40,'b'*40,'v0.7.5-RC1',True)['modified'])
+        for source,tree,version in (('short','b'*40,'v0.7.5-RC1'),('a'*40,'short','v0.7.5-RC1'),('a'*40,'b'*40,'development')):
+            with self.assertRaises(ValueError):builder.firmware_identity('gateway','waveshare-s3-eth','https',source,tree,version)
+
+    def test_fresh_https_bootstrap_precedes_radio_and_preserves_http(self):
+        root=Path(__file__).resolve().parents[1]
+        gateway=(root/'main/gateway.cpp').read_text()
+        self.assertLess(gateway.index('PrepareWebIdentityAtBoot();'),gateway.index('const BootStep steps[]'))
+        self.assertLess(gateway.index('PrepareWebIdentityAtBoot();'),gateway.index('StartLocalCommissioning(RestartNetworkServices)'))
+        self.assertIn('CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_UG_WEB_HTTP',gateway)
+        web=(root/'../components/ug_web/src/ug_web.cpp').read_text()
+        self.assertIn('return FinishHttpsStartup(bootstrap.reason, bootstrap.sdk_error)',web)
+        tls=(root/'../components/ug_platform/src/ug_tls_bootstrap.cpp').read_text()
+        self.assertLess(tls.index('bootloader_random_enable();'),tls.index('result = BootstrapTls(backend);'))
+        self.assertGreater(tls.index('bootloader_random_disable();'),tls.index('result = BootstrapTls(backend);'))
+        self.assertIn('MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT',tls)
+        self.assertNotIn('nvs_erase',tls)
+        self.assertNotIn('nvs_flash_erase',gateway)
+        self.assertNotIn('"development"',(root/'CMakeLists.txt').read_text())
+
     def test_web_transport_is_explicit_and_does_not_downgrade_tls(self):
         s3=['CONFIG_IDF_TARGET_ESP32S3=y']
         self.assertEqual(module.sdk_web_transport(s3),'https')

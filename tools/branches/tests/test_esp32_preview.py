@@ -26,8 +26,21 @@ f = load('preview_package', 'tools/branches/tests/test_firmware_package.py')
 pipeline = load('preview_pipeline', 'tools/branches/tests/test_esp32_release.py')
 
 
+class SourceVariants(unittest.TestCase):
+    def test_old_and_new_profile_inventories_are_classified_without_execution(self):
+        for variants in (p.VARIANTS,tuple(v for v in p.VARIANTS if v!='s3-gateway-http')):
+            code='VARIANTS = {'+','.join(repr(v)+':dict(runtime=unknown)' for v in variants)+'}\nraise RuntimeError("must never execute")'
+            with patch.object(p.a,'git',return_value=code):
+                self.assertEqual(p.source_variants(ROOT,'a'*40),variants)
+        for code in ('VARIANTS = dynamic()',"VARIANTS = {'unknown':{}}",'VARIANTS = {**unknown}'):
+            with patch.object(p.a,'git',return_value=code),self.assertRaises((ValueError,TypeError)):
+                p.source_variants(ROOT,'a'*40)
+
+
 class Preview(unittest.TestCase):
     def setUp(self):
+        self.variant_patch=patch.object(p,'source_variants',return_value=p.VARIANTS)
+        self.variant_patch.start();self.addCleanup(self.variant_patch.stop)
         self.run = {'id': 23, 'path': '.github/workflows/esp32.yml', 'event': 'push',
                     'status': 'completed', 'conclusion': 'success', 'head_sha': 'a' * 40,
                     'head_branch': 'feature/rtcm', 'head_repository': {'full_name': p.a.REPO},
@@ -75,7 +88,7 @@ class Preview(unittest.TestCase):
             p.available_run(23)
 
     def test_collector_drains_another_branch_even_if_its_callback_was_replaced(self):
-        runs=[{'id':n,'head_branch':branch,'head_repository':{'full_name':p.a.REPO},'path':'.github/workflows/esp32.yml','event':'push','conclusion':'success'}
+        runs=[{'id':n,'head_sha':'b'*40,'head_branch':branch,'head_repository':{'full_name':p.a.REPO},'path':'.github/workflows/esp32.yml','event':'push','conclusion':'success'}
               for n,branch in ((30,'docs-only'),(29,'feature/a'),(28,'dev'),(27,'feature/a'))]
         published=[]
         def publish(repo,run_id,bundles,output):
@@ -84,13 +97,13 @@ class Preview(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch.object(p.r,'api',side_effect=lambda path:
                     {'artifacts':[{'workflow_run':{'id':run['id']},'expired':run['id']==30} for run in runs]} if path.startswith('actions/artifacts?') else
                     next(run for run in runs if run['id']==int(path.rsplit('/',1)[1])) if path.startswith('actions/runs/') else {'id':99}), \
-                patch.object(p,'available_run',side_effect=lambda run_id:run_id!=30), \
+                patch.object(p,'available_run',side_effect=lambda run_id,repo:run_id!=30), \
                 patch.object(p,'storage',return_value={'id':99}), \
                 patch.object(p,'assets',return_value={'esp32-ci-28.json':{}}), \
                 patch.object(p,'publish',side_effect=publish),patch.object(p.subprocess,'run') as download:
             output=Path(temp)/'site'
             self.assertTrue(p.collect(ROOT,output))
-            self.assertEqual(published,[29]);self.assertEqual(download.call_count,3)
+            self.assertEqual(published,[29]);self.assertEqual(download.call_count,4)
             self.assertEqual((output/'verified').read_text(),'29')
 
     def test_workflow_separates_unprivileged_builds_and_trusted_data_only_publisher(self):
@@ -129,8 +142,11 @@ class EndToEnd(unittest.TestCase):
         git('tag', p.TAG)
         git('push', '-q', 'origin', 'main', '--tags')
         git('checkout', '-qb', 'feature/rtcm')
+        profile_source=repo/'embedded/esp32/native/profiles.py'
+        profile_source.parent.mkdir(parents=True,exist_ok=True)
+        profile_source.write_text((ROOT/'embedded/esp32/native/profiles.py').read_text())
         (repo / 'code.cpp').write_text('int new_branch_code;')
-        git('add', 'code.cpp'); git('commit', '-qm', 'feature code')
+        git('add', 'code.cpp', 'embedded/esp32/native/profiles.py'); git('commit', '-qm', 'feature code')
         sha, tree = git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD^{tree}')
         with self.assertRaises(ValueError): p.a.source(repo, sha)
         identity = {**p.a.source(repo, sha, development=True), 'branch': 'feature/rtcm',
@@ -140,8 +156,9 @@ class EndToEnd(unittest.TestCase):
             item = f.Package(); item.setUp(); self.addCleanup(item.doCleanups)
             item.qualification.update(source_commit=sha, source_object=sha, source_tree=tree, variant=variant)
             item.profile = f.p.profiles.from_variant(variant)
-            if variant == 's3-gateway':
+            if variant.startswith('s3-gateway'):
                 item.verified.update(profile='gateway', local_gnss=True,
+                                     web_transport='http' if variant=='s3-gateway-http' else 'https',
                                      boot_memory={'main_stack_bytes': 32768, 'tls_external': True})
                 item.qualification['host_tests'] = 'pass'
                 item.flash['extra_esptool_args']['chip'] = 'esp32s3'
@@ -188,7 +205,7 @@ class EndToEnd(unittest.TestCase):
             self.assertEqual(len(uploads), 3)
             mapping = p.a.s.p.load(output / 'flasher/branches.json')
             self.assertEqual(mapping['branches']['feature/rtcm']['source_sha'], sha)
-            self.assertEqual(len(p.a.s.p.load(output / 'flasher/catalog.json')['images']), 5)
+            self.assertEqual(len(p.a.s.p.load(output / 'flasher/catalog.json')['images']), 6)
             for name, data in original.items(): self.assertEqual((output / name).read_bytes(), data)
             again = p.publish(repo, 23, [], fixture.root / 'rerun')
             self.assertEqual(len(uploads), 3)

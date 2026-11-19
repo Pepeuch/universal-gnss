@@ -7,7 +7,7 @@ SPEC=importlib.util.spec_from_file_location('firmware_profiles',Path(__file__).r
 p=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(p)
 class Profiles(unittest.TestCase):
     def test_supported_catalogue_is_bounded(self):
-        self.assertEqual(set(p.VARIANTS),{'s3-gateway','c3-rover-usb','c3-rover-uart'})
+        self.assertEqual(set(p.VARIANTS),{'s3-gateway','s3-gateway-http','c3-rover-usb','c3-rover-uart'})
         for variant in p.VARIANTS:
             self.assertEqual(p.normalize(p.from_variant(variant)),p.from_variant(variant))
     def test_runtime_and_unknown_options_rejected(self):

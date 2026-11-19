@@ -61,8 +61,27 @@ def copy_main(source, destination, network):
         shutil.copyfile(destination / 'idf_component.network.yml', manifest)
 
 
+def firmware_identity(profile, board, transport, source_sha=None, source_tree=None, ug_version=None, source_modified=False):
+    modified = source_modified
+    if source_sha is None:
+        source_sha = subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
+        source_tree = subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD^{tree}'],text=True).strip()
+        modified = subprocess.run(['git','-C',str(ROOT),'diff','--quiet','HEAD']).returncode != 0
+    if ug_version is None:
+        version_result = subprocess.run(['git','-C',str(ROOT),'describe','--tags','--match','v[0-9]*','--abbrev=0'],capture_output=True,text=True)
+        ug_version = version_result.stdout.strip() if version_result.returncode==0 else 'unversioned'
+    if (not re.fullmatch('[a-f0-9]{40}', source_sha or '') or
+            not re.fullmatch('[a-f0-9]{40}', source_tree or '') or
+            not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.]+)?|unversioned',ug_version or '')):
+        raise ValueError('exact source SHA/tree and versioned UG reference required')
+    return dict(ug_version=ug_version,source_sha=source_sha,source_tree=source_tree,
+                hardware_variant=board,profile=profile,web_transport=transport if profile!='rover' else 'none',
+                esp_idf='6.1',modified=modified)
+
+
 def build(output, profile, board, gnss, provision=False, dependency_cache=None, peer_mac=None, channel=None,
-          rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False, web_transport='https'):
+          rover_uart_tx=None, rover_uart_baud=115200, prepare_only=False, web_transport='https',
+          source_sha=None, source_tree=None, ug_version=None, source_modified=False):
     if web_transport not in ('http', 'https') or (web_transport == 'http' and
             (profile != 'gateway' or board != 'waveshare-s3-eth')):
         raise ValueError('HTTP experiment requires the S3 gateway; HTTPS remains the default')
@@ -82,6 +101,14 @@ def build(output, profile, board, gnss, provision=False, dependency_cache=None, 
     work.mkdir(parents=True)
     project = work / 'project'
     project.mkdir()
+    identity = firmware_identity(profile, board, web_transport, source_sha, source_tree, ug_version, source_modified)
+    (project/'firmware-identity.json').write_text(json.dumps(identity,sort_keys=True,indent=2)+'\n')
+    definitions = {'UG_FIRMWARE_VERSION':identity['ug_version'], 'UG_SOURCE_SHA':identity['source_sha'],
+                   'UG_HARDWARE_VARIANT':identity['hardware_variant'], 'UG_WEB_TRANSPORT':identity['web_transport']}
+    cmake = ''.join('add_compile_definitions('+key+'=\\\"'+value+'\\\")\n' for key,value in definitions.items())
+    cmake += 'add_compile_definitions(UG_SOURCE_MODIFIED='+str(int(identity['modified']))+')\n'
+    cmake += 'set(PROJECT_VER \"'+identity['ug_version']+'+'+identity['source_sha'][:8]+'\")\n'
+    (project/'firmware-identity.cmake').write_text(cmake)
     source = ROOT / 'embedded/esp32/native'
     shutil.copyfile(source / 'CMakeLists.txt', project / 'CMakeLists.txt')
     rover = profile == 'rover'
@@ -151,6 +178,9 @@ CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT=y
         defaults_path.write_text(defaults_path.read_text() +
                                  network_sdk_defaults(profile, board))
         defaults_path.write_text(defaults_path.read_text() + 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y\n' + ('CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y\n' if s3 else 'CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y\n') + 'CONFIG_ESP_HTTPS_SERVER_ENABLE=y\nCONFIG_MBEDTLS_PEM_WRITE_C=y\n# CONFIG_MDNS_ENABLE_CONSOLE_CLI is not set\nCONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y\n')
+        if s3 and web_transport == 'https':
+            defaults_path.write_text(defaults_path.read_text() +
+                                    'CONFIG_MBEDTLS_X509_CREATE_C=y\nCONFIG_MBEDTLS_X509_CRT_WRITE_C=y\n')
     subprocess.run(command, env=env, check=True)
     if not rover:
         validate_dependency_lock(yaml.safe_load((project / 'dependencies.lock').read_text()),
@@ -174,6 +204,11 @@ if __name__ == '__main__':
     p.add_argument('--provision', action='store_true', help='explicitly allow IDF to download pinned dependencies')
     p.add_argument('--prepare-only', action='store_true', help='configure/download only; do not compile firmware')
     p.add_argument('--dependency-cache', help='prepared project containing same-target lock and managed_components')
+    p.add_argument('--source-modified', action='store_true')
+    p.add_argument('--source-sha')
+    p.add_argument('--source-tree')
+    p.add_argument('--ug-version')
     a = p.parse_args()
     build(a.output, a.profile, a.board, a.local_gnss, a.provision, a.dependency_cache, a.peer_mac, a.channel,
-          a.rover_uart_tx, a.rover_uart_baud, a.prepare_only, a.web_transport)
+          a.rover_uart_tx, a.rover_uart_baud, a.prepare_only, a.web_transport,
+          a.source_sha, a.source_tree, a.ug_version, a.source_modified)

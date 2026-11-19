@@ -125,10 +125,12 @@ function selectTab(name) {
 function unavailable() {
   for (const key of ['global','ethernet','https','gnss','rtcm','ntrip','memory']) $('card-' + key).textContent = 'Non actualisé';
   receiverPlans = null;
-  for (const id of ['base-submit','base-disable','telemetry-submit']) $(id).disabled = true;
+  for (const id of ['base-submit','base-disable','telemetry-submit','receiver-restart','system-reboot']) $(id).disabled = true;
 }
 function renderStatus(status) {
   $('status').textContent = print(status);
+  const firmware=status.firmware;
+  $('firmware-identity').textContent=firmware ? `UG ${firmware.ug_version} · ${firmware.hardware_variant} · ${firmware.web_transport} · ESP-IDF ${firmware.esp_idf} · ${firmware.source_sha}${firmware.modified?' · sources modifiées':''}` : 'Identification du firmware indisponible';
   $('services-status').textContent = print(status.services || {});
   const transport=['http','https'].includes(status.web_transport)?status.web_transport:webTransport;
   $('network-status').textContent = print({ethernet:status.services?.ethernet_driver,transport,http:status.services?.http,https:status.services?.https,espnow:status.espnow});
@@ -158,6 +160,7 @@ async function refresh() {
     $('resources').textContent = print(resources);
     $('card-memory').textContent = `${resources.pressure} · ${resources.internal_free ?? '?'} octets internes`;
     ntripMutationAllowed = Boolean(token) && !passwordChangeRequired && ['normal','reduced'].includes(resources.pressure) && resources.web_mutations_allowed === true;
+    $('system-reboot').disabled = !ntripMutationAllowed;
     $('functions-save').disabled = !ntripMutationAllowed || !functionsConfig;
     $('ntrip-save').disabled = !ntripMutationAllowed || !ntripConfig || ntripSaving;
     wireSelfTestAllowed = Boolean(token) && !passwordChangeRequired && resources.pressure === 'normal';
@@ -190,6 +193,7 @@ async function refresh() {
       $('base-submit').disabled = !permitted || !(receiverPlans.fixed || receiverPlans.survey_in || receiverPlans.time_optimization);
       $('telemetry-submit').disabled = !permitted || !receiverPlans.telemetry;
       $('base-disable').disabled = !permitted || !receiverPlans.disable_base;
+      $('receiver-restart').disabled = !ntripMutationAllowed || !permitted || !receiverPlans.restart;
       if (tab === 'gnss') {
         if (resources.satellites_allowed === false) satellites({available:false});
         else {
@@ -380,6 +384,18 @@ $('telemetry').onsubmit = handle(async (_, edit) => {
   show(await call('/api/gnss/telemetry/apply', value));
 });
 
+$('system-reboot').onclick = handle(async () => {
+  if (!token || !ntripMutationAllowed) throw Error('Session et mémoire disponibles requises');
+  if (!confirm('Redémarrer l’ESP32 ? Les connexions seront interrompues ; les réglages enregistrés seront conservés.')) return;
+  await call('/api/system/reboot', {confirm:'REBOOT_ESP32'});
+  closeSession(); show('ESP32 en cours de redémarrage. Reconnectez-vous lorsque la station est disponible.');
+});
+$('receiver-restart').onclick = handle(async () => {
+  if (!token || !ntripMutationAllowed || !receiverPlans?.restart) throw Error('F9P identifié et disponible requis');
+  if (!confirm('Redémarrer le GNSS du F9P à chaud, sans effacer sa configuration ? Les observations et corrections locales seront invalidées.')) return;
+  show(await call('/api/gnss/restart', {confirm:'RESTART_GNSS'}));
+  receiverPlans=null; $('receiver-restart').disabled=true; await refresh();
+});
 $('detect').onclick = handle(async (_, edit) => {
   if (!confirm('Relancer les interrogations de modèle en lecture seule ? Les corrections locales peuvent être interrompues brièvement. La quarantaine restera active.')) return;
   show(await call('/api/gnss/detect', {confirm: 'DETECT_RECEIVER'})); receiverPlans = null; await refresh();

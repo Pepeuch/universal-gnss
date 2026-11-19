@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import gzip
 import json
+import re
 from pathlib import Path
 import shlex
 import subprocess
@@ -212,12 +213,34 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
         raise ValueError('portable configuration parser not linked')
     if profile=='rover' and 'ug_rover_portable_current' not in symbols:
         raise ValueError('runtime rover output owner not linked')
+    identity = json.loads((work/'project/firmware-identity.json').read_text())
+    expected_transport = web_transport if profile!='rover' else 'none'
+    if (identity.get('profile')!=profile or identity.get('web_transport')!=expected_transport or
+            identity.get('esp_idf')!='6.1' or not re.fullmatch('[a-f0-9]{40}',identity.get('source_sha','')) or
+            not re.fullmatch('[a-f0-9]{40}',identity.get('source_tree',''))):
+        raise ValueError('firmware identity does not match actual build')
+    if profile=='gateway' and identity['source_sha'].encode() not in binary.read_bytes():
+        raise ValueError('full source SHA absent from the application image')
+    result['firmware_identity']=identity
+    if identity['hardware_variant']=='waveshare-s3-eth':
+        settings_header=(Path(__file__).resolve().parents[3]/'embedded/esp32/components/ug_settings/include/ug_settings.hpp').read_text()
+        schema=re.search(r'kSchema\s*=\s*(\d+)\s*;',settings_header)
+        if not schema:
+            raise ValueError('settings schema unavailable for update compatibility')
+        result['settings_schema']=int(schema[1])
+    result['first_boot_tls']='not_applicable'
     result['portable_configuration_schema']=1 if portable_supported else 0
     result['radio_configuration'] = 'runtime_nvs_encrypted_unicast'
     result['web_assets'] = web_assets
     if profile != 'rover':
         lines = (work / 'sdkconfig').read_text().splitlines()
         result['web_transport'] = sdk_web_transport(lines, web_transport)
+        if 'CONFIG_IDF_TARGET_ESP32S3=y' in lines and web_transport=='https':
+            if any(symbol not in symbols for symbol in ('ug::embedded::PrepareWebIdentityAtBoot(', 'mbedtls_x509write_crt_pem')):
+                raise ValueError('autonomous TLS bootstrap not linked')
+            result['first_boot_tls']='automatic_unique_nvs'
+        else:
+            result['first_boot_tls']='not_applicable'
         result['network_capacity'] = sdk_network_capacity(lines)
         result['boot_memory'] = sdk_boot_memory(lines, 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
     if profile == 'rover':

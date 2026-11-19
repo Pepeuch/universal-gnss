@@ -21,6 +21,31 @@ class Flasher(unittest.TestCase):
         base=self.fixture.root/'out';directory=base/'published'/self.entry['build_key']
         self.files={'flasher/'+str(path.relative_to(base)):list(path.read_bytes()) for path in directory.iterdir()
                     if path.suffix in ('.bin','.json') and path.name!='DEPENDENCIES.json'}
+    def test_identified_c3_bundle_keeps_catalogue_compatibility(self):
+        identity=dict(ug_version='v0.7.5-RC1',source_sha='a'*40,source_tree='b'*40,
+                      hardware_variant='supermini-c3',profile='rover',web_transport='none',esp_idf='6.1',modified=False)
+        self.fixture.verified['firmware_identity']=identity
+        self.fixture.verified['first_boot_tls']='not_applicable'
+        self.entry=self.fixture.package('identified')
+        base=self.fixture.root/'identified'
+        directory=base/'published'/self.entry['build_key']
+        self.files={'flasher/'+str(path.relative_to(base)):list(path.read_bytes()) for path in directory.iterdir()
+                    if path.suffix in ('.bin','.json') and path.name!='DEPENDENCIES.json'}
+        result,_=self.evaluate()
+        self.assertNotIn('error',result)
+        self.assertTrue(result['ok'])
+        self.assertEqual(self.entry['firmware_identity'],identity)
+        altered=copy.deepcopy(self.entry)
+        altered['firmware_identity']['source_sha']='c'*40
+        files=copy.deepcopy(self.files)
+        for path in list(files):
+            if path.endswith(('provenance.json','qualification.json')):
+                data=json.loads(bytes(files[path]))
+                target=data['binary'] if path.endswith('qualification.json') else data
+                target['firmware_identity']=altered['firmware_identity']
+                files[path]=list(json.dumps(data).encode())
+        self.assertIn('error',self.evaluate(entry=altered,files=files)[0])
+
     def vm(self):
         vm=quickjs.Context();vm.set_memory_limit(32*1024*1024)
         vm.add_callable('_sha256',lambda values:hashlib.sha256(bytes(json.loads(values))).hexdigest())
@@ -135,6 +160,11 @@ class Flasher(unittest.TestCase):
             for field in ('channel','peer_mac','key','receiver'):
                 bad={**profile,field:'private'}
                 with self.assertRaises(quickjs.JSException):vm.eval('UGFlasher.normalize('+json.dumps(bad)+')')
+    def test_update_compatibility_cannot_be_added_only_to_catalogue(self):
+        entry=copy.deepcopy(self.entry)
+        entry['settings_schema']=1
+        self.assertTrue(self.evaluate(entry=entry)[0].get('error'))
+
     def test_full_install_manifest_cannot_suppress_erase_prompt(self):
         files=copy.deepcopy(self.files);entry=copy.deepcopy(self.entry)
         path=entry['manifest'];data=json.loads(bytes(files[path]));data['new_install_prompt_erase']=False

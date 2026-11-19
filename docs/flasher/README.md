@@ -137,13 +137,23 @@ transmis à ESP Web Tools : pas de seconde lecture distante mutable pendant le
 flash. Un changement de sélection annule les lectures et révoque les anciennes
 URLs. Une entrée ambiguë, corrompue ou non approuvée reste refusée.
 
-**Installation complète uniquement** : confirmation explicite de l’utilisateur,
-avertissement d’effacement et sauvegarde préalable. Le navigateur distingue la
-famille de puce via ESP Web Tools ; il ne prouve pas le modèle de carte, son
-câblage, sa PSRAM ni le contenu NVS existant. Aucune mise à jour conservant la
-configuration n’est proposée tant que partitions et schémas ne sont pas qualifiés.
-La compatibilité effective Web Serial/Blob manifeste reste à accepter sur matériel.
+**Installation complète** : confirmation explicite, avertissement d'effacement et
+sauvegarde préalable. ESP Web Tools identifie la famille de puce ; le modèle de
+carte, le câblage et la PSRAM demandent une vérification distincte.
 
+**Mise à jour S3 conservant NVS** : parcours USB qualifié localement pendant le P0.
+Le firmware cible conserve sa qualification et ses empreintes de publication.
+Le nouveau rapport et la provenance déclarent le schéma de paramètres accepté.
+Fournir la sauvegarde privée complète de16Mio et le binaire installé. Lorsque la
+version installée est absente du catalogue compatible, joindre son rapport natif
+reliant son SHA256, sa taille, sa carte et son schéma. Ces fichiers restent locaux.
+La puce, la Flash, les octets du bootloader, des partitions, de la NVS, de la
+sélection OTA et de l'application sont comparés à la carte avant confirmation.
+L'écriture porte sur l'application active uniquement, puis les octets écrits et
+les régions conservées sont relus. Les lectures sont bornées à16Kio et les copies
+sensibles effacées. Une interruption peut nécessiter une récupération USB à partir
+de la sauvegarde. Les anciens rapports sans déclaration de compatibilité sont
+refusés. La qualification matérielle S3 et les limites sont consignées dans le [rapport P0](../analysis/ESP32_S3_FRESH_INSTALL.md). Le redémarrage USB utilise une impulsion explicite RTS, GPIO0 relâché, puis ferme le port.
 ## Conservation durable et préparation Pages
 
 La politique reste `dev → main → distributions générées`. La chaîne

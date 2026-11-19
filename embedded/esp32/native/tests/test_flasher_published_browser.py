@@ -54,6 +54,29 @@ def run(site):
                 expect(page.locator('#status')).to_contain_text('Firmware publié',timeout=30000)
                 expect(page.locator('#image-info')).to_contain_text(s3['sha256'])
                 expect(page.locator('#downloads a')).to_have_count(4)
+                expect(page.locator('#device option[value="s3-gateway-http"]')).to_have_count(1)
+                expect(page.locator('#install-mode option[value="update"]')).to_be_enabled()
+                page.locator('#device').select_option('s3-gateway-http')
+                http=next((entry for entry in catalog['images'] if entry['source_sha']==s3['source_sha'] and entry['profile']['variant']=='s3-gateway-http'),None)
+                if http:
+                    expect(page.locator('#status')).to_contain_text('Firmware publié',timeout=30000)
+                    expect(page.locator('#summary')).to_contain_text('LAN non chiffré')
+                else:
+                    expect(page.locator('#status')).to_contain_text('Aucun firmware CI disponible')
+                    expect(page.locator('#downloads a')).to_have_count(0)
+                page.locator('#device').select_option('s3-gateway')
+                expect(page.locator('#status')).to_contain_text('Firmware publié',timeout=30000)
+                page.evaluate("const mode=document.getElementById('install-mode');mode.value='update';mode.dispatchEvent(new Event('change'))")
+                if s3.get('settings_schema')==1:
+                    expect(page.locator('#status')).to_contain_text('Mise à jour S3')
+                    expect(page.locator('#update-start')).to_be_enabled()
+                else:
+                    expect(page.locator('#status')).to_contain_text('Mise à jour refusée')
+                    expect(page.locator('#update-start')).to_be_disabled()
+                page.locator('#consent').check()
+                expect(page.locator('#installer')).not_to_have_attribute('manifest',re.compile('.+'))
+                page.evaluate("const mode=document.getElementById('install-mode');mode.value='full';mode.dispatchEvent(new Event('change'))")
+                expect(page.locator('#status')).to_contain_text('Firmware publié',timeout=30000)
                 assert not errors,errors
                 for branch,row in branches['branches'].items():
                     page.locator('#branch').select_option(branch)

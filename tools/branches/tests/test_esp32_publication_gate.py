@@ -65,7 +65,7 @@ class Gate(unittest.TestCase):
     def test_every_supported_firmware_is_automatically_built(self):
         import yaml
         flow=yaml.load((ROOT/'.github/workflows/esp32.yml').read_text(),Loader=yaml.BaseLoader)
-        self.assertEqual(set(flow['jobs']['firmware']['strategy']['matrix']['variant']),{'s3-gateway','c3-rover-usb','c3-rover-uart'})
+        self.assertEqual(set(flow['jobs']['firmware']['strategy']['matrix']['variant']),{'s3-gateway','s3-gateway-http','c3-rover-usb','c3-rover-uart'})
         self.assertEqual(set(flow['on']),{'push','pull_request'})
         self.assertIn(flow['on']['push'], ('',None,{}))
         self.assertIn(flow['on']['pull_request'], ('',None,{}))

@@ -165,24 +165,30 @@ or ambiguous application remains quarantined across reboot. Parser/telemetry res
 never clears it. No remote endpoint clears quarantine. Successful command ACKs do
 not prove Survey-In completion or physical RTCM generation.
 
-HTTPS starts only with a locally provisioned matching certificate/key. There is
-no shared default credential and no plaintext API fallback. The server uses the
+On S3 HTTPS builds, early startup now retains a valid stored identity or creates
+and verifies a unique P-256 self-signed identity when it is missing. A structurally
+invalid identity is replaced with an explicit recovery diagnostic; unreadable NVS,
+crypto failures and allocation errors fail closed without erasing configuration.
+Generation runs before radio/ADC owners, within a hardware-entropy window.
+The [fresh-install report and hardware plan](../../../docs/analysis/ESP32_S3_FRESH_INSTALL.md)
+distinguish SDK/QEMU evidence from still-required physical acceptance. A self-signed
+certificate needs local browser trust; an arbitrary DHCP IP is not a certificate SAN.
+HTTP is a distinct S3 build selection, never a failure fallback. The server uses the
 [official IDF HTTPS API](https://docs.espressif.com/projects/esp-idf/en/v6.1/esp32s3/api-reference/protocols/esp_https_server.html).
-Use `native/tools/commission.py --output <new-private-external-directory>` to
-prepare a unique test/admin token and self-signed P-256 identity. This tool never
-opens a serial port or flashes. Its private console-input file must be transmitted
-only through the intended local setup console, after independent port/hardware
-identification. Verify/trust the certificate fingerprint locally. The local
-commands are `tls-init <JSON>`, `config <JSON>` and `reboot CONFIRM`. The rover
-links neither this console nor network/Web/settings services.
+`native/tools/commission.py` and `tls-init` remain local maintenance/replacement tools;
+they are no longer prerequisites for a fresh S3 HTTPS installation. Never replay their
+configuration/token commands over an already provisioned administrator. Existing valid
+credentials, identity, GNSS/NTRIP settings and partitions remain authoritative.
+The rover links neither this console nor the network/Web/settings services.
 
 The read-only `tls-status` maintenance command validates the stored identity and
 reports `admin_configured` without exposing certificates, keys or hashes. `status`
 also reports the last HTTPS startup classification and its numeric SDK error;
 `events` identifies HTTPS failures with the same fixed labels. Startup distinguishes
 `identity_missing`, `identity_unreadable`, `identity_invalid`, `no_memory`,
-`crypto_unavailable`, `server_start_failed` and `route_registration_failed`.
-Local service errors `0x6e01`–`0x6e07` carry these classifications; the underlying
+`crypto_unavailable`, `server_start_failed`, `route_registration_failed`,
+`identity_generation_failed` and `identity_persistence_failed`.
+Local service errors `0x6e01`–`0x6e09` carry these classifications; the underlying
 SDK error remains available in `status`. A successful stored-identity check does
 not imply that the HTTPS server has started; startup status is reported separately.
 No diagnostic command writes NVS or substitutes a default identity.

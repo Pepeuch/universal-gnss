@@ -64,7 +64,7 @@ def package(build, verified, profile, source_sha, output, qualification):
         qualification.get('network_during_build_and_tests')!='disconnected_no_interfaces' or
         qualification.get('source_mounts') is not False or qualification.get('flash_or_publication') is not False or
         qualification.get('binary')!=verified or
-        (profile['variant']=='s3-gateway' and qualification.get('host_tests')!='pass')):
+        (profile['variant'].startswith('s3-gateway') and qualification.get('host_tests')!='pass')):
         raise ValueError('matching immutable isolated CI qualification required')
     if (verified.get('profile')!=profile['profile'] or verified.get('local_gnss') is not (profile['profile']=='gateway') or
         verified.get('radio_configuration')!='runtime_nvs_encrypted_unicast' or verified.get('portable_configuration_schema')!=1):
@@ -73,6 +73,9 @@ def package(build, verified, profile, source_sha, output, qualification):
                      'tx_pin':profile.get('uart_tx'),'baud':profile.get('uart_baud')}
     if profile['profile']=='rover' and any(verified.get('rover_output',{}).get(k)!=v for k,v in expected_output.items()):
         raise ValueError('verified rover output mismatch')
+    expected_transport = 'http' if profile['variant']=='s3-gateway-http' else 'https'
+    if profile['profile']=='gateway' and verified.get('web_transport')!=expected_transport:
+        raise ValueError('Web transport does not match the selected firmware variant')
     build=Path(build).resolve(strict=True)
     flash=load(build/'flasher_args.json');description=load(build/'project_description.json')
     if not isinstance(flash,dict) or not isinstance(description,dict):raise ValueError('IDF metadata objects required')
@@ -137,6 +140,20 @@ def package(build, verified, profile, source_sha, output, qualification):
            'sha256':digest(app),'source_sha':source_sha,'sdk_image':pinned,
            'partition_sha256':digest(binaries[PARTS[1]]),'manifest_sha256':digest(json_bytes(manifest)),
            'qualification':'software_only','install_mode':'full','nvs_preservation':'not_qualified'}
+    if 'firmware_identity' in verified:
+        identity=verified['firmware_identity']
+        if (identity.get('source_sha')!=source_sha or identity.get('source_tree')!=qualification['source_tree'] or
+                identity.get('modified') is not False or identity.get('esp_idf')!='6.1' or
+                identity.get('profile')!=profile['profile'] or identity.get('hardware_variant')!=profile['board'] or
+                identity.get('web_transport')!=(expected_transport if profile['profile']=='gateway' else 'none')):
+            raise ValueError('modified/mismatched firmware provenance cannot be published')
+        expected_boot='automatic_unique_nvs' if profile['profile']=='gateway' and expected_transport=='https' else 'not_applicable'
+        if verified.get('first_boot_tls')!=expected_boot:
+            raise ValueError('matching first-boot TLS qualification required')
+        entry['firmware_identity']=identity
+        entry['first_boot_tls']=verified.get('first_boot_tls','not_applicable')
+        if verified.get('settings_schema')==1:
+            entry['settings_schema']=1
     provenance={**entry,'part_sha256':{names[p]:hashes[p] for p in PARTS},'part_sizes':{names[p]:len(binaries[p]) for p in PARTS}}
     with tempfile.TemporaryDirectory(dir=dest.parent,prefix='.package-') as temp:
         staging=Path(temp)/key;staging.mkdir()

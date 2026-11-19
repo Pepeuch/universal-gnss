@@ -69,7 +69,7 @@
  <section class="panel" aria-labelledby="config-heading">
   <h2 id="config-heading">Profil du firmware</h2>
   <div class="fields">
-   <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB / UART runtime</option></select></div>
+   <div><label for="device">Matériel et rôle</label><select id="device"><option value="s3-gateway">ESP32-S3 Waveshare ETH — BASE / Relais · HTTPS</option><option value="s3-gateway-http">ESP32-S3 Waveshare ETH — BASE / Relais · HTTP (LAN non chiffré)</option><option value="c3-rover-usb">ESP32-C3 SuperMini — Rover USB / UART runtime</option></select></div>
    <div><label for="branch">Branche Git</label><select id="branch"><option value="main">main</option><option value="dev">dev</option></select><small>Releases et builds CI de la branche sélectionnée.</small></div>
    <div><label for="version">Version du firmware</label><select id="version"><option value="none">Chargement des firmwares publiés…</option></select><small>Toutes les versions publiées compatibles : alpha, bêta et stable.</small></div>
    <div><label for="source">Source de corrections (S3)</label><select id="source"><option value="local">GNSS local — BASE RTK</option><option value="ntrip">NTRIP entrant — mode relais</option></select><small>Mode choisi après installation ; un même firmware S3 peut fournir les deux chemins.</small></div>
@@ -92,6 +92,14 @@
  </section>
  <section class="panel" aria-labelledby="flash-heading">
   <h2 id="flash-heading">Flash USB</h2>
+  <label for="install-mode">Mode d’installation</label><select id="install-mode"><option value="full">Installation complète — sauvegarder la configuration avant effacement NVS</option><option value="update">Mise à jour S3 préservant NVS — contrôle USB obligatoire</option></select>
+  <div id="update-panel" class="hidden">
+   <label>Sauvegarde privée complète de la carte (16 Mio)<input id="update-backup" type="file" accept=".bin"></label>
+   <label>Application actuellement installée, archivée<input id="update-current" type="file" accept=".bin"></label>
+   <label>Rapport de validation de l’application installée, si elle est absente du catalogue<input id="update-reference" type="file" accept="application/json"></label>
+   <button id="update-start" type="button" disabled>Vérifier la carte et mettre à jour</button>
+   <p>Les fichiers restent dans ce navigateur. Les deux versions doivent déclarer le schéma de configuration compatible. Garder la carte alimentée pendant l’écriture. Une interruption peut nécessiter une récupération USB avec la sauvegarde.</p>
+  </div>
   <label><input id="consent" type="checkbox">Je confirme la carte, la taille Flash/PSRAM et l’installation complète. Conservation NVS/configuration non qualifiée ; sauvegarde préalable nécessaire. Brochage à vérifier.</label>
   <div id="flash-available" class="hidden">
    <p>Construction logicielle vérifiée pour ce profil. Qualification matérielle non acquise.</p>
@@ -99,7 +107,7 @@
    <div id="image-info" class="muted"></div>
   </div>
   <div id="flash-unavailable"><p>Aucune image vérifiée n'est actuellement répertoriée pour ce profil. Le flash reste désactivé.</p></div>
-  <div id="downloads" class="actions"></div><p class="muted">La mise à jour conservant NVS n’est pas proposée sans preuve de compatibilité. Le navigateur ne compile pas ESP-IDF. Il ne flashe que des manifestes pointant vers des images déjà construites, vérifiées et publiées.</p>
+  <div id="downloads" class="actions"></div><p class="muted">La mise à jour S3 exige une sauvegarde, des versions compatibles et une lecture de vérification sur la carte. Le navigateur ne compile pas ESP-IDF. Il ne flashe que des manifestes pointant vers des images déjà construites, vérifiées et publiées.</p>
  </section>
 </div>
 <aside>
@@ -112,6 +120,7 @@
 </main>
 <script defer src="flasher/portable.js"></script>
 <script defer src="flasher/provision.js"></script>
+<script defer src="flasher/update.js"></script>
 <script defer src="flasher/app.js"></script>
 <script defer src="flasher/pinout/boards.js"></script>
 <script defer src="flasher/pinout/configurator.js"></script>

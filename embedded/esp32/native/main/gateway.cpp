@@ -14,6 +14,7 @@
 #include "ug_memory_diagnostics.hpp"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
+#include "ug_tls_bootstrap.hpp"
 #include "ug_wait.hpp"
 #include "ug_web.hpp"
 #include "ug_web_auth_platform.hpp"
@@ -111,6 +112,14 @@ std::int32_t StartRadioControl(void*)
 }  // namespace
 extern "C" void app_main()
 {
+  ESP_LOGI("UG",
+           "Firmware UG=%s source=%s hardware=%s transport=%s sdk=%s modified=%d",
+           UG_FIRMWARE_VERSION,
+           UG_SOURCE_SHA,
+           UG_HARDWARE_VARIANT,
+           UG_WEB_TRANSPORT,
+           esp_get_idf_version(),
+           UG_SOURCE_MODIFIED);
 #if CONFIG_IDF_TARGET_ESP32S3
   if (!ug::embedded::InitializeWebSessionRandom())
     ESP_LOGE("UG", "Web session RNG unavailable; password login fails closed");
@@ -139,6 +148,12 @@ extern "C" void app_main()
                  configured ? ESP_OK : (nvs == ESP_OK ? ESP_FAIL : nvs));
   if (!configured)
     ESP_LOGE("UG", "Configuration locked: %s", error.c_str());
+#if CONFIG_IDF_TARGET_ESP32S3 && !CONFIG_UG_WEB_HTTP
+  // Startup entropy must be consumed before any Wi-Fi/ADC owner runs. Identity
+  // provisioning never modifies configuration/auth namespaces or their banks.
+  if (WebUsesHttps())
+    PrepareWebIdentityAtBoot();
+#endif
   // Independent local USB recovery is started before Ethernet/GNSS setup.
   const auto console = StartLocalCommissioning(RestartNetworkServices);
   ObserveService(ServiceId::kConsole,

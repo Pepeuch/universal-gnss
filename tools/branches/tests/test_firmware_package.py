@@ -43,6 +43,20 @@ class Package(unittest.TestCase):
             'project_name':'universal-gnss-esp32','config_file':str(self.root/'sdkconfig')}))
     def package(self,output='out'):
         return p.package(self.build,self.verified,self.profile,'a'*40,self.root/output,self.qualification)
+    def test_identified_bundle_requires_exact_source_and_first_boot_qualification(self):
+        identity=dict(ug_version='v0.7.5-RC1',source_sha='a'*40,source_tree='b'*40,
+                      hardware_variant='supermini-c3',profile='rover',web_transport='none',esp_idf='6.1',modified=False)
+        self.verified['firmware_identity']=identity
+        with self.assertRaisesRegex(ValueError,'first-boot'):self.package()
+        self.verified['first_boot_tls']='not_applicable'
+        for field,value in (('source_sha','c'*40),('source_tree','d'*40),('modified',True),('web_transport','http'),('hardware_variant','waveshare-s3-eth')):
+            saved=identity[field];identity[field]=value
+            with self.assertRaisesRegex(ValueError,'provenance'):self.package()
+            identity[field]=saved
+        result=self.package()
+        self.assertEqual(result['firmware_identity'],identity)
+        self.assertEqual(result['first_boot_tls'],'not_applicable')
+
     def test_actual_offsets_determinism_provenance_and_no_overwrite(self):
         first=self.package();second=self.package('other');self.assertEqual(first,second)
         manifest=p.load(self.root/'out'/first['manifest'].removeprefix('flasher/'))

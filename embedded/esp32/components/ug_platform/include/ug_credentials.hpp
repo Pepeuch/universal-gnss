@@ -33,9 +33,13 @@ struct LoadedWebIdentity
     return bytes ? reinterpret_cast<const char*>(bytes.get() + 5 + certificate_size) : nullptr;
   }
 };
-// Local-console provisioning only. Remote API never accepts/retrieves these keys.
+// Boot/local-console provisioning only. Remote API never accepts/retrieves private keys.
+// PEM views must be NUL-terminated; lengths exclude the terminator.
+HttpsStartupStatus PersistWebIdentity(std::string_view certificate, std::string_view key);
 bool StoreWebIdentity(const WebIdentity&, std::string& error);
 HttpsStartupStatus LoadWebIdentity(LoadedWebIdentity&);
+// Public certificate DER fingerprint; never returns/logs private key material.
+bool WebCertificateFingerprint(const LoadedWebIdentity&, std::array<std::uint8_t, 32>&);
 // TLS endpoint paths may reference nvs://ug_tls/<name>; no filesystem mount required.
 bool StoreTlsObject(std::string_view name,
                     std::string_view pem,

@@ -199,3 +199,29 @@ et Afficher/Masquer NTRIP. La [réduction du temps de connexion](../../docs/anal
 est mesurée sur le S3 : médiane 36,84 s pour le vecteur public et 38,58 s pour
 une vérification HTTP invalide. Le gain est réel, mais la latence reste excessive ;
 l’opérateur confirme sa connexion avec le mot de passe habituel après redémarrage.
+
+
+## Démarrage vierge S3 — correctif P0
+
+Les variantes HTTP/HTTPS sont identifiées séparément dans le Flasher. HTTPS crée
+sa propre identité au premier démarrage, sans commande USB obligatoire ; les
+identités et identifiants existants sont conservés. Le tableau de bord affiche
+version UG, SHA source complet, carte, transport et SDK, avec indication des sources
+modifiées. Sur installation vierge uniquement, la connexion initiale admin/admin
+reste limitée au changement de mot de passe. Aucune nouvelle preuve physique de
+ce parcours n'est revendiquée : voir le [rapport et la campagne à autoriser](../../docs/analysis/ESP32_S3_FRESH_INSTALL.md).
+
+
+### Redémarrages depuis la WebUI
+
+Le tableau de bord propose le redémarrage de l’ESP32 avec confirmation, sans effacer
+la configuration. La session est fermée ; reconnectez-vous après son retour.
+Une opération GNSS en cours bloque ce redémarrage.
+
+Dans GNSS / BASE, le redémarrage du récepteur est proposé pour un ZED-F9P identifié,
+sans commande en cours ni quarantaine. Il redémarre seulement le GNSS à chaud,
+sans effacer sa configuration ni ses données de sauvegarde. La commande n’a pas
+d’ACK fiable : consulter les résultats et la nouvelle identification ; un envoi
+réussi ne prouve pas à lui seul le redémarrage matériel. Les observations et les
+corrections locales sont invalidées, et un échec conserve la quarantaine. Aucune
+commande de remise à zéro usine n’est exposée. Qualification matérielle en cours.

@@ -14,6 +14,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[3]
 VARIANTS = {
     's3-gateway': ('gateway', 'waveshare-s3-eth', True, None),
+    's3-gateway-http': ('gateway', 'waveshare-s3-eth', True, None),
     'c3-relay': ('relay-ntrip', 'supermini-c3', False, None),
     'c3-rover-usb': ('rover', 'supermini-c3', False, None),
     'c3-rover-uart': ('rover', 'supermini-c3', False, 4),
@@ -131,6 +132,8 @@ def build_arguments(variant, uart_tx=None, uart_baud=115200):
         args += ' --local-gnss'
     if tx is not None:
         args += f' --rover-uart-tx {tx} --rover-uart-baud {uart_baud}'
+    if variant == 's3-gateway-http':
+        args += ' --web-transport http'
     return args
 
 
@@ -142,7 +145,17 @@ def verify_arguments(variant, uart_tx=None, uart_baud=115200):
         args += ' --local-gnss'
     if tx is not None:
         args += f' --rover-uart-tx {tx} --rover-uart-baud {uart_baud}'
+    if variant == 's3-gateway-http':
+        args += ' --web-transport http'
     return args
+
+
+def source_has_identity(repo, source):
+    # Compatibility with immutable Releases predating this bootstrap. Inspect
+    # source only; do not execute branch code on the host or rewrite old tags.
+    builder = run(['git', '-C', str(repo), 'show',
+                   source + ':embedded/esp32/native/build.py'], capture=True).stdout
+    return b'def firmware_identity(' in builder
 
 
 def validate(repo, ref, variant, bundle_output=None, uart_tx=None, uart_baud=115200):
@@ -160,7 +173,7 @@ def validate(repo, ref, variant, bundle_output=None, uart_tx=None, uart_baud=115
                                capture=True).stdout)
     image = sdk_image(inventory)
     run(['docker', 'pull', image])
-    if variant == 's3-gateway':
+    if variant.startswith('s3-gateway'):
         recipe = run(['git', '-C', str(repo), 'show',
                       identity['source_object'] + ':embedded/esp32/native/Dockerfile.ci'], capture=True).stdout
         with host_dependency_image(image, recipe) as dependency_image:
@@ -178,11 +191,22 @@ def validate_container(repo, identity, inventory, base_image, image, variant, bu
         sdk(cid, f'chmod -R a-w {SOURCE}')
         args = build_arguments(variant, uart_tx, uart_baud)
         profile = VARIANTS[variant][0]
+        import shlex
+        identified = source_has_identity(repo, identity['source_object'])
+        source_args = ''
+        if identified:
+            commit = identity['source_commit'] or run(['git','-C',str(repo),'rev-parse','HEAD'],capture=True).stdout.decode().strip()
+            version_query = subprocess.run(['git','-C',str(repo),'describe','--tags','--match','v[0-9]*','--abbrev=0',commit],capture_output=True,text=True,check=False)
+            version = version_query.stdout.strip() if version_query.returncode==0 else 'unversioned'
+            source_args = (' --source-sha '+commit+' --source-tree '+identity['source_tree']+
+                           ' --ug-version '+shlex.quote(version)+(' --source-modified' if identity['source_type']=='tree' else ''))
+        elif variant == 's3-gateway-http':
+            raise ValueError('explicit HTTP catalogue variant is unavailable on this historical source')
         provision = ' --provision' if profile != 'rover' else ''
-        sdk(cid, f'python {NATIVE}/build.py --output /tmp/ug-ci-a {args}{provision} --prepare-only')
+        sdk(cid, f'python {NATIVE}/build.py --output /tmp/ug-ci-a {args}{provision}{source_args} --prepare-only')
         sdk(cid, 'test ! -e /tmp/ug-ci-a/build/universal-gnss-esp32.bin; '
                  'test ! -e /tmp/ug-ci-a/build/universal-gnss-esp32.elf')
-        if variant == 's3-gateway':
+        if variant.startswith('s3-gateway'):
             version = inventory['host_test_only']['quickjs']['version']
             if version != '1.19.4':
                 raise ValueError('unreviewed browser-test dependency')
@@ -193,7 +217,7 @@ def validate_container(repo, identity, inventory, base_image, image, variant, bu
         info, = json.loads(run(['docker', 'inspect', cid], capture=True).stdout)
         require_isolation(info, os.getuid(), os.getgid())
         host_tests = 'not_selected'
-        if variant == 's3-gateway':
+        if variant.startswith('s3-gateway'):
             sdk(cid, f'cmake -S {NATIVE}/tests -B /tmp/ug-host-build '
                      '-DUG_CJSON_SOURCE=/tmp/ug-ci-a/project/managed_components/espressif__cjson/cJSON '
                      '-DCMAKE_C_FLAGS="-fsanitize=address,undefined -g" '
@@ -202,14 +226,26 @@ def validate_container(repo, identity, inventory, base_image, image, variant, bu
                      'ctest --test-dir /tmp/ug-host-build --output-on-failure; '
                      f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_web_assets.py; '
                      f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_flasher_browser.py; '
+                     f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_browser_update.py; '
                      f'PYTHONPATH=/tmp/ug-host-deps python {NATIVE}/tests/test_portable_browser.py; '
                      f'python {NATIVE}/tests/test_capture_tools.py')
             host_tests = 'pass'
+        if variant == 's3-gateway' and identified:
+            # Real SDK crypto/NVS, on an emulated S3. No firmware variant,
+            # physical device, network or publication side effect.
+            sdk(cid, f'cp -R {NATIVE}/tests/tls_boot /tmp/ug-tls-test-project; '
+                     'chmod -R u+w /tmp/ug-tls-test-project; '
+                     'IDF_COMPONENT_MANAGER=0 idf.py -C /tmp/ug-tls-test-project '
+                     '-B /tmp/ug-tls-test-build -DIDF_TARGET=esp32s3 '
+                     f'-DUG_ROOT={SOURCE} '
+                     '-DUG_CJSON_COMPONENT=/tmp/ug-ci-a/project/managed_components/espressif__cjson build; '
+                     f'python {NATIVE}/tools/test_tls_boot.py --build /tmp/ug-tls-test-build '
+                     '--output /tmp/ug-tls-qemu-report.json')
         sdk(cid, 'idf.py -C /tmp/ug-ci-a/project -B /tmp/ug-ci-a/build build size')
         first = json.loads(sdk(cid, f'python {NATIVE}/verify.py --work /tmp/ug-ci-a '
                                   + verify_arguments(variant, uart_tx, uart_baud), capture=True).stdout)
         cache = ' --dependency-cache /tmp/ug-ci-a/project' if profile != 'rover' else ''
-        sdk(cid, f'python {NATIVE}/build.py --output /tmp/ug-ci-b {args}{cache}')
+        sdk(cid, f'python {NATIVE}/build.py --output /tmp/ug-ci-b {args}{cache}{source_args}')
         second = json.loads(sdk(cid, f'python {NATIVE}/verify.py --work /tmp/ug-ci-b '
                                    + verify_arguments(variant, uart_tx, uart_baud), capture=True).stdout)
         if first['sha256'] != second['sha256']:
@@ -220,7 +256,7 @@ def validate_container(repo, identity, inventory, base_image, image, variant, bu
         # Assert isolation again after all project/test commands.
         info, = json.loads(run(['docker', 'inspect', cid], capture=True).stdout)
         require_isolation(info, os.getuid(), os.getgid())
-        host_dependencies = sdk(cid, 'cat /opt/ug-native-host-dependencies.txt', capture=True).stdout.decode().strip() if variant == 's3-gateway' else 'not_selected'
+        host_dependencies = sdk(cid, 'cat /opt/ug-native-host-dependencies.txt', capture=True).stdout.decode().strip() if variant.startswith('s3-gateway') else 'not_selected'
         report = {**identity, 'variant': variant, 'sdk_image': base_image,
                 'host_dependencies': host_dependencies, 'build_and_verify': 'pass',
                 'reproducibility': 'pass', 'host_tests': host_tests,

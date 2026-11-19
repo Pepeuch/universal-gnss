@@ -9,7 +9,7 @@ HTTP 404 ; aucun déploiement public n’est effectué depuis la branche de pré
 La **compilation de développement** est indépendante de la publication RC :
 le workflow natif accepte toute branche. Sur une branche de travail ou une PR,
 seuls les changements d'entrées firmware (code, scripts/assets, configuration de
-build, dépendances, fixtures/tests) déclenchent les trois compilations S3/C3.
+build, dépendances, fixtures/tests) déclenchent les quatre compilations : S3 HTTPS, S3 HTTP, C3 USB et C3 UART.
 Une modification documentaire seule les ignore explicitement. Les pushes sur
 `main`, `dev` et les tags compilent toujours pour qualifier les Releases.
 Aucune approbation ni appartenance à `main` n'est requise pour compiler une branche.
@@ -125,3 +125,36 @@ redémarrage explicite.
 Les observations et limites du premier essai physique sont consignées dans le
 [bilan S3](../../embedded/esp32/HARDWARE_ALPHA.md). Elles ne qualifient pas les
 cartes C3/C6 ni un déploiement public du portail.
+
+
+## Premier démarrage S3 et transport explicite
+
+Choisir **S3 HTTPS** ou **S3 HTTP** dans Matériel et rôle. Le transport fait partie de
+l'identité de compilation ; il ne dépend pas d'une ancienne configuration NVS.
+HTTP laisse les identifiants et sessions non chiffrés sur le LAN. Aucun échec HTTPS
+ne bascule automatiquement en HTTP. Les bundles historiques restent disponibles ;
+le portail indique quand une ancienne image exige encore un provisionnement USB.
+
+Les nouveaux builds HTTPS initialisent une identité TLS P-256 unique si elle manque,
+la relisent avant de lancer le serveur et la conservent aux démarrages suivants.
+Un certificat autosigné local n'est pas une autorité publique : vérifier/accepter
+la confiance locale dans le navigateur ; l'IP DHCP peut ne pas correspondre au SAN.
+Sur NVS réellement vierge, `admin` / `admin` ouvre uniquement le changement obligatoire
+du mot de passe. Aucun identifiant existant n'est réinitialisé automatiquement.
+Le [rapport P0](../analysis/ESP32_S3_FRESH_INSTALL.md) décrit les limites matérielles.
+
+L'installation complète propose un effacement : **une NVS effacée perd ses réglages,
+son mot de passe et ses identités**. Sauvegarder avant de l'accepter. Le sélecteur
+Mise à jour reste désactivé tant que la conservation physique n'est pas qualifiée.
+Le plan hors ligne `embedded/esp32/native/tools/prepare_update.py` compare une
+sauvegarde complète vérifiée, l'application archivée actuelle, le bootloader et les
+partitions. Il refuse les états OTA indéterminés et ne propose qu'une écriture de
+l'application sélectionnée. Il ne flashe rien, n'est pas un manifeste de navigateur,
+et ne prouve ni une mise à jour atomique ni une conservation déjà qualifiée.
+
+Le build conserve la version UG issue du tag accessible, le SHA complet, la variante,
+le transport et le SDK. Sans tag accessible sur une branche indépendante, la version
+est explicitement `unversioned`, avec SHA exact ; cette branche reste compilable.
+Les builds locaux modifiés sont marqués comme tels et ne sont pas publiables.
+La publication RC manuelle/automatique conserve sa matrice S3 HTTPS + C3 USB ; les
+aperçus CI ajoutent S3 HTTP et conservent C3 UART, sans remplacer les anciennes archives.

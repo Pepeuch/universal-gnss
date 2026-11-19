@@ -23,6 +23,8 @@ bool QueueBaseOperation(const BaseOperation&);
 bool QueueBaseDisableOperation(const BaseDisableOperation&);
 bool QueueTelemetryOperation(const TelemetryOperation&);
 bool QueueReceiverDetection();
+bool QueueReceiverRestart();
+bool ReceiverOperationPending();
 ReceiverStatus ReceiverSnapshot();
 CommandHistorySnapshot ReceiverCommands();
 struct ReceiverSatelliteReport
