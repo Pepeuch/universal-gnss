@@ -1,17 +1,54 @@
 # Roadmap
 
 
-S3 fresh-install P0 is **PARTIAL / HARDWARE_REQUIRED**: [autonomous TLS bootstrap,
-explicit HTTP/HTTPS identities and the acceptance plan](docs/analysis/ESP32_S3_FRESH_INSTALL.md)
-are implemented/tested in software; the first authorized erased S3 HTTPS boot,
-certificate generation, application-only update, reboot controls and three
-cold boots pass. Two further erased installations, HTTP hardware and browser
-update integration remain open. Original operator access was restored and confirmed.
-Valid credentials/configuration are retained;
-no HTTP fallback or partition change. NVS-preserving browser update remains disabled
-until USB compatibility integration and the destructive-install/update/F9P campaign
-are complete, with explicit hardware authorization.
-No release or roadmap completion is counted from this preparation.
+S3 fresh-install P0 is **IMPLEMENTED / locally qualified**: [completion evidence](docs/analysis/ESP32_S3_FRESH_INSTALL.md)
+covers three erased HTTPS installations, nine confirmed cold boots, HTTP hardware,
+real Chromium/Web Serial application-only updates, automatic USB reboot and NVS,
+TLS/password/settings preservation. Original operator state is restored and usual
+login confirmed. Final clean952 BIN/ELF/MAP match and are archived outside Git.
+The Flasher completion patch awaits review, commit and hosted CI. Contact quality,
+slow authentication, RTK/endurance and the resource refactor remain separate work.
+Historical release/roadmap counters are unchanged by this independent ESP32 block.
+
+## Active development direction — ESP32 station capability and return to main roadmap
+
+Planning update (2026-11-19; not a release or qualification claim). ESP32 work
+was brought forward from the original deployment sequence. Complete the current
+fresh-install P0 first, then pursue the station capability blocks below as whole
+functional exercises, not as separate administrative micro-lots. Keep the common
+engine portable, preserve ROS2 and C3 compatibility and follow existing `AGENTS.md`
+and checkpoint ownership. Build, test on the relevant physical hardware, debug
+and retest within each exercise. Measure memory and latency as part of each block.
+
+| Exercise | Functional objective |
+| --- | --- |
+| ESP-01 | Local qualification complete: autonomous TLS, three erased HTTPS installs/nine cold boots, HTTP, preserving Web Serial update and operator-state restoration. Completion patch awaiting review/integration. |
+| ESP-02 | Centralized Journals and WebUI administration: readable reports, filtering, individual/global copy and file exports, restart controls and reset diagnostics, acceptable secure login latency, official receiver firmware/tool links in Web Flasher. Reuse already implemented controls. |
+| ESP-03 | GNSS/RTCM observability: shared message counters, rates, ages, RX/TX throughput, decoding and identity diagnostics; project to embedded WebUI and other consumers without duplicating parsers. |
+| ESP-04 | Remote receiver maintenance: UART bidirectional UDP/TCP, read-only monitoring, exclusive authenticated maintenance, USB Host where qualified, vendor-tool interoperability. |
+| ESP-05 | Storage: selectable microSD or SMB2/3 NAS, bounded asynchronous recording, rotation, retention, browsing/export and failure isolation. |
+| ESP-06 | GNSS raw recording and RINEX: vendor observations/navigation records, metadata, integrity, Linux conversion and 24-hour station qualification for Centipede/Onocoy as applicable. Native RINEX conversion is a feasibility study only. |
+| ESP-07 | OTA and recovery: verified images, persistent configuration, rollback and power-loss qualification. |
+| ESP-08 | Complete embedded integration and field qualification: BASE/RELAY/ROVER, ESP-NOW LR, active-radio memory margin, multi-peer/broadcast, rover GGA for NEAR, sustained live GNSS/RTCM/NTRIP and storage load; resource profiling and no-PSRAM feasibility. MQTT remains open; LoRa retains its deferred priority. |
+
+The order is a proposed execution sequence, not a new release numbering scheme.
+After the embedded station baseline is qualified, return to the outstanding
+ROS2-first production deployment gates and native/headless Linux, generic API/UI,
+BlueOS and additional receiver backends in their existing dependency order.
+Portable receiver/core improvements discovered during ESP32 work are shared where
+appropriate; they do not require maintaining a second GNSS engine.
+
+### Cross-platform receiver security study (planned, not implementation)
+
+Investigate Galileo OSNMA in the vendor backends, beginning with supported u-blox
+hardware/firmware. Authenticate navigation messages, not RTCM or the whole PVT
+solution; no extra satellites or direct accuracy improvement is implied. Verify
+exact hardware/firmware capabilities, public key/Merkle material and trusted time
+requirements, receiver-native status and safe provisioning; expose portable
+security diagnostics to ROS2 and ESP32 without mandatory OSNMA or new rejection
+policy. Evaluate Unicore support independently. See the official
+[Galileo OSNMA service](https://www.gsc-europa.eu/galileo/services/galileo-open-service-navigation-message-authentication-osnma)
+and [ZED-F9P resources](https://www.u-blox.com/en/product/zed-f9p-module?legacy=Current#Documentation-&-resources).
 
 ## Current phase
 

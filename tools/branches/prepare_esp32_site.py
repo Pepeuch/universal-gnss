@@ -31,7 +31,9 @@ def inspect_bundle(root,approvals):
     pinned=p.load(ROOT/'embedded/esp32/migration/dependencies.json')['sdk']['image']
     output={'transport':'uart1-tx' if profile['output']=='uart' else 'usb-serial-jtag',
             'tx_pin':profile.get('uart_tx'),'baud':profile.get('uart_baud')}
-    if (entry.get('sdk_image')!=pinned or entry.get('qualification')!='software_only' or
+    if (provenance.get('settings_schema')!=entry.get('settings_schema') or
+        qualification.get('binary',{}).get('settings_schema')!=entry.get('settings_schema') or
+        entry.get('sdk_image')!=pinned or entry.get('qualification')!='software_only' or
         p.profiles.normalize(provenance.get('profile'))!=profile or
         qualification.get('sdk_image')!=pinned or qualification.get('variant')!=profile['variant'] or qualification.get('source_object')!=entry['source_sha'] or
         qualification.get('network_during_build_and_tests')!='disconnected_no_interfaces' or qualification.get('source_mounts') is not False or
@@ -136,7 +138,7 @@ def prepare(output,approvals,bundles=(),repo=ROOT):
     output.mkdir(parents=True)
     for name in ('flasher.html','UG_logo.png'):shutil.copyfile(ROOT/'docs'/name,output/name)
     (output/'flasher').mkdir()
-    for name in ('app.js','portable.js','provision.js','README.md'):shutil.copyfile(ROOT/'docs/flasher'/name,output/'flasher'/name)
+    for name in ('app.js','portable.js','provision.js','update.js','README.md'):shutil.copyfile(ROOT/'docs/flasher'/name,output/'flasher'/name)
     # Include versioned Pin Configurator resources in the isolated Pages staging.
     shutil.copytree(ROOT/'docs/flasher/pinout', output/'flasher/pinout')
     shutil.copytree(ROOT/'docs/flasher/assets/boards', output/'flasher/assets/boards')

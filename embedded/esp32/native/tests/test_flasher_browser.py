@@ -160,6 +160,11 @@ class Flasher(unittest.TestCase):
             for field in ('channel','peer_mac','key','receiver'):
                 bad={**profile,field:'private'}
                 with self.assertRaises(quickjs.JSException):vm.eval('UGFlasher.normalize('+json.dumps(bad)+')')
+    def test_update_compatibility_cannot_be_added_only_to_catalogue(self):
+        entry=copy.deepcopy(self.entry)
+        entry['settings_schema']=1
+        self.assertTrue(self.evaluate(entry=entry)[0].get('error'))
+
     def test_full_install_manifest_cannot_suppress_erase_prompt(self):
         files=copy.deepcopy(self.files);entry=copy.deepcopy(self.entry)
         path=entry['manifest'];data=json.loads(bytes(files[path]));data['new_install_prompt_erase']=False

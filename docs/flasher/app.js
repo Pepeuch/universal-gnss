@@ -61,6 +61,7 @@
     const output={transport:profile.output==='uart'?'uart1-tx':'usb-serial-jtag',tx_pin:profile.uart_tx??null,baud:profile.uart_baud??null};
     if (canonical(normalize(provenance.profile))!==canonical(profile) ||
         ['source_sha','sha256','partition_sha256','manifest_sha256','build_key','sdk_image','install_mode','nvs_preservation','qualification'].some(k=>provenance[k]!==entry[k]) ||
+        provenance.settings_schema!==entry.settings_schema || qualification.binary?.settings_schema!==entry.settings_schema ||
         qualification.source_type!=='commit' || qualification.source_commit!==entry.source_sha || qualification.source_object!==entry.source_sha ||
         qualification.source_tree!==approval.source_tree || qualification.variant!==profile.variant || qualification.sdk_image!==entry.sdk_image ||
         qualification.build_and_verify!=='pass' || qualification.reproducibility!=='pass' || qualification.source_mounts!==false ||
@@ -170,7 +171,7 @@
       controller?.abort();controller=null;current=null;
       for(const url of urls)URL.revokeObjectURL(url);urls=[];
       $('installer').removeAttribute('manifest');$('flash-available').classList.add('hidden');$('flash-unavailable').classList.remove('hidden');
-      $('image-info').textContent='';$('downloads').replaceChildren();$('consent').checked=false;
+      $('update-start').disabled=true;$('image-info').textContent='';$('downloads').replaceChildren();$('consent').checked=false;
     }
     function selected() {
       const variant=$('device').value==='c3-rover-uart'?'c3-rover-usb':$('device').value,input={schema:2,variant,...variants[variant]};
@@ -200,7 +201,7 @@
     }
     async function render() {
       const version=++generation;clear();const p=selected(),source=$('version').value;
-      if(($('install-mode')?.value||'full')!=='full'){status('Mise à jour indisponible : qualification matérielle et contrôle USB préalables requis.');return;}
+      const update=$('install-mode').value==='update';$('consent').closest('label').classList.toggle('hidden',update);$('update-panel').classList.toggle('hidden',!update);$('update-start').disabled=true;
       portableForm(p.board);
       $('source').disabled=p.profile!=='gateway';$('receiver').disabled=p.profile!=='gateway';
       $('tx-block').classList.add('hidden');$('baud-block').classList.add('hidden');summary();request(p,source);
@@ -217,7 +218,12 @@
         const parts=verified.parts.map(part=>{const path=URL.createObjectURL(new Blob([part.bytes]));urls.push(path);return {path,offset:part.offset}});
         const manifest={...verified.manifest,builds:[{chipFamily:p.chip,parts}]};
         const manifestUrl=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/json'}));urls.push(manifestUrl);
-        current={manifestUrl};
+        current={manifestUrl,verified};
+        if(update){
+          $('update-start').disabled=p.board!=='waveshare-s3-eth' || verified.entry.settings_schema!==1;
+          status($('update-start').disabled?'Mise à jour refusée : compatibilité de configuration absente pour cette version.':'Mise à jour S3 : fournir la sauvegarde et l’application installée, puis vérifier la carte par USB.');
+          return;
+        }
         for(let i=0;i<parts.length;++i){const a=document.createElement('a');a.href=parts[i].path;a.download=verified.parts[i].path;a.textContent='Télécharger '+verified.parts[i].path;a.className='button secondary';$('downloads').append(a)}
         const fw=verified.entry.firmware_identity;
         const identityInfo=fw?`UG ${fw.ug_version} · ${fw.hardware_variant} · ${fw.web_transport.toUpperCase()} · ESP-IDF ${fw.esp_idf} · `:'';
@@ -288,6 +294,40 @@
       if(ready)$('installer').setAttribute('manifest',current.manifestUrl);else $('installer').removeAttribute('manifest');
     });
     $('install-mode')?.addEventListener('change',()=>render().catch(e=>status(e.message)));
+    $('update-start').addEventListener('click',async()=>{
+      if(!navigator.serial){status('Web Serial nécessite Chromium sur HTTPS.');return;}
+      const candidate=current?.verified,backupFile=$('update-backup').files[0],oldFile=$('update-current').files[0];
+      if(!candidate || !backupFile || backupFile.size!==16777216 || !oldFile || oldFile.size>3145728){status('Sauvegarde complète et application archivée requises.');return;}
+      let port,transport,backup,old;const controls=[...document.querySelectorAll('button,input,select')].map(element=>({element,disabled:element.disabled}));
+      try {
+        port=await navigator.serial.requestPort({filters:[{usbVendorId:0x303a}]});
+        controls.forEach(c=>c.element.disabled=true);
+        backup=new Uint8Array(await backupFile.arrayBuffer());old=new Uint8Array(await oldFile.arrayBuffer());
+        const oldHash=await digest(old),references=images.filter(e=>e.sha256===oldHash && e.settings_schema===1 && e.profile.board==='waveshare-s3-eth');
+        let baseline;
+        if(references.length===1) {
+          baseline=references[0];const approval=sources.find(s=>s.source_sha===baseline.source_sha);
+          await verifyPublished(baseline,baseline.profile,approval,(path,limit)=>boundedFetch(path,limit));
+        } else {
+          const referenceFile=$('update-reference').files[0];
+          if(references.length || !referenceFile || referenceFile.size>65536)throw Error('Rapport de validation de la version installée requis');
+          const reference=JSON.parse(await referenceFile.text());
+          baseline=UGUpdate.baseline(reference,oldHash,old.length);
+        }
+        const {ESPLoader,Transport}=await import('https://unpkg.com/esptool-js@0.6.0/bundle.js');
+        transport=new Transport(port);
+        const loader=new ESPLoader({transport,baudrate:115200,terminal:{clean(){},write(){},writeLine(){}}});
+        await loader.main();
+        await UGUpdate.run(loader,backup,old,candidate,baseline,async()=>confirm('La carte et la sauvegarde correspondent. Écrire uniquement l’application et conserver NVS, identifiants, certificat et paramètres ?'),status);
+        await UGUpdate.restart(transport);
+        status('Application vérifiée sur la carte ; NVS, bootloader, partitions et sélection OTA identiques. Vérifier la WebUI après redémarrage.');
+      } catch(error){status('Mise à jour arrêtée : '+error.message+'. La carte peut rester en mode USB. Après une annulation avant écriture, redémarrer la carte ; après une écriture interrompue, utiliser la sauvegarde pour la récupération.');}
+      finally {
+        backup?.fill(0);old?.fill(0);$('update-backup').value='';$('update-current').value='';$('update-reference').value='';
+        if(transport)try{await transport.disconnect();}catch{}
+        controls.forEach(c=>c.element.disabled=c.disabled);
+      }
+    });
     for(const id of ['device','version','tx','baud'])$(id).addEventListener('change',()=>render().catch(e=>status(e.message)));
     $('branch').addEventListener('change',()=>{selectBranch();render().catch(e=>status(e.message));});
     $('check').addEventListener('click',()=>reloadCatalogue());

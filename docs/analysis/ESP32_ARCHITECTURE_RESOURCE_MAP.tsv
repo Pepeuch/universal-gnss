@@ -1,0 +1,218 @@
+vue	section	proprietaire	octets	symbole
+section	.rtc.force_slow	libesp_hw_support.a	36	—
+section	.rtc_reserved	libesp_hw_support.a	24	—
+section	.iram0.vectors	libxtensa.a	427	—
+section	.iram0.vectors	alignement / hors archive	601	—
+section	.iram0.text	libpp.a	15392	—
+section	.iram0.text	libspi_flash.a	10720	—
+section	.iram0.text	libesp_hw_support.a	10458	—
+section	.iram0.text	libheap.a	6627	—
+section	.iram0.text	libfreertos.a	5574	—
+section	.iram0.text	libphy.a	5150	—
+section	.iram0.text	libesp_hal_mspi.a	4975	—
+section	.iram0.text	libesp_driver_spi.a	4139	—
+section	.iram0.text	libnet80211.a	3871	—
+section	.iram0.text	libesp_system.a	3357	—
+section	.iram0.text	libesp_hal_gpspi.a	2977	—
+section	.iram0.text	libesp_libc.a	2906	—
+section	.iram0.text	libesp_ringbuf.a	2302	—
+section	.iram0.text	libxtensa.a	2060	—
+section	.iram0.text	libesp_psram.a	1852	—
+section	.iram0.text	libhal.a	1724	—
+section	.iram0.text	libesp_mm.a	1115	—
+section	.iram0.text	libesp_timer.a	1026	—
+section	.iram0.text	libbootloader_support.a	877	—
+section	.iram0.text	libesp_rom.a	698	—
+section	.iram0.text	libesp_hal_systimer.a	653	—
+section	.iram0.text	libesp_hal_dma.a	518	—
+section	.iram0.text	liblog.a	447	—
+section	.iram0.text	libxt_hal.a	405	—
+section	.iram0.text	libesp_wifi.a	356	—
+section	.iram0.text	libesp_driver_gpio.a	262	—
+section	.iram0.text	libesp_phy.a	233	—
+section	.iram0.text	libesp_driver_dma.a	119	—
+section	.iram0.text	libgcc.a	104	—
+section	.iram0.text	libesp_driver_usb_serial_jtag.a	102	—
+section	.iram0.text	libesp_coex.a	97	—
+section	.iram0.text	libtfpsacrypto.a	80	—
+section	.iram0.text	libespressif__wiznet_common.a	28	—
+section	.iram0.text	libefuse.a	10	—
+section	.iram0.text	alignement / hors archive	1137	—
+section	.dram0.data	libspi_flash.a	8937	—
+section	.dram0.data	libfreertos.a	3116	—
+section	.dram0.data	libpp.a	2640	—
+section	.dram0.data	libphy.a	1277	—
+section	.dram0.data	libug_gnss.a	1144	—
+section	.dram0.data	libxtensa.a	1060	—
+section	.dram0.data	libnet80211.a	946	—
+section	.dram0.data	libesp_hw_support.a	760	—
+section	.dram0.data	libesp_system.a	497	—
+section	.dram0.data	libesp_wifi.a	480	—
+section	.dram0.data	libesp_libc.a	408	—
+section	.dram0.data	libug_receiver.a	312	—
+section	.dram0.data	libefuse.a	276	—
+section	.dram0.data	libhal.a	245	—
+section	.dram0.data	libesp_driver_uart.a	200	—
+section	.dram0.data	libesp_driver_spi.a	200	—
+section	.dram0.data	libvfs.a	192	—
+section	.dram0.data	libstdc++.a	152	—
+section	.dram0.data	libesp_mm.a	129	—
+section	.dram0.data	libtfpsacrypto.a	128	—
+section	.dram0.data	libesp_driver_usb_serial_jtag.a	56	—
+section	.dram0.data	libespressif__mdns.a	48	—
+section	.dram0.data	libheap.a	41	—
+section	.dram0.data	libespnow_rtcm.a	36	—
+section	.dram0.data	libesp_hal_mspi.a	36	—
+section	.dram0.data	libesp_driver_gpio.a	36	—
+section	.dram0.data	libug_platform.a	33	—
+section	.dram0.data	libesp_timer.a	32	—
+section	.dram0.data	libesp_stdio.a	32	—
+section	.dram0.data	libesp_hal_systimer.a	29	—
+section	.dram0.data	libesp_hal_gpspi.a	20	—
+section	.dram0.data	libug_services.a	16	—
+section	.dram0.data	libpthread.a	16	—
+section	.dram0.data	liblwip.a	16	—
+section	.dram0.data	libc.a	16	—
+section	.dram0.data	libespressif__cjson.a	12	—
+section	.dram0.data	libesp_netif.a	12	—
+section	.dram0.data	libesp_hal_dma.a	12	—
+section	.dram0.data	libesp_driver_dma.a	12	—
+section	.dram0.data	libesp_psram.a	10	—
+section	.dram0.data	libesp_phy.a	9	—
+section	.dram0.data	libesp_hal_ana_conv.a	9	—
+section	.dram0.data	libwpa_supplicant.a	8	—
+section	.dram0.data	libug_gateway_service.a	8	—
+section	.dram0.data	libug_ethernet.a	8	—
+section	.dram0.data	liblog.a	8	—
+section	.dram0.data	libcxx.a	8	—
+section	.dram0.data	libespnow.a	7	—
+section	.dram0.data	libesp_rom.a	4	—
+section	.dram0.data	alignement / hors archive	100	—
+section	.noinit	alignement / hors archive	3	—
+section	.dram0.bss	libug_gnss.a	9117	—
+section	.dram0.bss	libnet80211.a	7977	—
+section	.dram0.bss	libstdc++.a	4849	—
+section	.dram0.bss	liblwip.a	4374	—
+section	.dram0.bss	libug_services.a	2298	—
+section	.dram0.bss	libespressif__mdns.a	2143	—
+section	.dram0.bss	libwpa_supplicant.a	1707	—
+section	.dram0.bss	libug_supervisor.a	1564	—
+section	.dram0.bss	libug_platform.a	1311	—
+section	.dram0.bss	libpp.a	1274	—
+section	.dram0.bss	libfreertos.a	1100	—
+section	.dram0.bss	libesp_libc.a	692	—
+section	.dram0.bss	libug_gateway_service.a	608	—
+section	.dram0.bss	libc.a	504	—
+section	.dram0.bss	libtfpsacrypto.a	460	—
+section	.dram0.bss	libesp_system.a	321	—
+section	.dram0.bss	liblog.a	276	—
+section	.dram0.bss	libesp_hw_support.a	227	—
+section	.dram0.bss	libesp_netif.a	209	—
+section	.dram0.bss	libespnow_rtcm.a	193	—
+section	.dram0.bss	libphy.a	86	—
+section	.dram0.bss	libmbedtls.a	76	—
+section	.dram0.bss	libheap.a	64	—
+section	.dram0.bss	libespnow.a	64	—
+section	.dram0.bss	libesp_psram.a	62	—
+section	.dram0.bss	libspi_flash.a	56	—
+section	.dram0.bss	libug_receiver.a	48	—
+section	.dram0.bss	libesp_mm.a	48	—
+section	.dram0.bss	libvfs.a	44	—
+section	.dram0.bss	libesp_wifi.a	43	—
+section	.dram0.bss	libesp_phy.a	43	—
+section	.dram0.bss	libug_web.a	37	—
+section	.dram0.bss	libesp_timer.a	36	—
+section	.dram0.bss	libnvs_flash.a	24	—
+section	.dram0.bss	libesp_driver_spi.a	24	—
+section	.dram0.bss	libcxx.a	20	—
+section	.dram0.bss	libesp_driver_usb_serial_jtag.a	17	—
+section	.dram0.bss	libesp_security.a	16	—
+section	.dram0.bss	libug_ethernet.a	13	—
+section	.dram0.bss	libesp_driver_uart.a	13	—
+section	.dram0.bss	libesp_app_format.a	10	—
+section	.dram0.bss	libmain.a	9	—
+section	.dram0.bss	libcore.a	9	—
+section	.dram0.bss	libespressif__cjson.a	8	—
+section	.dram0.bss	libesp_stdio.a	8	—
+section	.dram0.bss	libesp_partition.a	8	—
+section	.dram0.bss	libhal.a	5	—
+section	.dram0.bss	libpthread.a	4	—
+section	.dram0.bss	libesp_event.a	4	—
+section	.dram0.bss	libesp-tls.a	4	—
+section	.dram0.bss	libefuse.a	4	—
+section	.dram0.bss	libapp_update.a	4	—
+section	.dram0.bss	alignement / hors archive	269	—
+symbole	.dram0.bss	libug_gnss.a(ug_gnss_service.cpp.obj)	7776	ug::embedded::(anonymous namespace)::receiver
+symbole	.dram0.bss	libnet80211.a(wl_cnx.o)	3976	g_cnxMgr
+symbole	.dram0.data	libfreertos.a(port.c.obj)	3072	port_IntStack
+symbole	.dram0.bss	libespressif__mdns.a(mdns_send.c.obj)	1460	packet$6
+symbole	.dram0.bss	libnet80211.a(ieee80211_nvs.o)	1440	s_wifi_nvs
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	1248	(anonymous namespace)::ctype_w
+symbole	.dram0.bss	libwpa_supplicant.a(wpa.c.obj)	1196	gWpaSm
+symbole	.dram0.bss	liblwip.a(dns.c.obj)	1184	dns_table
+symbole	.dram0.data	libug_gnss.a(ug_gnss_service.cpp.obj)	1080	ug::embedded::(anonymous namespace)::satellite_snapshot
+symbole	.dram0.data	libpp.a(pp.o)	960	TxRxCxt
+symbole	.dram0.bss	libug_gnss.a(ug_gnss_service.cpp.obj)	928	ug::embedded::(anonymous namespace)::command_snapshot
+symbole	.dram0.bss	libug_services.a(ug_network_services.cpp.obj)	808	ug::embedded::(anonymous namespace)::history
+symbole	.dram0.bss	libug_supervisor.a(ug_supervisor.cpp.obj)	800	ug::embedded::(anonymous namespace)::events
+symbole	.dram0.bss	libnet80211.a(ieee80211.o)	760	g_ic
+symbole	.dram0.bss	libug_supervisor.a(ug_supervisor.cpp.obj)	760	ug::embedded::(anonymous namespace)::services
+symbole	.dram0.data	libphy.a(phy_init.o)	740	phy_param
+symbole	.dram0.bss	libnet80211.a(wl_chm.o)	592	gChmCxt
+symbole	.dram0.bss	libpp.a(pm.o)	584	g_pm
+symbole	.dram0.bss	liblwip.a(sockets.c.obj)	560	socket_ipv6_multicast_memberships
+symbole	.dram0.bss	libug_services.a(ug_network_services.cpp.obj)	552	ug::embedded::(anonymous namespace)::stats
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	544	(anonymous namespace)::ctype_c
+symbole	.dram0.bss	libug_platform.a(ug_web_auth_platform.cpp.obj)	536	ug::embedded::(anonymous namespace)::auth
+symbole	.dram0.data	libxtensa.a(xtensa_intr_asm.S.obj)	512	_xt_exception_table
+symbole	.dram0.bss	libug_services.a(ug_network_services.cpp.obj)	520	ug::embedded::(anonymous namespace)::publishers
+symbole	.dram0.data	libxtensa.a(xtensa_intr_asm.S.obj)	512	_xt_interrupt_table
+symbole	.dram0.bss	libstdc++.a(shared_ptr.o)	512	__gnu_internal::get_mutex(unsigned char)::buffer
+symbole	.dram0.bss	libfreertos.a(tasks.c.obj)	500	pxReadyTasksLists
+symbole	.dram0.data	libesp_wifi.a(esp_adapter.c.obj)	480	g_wifi_osi_funcs
+symbole	.dram0.bss	liblwip.a(nd6.c.obj)	480	destination_cache
+symbole	.dram0.bss	liblwip.a(sockets.c.obj)	400	sockets
+symbole	.dram0.bss	libc.a(libc_stdlib_pico-exitprocs.c.o)	384	on_exits
+symbole	.dram0.bss	libug_platform.a(ug_web_auth_platform.cpp.obj)	328	ug::embedded::(anonymous namespace)::session_random
+symbole	.dram0.bss	libnet80211.a(ieee80211_scan.o)	284	gScanStruct
+symbole	.dram0.bss	libespressif__mdns.a(mdns_receive.c.obj)	263	n$5
+symbole	.dram0.bss	liblwip.a(netif.c.obj)	260	loop_netif
+symbole	.dram0.bss	libug_platform.a(ug_memory_diagnostics.cpp.obj)	256	ug::embedded::(anonymous namespace)::metrics
+symbole	.dram0.bss	liblog.a(log_binary_heap.c.obj)	248	s_log_cache
+symbole	.dram0.bss	libug_services.a(ug_network_services.cpp.obj)	248	ug::embedded::(anonymous namespace)::gnss_snapshot
+symbole	.dram0.bss	liblwip.a(sockets.c.obj)	240	socket_ipv4_multicast_memberships
+symbole	.dram0.bss	liblwip.a(etharp.c.obj)	240	arp_table
+symbole	.dram0.bss	libug_gnss.a(ug_gnss_service.cpp.obj)	232	ug::embedded::(anonymous namespace)::status
+symbole	.dram0.data	libnet80211.a(ieee80211_timer.o)	224	g_timer_info
+symbole	.dram0.bss	liblwip.a(nd6.c.obj)	220	neighbor_cache
+symbole	.dram0.data	libpp.a(esf_buf.o)	220	g_eb_list_desc
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	200	(anonymous namespace)::timepunct_cache_w
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	200	(anonymous namespace)::timepunct_cache_c
+symbole	.dram0.data	libesp_driver_uart.a(uart.c.obj)	192	uart_context
+symbole	.dram0.data	libvfs.a(vfs.c.obj)	192	s_fd_table
+symbole	.dram0.bss	libpp.a(pp_debug.o)	192	g_lmac_cnt
+symbole	.dram0.bss	libpp.a(esf_buf.o)	192	eb_space
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	192	(anonymous namespace)::facet_vec
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	192	(anonymous namespace)::cache_vec
+symbole	.dram0.data	libesp_system.a(esp_ipc.c.obj)	184	s_ipc_mutex_buffer
+symbole	.dram0.data	libesp_system.a(esp_ipc.c.obj)	184	s_ipc_ack_buffer
+symbole	.dram0.bss	libtfpsacrypto.a(psa_crypto_slot_management.c.obj)	184	global_data
+symbole	.dram0.data	libesp_hw_support.a(sleep_modes.c.obj)	176	s_config
+symbole	.dram0.bss	libnet80211.a(ieee80211_mesh_quick.o)	176	esp_mesh_quick_funcs
+symbole	.dram0.data	libpp.a(trc.o)	168	rc11NSchedTbl
+symbole	.dram0.bss	libstdc++.a(locale_init.o)	168	(anonymous namespace)::numpunct_cache_w
+symbole	.dram0.bss	libfreertos.a(timers.c.obj)	160	ucStaticTimerQueueStorage$15
+symbole	.dram0.data	libpp.a(pp.o)	160	bars
+symbole	.dram0.data	libesp_libc.a(picolibc_init.c.obj)	156	s_stub_table
+symbole	.dram0.data	libpp.a(trc.o)	156	rc11GSchedTbl
+symbole	.dram0.bss	libespnow_rtcm.a(espnow_rtcm.c.obj)	144	s_stats
+symbole	.dram0.bss	libwpa_supplicant.a(esp_common.c.obj)	144	g_wpa_supp
+symbole	.dram0.data	libpp.a(esf_buf.o)	144	eb_txdesc_space
+symbole	.dram0.bss	liblwip.a(nd6.c.obj)	140	prefix_list
+symbole	.dram0.data	libpp.a(wdev.o)	132	s_record_list
+symbole	.dram0.bss	libesp_libc.a(picolibc_init.c.obj)	128	out_buf
+symbole	.dram0.bss	libesp_libc.a(picolibc_init.c.obj)	128	in_buf
+symbole	.dram0.bss	libwpa_supplicant.a(esp_wpa3.c.obj)	128	g_sae_data
+symbole	.dram0.bss	libesp_libc.a(picolibc_init.c.obj)	128	err_buf
+symbole	.dram0.bss	libug_gateway_service.a(ug_gateway_service.cpp.obj)	128	ug::embedded::(anonymous namespace)::active_destinations
+symbole	.dram0.bss	libug_gateway_service.a(ug_gateway_service.cpp.obj)	128	ug::embedded::(anonymous namespace)::destinations

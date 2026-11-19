@@ -222,6 +222,12 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
     if profile=='gateway' and identity['source_sha'].encode() not in binary.read_bytes():
         raise ValueError('full source SHA absent from the application image')
     result['firmware_identity']=identity
+    if identity['hardware_variant']=='waveshare-s3-eth':
+        settings_header=(Path(__file__).resolve().parents[3]/'embedded/esp32/components/ug_settings/include/ug_settings.hpp').read_text()
+        schema=re.search(r'kSchema\s*=\s*(\d+)\s*;',settings_header)
+        if not schema:
+            raise ValueError('settings schema unavailable for update compatibility')
+        result['settings_schema']=int(schema[1])
     result['first_boot_tls']='not_applicable'
     result['portable_configuration_schema']=1 if portable_supported else 0
     result['radio_configuration'] = 'runtime_nvs_encrypted_unicast'

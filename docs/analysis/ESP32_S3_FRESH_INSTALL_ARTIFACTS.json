@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "source_commit": "952eca0e65651f7f187c372a9dfe4fa80131c092",
+  "sdk_image": "espressif/idf@sha256:81893c71bb5e570088901f21def8684c25cd2a9020281bd01b843a7655edb18c",
+  "final_https": {
+    "hardware": "waveshare-s3-eth",
+    "profile": "gateway",
+    "source_modified": false,
+    "artifacts": {
+      "map": {
+        "sha256": "549f033d62901bc17981c1fcbe7640d9b558df874122a4f2f23dfbdae5b3bde6",
+        "size": 16279677
+      },
+      "elf": {
+        "sha256": "744e7be9a57d0e10b5623afb8f0813d02c996a086853e8048383f37785125340",
+        "size": 27040588
+      },
+      "bin": {
+        "sha256": "bf308e2f435a955ce5c533febb5f522d7c62b4e88bfe057e94118479847af6a8",
+        "size": 1505408
+      }
+    },
+    "binary_matches_durable_published_image": true,
+    "elf_matches_application_descriptor": true
+  },
+  "http_hardware_candidate": {
+    "source_base": "cf02bede33e71b51ed9335b03c2c4af6535cd406",
+    "source_modified": true,
+    "artifacts": {
+      "bin": {
+        "sha256": "4d5e5d8202107b1d875a4809c5a08c747a3895f4d667d5528ede6d54150dcd8c",
+        "bytes": 1490032
+      },
+      "elf": {
+        "sha256": "fadebd0c4130a8543e0ec721fd31271ded8eb0e633f5994ecc71c5635ec4c14e",
+        "bytes": 26881520
+      },
+      "map": {
+        "sha256": "bb3992ea4f79fa41762b6c90947fce9c3e569e8b620bc960580dd6a820abf305",
+        "bytes": 16210967
+      }
+    },
+    "elf_matches_application_descriptor": true
+  },
+  "physical_acceptance": {
+    "https_erased_installations": 3,
+    "electrical_boots_per_installation": 3,
+    "cold_cycle_confirmation": "operator_and_network_observer",
+    "full_snapshot_verified_before_erasure": true,
+    "browser_update": "actual_operator_Chromium_Web_Serial",
+    "nvs_byte_preservation": true,
+    "tls_identity_preservation": true,
+    "automatic_usb_reset_verified_without_serial_intervention": true,
+    "operator_nvs_restored_byte_identical_before_boot": true,
+    "original_operator_login_confirmed": true,
+    "resume_erased_installation_binary_sha256": "d2066d09122783ff1fed9ccf44e7deccee6847645095c9444d54ef76e05563a4",
+    "initial_erased_installation_binary_sha256": "4e3a169dd8755a2c266db2889b90eb787419efef3b247fce8e6c4566dcaf25aa",
+    "provenance_note": "Initial and resumed erased-installation binaries precede the final clean identification rebuild. Autonomous TLS implementation is preserved. Final clean952 BIN exactly reproduces the durable published image; application-only Web Serial updates and automatic reboot are physically verified."
+  },
+  "limits": [
+    "Temporary F9P contacts limit physical communication reliability",
+    "Earlier RTK test reported by operator; independent performance and field completion remain separate",
+    "No long radio/memory endurance qualification"
+  ],
+  "operator_receiver_evidence": {
+    "reported_prior_rtk_test": true,
+    "field_completion_planned": true,
+    "snapshot": {
+      "model": "ZED-F9P",
+      "firmware": "HPG 1.32",
+      "model_verified": true,
+      "fix_valid": true,
+      "fix_type": 2,
+      "fix_type_name": "kFix",
+      "rtk_mode": 1,
+      "rtk_mode_name": "kNone",
+      "position_observation_age_ms": 51,
+      "last_bytes_age_ms": 52,
+      "satellites_used": 12,
+      "observations": 3490,
+      "uart_errors": 0,
+      "survey_active": false,
+      "survey_position_valid": false
+    },
+    "precise_coordinates_stored": false
+  }
+}

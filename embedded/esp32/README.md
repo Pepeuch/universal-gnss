@@ -1,5 +1,12 @@
 # UG ESP32 — RTCM portable et architecture des profils
 
+Le P0 S3 est qualifié localement sur le firmware `952eca0` : installations HTTPS
+vierges, neuf coupures électriques, variante HTTP et mises à jour Web Serial
+conservant la NVS. Le [rapport de qualification](../../docs/analysis/ESP32_S3_FRESH_INSTALL.md)
+consigne les artefacts exacts, les limites et la restauration des identifiants opérateur.
+Les références de branches et lots ci-dessous conservent le contexte de la migration initiale.
+
+
 Branche de travail : `feat/esp32` (renommée sans recréer la branche).
 Base UG : `069d868a0bc1ccb55baa48f4c19c4e8e14fa381d`.
 Référence historique publiée : `7a1ec69f5e9d07522c0284ec2dbae380f72c7e85`

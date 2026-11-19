@@ -152,6 +152,8 @@ def package(build, verified, profile, source_sha, output, qualification):
             raise ValueError('matching first-boot TLS qualification required')
         entry['firmware_identity']=identity
         entry['first_boot_tls']=verified.get('first_boot_tls','not_applicable')
+        if verified.get('settings_schema')==1:
+            entry['settings_schema']=1
     provenance={**entry,'part_sha256':{names[p]:hashes[p] for p in PARTS},'part_sizes':{names[p]:len(binaries[p]) for p in PARTS}}
     with tempfile.TemporaryDirectory(dir=dest.parent,prefix='.package-') as temp:
         staging=Path(temp)/key;staging.mkdir()
