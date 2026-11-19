@@ -52,3 +52,16 @@ Exact next action: maintainer reviews the uncommitted completion patch; commit/p
 publication require authorisation. Preserve local TODO/ROADMAP additions and the
 resource audit. Reopen only for changed TLS/NVS/USB/update/native contracts, relevant
 SDK/profiles, or contradictory evidence. No merge or firmware publication here.
+
+## PR59 fixture correction — 20 November 2026
+
+Completion source35e9348 was pushed. Its CI exposed a missing DOM closest() in
+test_portable_browser, not a firmware failure. Fixture parent traversal, control
+types from actual HTML, class/attribute/file state and unsupported-WebSerial
+boundary now match portal usage; original import/export/network assertions remain.
+Full native ci.py s3-gateway on local tree621c79383a79333cc5c672ea81ba89b1a8009a11
+passes:79ASan/UBSan tests,23assets/17Flasher/7update/6portable/8capture cases,
+SDK TLS emulation, build/verify and independent four-segment reproduction.
+Firmware sources and installed hardware unchanged; no new physical claim.
+Correction commit/push authorised; hosted CI for the corrective SHA must pass
+before integration. Preserve the untracked preexisting memory audit.
