@@ -5,11 +5,48 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <new>
 #include <string>
 #include <vector>
 
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
 #include "universal_gnss_protocols/rtcm_crc24q.hpp"
+
+namespace
+{
+bool fail_next_allocation{};
+}
+void* operator new(std::size_t size)
+{
+  if (fail_next_allocation)
+  {
+    fail_next_allocation = false;
+    throw std::bad_alloc{};
+  }
+  if (auto* p = std::malloc(size ? size : 1))
+    return p;
+  throw std::bad_alloc{};
+}
+void* operator new[](std::size_t size)
+{
+  return ::operator new(size);
+}
+void operator delete(void* p) noexcept
+{
+  std::free(p);
+}
+void operator delete[](void* p) noexcept
+{
+  std::free(p);
+}
+void operator delete(void* p, std::size_t) noexcept
+{
+  std::free(p);
+}
+void operator delete[](void* p, std::size_t) noexcept
+{
+  std::free(p);
+}
 
 namespace
 {
@@ -102,10 +139,73 @@ void TestServingAndIncarnation(TestContext& ctx)
   ::close(two);
   caster.Stop();
 }
+void TestStandardAuthentication(TestContext& ctx)
+{
+  LocalRtcmCaster caster;
+  universal_gnss_ntrip::LocalRtcmCasterPolicy policy;
+  policy.username = "operator";
+  policy.password = "test-only";
+  ctx.Expect(caster.SetPolicy(policy), "authenticated policy should be accepted");
+  LocalRtcmCasterConfig config;
+  config.mountpoint = "BASE";
+  ctx.Expect(caster.Start(config), "authenticated caster should start");
+  for (const std::string authorization : {"Basic b3BlcmF0b3I6dGVzdC1vbmx5",
+                                          "Basic Basic b3BlcmF0b3I6dGVzdC1vbmx5",
+                                          "Basic d3Jvbmc6d3Jvbmc="})
+  {
+    const int fd = Connect(caster.port());
+    ctx.Expect(fd >= 0, "authenticated test client should connect");
+    const auto request = "GET /BASE HTTP/1.1\r\nAuthorization: " + authorization + "\r\n\r\n";
+    (void)::send(fd, request.data(), request.size(), 0);
+    for (unsigned i = 0; i < 5; ++i)
+      caster.Poll();
+    const auto response = ReadAll(fd);
+    ctx.Expect((response == "ICY 200 OK\r\n\r\n") ==
+                   (authorization == "Basic b3BlcmF0b3I6dGVzdC1vbmx5"),
+               "standard Basic succeeds; doubled prefix and wrong credentials are rejected");
+    ::close(fd);
+    caster.Poll();
+  }
+  ctx.Expect(caster.metrics().accepted_clients == 1 && caster.metrics().rejected_requests == 2,
+             "authentication counters distinguish accepted and rejected requests");
+}
+void TestAdmissionAllocationFailure(TestContext& ctx)
+{
+  LocalRtcmCaster caster;
+  LocalRtcmCasterConfig config;
+  config.mountpoint = "BASE";
+  ctx.Expect(caster.Start(config), "admission test caster starts");
+  const int fd = Connect(caster.port());
+  ctx.Expect(fd >= 0, "allocation failure client connects");
+  bool caught = false;
+  fail_next_allocation = true;
+  try
+  {
+    caster.Poll();
+  }
+  catch (const std::bad_alloc&)
+  {
+    caught = true;
+  }
+  fail_next_allocation = false;
+  char value{};
+  ctx.Expect(caught && ::recv(fd, &value, 1, MSG_DONTWAIT) == 0,
+             "failed vector admission closes the just-accepted socket before propagation");
+  ::close(fd);
+  const int retry = Connect(caster.port());
+  const std::string request = "GET /BASE HTTP/1.0\r\n\r\n";
+  (void)::send(retry, request.data(), request.size(), 0);
+  for (unsigned i = 0; i < 5; ++i)
+    caster.Poll();
+  ctx.Expect(ReadAll(retry) == "ICY 200 OK\r\n\r\n", "admission recovers after allocation failure");
+  ::close(retry);
+}
 }  // namespace
 int main()
 {
   TestContext ctx;
   TestServingAndIncarnation(ctx);
+  TestStandardAuthentication(ctx);
+  TestAdmissionAllocationFailure(ctx);
   return ctx.failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

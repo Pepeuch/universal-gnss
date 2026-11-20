@@ -159,9 +159,7 @@ bool LocalRtcmCaster::SetPolicy(LocalRtcmCasterPolicy policy)
   if (running() || policy.username.empty() != policy.password.empty())
     return false;
   impl_->authorization =
-      policy.username.empty()
-          ? ""
-          : "Basic " + BuildBasicAuthorizationValue(policy.username, policy.password);
+      policy.username.empty() ? "" : BuildBasicAuthorizationValue(policy.username, policy.password);
   impl_->policy = std::move(policy);
   return true;
 }
@@ -289,7 +287,19 @@ void LocalRtcmCaster::Poll()
       ++impl_->metrics.rejected_requests;
       continue;
     }
+    // accept() transfers ownership before vector growth can allocate. Keep a
+    // stack guard until insertion succeeds, including allocation failure.
+    struct Admission
+    {
+      int fd;
+      ~Admission()
+      {
+        if (fd >= 0)
+          ::close(fd);
+      }
+    } admission{fd};
     impl_->clients.push_back({fd, {}, {}, 0u, false});
+    admission.fd = -1;
   }
   for (auto& client : impl_->clients)
   {
