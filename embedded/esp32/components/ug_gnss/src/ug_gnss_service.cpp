@@ -9,6 +9,7 @@
 #include "ug_gateway_service.hpp"
 #include "ug_idf_uart.hpp"
 #include "ug_receiver_runtime.hpp"
+#include "ug_s3_execution_policy.h"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #include "ug_uart_drain.hpp"
@@ -45,6 +46,13 @@ void Error(const std::string& error)
 }
 void Owner(void*)
 {
+#if CONFIG_IDF_TARGET_ESP32S3 && defined(ESP_PLATFORM)
+  ESP_LOGI("UG_CPU",
+           "role=gnss profile=%d configured_core=%d observed_core=%d",
+           UG_S3_CPU_PROFILE,
+           ug_s3_worker_core(UG_S3_WORKER_GNSS),
+           xPortGetCoreID());
+#endif
   WorkerHealth health(ServiceId::kGnss, 5000000000LL, true);
   std::vector<std::uint8_t> probe;
   probe.reserve(4096);
@@ -404,6 +412,13 @@ void Owner(void*)
       status.operation_state = static_cast<unsigned>(state);
       command_snapshot = receiver.command_history();
       status.uart_overflows = uart.overflows;
+      status.uart_fifo_overflows = uart.fifo_overflows;
+      status.uart_ring_buffer_full = uart.ring_buffer_full;
+      status.uart_last_fifo_seq = uart.last_fifo_seq;
+      status.uart_last_ring_full_seq = uart.last_ring_full_seq;
+      status.uart_last_fifo_observed_ns = uart.last_fifo_observed_ns;
+      status.uart_last_ring_full_observed_ns = uart.last_ring_full_observed_ns;
+      status.uart_max_poll_gap_ns = uart.max_poll_gap_ns;
       status.uart_line_errors = uart.line_errors;
       status.uart_event_saturations = uart.event_saturations;
       status.uart_read_failures = uart.read_failures;
@@ -431,7 +446,17 @@ esp_err_t StartGnssService()
   operations =
       xQueueCreateStatic(1, sizeof(GnssOperation), operations_memory.data(), &operations_control);
   ExpectWorker(ServiceId::kGnss, 5000000000LL);
-  if (!operations || xTaskCreate(Owner, "ug_gnss", 16384, nullptr, 4, nullptr) != pdPASS)
+  if (!operations)
+    return ESP_ERR_NO_MEM;
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CPU_PROFILE > 0
+  const bool started =
+      xTaskCreatePinnedToCore(
+          Owner, "ug_gnss", 16384, nullptr, 4, nullptr, ug_s3_worker_core(UG_S3_WORKER_GNSS)) ==
+      pdPASS;
+#else
+  const bool started = xTaskCreate(Owner, "ug_gnss", 16384, nullptr, 4, nullptr) == pdPASS;
+#endif
+  if (!started)
     return ESP_ERR_NO_MEM;
   return ESP_OK;
 }
@@ -489,6 +514,24 @@ CommandHistorySnapshot ReceiverCommands()
 {
   std::lock_guard<std::mutex> lock(status_guard);
   return command_snapshot;
+}
+ReceiverIoStatus ReceiverIoSnapshot()
+{
+  std::lock_guard<std::mutex> lock(status_guard);
+  return {status.bytes,
+          status.uart_overflows,
+          status.uart_line_errors,
+          status.uart_event_saturations,
+          status.uart_read_failures,
+          status.uart_drain_limits,
+          status.last_bytes_ns,
+          status.uart_fifo_overflows,
+          status.uart_ring_buffer_full,
+          status.uart_last_fifo_seq,
+          status.uart_last_ring_full_seq,
+          status.uart_last_fifo_observed_ns,
+          status.uart_last_ring_full_observed_ns,
+          status.uart_max_poll_gap_ns};
 }
 ReceiverStatus ReceiverSnapshot()
 {

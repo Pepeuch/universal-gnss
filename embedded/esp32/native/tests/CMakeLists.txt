@@ -43,6 +43,14 @@ endforeach()
 add_executable(test_password_hmac test_password_hmac.cpp)
 target_include_directories(test_password_hmac PRIVATE ../../components/ug_platform/include)
 target_link_libraries(test_password_hmac PRIVATE ug_embedded_settings OpenSSL::Crypto)
+add_library(ug_embedded_pmk ../../components/ug_pairing/src/ug_pairing_pmk.c pmk_host_backend.cpp)
+target_include_directories(ug_embedded_pmk PUBLIC ../../components/ug_pairing/include
+    PRIVATE pmk_stubs idf_stubs)
+target_link_libraries(ug_embedded_pmk PUBLIC OpenSSL::Crypto)
+add_executable(test_pairing_pmk test_pairing_pmk.cpp)
+target_link_libraries(test_pairing_pmk PRIVATE ug_embedded_pmk)
+target_compile_options(test_pairing_pmk PRIVATE -UNDEBUG)
+add_test(NAME embedded_pairing_pmk COMMAND test_pairing_pmk)
 target_compile_options(test_password_hmac PRIVATE -UNDEBUG -Wno-deprecated-declarations)
 add_test(NAME embedded_password_hmac_contract COMMAND test_password_hmac)
 
@@ -62,7 +70,7 @@ target_compile_options(test_base_profile PRIVATE -UNDEBUG)
 target_link_libraries(test_base_profile PRIVATE universal_gnss_driver)
 add_test(NAME embedded_base_profile_contract COMMAND test_base_profile)
 add_executable(test_idf_tcp test_idf_tcp.cpp ../../components/ug_network/src/idf_tcp_transport.cpp)
-target_include_directories(test_idf_tcp PRIVATE ../../components/ug_settings/include idf_stubs "${UG_ROOT}/core/gnss_transport/include")
+target_include_directories(test_idf_tcp PRIVATE ../../components/ug_settings/include ../../components/ug_network/include idf_stubs "${UG_ROOT}/core/gnss_transport/include")
 target_compile_definitions(test_idf_tcp PRIVATE ESP_PLATFORM=1)
 target_compile_features(test_idf_tcp PRIVATE cxx_std_17)
 target_compile_options(test_idf_tcp PRIVATE -UNDEBUG)
@@ -312,14 +320,35 @@ add_test(NAME embedded_satellite_storage_equivalence COMMAND "${Python3_EXECUTAB
     "${CMAKE_CURRENT_SOURCE_DIR}/compare_satellite_storage.py"
     $<TARGET_FILE:test_satellite_reports> $<TARGET_FILE:test_satellite_reports_external>)
 
-add_executable(test_espnow_lifecycle test_espnow_lifecycle.c
-    ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
-target_include_directories(test_espnow_lifecycle PRIVATE espnow_driver_stubs radio_stubs
-    ../../components/espnow_rtcm/include ../../components/ug_pairing/include)
-target_link_libraries(test_espnow_lifecycle PRIVATE ug_embedded_radio ug_embedded_pairing)
-target_compile_options(test_espnow_lifecycle PRIVATE -UNDEBUG)
-foreach(scenario nominal oom wifi-failure callback-failure late-ack stop-before-start expired epoch-overflow)
-    add_test(NAME embedded_espnow_lifecycle_${scenario} COMMAND test_espnow_lifecycle ${scenario})
+foreach(suffix "" "_psram")
+    set(target "test_espnow_lifecycle${suffix}")
+    add_executable(${target} test_espnow_lifecycle.c ../../components/espnow_rtcm/src/espnow_rtcm_storage.c)
+    target_include_directories(${target} PRIVATE espnow_driver_stubs radio_stubs
+        ../../components/espnow_rtcm/include ../../components/ug_pairing/include ../../components/ug_supervisor/include)
+    target_link_libraries(${target} PRIVATE ug_embedded_radio ug_embedded_pairing ug_embedded_pmk)
+    target_compile_options(${target} PRIVATE -UNDEBUG)
+    if(suffix STREQUAL "_psram")
+        target_compile_definitions(${target} PRIVATE UG_S3_RADIO_STORAGE_PSRAM=1)
+    else()
+        # Preserve the internal-storage comparator as well as the S3 default.
+        target_compile_definitions(${target} PRIVATE UG_S3_RADIO_STORAGE_PSRAM=0)
+    endif()
+    foreach(scenario nominal oom wifi-failure callback-failure pmk-failure late-ack stop-before-start expired epoch-overflow max-frame queue-diagnostics)
+        add_test(NAME embedded_espnow_lifecycle${suffix}_${scenario} COMMAND ${target} ${scenario})
+    endforeach()
+endforeach()
+foreach(variant default 0 1 2 3 4 c3)
+    add_executable(test_radio_profile_${variant} test_radio_profile.c)
+    target_include_directories(test_radio_profile_${variant} PRIVATE espnow_driver_stubs radio_stubs
+        ../../components/ug_supervisor/include)
+    target_compile_options(test_radio_profile_${variant} PRIVATE -UNDEBUG)
+    if(variant STREQUAL "c3")
+        target_compile_definitions(test_radio_profile_${variant} PRIVATE CONFIG_IDF_TARGET_ESP32S3=0
+            CONFIG_IDF_TARGET_ESP32C3=1 UG_S3_RADIO_PROFILE=3)
+    elseif(NOT variant STREQUAL "default")
+        target_compile_definitions(test_radio_profile_${variant} PRIVATE UG_S3_RADIO_PROFILE=${variant})
+    endif()
+    add_test(NAME embedded_radio_profile_${variant} COMMAND test_radio_profile_${variant})
 endforeach()
 find_package(Threads REQUIRED)
 add_executable(test_espnow_storage_concurrent test_espnow_storage_concurrent.c
@@ -343,6 +372,13 @@ add_library(ug_embedded_rtcm_rules ../../components/rtcm_filter/src/ug_rtcm_rule
 target_include_directories(ug_embedded_rtcm_rules PUBLIC ../../components/rtcm_filter/include)
 target_link_libraries(ug_embedded_settings PUBLIC ug_embedded_rtcm_rules)
 target_link_libraries(ug_embedded_ntrip PUBLIC ug_embedded_rtcm_rules ug_embedded_radio)
+add_executable(test_publisher_progress test_publisher_progress.cpp
+    ../../components/ug_network/src/ug_ntrip_publisher.cpp)
+target_include_directories(test_publisher_progress PRIVATE ../../components/ug_network/include)
+target_link_libraries(test_publisher_progress PRIVATE universal_gnss_ntrip
+    ug_embedded_rtcm_rules ug_embedded_radio)
+target_compile_options(test_publisher_progress PRIVATE -UNDEBUG)
+add_test(NAME embedded_publisher_progress_contract COMMAND test_publisher_progress)
 add_executable(test_rtcm_rules test_rtcm_rules.cpp)
 target_link_libraries(test_rtcm_rules PRIVATE ug_embedded_rtcm_rules)
 target_compile_options(test_rtcm_rules PRIVATE -UNDEBUG)
@@ -352,3 +388,62 @@ target_link_libraries(test_publisher_filters PRIVATE ug_embedded_ntrip)
 target_compile_options(test_publisher_filters PRIVATE -UNDEBUG)
 add_test(NAME embedded_publisher_filters_contract COMMAND test_publisher_filters)
 set_tests_properties(embedded_publisher_filters_contract PROPERTIES TIMEOUT 12)
+
+add_executable(test_destination_lifecycle test_destination_lifecycle.cpp)
+target_include_directories(test_destination_lifecycle PRIVATE ../../components/ug_gateway_service/include)
+target_compile_features(test_destination_lifecycle PRIVATE cxx_std_17)
+target_compile_options(test_destination_lifecycle PRIVATE -UNDEBUG)
+add_test(NAME embedded_destination_lifecycle COMMAND test_destination_lifecycle)
+
+add_executable(test_network_lifecycle test_network_lifecycle.cpp)
+target_include_directories(test_network_lifecycle PRIVATE network_lifecycle_stubs routing_stubs
+    ../../components/ug_services/include ../../components/ug_platform/include
+    ../../components/ug_supervisor/include ../../components/ug_gateway_service/include
+    ../../components/ug_settings/include idf_stubs)
+target_link_libraries(test_network_lifecycle PRIVATE ug_embedded_ntrip)
+target_compile_options(test_network_lifecycle PRIVATE -UNDEBUG)
+add_test(NAME embedded_network_lifecycle COMMAND test_network_lifecycle)
+add_executable(test_network_cooperative test_network_cooperative.cpp)
+target_include_directories(test_network_cooperative PRIVATE network_lifecycle_stubs routing_stubs
+    ../../components/ug_services/include ../../components/ug_platform/include
+    ../../components/ug_supervisor/include ../../components/ug_gateway_service/include
+    ../../components/ug_settings/include idf_stubs)
+target_link_libraries(test_network_cooperative PRIVATE ug_embedded_ntrip)
+target_compile_options(test_network_cooperative PRIVATE -UNDEBUG)
+add_test(NAME embedded_network_cooperative COMMAND test_network_cooperative)
+add_executable(test_network_cooperative_external test_network_cooperative.cpp)
+target_include_directories(test_network_cooperative_external PRIVATE network_lifecycle_stubs routing_stubs
+    ../../components/ug_services/include ../../components/ug_platform/include
+    ../../components/ug_supervisor/include ../../components/ug_gateway_service/include
+    ../../components/ug_settings/include idf_stubs)
+target_link_libraries(test_network_cooperative_external PRIVATE ug_embedded_ntrip)
+target_compile_definitions(test_network_cooperative_external PRIVATE UG_NETWORK_STACK_PSRAM=1)
+target_compile_options(test_network_cooperative_external PRIVATE -UNDEBUG)
+add_test(NAME embedded_network_cooperative_external COMMAND test_network_cooperative_external)
+add_executable(test_exclusive_job test_exclusive_job.cpp)
+target_include_directories(test_exclusive_job PRIVATE ../../components/ug_services/include)
+target_compile_features(test_exclusive_job PRIVATE cxx_std_17)
+target_compile_options(test_exclusive_job PRIVATE -UNDEBUG)
+target_link_libraries(test_exclusive_job PRIVATE Threads::Threads)
+add_test(NAME embedded_exclusive_job COMMAND test_exclusive_job)
+add_executable(test_network_allocation test_network_allocation.cpp)
+target_include_directories(test_network_allocation PRIVATE allocation_stubs
+    ../../components/ug_network/include)
+target_compile_features(test_network_allocation PRIVATE cxx_std_17)
+target_compile_options(test_network_allocation PRIVATE -UNDEBUG)
+target_link_libraries(test_network_allocation PRIVATE Threads::Threads)
+add_test(NAME embedded_network_allocation COMMAND test_network_allocation)
+
+foreach(profile IN ITEMS 0 1 2 c3)
+    add_executable(test_execution_policy_${profile} test_execution_policy.c)
+    target_include_directories(test_execution_policy_${profile} PRIVATE espnow_driver_stubs radio_stubs
+        ../../components/ug_supervisor/include)
+    target_compile_options(test_execution_policy_${profile} PRIVATE -UNDEBUG)
+    if(profile STREQUAL "c3")
+        target_compile_definitions(test_execution_policy_${profile} PRIVATE CONFIG_IDF_TARGET_ESP32S3=0
+            CONFIG_IDF_TARGET_ESP32C3=1 UG_S3_CPU_PROFILE=2)
+    else()
+        target_compile_definitions(test_execution_policy_${profile} PRIVATE UG_S3_CPU_PROFILE=${profile})
+    endif()
+    add_test(NAME embedded_execution_policy_${profile} COMMAND test_execution_policy_${profile})
+endforeach()

@@ -53,6 +53,25 @@ def sdk_boot_memory(lines, s3):
     return {'main_stack_bytes': stack, 'tls_external': s3}
 
 
+def sdk_owner_oom_recovery(lines, s3):
+    if not s3:
+        return {'enabled': False, 'emergency_bytes': 0}
+    values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
+    if (values.get('CONFIG_COMPILER_CXX_EXCEPTIONS') != 'y' or
+            values.get('CONFIG_COMPILER_CXX_EXCEPTIONS_EMG_POOL_SIZE') != '2048'):
+        raise ValueError('S3 owner allocation recovery requires the qualified exception reserve')
+    return {'enabled': True, 'emergency_bytes': 2048}
+
+
+def sdk_gnss_uart_memory(lines, required):
+    values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
+    enabled = values.get('CONFIG_UART_ISR_IN_IRAM') == 'y'
+    if required and (not enabled or values.get('CONFIG_RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH') == 'y'):
+        raise ValueError('S3 GNSS reception during Flash writes requires the IRAM-safe UART driver')
+    return {'required': bool(required), 'isr_iram': enabled,
+            'driver_buffers': 'internal' if enabled else 'SDK_default'}
+
+
 def sdk_network_capacity(lines):
     values = dict(line.split('=', 1) for line in lines if line.startswith('CONFIG_') and '=' in line)
     names = {'sockets': 'LWIP_MAX_SOCKETS', 'tcp_active': 'LWIP_MAX_ACTIVE_TCP',
@@ -101,6 +120,23 @@ def sdk_web_transport(lines, expected='https'):
     if actual != expected or (actual == 'http' and values.get('CONFIG_IDF_TARGET_ESP32S3') != 'y'):
         raise ValueError('Web transport does not match explicit S3 build selection')
     return actual
+
+
+def check_network_engine(symbols, profile):
+    required = ['universal_gnss_ntrip::NtripClient::Read(',
+                'universal_gnss_transport::TcpClientTransport::Open(']
+    if profile == 'gateway':
+        required += ['ug::embedded::NtripPublisher::BeginFrame(',
+                     'ug::embedded::NtripPublisher::ProgressFrame(',
+                     'ug::embedded::WithdrawCorrectionDestination(',
+                     'ug::embedded::CorrectionDestinationRetired(',
+                     'ug::embedded::InitializeNetworkAllocation(',
+                     'CooperativeHelper(']
+    else:
+        required += ['ug::embedded::NtripPublisher::Send(']
+    for value in required:
+        if value not in symbols:
+            raise ValueError('actual UG network engine not linked: ' + value)
 
 
 def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=115200,
@@ -175,10 +211,7 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
         if 'espnow_rtcm_output_frame' not in symbols:
             raise ValueError('bounded rover frame writer not linked')
     else:
-        for value in ('universal_gnss_ntrip::NtripClient::Read(',
-                      'universal_gnss_transport::TcpClientTransport::Open(', 'ug::embedded::NtripPublisher::Send('):
-            if value not in symbols:
-                raise ValueError('actual UG network engine not linked: ' + value)
+        check_network_engine(symbols, profile)
     if any(line.startswith(('CONFIG_ESPNOW_RTCM_PEER_MAC=', 'CONFIG_ESPNOW_RTCM_CHANNEL=')) for line in lines):
         raise ValueError('compiled peer/channel settings are forbidden in generic native firmware')
     if 'espnow_rtcm_configure_secure' not in symbols or 'ug_pairing_from_text' not in symbols:
@@ -241,8 +274,11 @@ def verify(work, profile, local_gnss=False, rover_uart_tx=None, rover_uart_baud=
             result['first_boot_tls']='automatic_unique_nvs'
         else:
             result['first_boot_tls']='not_applicable'
+        result['owner_oom_recovery'] = sdk_owner_oom_recovery(lines, 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
         result['network_capacity'] = sdk_network_capacity(lines)
         result['boot_memory'] = sdk_boot_memory(lines, 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
+        result['gnss_uart_memory'] = sdk_gnss_uart_memory(
+            lines, local_gnss and 'CONFIG_IDF_TARGET_ESP32S3=y' in lines)
     if profile == 'rover':
         result['rover_output'] = {'transport': 'uart1-tx' if rover_uart_tx is not None else 'usb-serial-jtag',
                                   'tx_pin': rover_uart_tx,

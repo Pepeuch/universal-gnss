@@ -11,7 +11,10 @@
 #include "esp_memory_utils.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
+#include "ug_configuration.hpp"
+#include "ug_network_allocation.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -106,6 +109,10 @@ void InitializeMemoryDiagnostics()
 void PrintMemoryDiagnostics()
 {
   const auto begin = esp_timer_get_time();
+  // IDF credits idle time on task switch-out. Use deltas over sustained windows.
+  const auto idle0 = ulTaskGetIdleRunTimeCounterForCore(0);
+  const auto idle1 = ulTaskGetIdleRunTimeCounterForCore(1);
+  const auto sample_end = esp_timer_get_time();
   const auto* app = esp_app_get_description();
   std::printf("UG_MEM uptime_us=%lld failed_allocations=%lu elf=",
               static_cast<long long>(begin),
@@ -113,12 +120,34 @@ void PrintMemoryDiagnostics()
   for (std::size_t i = 0; i < 8; ++i)
     std::printf("%02x", app->app_elf_sha256[i]);
   std::puts("");
+  std::printf("UG_MEM cpu_sample_begin_us=%lld end_us=%lld idle0_us=%llu idle1_us=%llu\n",
+              static_cast<long long>(begin),
+              static_cast<long long>(sample_end),
+              static_cast<unsigned long long>(idle0),
+              static_cast<unsigned long long>(idle1));
   std::printf("UG_MEM json_failures=%lu injected=%lu\n",
               static_cast<unsigned long>(S3JsonMemoryFailures()),
               static_cast<unsigned long>(S3JsonInjectedFailures()));
   PrintHeap("internal", MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
   PrintHeap("dma", MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
   PrintHeap("psram", MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  const auto cpp = NetworkCppAllocations();
+  for (std::size_t i = 0; i < cpp.size(); ++i)
+    std::printf("UG_MEM cpp_owner=%u live=%zu requested_bytes=%zu peak_requested_bytes=%zu "
+                "allocations=%lu refusals=%lu\n",
+                unsigned(i),
+                cpp[i].live,
+                cpp[i].requested_bytes,
+                cpp[i].peak_requested_bytes,
+                static_cast<unsigned long>(cpp[i].allocations),
+                static_cast<unsigned long>(cpp[i].refusals));
+  const auto arena = NetworkArenaMemory();
+  std::printf("UG_MEM network_arena reserved=%zu free=%zu min=%zu largest=%zu\n",
+              arena.reserved,
+              arena.free,
+              arena.minimum,
+              arena.largest);
+  PrintConfigurationWriteDiagnostics();
   // External scratch is diagnostic-only. Stacks and DMA never move here.
   constexpr std::size_t capacity = 48;
   auto* tasks = static_cast<TaskStatus_t*>(
@@ -142,13 +171,15 @@ void PrintMemoryDiagnostics()
                           : task.xHandle == web_task                         ? "web"
                                                                              : "task";
       std::printf(
-          "UG_MEM task=%lu owner=%s priority=%u state=%u stack_min_bytes=%lu runtime_us=%llu\n",
+          "UG_MEM task=%lu owner=%s priority=%u state=%u stack_min_bytes=%lu runtime_us=%llu "
+          "stack_external=%d\n",
           static_cast<unsigned long>(task.xTaskNumber),
           owner,
           unsigned(task.uxCurrentPriority),
           unsigned(task.eCurrentState),
           static_cast<unsigned long>(task.usStackHighWaterMark),
-          static_cast<unsigned long long>(task.ulRunTimeCounter));
+          static_cast<unsigned long long>(task.ulRunTimeCounter),
+          esp_ptr_external_ram(task.pxStackBase));
     }
     heap_caps_free(tasks);
   }
@@ -171,6 +202,12 @@ void PrintMemoryDiagnostics()
                 m.internal_low,
                 m.psram_low);
   }
+#if UG_NETWORK_ALLOCATION_TEST
+  // Fault-image console command: quiesce allocation traffic and other checkers first.
+  const bool sdk_integrity = heap_caps_check_integrity_all(false);
+  const bool arena_integrity = CheckNetworkArenaIntegrity();
+  std::printf("UG_MEM integrity sdk=%d arena=%d\n", sdk_integrity, arena_integrity);
+#endif
   std::printf("UG_MEM diagnostic_elapsed_us=%lld\n",
               static_cast<long long>(esp_timer_get_time() - begin));
 }

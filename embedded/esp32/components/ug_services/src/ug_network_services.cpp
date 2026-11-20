@@ -4,13 +4,22 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "lwip/opt.h"
+#include "mbedtls/platform_util.h"
 #include "sdkconfig.h"
 #if CONFIG_IDF_TARGET_ESP32S3
 #include "esp_heap_caps.h"
 #include "ug_queue_payload.hpp"
 #endif
 #include "ug_configuration.hpp"
+#include "ug_exclusive_job.hpp"
 #include "ug_gateway_service.hpp"
+#include "ug_io_execution.hpp"
+#include "ug_network_allocation.hpp"
+#include "ug_network_stack.hpp"
+#include "ug_s3_execution_policy.h"
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_NETWORK_STACK_PSRAM
+#include "freertos/idf_additions.h"
+#endif
 #include "ug_network_budget.hpp"
 #include "ug_ntrip_connection.hpp"
 #include "ug_ntrip_publisher.hpp"
@@ -18,9 +27,15 @@
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
+#ifndef UG_NETWORK_COOPERATIVE
+#define UG_NETWORK_COOPERATIVE 1
+#endif
 #include "universal_gnss_ntrip/local_rtcm_caster.hpp"
+#include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <mutex>
+#include <new>
 namespace ug::embedded
 {
 namespace
@@ -129,10 +144,97 @@ Outbox publishers[UG_SERVICE_PUBLISHERS];
 #if UG_SERVICE_CASTER
 Outbox caster_box;
 #endif
+#if CONFIG_IDF_TARGET_ESP32S3
+// Control objects remain internal and survive every worker generation. Payload
+// queues are allocated on first use and retained until reboot in this comparator.
+// Only the manager starts a worker; only that worker releases its live flag,
+// after all C++ locals and network owners have been destroyed.
+struct WorkerSlot
+{
+  std::atomic<bool> live{false}, failed{false};
+  std::size_t index{};
+  std::int64_t retry_after_ns{};
+};
+std::array<WorkerSlot, 7> network_workers;
+std::atomic<bool> lifecycle_started{false};
+// Logical endpoint identity/filter/counters survive worker recreation. These
+// task-only objects are reserved explicitly in external RAM on first activation;
+// their sockets are closed on stop. No callback may use them from ISR context.
+NtripConnection* input_owner{};
+NtripPublisher* publisher_owners[UG_SERVICE_PUBLISHERS]{};
+#if UG_SERVICE_CASTER
+universal_gnss_ntrip::LocalRtcmCaster* caster_owner{};
+std::uint64_t caster_cache_generation{};
+#endif
+template <class T, class Construct>
+// This template can be called directly by the independent task manager: keep
+// its placement-construction handler out of the Xtensa task-entry frame too.
+__attribute__((noinline)) bool ReserveOwner(T*& owner, Construct construct)
+{
+  if (owner)
+    return true;
+  void* memory = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!memory)
+    return false;
+  try
+  {
+    owner = construct(memory);
+    return true;
+  }
+  catch (const std::bad_alloc&)
+  {
+    // Placement construction may allocate existing std::string/Pimpl children.
+    // Unwinding destroys completed members; the external object block is ours.
+    mbedtls_platform_zeroize(memory, sizeof(T));
+    heap_caps_free(memory);
+    return false;
+  }
+  catch (...)
+  {
+    mbedtls_platform_zeroize(memory, sizeof(T));
+    heap_caps_free(memory);
+    throw;
+  }
+}
+
+bool EndpointRequested(std::size_t index)
+{
+  const auto config = Configuration();
+  if (!network_ready.load())
+    return false;
+  if (index == 0)
+    return config->upstream_enabled && !config->local_input;
+  if (index <= UG_SERVICE_PUBLISHERS)
+    return index <= BoardCapabilities().publisher_slots && config->publishers[index - 1].enabled;
+#if UG_SERVICE_CASTER
+  if (index == 6)
+    return BoardCapabilities().caster && config->caster_enabled;
+#endif
+  return false;
+}
+void QuiesceDestination(std::size_t sink, ServiceId id, WorkerHealth& health)
+{
+  // Failure to obtain retirement is not permission to free/reset the context.
+  // Keep the owner alive and visible until the router acknowledges its withdrawal.
+  bool blocked = false;
+  while (!RetireCorrectionDestination(sink, 100))
+  {
+    blocked = true;
+    ObserveService(id, ServiceState::kBlocked, ESP_ERR_TIMEOUT);
+    health.Progress();
+  }
+  if (blocked)
+    ObserveService(id, ServiceState::kRunning);
+}
+#endif
+#if !CONFIG_IDF_TARGET_ESP32S3 || !UG_NETWORK_COOPERATIVE
 void InputWorker(void*)
 {
   WorkerHealth health(ServiceId::kNtripInput, 30000000000LL, false);
   std::uint64_t config_generation = 0, link_generation = 0;
+#if CONFIG_IDF_TARGET_ESP32S3
+  auto& input = *input_owner;
+#else
   NtripConnection input(
       [](const auto& f) {
         const auto epoch = upstream_generation.load();
@@ -143,10 +245,20 @@ void InputWorker(void*)
       [](bool active) {
         upstream_generation = BeginCorrectionSource(kUpstream, active && network_ready.load());
       });
+#endif
   TraceContext trace{ServiceId::kNtripInput, config_generation, link_generation};
   input.SetTrace(trace.Sink());
   for (;;)
   {
+#if CONFIG_IDF_TARGET_ESP32S3
+    if (!EndpointRequested(0))
+    {
+      input.Stop();
+      upstream_generation = BeginCorrectionSource(kUpstream, false);
+      health.Finish();
+      return;
+    }
+#endif
     const auto config = Configuration();
     const auto link = network_generation.load();
     if (config->revision != config_generation || link != link_generation)
@@ -198,7 +310,11 @@ void PublisherWorker(void* context)
   WorkerHealth health(static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
                       30000000000LL,
                       false);
+#if CONFIG_IDF_TARGET_ESP32S3
+  auto& publisher = *publisher_owners[slot];
+#else
   NtripPublisher publisher;
+#endif
   Gateway::Frame frame;
   std::uint64_t config_generation = 0, link_generation = 0;
   TraceContext trace{static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
@@ -209,11 +325,31 @@ void PublisherWorker(void* context)
   std::uint64_t incarnation = 0;
   for (;;)
   {
+#if CONFIG_IDF_TARGET_ESP32S3
+    if (!EndpointRequested(1 + slot))
+    {
+      publisher.Stop();
+      QuiesceDestination(
+          1 + slot,
+          static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
+          health);
+      xQueueReset(box.queue);
+      health.Finish();
+      return;
+    }
+#endif
     const auto config = Configuration();
     const auto link = network_generation.load();
     if (config_generation != config->revision || link_generation != link)
     {
+#if CONFIG_IDF_TARGET_ESP32S3
+      QuiesceDestination(
+          1 + slot,
+          static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) + slot),
+          health);
+#else
       SetCorrectionDestination(1 + slot, nullptr, nullptr);
+#endif
       xQueueReset(box.queue);
       publisher.Stop();
       source = Gateway::kSources;
@@ -288,17 +424,41 @@ void PublisherWorker(void* context)
 void CasterWorker(void*)
 {
   WorkerHealth health(ServiceId::kCaster, 30000000000LL, false);
+#if CONFIG_IDF_TARGET_ESP32S3
+  auto& caster = *caster_owner;
+#else
   universal_gnss_ntrip::LocalRtcmCaster caster;
+#endif
   Gateway::Frame frame;
-  std::uint64_t config_generation = 0, link_generation = 0, cache_generation = 0, incarnation = 0;
+  std::uint64_t config_generation = 0, link_generation = 0, incarnation = 0;
+#if CONFIG_IDF_TARGET_ESP32S3
+  // The retained caster rejects a reused source incarnation after Stop().
+  auto& cache_generation = caster_cache_generation;
+#else
+  std::uint64_t cache_generation = 0;
+#endif
   std::size_t source = Gateway::kSources;
   for (;;)
   {
+#if CONFIG_IDF_TARGET_ESP32S3
+    if (!EndpointRequested(6))
+    {
+      caster.Stop();
+      QuiesceDestination(6, ServiceId::kCaster, health);
+      xQueueReset(caster_box.queue);
+      health.Finish();
+      return;
+    }
+#endif
     const auto config = Configuration();
     const auto link = network_generation.load();
     if (config_generation != config->revision || link_generation != link)
     {
+#if CONFIG_IDF_TARGET_ESP32S3
+      QuiesceDestination(6, ServiceId::kCaster, health);
+#else
       SetCorrectionDestination(6, nullptr, nullptr);
+#endif
       caster.Stop();
       xQueueReset(caster_box.queue);
       source = Gateway::kSources;
@@ -370,6 +530,156 @@ void CasterWorker(void*)
   }
 }
 #endif
+#endif  // Legacy independent execution comparator and C3 path.
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_NETWORK_COOPERATIVE
+#include "ug_network_cooperative.hpp"
+#elif CONFIG_IDF_TARGET_ESP32S3
+// Keep exception handlers above the sentinel return address of a task entry.
+__attribute__((noinline)) std::int32_t GuardedNetworkWorker(WorkerSlot& slot)
+{
+  std::int32_t error = ESP_OK;
+  try
+  {
+    if (slot.index == 0)
+      InputWorker(nullptr);
+    else if (slot.index <= UG_SERVICE_PUBLISHERS)
+      PublisherWorker(&publishers[slot.index - 1]);
+#if UG_SERVICE_CASTER
+    else if (slot.index == 6)
+      CasterWorker(nullptr);
+#endif
+  }
+  catch (const std::bad_alloc&)
+  {
+    error = ESP_ERR_NO_MEM;
+  }
+  catch (...)
+  {
+    error = ESP_FAIL;
+  }
+  return error;
+}
+void NetworkWorker(void* context)
+{
+  auto& slot = *static_cast<WorkerSlot*>(context);
+  const auto error = GuardedNetworkWorker(slot);
+  if (error != ESP_OK)
+  {
+    // Trace contexts were stack-owned and have unwound. Detach before Stop emits
+    // an event, then quiesce without allocating or using a destroyed guard.
+    if (slot.index == 0)
+    {
+      input_owner->SetTrace({});
+      input_owner->Stop();
+      upstream_generation = BeginCorrectionSource(kUpstream, false);
+    }
+    else
+    {
+      if (slot.index <= UG_SERVICE_PUBLISHERS)
+      {
+        publisher_owners[slot.index - 1]->SetTrace({});
+        publisher_owners[slot.index - 1]->Stop();
+      }
+#if UG_SERVICE_CASTER
+      else
+        caster_owner->Stop();
+#endif
+      while (!RetireCorrectionDestination(slot.index, 100))
+        vTaskDelay(FiniteWaitTicks(10, configTICK_RATE_HZ));
+      if (slot.index <= UG_SERVICE_PUBLISHERS)
+        xQueueReset(publishers[slot.index - 1].queue);
+#if UG_SERVICE_CASTER
+      else
+        xQueueReset(caster_box.queue);
+#endif
+    }
+    const auto id = slot.index == 0 ? ServiceId::kNtripInput
+                    : slot.index == 6
+                        ? ServiceId::kCaster
+                        : static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) +
+                                                 slot.index - 1);
+    ObserveService(id, ServiceState::kFailed, error);
+    slot.failed.store(true, std::memory_order_release);
+  }
+  // Owner scopes have returned, sockets closed, and destinations retired.
+  // No access to this slot follows publication; RTOS reaps the stack on idle.
+  slot.live.store(false, std::memory_order_release);
+  vTaskDelete(nullptr);
+}
+void NetworkLifecycle(void*)
+{
+  WorkerHealth manager(ServiceId::kNtripSetup, 5000000000LL, false);
+  for (;;)
+  {
+    for (auto& slot : network_workers)
+    {
+      if (slot.live.load(std::memory_order_acquire))
+        continue;
+      if (slot.failed.exchange(false, std::memory_order_acquire))
+        slot.retry_after_ns = Now() + 1000000000LL;
+      if (!EndpointRequested(slot.index) || Now() < slot.retry_after_ns)
+        continue;
+      const auto id = slot.index == 0 ? ServiceId::kNtripInput
+                      : slot.index == 6
+                          ? ServiceId::kCaster
+                          : static_cast<ServiceId>(static_cast<unsigned>(ServiceId::kPublisher0) +
+                                                   slot.index - 1);
+      bool ready = true;
+      if (slot.index == 0)
+        ready = ReserveOwner(input_owner, [](void* memory) {
+          return new (memory) NtripConnection(
+              [](const auto& f) {
+                const auto epoch = upstream_generation.load();
+                if (epoch && f.timestamp_ns)
+                  SubmitCorrectionBytes(kUpstream,
+                                        epoch,
+                                        f.raw_bytes.data(),
+                                        f.raw_bytes.size(),
+                                        *f.timestamp_ns,
+                                        true);
+              },
+              [](bool active) {
+                upstream_generation =
+                    BeginCorrectionSource(kUpstream, active && network_ready.load());
+              });
+        });
+      if (slot.index > 0 && slot.index <= UG_SERVICE_PUBLISHERS)
+      {
+        auto& box = publishers[slot.index - 1];
+        box.slot = slot.index - 1;
+        ready = ReserveOwner(publisher_owners[slot.index - 1],
+                             [](void* memory) { return new (memory) NtripPublisher{}; }) &&
+                (box.queue || box.Create());
+      }
+#if UG_SERVICE_CASTER
+      else if (slot.index == 6)
+        ready = ReserveOwner(caster_owner,
+                             [](void* memory) {
+                               return new (memory) universal_gnss_ntrip::LocalRtcmCaster{};
+                             }) &&
+                (caster_box.queue || caster_box.Create());
+#endif
+      ExpectWorker(id, 30000000000LL);
+      slot.live.store(true, std::memory_order_release);
+      if (!ready || xTaskCreate(NetworkWorker,
+                                slot.index == 0   ? "ug_ntrip_in"
+                                : slot.index == 6 ? "ug_caster"
+                                                  : "ug_ntrip_out",
+                                slot.index == 0 ? 10240 : 8192,
+                                &slot,
+                                slot.index == 0 ? 3 : 2,
+                                nullptr) != pdPASS)
+      {
+        slot.live.store(false, std::memory_order_release);
+        slot.retry_after_ns = Now() + 1000000000LL;
+        ObserveService(id, ServiceState::kFailed, ESP_ERR_NO_MEM);
+      }
+    }
+    manager.Progress();
+    vTaskDelay(FiniteWaitTicks(20, configTICK_RATE_HZ));
+  }
+}
+#endif
 }  // namespace
 NetworkCapacity NetworkResourceCapacity()
 {
@@ -425,6 +735,58 @@ esp_err_t StartNetworkServices()
   if (caps.publisher_slots > UG_SERVICE_PUBLISHERS || (caps.caster && !UG_SERVICE_CASTER) ||
       caps.publisher_slots + 1 > Gateway::kSinks)
     return ESP_ERR_INVALID_STATE;  // Never silently truncate a board capability.
+#if CONFIG_IDF_TARGET_ESP32S3
+  bool expected = false;
+  if (!lifecycle_started.compare_exchange_strong(expected, true))
+    return ESP_ERR_INVALID_STATE;
+  if (!InitializeNetworkAllocation())
+  {
+    lifecycle_started = false;
+    return ESP_ERR_NO_MEM;
+  }
+#if !UG_NETWORK_COOPERATIVE
+  for (std::size_t i = 0; i < network_workers.size(); ++i)
+    network_workers[i].index = i;
+#endif
+#if UG_NETWORK_COOPERATIVE && UG_NETWORK_STACK_PSRAM && UG_S3_CPU_PROFILE > 0
+  const bool started =
+      xTaskCreatePinnedToCoreWithCaps(NetworkLifecycle,
+                                      "ug_network_life",
+                                      12288,
+                                      nullptr,
+                                      2,
+                                      nullptr,
+                                      ug_s3_worker_core(UG_S3_WORKER_NETWORK),
+                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS;
+#elif UG_NETWORK_COOPERATIVE && UG_NETWORK_STACK_PSRAM
+  const bool started = xTaskCreateWithCaps(NetworkLifecycle,
+                                           "ug_network_life",
+                                           12288,
+                                           nullptr,
+                                           2,
+                                           nullptr,
+                                           MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS;
+#elif UG_S3_CPU_PROFILE > 0
+  const bool started = xTaskCreatePinnedToCore(NetworkLifecycle,
+                                               "ug_network_life",
+                                               UG_NETWORK_COOPERATIVE ? 12288 : 4096,
+                                               nullptr,
+                                               2,
+                                               nullptr,
+                                               ug_s3_worker_core(UG_S3_WORKER_NETWORK)) == pdPASS;
+#else
+  const bool started = xTaskCreate(NetworkLifecycle,
+                                   "ug_network_life",
+                                   UG_NETWORK_COOPERATIVE ? 12288 : 4096,
+                                   nullptr,
+                                   2,
+                                   nullptr) == pdPASS;
+#endif
+  if (started)
+    return ESP_OK;
+  lifecycle_started = false;
+  return ESP_ERR_NO_MEM;
+#else
   bool ok = true;
   ExpectWorker(ServiceId::kNtripInput, 30000000000LL);
   if (xTaskCreate(InputWorker, "ug_ntrip_in", 10240, nullptr, 3, nullptr) != pdPASS)
@@ -458,5 +820,6 @@ esp_err_t StartNetworkServices()
   }
 #endif
   return ok ? ESP_OK : ESP_ERR_NO_MEM;
+#endif
 }
 }  // namespace ug::embedded

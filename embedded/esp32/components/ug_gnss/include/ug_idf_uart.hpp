@@ -2,6 +2,7 @@
 #pragma once
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "ug_settings.hpp"
@@ -44,6 +45,10 @@ public:
   {
     if (!events)
       return;
+    const auto poll_ns = esp_timer_get_time() * 1000;
+    if (previous_poll_ns >= 0 && poll_ns - previous_poll_ns > max_poll_gap_ns)
+      max_poll_gap_ns = poll_ns - previous_poll_ns;
+    previous_poll_ns = poll_ns;
     // Data notifications can fill the SDK queue and hide a later error event.
     // A full queue is therefore itself ambiguous, even without a received OVF.
     if (uxQueueMessagesWaiting(events) >= kEventDepth)
@@ -57,6 +62,21 @@ public:
       if (event.type == UART_FIFO_OVF || event.type == UART_BUFFER_FULL)
       {
         ++overflows;
+        // SDK events have no IRQ timestamp. Record when the owner dequeued
+        // the event; the sequence disambiguates equal clock samples.
+        const auto observed_ns = esp_timer_get_time() * 1000;
+        if (event.type == UART_FIFO_OVF)
+        {
+          ++fifo_overflows;
+          last_fifo_seq = overflows;
+          last_fifo_observed_ns = observed_ns;
+        }
+        else
+        {
+          ++ring_buffer_full;
+          last_ring_full_seq = overflows;
+          last_ring_full_observed_ns = observed_ns;
+        }
         faulted = true;
       }
       else if (event.type == UART_PARITY_ERR || event.type == UART_FRAME_ERR ||
@@ -99,6 +119,7 @@ public:
       installed = false;
     }
     events = nullptr;
+    previous_poll_ns = -1;
     faulted = false;
     if (tx >= 0)
       gpio_reset_pin(static_cast<gpio_num_t>(tx));
@@ -142,7 +163,12 @@ public:
   QueueHandle_t events{};
   bool faulted{};
   std::uint64_t overflows{}, line_errors{}, event_saturations{}, read_failures{};
+  std::uint64_t fifo_overflows{}, ring_buffer_full{}, last_fifo_seq{}, last_ring_full_seq{};
+  std::int64_t last_fifo_observed_ns{}, last_ring_full_observed_ns{}, max_poll_gap_ns{};
   bool opened{false}, installed{false};
   int tx{-1}, rx{-1};
+
+private:
+  std::int64_t previous_poll_ns{-1};
 };
 }  // namespace ug::embedded

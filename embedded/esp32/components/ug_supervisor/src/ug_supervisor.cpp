@@ -99,12 +99,17 @@ WorkerHealth::~WorkerHealth()
     service.watchdog_registered = false;
   else
     service.watchdog_error = removed;
-  // Unexpected worker exit must not retain a cached healthy state.
-  service.state = ServiceState::kFailed;
-  service.error = ESP_ERR_INVALID_STATE;
+  // A deliberate quiescent exit is distinct from an unexpected owner loss.
+  service.state = finished_ ? ServiceState::kDisabled : ServiceState::kFailed;
+  service.error = finished_ ? 0 : ESP_ERR_INVALID_STATE;
+  service.entered = false;
   events.Append(id_, service.state, ServiceEventKind::kWorkerExit, service.error, Now());
   if (removed != ESP_OK)
     events.Append(id_, service.state, ServiceEventKind::kWatchdog, removed, Now());
+}
+void WorkerHealth::Finish()
+{
+  finished_ = true;
 }
 void WorkerHealth::Progress()
 {

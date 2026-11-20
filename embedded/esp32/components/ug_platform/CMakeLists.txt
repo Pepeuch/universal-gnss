@@ -1,6 +1,7 @@
 set(auth_sources)
 set(auth_requires)
 if(IDF_TARGET STREQUAL "esp32s3")
+    list(APPEND auth_requires ug_network)
     list(APPEND auth_sources "src/ug_web_auth_platform.cpp")
     if(NOT CONFIG_UG_WEB_HTTP)
         list(APPEND auth_sources "src/ug_tls_bootstrap.cpp")

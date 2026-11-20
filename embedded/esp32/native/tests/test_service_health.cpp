@@ -127,6 +127,13 @@ int main()
     network_worker.Progress();
     assert(added == 1 && fed == 3);
   }
+  {
+    WorkerHealth stopped(ServiceId::kPublisher0, 30000000000LL, false);
+    stopped.Progress();
+    stopped.Finish();
+  }
+  state = ServiceHealths()[Index(ServiceId::kPublisher0)];
+  assert(state.state == ServiceState::kDisabled && !state.entered && !state.error);
   add_error = 9;
   {
     WorkerHealth unavailable(ServiceId::kGnss, 5000000000LL, true);

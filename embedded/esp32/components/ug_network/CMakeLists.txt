@@ -10,3 +10,6 @@ idf_component_register(SRCS "src/idf_tcp_transport.cpp" "src/ug_ntrip_connection
     REQUIRES rtcm_filter ug_protocols ug_gateway ug_rtcm ug_settings nvs_flash esp-tls mbedtls lwip esp_timer)
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
 target_compile_definitions(${COMPONENT_LIB} PUBLIC UNIVERSAL_GNSS_TRANSPORT_HAS_TCP_CLIENT=1)
+if(IDF_TARGET STREQUAL "esp32s3")
+    target_sources(${COMPONENT_LIB} PRIVATE "src/ug_network_allocation.cpp")
+endif()

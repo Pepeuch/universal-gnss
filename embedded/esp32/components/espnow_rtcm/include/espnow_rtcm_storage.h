@@ -3,12 +3,12 @@
 #include "espnow_rtcm_codec.h"
 /* Payload lifetime is the whole boot, independently of SDK/callback lifetime.
  * Synchronization, activation claim, TX epoch/quarantine and stats stay outside.
- * Ring cursors retain the existing mailbox layout; this storage is INTERNAL.
+ * Ring cursors stay in internal memory even when payload is in PSRAM.
  */
 typedef struct
 {
   espnow_rtcm_codec_t stream, radio;
-  espnow_rtcm_mailbox_t queue;
+  espnow_rtcm_message_t slots[ESPNOW_RTCM_QUEUE_DEPTH];
   espnow_rtcm_message_t message;
 } espnow_rtcm_storage_data_t;
 typedef struct

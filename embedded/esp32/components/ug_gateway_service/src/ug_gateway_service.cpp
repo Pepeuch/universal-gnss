@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #include "ug_gateway_service.hpp"
 #include "sdkconfig.h"
+#include "ug_destination_lifecycle.hpp"
+#include "ug_s3_execution_policy.h"
 #include "ug_supervisor.hpp"
 #include "ug_wait.hpp"
 extern "C" {
@@ -35,14 +37,11 @@ struct Control
   std::uint64_t epoch{};
   bool enabled{};
 };
-struct Destination
-{
-  FrameDestination callback{};
-  void* context{};
-  std::uint64_t revision{};
-};
+using Publication = DestinationPublication<FrameDestination>;
+using Destination = Publication::Target;
 std::array<Control, Gateway::kSources> desired{}, applied{};
-std::array<Destination, Gateway::kSinks> destinations{}, active_destinations{};
+std::array<Publication, Gateway::kSinks> destinations{};
+std::array<Destination, Gateway::kSinks> active_destinations{};
 GatewayServiceStats stats{};
 portMUX_TYPE guard = portMUX_INITIALIZER_UNLOCKED;
 QueueHandle_t ingress;
@@ -133,17 +132,28 @@ void RefreshDestinations(Gateway& gateway)
   for (std::size_t i = 0; i < destinations.size(); ++i)
   {
     portENTER_CRITICAL(&guard);
-    const auto target = destinations[i];
+    const auto target = destinations[i].Desired();
     portEXIT_CRITICAL(&guard);
     if (target.revision != active_destinations[i].revision)
     {
       gateway.ConfigureSink(i, target.callback != nullptr, 3000000000LL);
       active_destinations[i] = target;
+      // This owner is the only callback executor. Its previous iteration has
+      // completed before this replacement; no retired callback remains in flight.
+      portENTER_CRITICAL(&guard);
+      (void)destinations[i].Acknowledge(target.revision);
+      portEXIT_CRITICAL(&guard);
     }
   }
 }
 void Owner(void*)
 {
+#if CONFIG_IDF_TARGET_ESP32S3 && defined(ESP_PLATFORM)
+  std::printf("UG_CPU role=router profile=%d configured_core=%d observed_core=%d\n",
+              UG_S3_CPU_PROFILE,
+              ug_s3_worker_core(UG_S3_WORKER_ROUTER),
+              xPortGetCoreID());
+#endif
   auto& gateway = RoutingGateway();
   auto& frame = RoutingFrame();
   auto& input = RoutingInput();
@@ -196,7 +206,15 @@ esp_err_t StartGatewayService()
     return ESP_ERR_NO_MEM;
 
   ExpectWorker(ServiceId::kRouting, 5000000000LL);
-  if (xTaskCreate(Owner, "ug_rtcm", 6144, nullptr, 5, nullptr) != pdPASS)
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CPU_PROFILE > 0
+  const bool started =
+      xTaskCreatePinnedToCore(
+          Owner, "ug_rtcm", 6144, nullptr, 5, nullptr, ug_s3_worker_core(UG_S3_WORKER_ROUTER)) ==
+      pdPASS;
+#else
+  const bool started = xTaskCreate(Owner, "ug_rtcm", 6144, nullptr, 5, nullptr) == pdPASS;
+#endif
+  if (!started)
   {
     vQueueDelete(ingress);
     ingress = nullptr;
@@ -259,16 +277,44 @@ bool SetCorrectionDestination(const std::size_t sink, FrameDestination callback,
   if (sink >= destinations.size())
     return false;
   portENTER_CRITICAL(&guard);
-  if (destinations[sink].revision == UINT64_MAX)
-  {
-    portEXIT_CRITICAL(&guard);
-    return false;
-  }
-  const auto revision = destinations[sink].revision + 1;
-  destinations[sink] = {callback, context, revision};
+  const auto ticket = destinations[sink].Publish(callback, context);
   portEXIT_CRITICAL(&guard);
-  return true;
+  return ticket != 0;
 }
+std::uint64_t WithdrawCorrectionDestination(const std::size_t sink)
+{
+  if (sink >= destinations.size())
+    return 0;
+  portENTER_CRITICAL(&guard);
+  const auto ticket = destinations[sink].Publish(nullptr, nullptr);
+  portEXIT_CRITICAL(&guard);
+  return ticket;
+}
+bool CorrectionDestinationRetired(const std::size_t sink, const std::uint64_t ticket)
+{
+  if (sink >= destinations.size())
+    return false;
+  portENTER_CRITICAL(&guard);
+  const bool retired = destinations[sink].Applied(ticket);
+  portEXIT_CRITICAL(&guard);
+  return retired;
+}
+bool RetireCorrectionDestination(const std::size_t sink, std::uint32_t timeout_ms)
+{
+  const auto ticket = WithdrawCorrectionDestination(sink);
+  if (!ticket)
+    return false;
+  const auto started = esp_timer_get_time();
+  for (;;)
+  {
+    if (CorrectionDestinationRetired(sink, ticket))
+      return true;
+    if (esp_timer_get_time() - started >= static_cast<std::int64_t>(timeout_ms) * 1000)
+      return false;  // Caller MUST retain its context; timeout is not retirement.
+    vTaskDelay(FiniteWaitTicks(1, configTICK_RATE_HZ));
+  }
+}
+
 GatewayServiceStats GatewayStats()
 {
   portENTER_CRITICAL(&guard);

@@ -4,6 +4,11 @@
 #include "ug_json.hpp"
 #include "ug_portable_settings.hpp"
 #include "ug_settings_store.hpp"
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+#include "esp_timer.h"
+#include <array>
+#include <cstdio>
+#endif
 #include <atomic>
 #include <charconv>
 #include <cstring>
@@ -12,6 +17,19 @@ namespace ug::embedded
 {
 namespace
 {
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+// SettingsStore writers and the diagnostic reader use the existing writer mutex.
+struct ConfigurationWriteSample
+{
+  std::uint64_t sequence;
+  std::int64_t begin_us, set_end_us, end_us;
+  unsigned slot;
+  std::size_t bytes;
+  esp_err_t set_error, commit_error;
+};
+std::array<ConfigurationWriteSample, 8> write_samples{};
+std::uint64_t write_count{};
+#endif
 class NvsStorage final : public SettingsStorage
 {
 public:
@@ -39,10 +57,31 @@ public:
   }
   bool Write(unsigned slot, const std::vector<std::uint8_t>& bytes) override
   {
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+    if (bytes.size() > SettingsStore::kRecordLimit)
+      return false;
+    auto& sample = write_samples[write_count % write_samples.size()];
+    sample.sequence = ++write_count;
+    sample.slot = slot;
+    sample.bytes = bytes.size();
+    sample.begin_us = esp_timer_get_time();
+    sample.set_error =
+        nvs_set_blob(handle, slot == 0 ? "cfg0" : "cfg1", bytes.data(), bytes.size());
+    sample.set_end_us = esp_timer_get_time();
+    if (sample.set_error != ESP_OK)
+    {
+      sample.end_us = sample.set_end_us;
+      return false;
+    }
+    sample.commit_error = nvs_commit(handle);
+    sample.end_us = esp_timer_get_time();
+    return sample.commit_error == ESP_OK;
+#else
     return bytes.size() <= SettingsStore::kRecordLimit &&
            nvs_set_blob(handle, slot == 0 ? "cfg0" : "cfg1", bytes.data(), bytes.size()) ==
                ESP_OK &&
            nvs_commit(handle) == ESP_OK;
+#endif
   }
   nvs_handle_t handle{};
 };
@@ -53,6 +92,30 @@ std::shared_ptr<const Settings> snapshot;
 std::mutex writer;
 std::atomic<bool> writable{false}, journal_blocked{true};
 }  // namespace
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+void PrintConfigurationWriteDiagnostics()
+{
+  std::lock_guard<std::mutex> lock(writer);
+  const auto first = write_count > write_samples.size() ? write_count - write_samples.size() : 0;
+  for (auto index = first; index < write_count; ++index)
+  {
+    const auto& sample = write_samples[index % write_samples.size()];
+    char commit[16] = "not_called";
+    if (sample.set_error == ESP_OK)
+      std::snprintf(commit, sizeof(commit), "%d", sample.commit_error);
+    std::printf("UG_MEM config_write seq=%llu slot=%u bytes=%zu begin_us=%lld set_end_us=%lld "
+                "end_us=%lld set_error=%d commit_error=%s\n",
+                static_cast<unsigned long long>(sample.sequence),
+                sample.slot,
+                sample.bytes,
+                static_cast<long long>(sample.begin_us),
+                static_cast<long long>(sample.set_end_us),
+                static_cast<long long>(sample.end_us),
+                sample.set_error,
+                commit);
+  }
+}
+#endif
 bool StartConfiguration(Capabilities caps, std::string& error)
 {
   std::lock_guard<std::mutex> lock(writer);

@@ -18,6 +18,37 @@ build_spec.loader.exec_module(builder)
 
 
 class NativeBuildContract(unittest.TestCase):
+    def test_s3_uart_flash_safety_is_required_without_changing_c3_policy(self):
+        config = ['CONFIG_UART_ISR_IN_IRAM=y']
+        self.assertEqual(module.sdk_gnss_uart_memory(config, True),
+                         {'required': True, 'isr_iram': True, 'driver_buffers': 'internal'})
+        for bad in ([], ['# CONFIG_UART_ISR_IN_IRAM is not set'],
+                    config + ['CONFIG_RINGBUF_PLACE_ISR_FUNCTIONS_INTO_FLASH=y']):
+            with self.assertRaises(ValueError):
+                module.sdk_gnss_uart_memory(bad, True)
+        self.assertEqual(module.sdk_gnss_uart_memory([], False),
+                         {'required': False, 'isr_iram': False, 'driver_buffers': 'SDK_default'})
+
+    def test_network_symbols_require_the_exact_execution_path(self):
+        shared=['universal_gnss_ntrip::NtripClient::Read(',
+                'universal_gnss_transport::TcpClientTransport::Open(']
+        cooperative=['ug::embedded::NtripPublisher::BeginFrame(',
+                     'ug::embedded::NtripPublisher::ProgressFrame(',
+                     'ug::embedded::WithdrawCorrectionDestination(',
+                     'ug::embedded::CorrectionDestinationRetired(', 'CooperativeHelper(']
+        cooperative += ['ug::embedded::InitializeNetworkAllocation(']
+        legacy=['ug::embedded::NtripPublisher::Send(']
+        module.check_network_engine('\n'.join(shared+cooperative),'gateway')
+        module.check_network_engine('\n'.join(shared+legacy),'relay-ntrip')
+        for index in range(len(shared+cooperative)):
+            values=shared+cooperative
+            with self.assertRaises(ValueError):
+                module.check_network_engine('\n'.join(values[:index]+values[index+1:]),'gateway')
+        with self.assertRaises(ValueError):
+            module.check_network_engine('\n'.join(shared+legacy),'gateway')
+        with self.assertRaises(ValueError):
+            module.check_network_engine('\n'.join(shared+cooperative),'relay-ntrip')
+
     def test_immutable_firmware_identity_and_separate_transports(self):
         for transport in ('http','https'):
             identity=builder.firmware_identity('gateway','waveshare-s3-eth',transport,'a'*40,'b'*40,'v0.7.5-RC1')
@@ -57,6 +88,16 @@ class NativeBuildContract(unittest.TestCase):
                                    ('gateway','waveshare-s3-eth','automatic')):
             with self.assertRaises(ValueError):
                 builder.build('/tmp/not-created-http-invalid',profile,board,False,web_transport=mode)
+
+    def test_s3_owner_oom_reserve_is_explicit_and_not_a_c3_requirement(self):
+        config=['CONFIG_COMPILER_CXX_EXCEPTIONS=y',
+                'CONFIG_COMPILER_CXX_EXCEPTIONS_EMG_POOL_SIZE=2048']
+        self.assertEqual(module.sdk_owner_oom_recovery(config,True),
+                         {'enabled':True,'emergency_bytes':2048})
+        for bad in ([],config[:1],config[1:],[config[0],config[1].replace('2048','0')]):
+            with self.assertRaises(ValueError):module.sdk_owner_oom_recovery(bad,True)
+        self.assertEqual(module.sdk_owner_oom_recovery([],False),
+                         {'enabled':False,'emergency_bytes':0})
 
     def test_network_boot_and_s3_tls_reject_insufficient_effective_memory_settings(self):
         s3 = ['CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768', 'CONFIG_SPIRAM_USE_MALLOC=y',

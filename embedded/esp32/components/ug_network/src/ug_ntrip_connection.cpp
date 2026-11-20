@@ -18,7 +18,8 @@ NtripConnection::NtripConnection(FrameSink sink, SessionBoundary boundary)
 }
 bool NtripConnection::Configure(const universal_gnss_ntrip::NtripConfig& config,
                                 const bool enabled,
-                                std::function<bool()> cancelled)
+                                std::function<bool()> cancelled,
+                                bool nonblocking)
 {
   if (enabled &&
       (config.host.empty() || !config.port || !SafeText(config.host, 253) ||
@@ -35,6 +36,7 @@ bool NtripConnection::Configure(const universal_gnss_ntrip::NtripConfig& config,
   transport.read_timeout_ms = 20;
   transport.write_timeout_ms = 1000;
   transport.tcp_nodelay = true;
+  transport.nonblocking = nonblocking;
   transport.connect_cancelled = std::move(cancelled);
   client_.set_tcp_config(transport);
   enabled_ = enabled;
@@ -61,7 +63,23 @@ void NtripConnection::Stop()
   if (was_enabled)
     trace_.Emit(NtripTraceKind::kStopped);
 }
-void NtripConnection::Tick(const std::int64_t now_ns, const universal_gnss::GnssRuntimeState* state)
+bool NtripConnection::BlockingStepDue(std::int64_t now_ns) const
+{
+  if (!enabled_ || now_ns < 0)
+    return false;
+  if (client_.IsConnected())
+    return !client_.metrics().request_sent;
+  return !attempted_ ||
+         client_.config().reconnect_policy.ShouldReconnect(client_.reconnect_state(), now_ns);
+}
+void NtripConnection::InjectGga(std::int64_t now_ns, const universal_gnss::GnssRuntimeState& state)
+{
+  if (enabled_ && client_.IsConnected() && client_.config().send_gga)
+    (void)client_.MaybeInjectGga(state, now_ns);
+}
+void NtripConnection::Tick(const std::int64_t now_ns,
+                           const universal_gnss::GnssRuntimeState* state,
+                           bool inject_gga)
 {
   using namespace universal_gnss_ntrip;
   if (!enabled_ || now_ns < 0)
@@ -123,7 +141,7 @@ void NtripConnection::Tick(const std::int64_t now_ns, const universal_gnss::Gnss
     EndSession();
     return;
   }
-  if (state && client_.config().send_gga)
-    (void)client_.MaybeInjectGga(*state, now_ns);
+  if (state && inject_gga)
+    InjectGga(now_ns, *state);
 }
 }  // namespace ug::embedded

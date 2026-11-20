@@ -2,6 +2,7 @@
 // SDK API seam tests: these do not claim a real ESP TLS handshake.
 #include "esp_tls.h"
 #include "nvs.h"
+#include "ug_io_execution.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 #include <cassert>
 #include <cerrno>
@@ -11,6 +12,7 @@
 #include <fcntl.h>
 #include <string>
 #include <sys/socket.h>
+#include <thread>
 #include <unistd.h>
 static std::string stored_pem = "fake-cert";
 static bool nvs_fail = false;
@@ -110,6 +112,19 @@ int main()
   cfg.read_timeout_ms = 2;
   cfg.write_timeout_ms = 2;
   TcpClientTransport t;
+  {
+    using namespace ug::embedded;
+    IoExecutionScope owner(IoExecution::kNonblocking);
+    assert(NonblockingIo(false) && t.Open(cfg) == TransportError::kUnsupported);
+    {
+      IoExecutionScope helper(IoExecution::kBlocking);
+      assert(!NonblockingIo(true));
+    }
+    assert(NonblockingIo(false));
+    std::thread independent([] { assert(!ug::embedded::NonblockingIo(false)); });
+    independent.join();
+  }
+  assert(!ug::embedded::NonblockingIo(false));
   char buffer[16];
   cfg.tls_verify_peer = false;
   assert(t.Open(cfg) == TransportError::kTlsVerificationFailure);
@@ -129,6 +144,13 @@ int main()
   stored_pem = "fake-cert";
   int ca_peer = Pair();
   assert(t.Open(cfg) == TransportError::kNone);
+  {
+    ug::embedded::IoExecutionScope owner(ug::embedded::IoExecution::kNonblocking);
+    force_wait = true;
+    const auto idle = t.Read(reinterpret_cast<std::uint8_t*>(buffer), sizeof(buffer));
+    assert(idle.status == TransportStatus::kOk && idle.bytes_read == 0 && t.IsOpen());
+    force_wait = false;
+  }
   t.Close();
   ::close(ca_peer);
   cfg.tls_ca_file.clear();
