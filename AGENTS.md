@@ -149,6 +149,32 @@ explicitly requires retention.
 
 ---
 
+### Xtensa FreeRTOS C++ recovery boundary
+
+For the currently qualified ESP32-S3 Xtensa runtime (ESP-IDF 6.1, toolchain
+`esp-15.2.0_20251204`), never place the only C++ recovery handler directly in a
+FreeRTOS task-entry function.
+The task-entry sentinel return address can end exception search before that
+frame's handler is consulted.
+
+- Put recovery handlers in a distinct called function.
+- Preserve a real caller frame through optimization: prevent inlining and tail
+  calls across this boundary, and verify the optimized ELF when changing it.
+- Test the first throw at cold task startup, as well as repeated failures and
+  recovery; keep fault-triggering allocations observable to the optimizer.
+- Physically inject the relevant fault on the actual application path and verify
+  cleanup, ownership/invalidation, and resumed operation. Compilation, host tests
+  or a warmed main-task catch alone do not qualify this boundary.
+- Reassess this constraint and its regression evidence whenever the SDK,
+  toolchain, task wrapper, or exception configuration changes. Do not assume the
+  limitation applies to every architecture or future toolchain.
+
+Evidence: [ESP32 resource lifecycle analysis](docs/analysis/ESP32_RESOURCE_LIFECYCLE.md),
+section “Xtensa cold-task exception recovery”. This rule also applies to future
+network, storage and supervision workers using the affected runtime.
+
+---
+
 ## 5. Evidence discipline
 
 Distinguish verified behaviour from assumptions.

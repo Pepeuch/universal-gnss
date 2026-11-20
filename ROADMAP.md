@@ -8,6 +8,18 @@ TLS/password/settings preservation. Original operator state is restored and usua
 login confirmed. Final clean952 BIN/ELF/MAP match and are archived outside Git.
 The Flasher completion patch awaits review, commit and hosted CI. Contact quality,
 slow authentication, RTK/endurance and the resource refactor remain separate work.
+Resource lifecycle remains **PARTIAL / HARDWARE_REQUIRED**, paused with user
+configuration restored and benches stopped. Input-arena OOM recovery is physically
+proven on its recorded baseline. Latest nominal load delivers902/902 C3 frames
+and60/60 HTTPS requests, minimum internal126667 B / largest34816 B. UART IRAM
+correction passes81 configuration writes after a reproduced Flash-ISR FIFO fault.
+Final software validation passes112 native sanitizer tests and SDK/QEMU/reproduction;
+that final image is not installed. CPU A, radio PSRAM and Wi-Fi B are selected;
+external network stacks remain off. Intermittent radio loss stops the transition
+series at42 transitions, followed by separate11/11 recovery. Cancellation/bursts,
+final-source hardware recovery and full acceptance remain pending. The indicative
+150 KiB loaded goal is unmet. See the
+[partial resource report](docs/analysis/ESP32_RESOURCE_LIFECYCLE.md).
 Historical release/roadmap counters are unchanged by this independent ESP32 block.
 
 ## Active development direction — ESP32 station capability and return to main roadmap
