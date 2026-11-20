@@ -9,6 +9,9 @@
 #include "mdns.h"
 #include "ug_configuration.hpp"
 #include "ug_services.hpp"
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+#include "ug_s3_radio_policy.h"
+#endif
 #include <atomic>
 #include <cstring>
 namespace ug::embedded
@@ -94,6 +97,9 @@ esp_err_t StartWifiAndClock()
     return ESP_ERR_NO_MEM;
   wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
   init.nvs_enable = false;
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  ug_apply_s3_radio_policy(&init, false);
+#endif
   auto result = esp_wifi_init(&init);
   if (result != ESP_OK)
     return result;

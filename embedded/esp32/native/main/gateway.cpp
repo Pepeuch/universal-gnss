@@ -12,6 +12,7 @@
 #include "ug_configuration.hpp"
 #include "ug_gateway_service.hpp"
 #include "ug_memory_diagnostics.hpp"
+#include "ug_s3_execution_policy.h"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #include "ug_tls_bootstrap.hpp"
@@ -55,6 +56,13 @@ bool RadioDestination(const ug::embedded::Gateway::Frame& frame, void*)
 bool radio_initialized;
 void RadioControl(void*)
 {
+#if CONFIG_IDF_TARGET_ESP32S3
+  ESP_LOGI("UG_CPU",
+           "role=radio_control profile=%d configured_core=%d observed_core=%d",
+           UG_S3_CPU_PROFILE,
+           ug_s3_worker_core(UG_S3_WORKER_RADIO),
+           xPortGetCoreID());
+#endif
   ug::embedded::WorkerHealth health(ug::embedded::ServiceId::kRadioControl, 5000000000LL, true);
   bool active = true;
   for (;;)
@@ -105,9 +113,21 @@ std::int32_t StartRadioControl(void*)
 {
   using namespace ug::embedded;
   ExpectWorker(ServiceId::kRadioControl, 5000000000LL);
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CPU_PROFILE > 0
+  return xTaskCreatePinnedToCore(RadioControl,
+                                 "ug_radio_control",
+                                 3072,
+                                 nullptr,
+                                 3,
+                                 nullptr,
+                                 ug_s3_worker_core(UG_S3_WORKER_RADIO)) == pdPASS
+             ? ESP_OK
+             : ESP_ERR_NO_MEM;
+#else
   return xTaskCreate(RadioControl, "ug_radio_control", 3072, nullptr, 3, nullptr) == pdPASS
              ? ESP_OK
              : ESP_ERR_NO_MEM;
+#endif
 }
 }  // namespace
 extern "C" void app_main()

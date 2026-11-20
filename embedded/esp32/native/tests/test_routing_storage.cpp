@@ -22,7 +22,7 @@ bool refuse_memory{}, wrong_region{}, refuse_queue{}, refuse_task{};
 TaskFunction_t worker{};
 std::int64_t now_us = 10000000;
 unsigned remaining{};
-std::function<void()> progress_hook;
+std::function<void()> progress_hook, delay_hook;
 struct WorkerStopped
 {
 };
@@ -195,6 +195,13 @@ int xTaskCreate(
   worker = entry;
   return pdPASS;
 }
+void vTaskDelay(TickType_t ticks)
+{
+  assert(!critical_depth);
+  now_us += static_cast<std::int64_t>(ticks) * 1000000 / configTICK_RATE_HZ;
+  if (delay_hook)
+    delay_hook();
+}
 extern "C" void espnow_rtcm_invalidate_pending()
 {
   assert(!critical_depth);
@@ -362,6 +369,28 @@ int main(int argc, char** argv)
       2, replacement, bytes.data() + 400, bytes.size() - 400, now_us * 1000 + 30, false));
   Run(1);
   assert(GatewayStats().routing.valid == 11);
+  // Publishing removal is not enough: without the owner running, retirement
+  // must time out and leave the caller responsible for retaining its context.
+  assert(!RetireCorrectionDestination(0, 0));
+  assert(!RetireCorrectionDestination(Gateway::kSinks, 1));
+  assert(!RetireCorrectionDestination(1, 2));
+  const auto ticket = WithdrawCorrectionDestination(1);
+  assert(ticket && !CorrectionDestinationRetired(1, ticket));
+  assert(!WithdrawCorrectionDestination(Gateway::kSinks));
+  assert(!CorrectionDestinationRetired(Gateway::kSinks, ticket));
+  Run(1);
+  assert(CorrectionDestinationRetired(1, ticket));
+  // Progressing the routing owner replaces cached destinations and acknowledges
+  // retirement. The task-only waiting caller holds no routing critical section.
+  delay_hook = [] { RefreshDestinations(RoutingGateway()); };
+  assert(RetireCorrectionDestination(1, 100));
+  delay_hook = {};
+  Run(1);
+  const auto receipt_count = received[0].size();
+  assert(SubmitCorrectionBytes(2, replacement, bytes.data(), bytes.size(), now_us * 1000, true));
+  Run(1);
+  assert(received[0].size() == receipt_count);
+  assert(destinations[0].Applied(destinations[0].Desired().revision));
 #if CONFIG_IDF_TARGET_ESP32S3
   assert(allocations == 1);  // No runtime reallocation or hidden SRAM fallback.
 #endif

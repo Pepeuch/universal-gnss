@@ -39,6 +39,19 @@ typedef struct
   size_t head, count;
 } espnow_rtcm_mailbox_t;
 
+/* Caller owns synchronization and the lifetime of all three fields. */
+typedef struct
+{
+  espnow_rtcm_message_t* slots;
+  size_t* head;
+  size_t* count;
+} espnow_rtcm_mailbox_view_t;
+bool espnow_rtcm_mailbox_view_push(espnow_rtcm_mailbox_view_t view,
+                                   const uint8_t* data,
+                                   size_t len,
+                                   uint32_t now_ms);
+bool espnow_rtcm_mailbox_view_pop(espnow_rtcm_mailbox_view_t view, espnow_rtcm_message_t* message);
+
 void espnow_rtcm_codec_init(espnow_rtcm_codec_t* codec);
 void espnow_rtcm_stream_reset(espnow_rtcm_codec_t* codec);
 void espnow_rtcm_ntrip_begin(espnow_rtcm_codec_t* codec, bool icy);

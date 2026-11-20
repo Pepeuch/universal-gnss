@@ -10,6 +10,7 @@
 #include "mbedtls/platform_util.h"
 #include "nvs.h"
 #include "ug_certificate_uri.hpp"
+#include "ug_io_execution.hpp"
 #include "universal_gnss_transport/tcp_client_transport.hpp"
 #include <algorithm>
 #include <array>
@@ -119,6 +120,8 @@ TcpClientTransport::~TcpClientTransport()
 }
 TransportError TcpClientTransport::Open(const TcpClientConfig& config)
 {
+  if (ug::embedded::io_execution == ug::embedded::IoExecution::kNonblocking)
+    return TransportError::kUnsupported;
   Close();
   config_ = config;
   const auto failed = [&](const TransportError error) {
@@ -251,7 +254,7 @@ ReadResult TcpClientTransport::Read(std::uint8_t* destination, const std::size_t
     }
     if (WantIo(read))
     {
-      if (config_.nonblocking)
+      if (ug::embedded::NonblockingIo(config_.nonblocking))
         return {};
       const auto waited = Wait(fd_, read == ESP_TLS_ERR_SSL_WANT_WRITE, deadline);
       if (waited == IoWait::Ready)
@@ -293,7 +296,7 @@ WriteResult TcpClientTransport::Write(const std::uint8_t* data, const std::size_
     auto error = TransportError::kWriteFailure;
     if (written < 0 && WantIo(written))
     {
-      if (config_.nonblocking)
+      if (ug::embedded::NonblockingIo(config_.nonblocking))
         error = TransportError::kTimeout;
       else
       {

@@ -16,6 +16,14 @@ bool SubmitCorrectionBytes(std::size_t source,
                            std::int64_t receipt_ns,
                            bool complete_frame = false);
 bool SetCorrectionDestination(std::size_t sink, FrameDestination callback, void* context);
+// Task-only; never call from the routing owner or a destination callback.
+// Caller serializes publication for this sink and must not republish the retiring
+// context. True means all old callbacks finished; false requires retaining it.
+bool RetireCorrectionDestination(std::size_t sink, std::uint32_t timeout_ms);
+// Nonblocking form for a cooperative owner. Retain the context until this exact
+// ticket is acknowledged; do not publish a fresh ticket on every poll.
+std::uint64_t WithdrawCorrectionDestination(std::size_t sink);
+bool CorrectionDestinationRetired(std::size_t sink, std::uint64_t ticket);
 struct GatewayServiceStats
 {
   Gateway::Metrics routing{};

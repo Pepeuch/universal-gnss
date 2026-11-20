@@ -48,7 +48,7 @@ int main(void)
   pthread_mutex_unlock(&lock);
   assert(!pthread_join(task, NULL));
   espnow_rtcm_storage_data_t* data = espnow_rtcm_storage_get(&slot);
-  assert(data && data->queue.count == 0 && !data->message.len);
+  assert(data && data->slots[0].len == 0 && !data->message.len);
   assert(!espnow_rtcm_storage_reserve(&slot, allocate) && calls == 1);
   free(data);  // Test-only reboot; there are no remaining readers.
   return 0;

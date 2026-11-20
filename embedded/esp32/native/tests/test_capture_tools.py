@@ -1,5 +1,7 @@
 """Software-only validation of the migrated Linux capture tools using a PTY."""
 import io
+import asyncio
+import importlib.util
 import os
 from pathlib import Path
 import pty
@@ -21,6 +23,28 @@ def frame(payload):
 
 
 class CaptureTests(unittest.TestCase):
+    def test_resource_fixture_frames_and_fixed_schedule(self):
+        path=Path(__file__).resolve().parents[1]/'tools/resource_test_caster.py'
+        spec=importlib.util.spec_from_file_location('resource_fixture',path)
+        fixture=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture)
+        for size in (22,256,1023):
+            raw=fixture.make_frame(crc24q,1077,23,size)
+            self.assertEqual(RtcmReader().feed(raw),[raw])
+            kind,sequence,sent=fixture.identity(raw)
+            self.assertEqual((kind,sequence),(1077,23));self.assertGreater(sent,0)
+        for kind,size in ((1077,21),(1077,1024),(4096,22)):
+            with self.assertRaises(ValueError):fixture.make_frame(crc24q,kind,0,size)
+        self.assertEqual(fixture.next_deadline(10,10.001,.02),(10.02,0))
+        deadline,missed=fixture.next_deadline(10,10.075,.02)
+        self.assertAlmostEqual(deadline,10.08);self.assertEqual(missed,3)
+        class Writer:
+            async def drain(self):
+                raise TimeoutError('controlled fixture timeout')
+            def write(self,raw):pass
+        stats={'source_frames':0,'source_bytes':0,'source_write_timeouts':0}
+        with self.assertRaises(TimeoutError):asyncio.run(fixture.send_source({Writer()},b'x',stats))
+        self.assertEqual(stats,{'source_frames':0,'source_bytes':0,'source_write_timeouts':1})
+
     def test_explicit_uart_baud_8n1_order_and_restoration(self):
         for baud in (115200, 230400, 460800, 921600):
             with self.subTest(baud=baud):

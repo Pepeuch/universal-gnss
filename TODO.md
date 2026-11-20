@@ -1,5 +1,23 @@
 # Universal GNSS — TODO
 
+ESP32 resource lifecycle refactor: **PARTIAL / HARDWARE_REQUIRED**, paused on
+`perf/esp32-resource-lifecycle`. Router retirement, cooperative execution, a private
+PSRAM arena and scoped Xtensa recovery are implemented. Physical input-arena OOM
+cleanup/retry passes on its recorded baseline. CPU A is retained; PSRAM radio
+payload and conservative Wi-Fi B become S3 defaults after matched comparisons.
+The UART-in-Flash FIFO failure is reproduced; IRAM correction passes 81 writes.
+Latest nominal load: 902/902 C3 frames, 60/60 HTTPS requests, minimum sampled
+internal free126667 B / largest34816 B. Admission guards are unchanged; the
+indicative150 KiB loaded goal remains unmet. Final software snapshot passes112
+native sanitizer tests and pinned-SDK/QEMU/reproducibility; it is not the installed
+comparator. The100-transition series remains incomplete (42 transitions then
+three MAC failures, UART clean); recovery11/11 is a separate bounded result.
+Cancellation/bursts, final-source hardware recovery and full acceptance remain
+open. Configuration restored, benches stopped, USB free for the pause.
+[Current evidence](docs/analysis/ESP32_RESOURCE_LIFECYCLE.md).
+No historical completion counter changes. Generic ESP32 preservation is indexed
+in the retained engineering checkpoint; independent extraction is deferred.
+
 ## Active ESP32 functional exercises — planned scope, outside historical counters
 
 Planning update (2026-11-19). This register follows the active direction in

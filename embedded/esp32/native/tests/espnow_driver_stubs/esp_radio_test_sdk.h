@@ -13,6 +13,7 @@
 #define ESP_ERR_TIMEOUT 9
 #define MALLOC_CAP_INTERNAL 1U
 #define MALLOC_CAP_8BIT 2U
+#define MALLOC_CAP_SPIRAM 4U
 #define ESP_LOGE(...) ((void)0)
 #define ESP_LOGI(...) ((void)0)
 typedef int portMUX_TYPE;
@@ -22,6 +23,8 @@ void test_unlock(void);
 #define portENTER_CRITICAL(x) test_lock()
 #define portEXIT_CRITICAL(x) test_unlock()
 typedef void* TaskHandle_t;
+unsigned uxTaskGetStackHighWaterMark(TaskHandle_t task);
+int xPortGetCoreID(void);
 typedef int* SemaphoreHandle_t;
 #define pdTRUE 1
 #define pdPASS 1
@@ -46,6 +49,9 @@ typedef int esp_now_send_status_t;
 typedef struct
 {
   bool nvs_enable;
+  int static_rx_buf_num, dynamic_rx_buf_num, dynamic_tx_buf_num;
+  int ampdu_rx_enable, ampdu_tx_enable, rx_ba_win;
+  int tx_buf_type, static_tx_buf_num, rx_mgmt_buf_num, espnow_max_encrypt_num;
 } wifi_init_config_t;
 #define WIFI_INIT_CONFIG_DEFAULT() ((wifi_init_config_t){.nvs_enable = true})
 typedef int wifi_mode_t;

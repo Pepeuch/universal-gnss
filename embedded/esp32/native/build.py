@@ -133,6 +133,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
         f'CONFIG_ESP_MAIN_TASK_STACK_SIZE={8192 if rover else 32768}\n']
     if s3:
         defaults += ['CONFIG_UG_WEB_HTTP=y\n' if web_transport == 'http' else '# CONFIG_UG_WEB_HTTP is not set\n']
+        # Dynamic S3 owners must recover from nested C++ allocation failures;
+        # with exceptions disabled, libstdc++ aborts instead. Keep a bounded
+        # emergency reserve and qualify it under full heap exhaustion in QEMU.
         defaults += ['''CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
@@ -140,6 +143,10 @@ CONFIG_SPIRAM_TYPE_ESPPSRAM64=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_USE_MALLOC=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=1024
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
+CONFIG_COMPILER_CXX_EXCEPTIONS_EMG_POOL_SIZE=2048
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+CONFIG_UART_ISR_IN_IRAM=y
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 CONFIG_HEAP_TRACING_STANDALONE=y
 CONFIG_HEAP_TRACING_STACK_DEPTH=4

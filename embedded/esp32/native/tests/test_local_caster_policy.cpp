@@ -52,9 +52,8 @@ int main()
   const auto rejected = PollRead(caster, fd);
   assert(rejected.find("200 OK") == std::string::npos);
   close(fd);
-  const std::string authorization = "Authorization: Basic " +
-                                    BuildBasicAuthorizationValue(policy.username, policy.password) +
-                                    "\r\n";
+  const std::string authorization =
+      "Authorization: " + BuildBasicAuthorizationValue(policy.username, policy.password) + "\r\n";
   fd = Connect(caster.port());
   auto partial = "GET /BASE HTTP/1.0\r\n" + authorization;
   assert(send(fd, partial.data(), partial.size(), 0) == static_cast<ssize_t>(partial.size()));
@@ -78,6 +77,12 @@ int main()
   fd = Connect(caster.port());
   auto duplicate = "GET /BASE HTTP/1.0\r\n" + authorization + authorization + "\r\n";
   assert(send(fd, duplicate.data(), duplicate.size(), 0) == static_cast<ssize_t>(duplicate.size()));
+  assert(PollRead(caster, fd).find("200 OK") == std::string::npos);
+  close(fd);
+  fd = Connect(caster.port());
+  const auto doubled = "GET /BASE HTTP/1.0\r\nAuthorization: Basic " +
+                       BuildBasicAuthorizationValue(policy.username, policy.password) + "\r\n\r\n";
+  assert(send(fd, doubled.data(), doubled.size(), 0) == static_cast<ssize_t>(doubled.size()));
   assert(PollRead(caster, fd).find("200 OK") == std::string::npos);
   close(fd);
   caster.Stop();

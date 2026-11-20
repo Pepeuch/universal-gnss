@@ -16,12 +16,26 @@ public:
   {
     std::uint64_t connects{}, frames{}, bytes{}, failures{}, expired{}, filtered{};
   };
+  // Caller-owned task payload. Keep it with the S3 endpoint in external RAM,
+  // never on the shared I/O stack. No change to the legacy synchronous Send.
+  struct PendingFrame
+  {
+    Gateway::Frame frame{};
+    std::size_t offset{};
+    std::int64_t started_ns{};
+    std::uint16_t message_type{};
+    bool active{};
+  };
   bool Configure(const universal_gnss_ntrip::NtripConfig&,
                  bool enabled,
                  std::function<bool()> cancelled = {},
-                 std::string_view rtcm_messages = {});
+                 std::string_view rtcm_messages = {},
+                 bool nonblocking = false);
+  bool BlockingStepDue(std::int64_t now_ns) const;
   void Tick(std::int64_t now_ns);
   bool Send(const Gateway::Frame&, std::int64_t now_ns);
+  bool BeginFrame(PendingFrame&, const Gateway::Frame&, std::int64_t now_ns);
+  void ProgressFrame(PendingFrame&, std::int64_t now_ns);
   void Stop();
   void SetTrace(NtripTraceSink sink)
   {
@@ -46,6 +60,8 @@ private:
     kStreaming
   };
   void Fail(std::int64_t now_ns, NtripTraceError error);
+  bool AcceptFrame(const Gateway::Frame&, std::int64_t, std::uint16_t&);
+  void CommitFrame(std::uint16_t, std::size_t, std::int64_t);
   NtripTraceSink trace_;
   bool WriteAll(const std::uint8_t*, std::size_t);
   RtcmRules filter_;

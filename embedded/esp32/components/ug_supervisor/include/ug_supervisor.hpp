@@ -20,10 +20,12 @@ public:
   WorkerHealth(const WorkerHealth&) = delete;
   WorkerHealth& operator=(const WorkerHealth&) = delete;
   void Progress();
+  // Called only by its owner after sockets/callbacks and work are quiescent.
+  void Finish();
 
 private:
   ServiceId id_;
   std::int64_t last_stack_sample_ns_{};
-  bool watchdog_{};
+  bool watchdog_{}, finished_{};
 };
 }  // namespace ug::embedded

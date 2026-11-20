@@ -164,27 +164,44 @@ esp_err_t espnow_rtcm_receive(espnow_rtcm_codec_t* codec,
   return ESP_OK;
 }
 
+bool espnow_rtcm_mailbox_view_push(espnow_rtcm_mailbox_view_t view,
+                                   const uint8_t* data,
+                                   size_t len,
+                                   uint32_t now_ms)
+{
+  if (!view.slots || !view.head || !view.count || !data || !len || len > RTCM3_MAX_FRAME_LEN ||
+      *view.count == ESPNOW_RTCM_QUEUE_DEPTH)
+    return false;
+  espnow_rtcm_message_t* slot = &view.slots[(*view.head + *view.count) % ESPNOW_RTCM_QUEUE_DEPTH];
+  memcpy(slot->bytes, data, len);
+  slot->len = len;
+  slot->stamp_ms = now_ms;
+  ++*view.count;
+  return true;
+}
+
+bool espnow_rtcm_mailbox_view_pop(espnow_rtcm_mailbox_view_t view, espnow_rtcm_message_t* message)
+{
+  if (!view.slots || !view.head || !view.count || !message || !*view.count)
+    return false;
+  *message = view.slots[*view.head];
+  *view.head = (*view.head + 1) % ESPNOW_RTCM_QUEUE_DEPTH;
+  --*view.count;
+  return true;
+}
+
 bool espnow_rtcm_mailbox_push(espnow_rtcm_mailbox_t* box,
                               const uint8_t* data,
                               size_t len,
                               uint32_t now_ms)
 {
-  if (!box || !data || !len || len > RTCM3_MAX_FRAME_LEN || box->count == ESPNOW_RTCM_QUEUE_DEPTH)
-    return false;
-  espnow_rtcm_message_t* slot = &box->slots[(box->head + box->count) % ESPNOW_RTCM_QUEUE_DEPTH];
-  memcpy(slot->bytes, data, len);
-  slot->len = len;
-  slot->stamp_ms = now_ms;
-  ++box->count;
-  return true;
+  return box &&
+         espnow_rtcm_mailbox_view_push(
+             (espnow_rtcm_mailbox_view_t){box->slots, &box->head, &box->count}, data, len, now_ms);
 }
 
 bool espnow_rtcm_mailbox_pop(espnow_rtcm_mailbox_t* box, espnow_rtcm_message_t* message)
 {
-  if (!box || !message || !box->count)
-    return false;
-  *message = box->slots[box->head];
-  box->head = (box->head + 1) % ESPNOW_RTCM_QUEUE_DEPTH;
-  --box->count;
-  return true;
+  return box && espnow_rtcm_mailbox_view_pop(
+                    (espnow_rtcm_mailbox_view_t){box->slots, &box->head, &box->count}, message);
 }

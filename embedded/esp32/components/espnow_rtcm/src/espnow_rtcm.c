@@ -5,6 +5,7 @@
 #include "espnow_rtcm.h"
 #include "sdkconfig.h"
 #include "ug_pairing.h"
+#include "ug_pairing_pmk.h"
 
 #if CONFIG_ESPNOW_RTCM_BASE || CONFIG_ESPNOW_RTCM_ROVER
 #include "driver/usb_serial_jtag.h"
@@ -23,6 +24,8 @@
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
 #include "esp_heap_caps.h"
 #include "espnow_rtcm_storage.h"
+#include "ug_s3_execution_policy.h"
+#include "ug_s3_radio_policy.h"
 #include <stdatomic.h>
 static portMUX_TYPE s_storage_guard = portMUX_INITIALIZER_UNLOCKED;
 static void storage_enter(void)
@@ -39,12 +42,26 @@ static espnow_rtcm_storage_t s_storage = {.enter = storage_enter, .exit = storag
 static bool s_start_claimed;
 #define s_stream (espnow_rtcm_storage_get(&s_storage)->stream)
 #define s_radio (espnow_rtcm_storage_get(&s_storage)->radio)
-#define s_queue (espnow_rtcm_storage_get(&s_storage)->queue)
+static struct
+{
+  size_t head, count;
+} s_queue;
+static espnow_rtcm_mailbox_view_t queue_view(espnow_rtcm_storage_data_t* storage)
+{
+  return (espnow_rtcm_mailbox_view_t){storage->slots, &s_queue.head, &s_queue.count};
+}
+#ifndef UG_S3_RADIO_STORAGE_PSRAM
+#define UG_S3_RADIO_STORAGE_PSRAM 1
+#endif
+#if UG_S3_RADIO_STORAGE_PSRAM != 0 && UG_S3_RADIO_STORAGE_PSRAM != 1
+#error "UG_S3_RADIO_STORAGE_PSRAM must be 0 or 1"
+#endif
 #define s_message (espnow_rtcm_storage_get(&s_storage)->message)
 static void* allocate_radio_storage(size_t size)
 {
-  /* No DMA buffer is moved. Keep cache-disabled/critical-section assumptions. */
-  return heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  return heap_caps_malloc(
+      size,
+      MALLOC_CAP_8BIT | (UG_S3_RADIO_STORAGE_PSRAM ? MALLOC_CAP_SPIRAM : MALLOC_CAP_INTERNAL));
 }
 #else
 static espnow_rtcm_codec_t s_stream, s_radio;
@@ -85,11 +102,7 @@ void espnow_rtcm_get_stats(espnow_rtcm_stats_t* out)
   portENTER_CRITICAL(&s_lock);
   *out = s_stats;
   out->started = s_started;
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  out->queued = espnow_rtcm_storage_get(&s_storage) ? s_queue.count : 0;
-#else
   out->queued = s_queue.count;
-#endif
 #if CONFIG_ESPNOW_RTCM_BASE
   out->tx_quarantined = s_tx_halted;
 #endif
@@ -101,19 +114,77 @@ static uint32_t now_ms(void)
   return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+// Seven internal 32-bit counters. The worker alone owns its 64-bit sample deadline.
+static struct
+{
+  uint32_t peak, max_dequeue_age_ms, max_push_lock_hold_us, max_pop_lock_hold_us;
+  uint32_t enter_delay_us_max, worker_stack_min_bytes, observed_core_mask;
+} s_queue_diag;
+static int64_t s_next_stack_sample_us;
+
+static void record_max(uint32_t* high, uint32_t value)
+{
+  if (value > *high)
+    *high = value;
+}
+static void record_duration(uint32_t* high, int64_t duration_us)
+{
+  record_max(high, duration_us > UINT32_MAX ? UINT32_MAX : (uint32_t)duration_us);
+}
+void espnow_rtcm_get_queue_diagnostics(espnow_rtcm_queue_diagnostics_t* out)
+{
+  if (!out)
+    return;
+  portENTER_CRITICAL(&s_lock);
+  *out = (espnow_rtcm_queue_diagnostics_t){
+      .available = true,
+      .capacity = ESPNOW_RTCM_QUEUE_DEPTH,
+      .depth = s_queue.count,
+      .peak = s_queue_diag.peak,
+      .max_dequeue_age_ms = s_queue_diag.max_dequeue_age_ms,
+      .max_push_lock_hold_us = s_queue_diag.max_push_lock_hold_us,
+      .max_pop_lock_hold_us = s_queue_diag.max_pop_lock_hold_us,
+      .enter_delay_us_max = s_queue_diag.enter_delay_us_max,
+      .worker_stack_min_bytes = s_queue_diag.worker_stack_min_bytes,
+      .observed_core_mask = s_queue_diag.observed_core_mask,
+  };
+  if (s_queue.count)
+  {
+    const espnow_rtcm_storage_data_t* storage = espnow_rtcm_storage_get(&s_storage);
+    out->oldest_age_ms = now_ms() - storage->slots[s_queue.head].stamp_ms;
+    out->oldest_valid = true;
+  }
+  portEXIT_CRITICAL(&s_lock);
+}
+#endif
 static bool queue_push_at(const uint8_t* data, size_t len, uint32_t stamp_ms)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  const int64_t before_us = esp_timer_get_time();
+#endif
   portENTER_CRITICAL(&s_lock);
 #if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  if (!espnow_rtcm_storage_get(&s_storage))
+  const int64_t entered_us = esp_timer_get_time();
+  record_duration(&s_queue_diag.enter_delay_us_max, entered_us - before_us);
+  espnow_rtcm_storage_data_t* storage = espnow_rtcm_storage_get(&s_storage);
+  if (!storage)
   {
+    record_duration(&s_queue_diag.max_push_lock_hold_us, esp_timer_get_time() - entered_us);
     portEXIT_CRITICAL(&s_lock);
     return false;
   }
-#endif
+  bool ok = espnow_rtcm_mailbox_view_push(queue_view(storage), data, len, stamp_ms);
+#else
   bool ok = espnow_rtcm_mailbox_push(&s_queue, data, len, stamp_ms);
+#endif
   if (!ok)
     ++s_stats.dropped;
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  if (ok)
+    record_max(&s_queue_diag.peak, s_queue.count);
+  record_duration(&s_queue_diag.max_push_lock_hold_us, esp_timer_get_time() - entered_us);
+#endif
   portEXIT_CRITICAL(&s_lock);
   if (ok)
     xTaskNotifyGive(s_worker);
@@ -127,12 +198,40 @@ static bool queue_push(const uint8_t* data, size_t len)
 
 static bool queue_pop(void)
 {
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  const int64_t before_us = esp_timer_get_time();
+#endif
   portENTER_CRITICAL(&s_lock);
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  const int64_t entered_us = esp_timer_get_time();
+  record_duration(&s_queue_diag.enter_delay_us_max, entered_us - before_us);
+  espnow_rtcm_storage_data_t* storage = espnow_rtcm_storage_get(&s_storage);
+  bool ok = espnow_rtcm_mailbox_view_pop(queue_view(storage), &storage->message);
+#else
   bool ok = espnow_rtcm_mailbox_pop(&s_queue, &s_message);
+#endif
 #if CONFIG_ESPNOW_RTCM_BASE
   s_message_epoch = s_tx_epoch;
 #endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  if (ok)
+  {
+    record_max(&s_queue_diag.max_dequeue_age_ms, now_ms() - storage->message.stamp_ms);
+    s_queue_diag.observed_core_mask |= 1U << xPortGetCoreID();
+  }
+  record_duration(&s_queue_diag.max_pop_lock_hold_us, esp_timer_get_time() - entered_us);
+#endif
   portEXIT_CRITICAL(&s_lock);
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  if (before_us >= s_next_stack_sample_us)
+  {
+    const uint32_t remaining = uxTaskGetStackHighWaterMark(NULL);
+    s_next_stack_sample_us = esp_timer_get_time() + 1000000;
+    portENTER_CRITICAL(&s_lock);
+    s_queue_diag.worker_stack_min_bytes = remaining;
+    portEXIT_CRITICAL(&s_lock);
+  }
+#endif
   return ok;
 }
 
@@ -157,6 +256,14 @@ static esp_err_t send_fragment(const lora_transport_fragment_t* part, void* ctx)
   esp_err_t err = esp_now_send(s_peer, part->packet, part->packet_len);
   if (err != ESP_OK)
   {
+#if CONFIG_IDF_TARGET_ESP32S3
+    static unsigned reported_api_errors;
+    if (reported_api_errors < 4)
+    {
+      ++reported_api_errors;
+      ESP_LOGE("ESP_NOW_RTCM", "Send API failed: %s", esp_err_to_name(err));
+    }
+#endif
     counter_add(&s_stats.tx_failures, 1);
     return err;
   }
@@ -169,6 +276,17 @@ static esp_err_t send_fragment(const lora_transport_fragment_t* part, void* ctx)
     counter_add(&s_stats.tx_failures, 1);
     return ESP_ERR_TIMEOUT;
   }
+#if CONFIG_IDF_TARGET_ESP32S3
+  if (s_send_status != ESP_NOW_SEND_SUCCESS)
+  {
+    static unsigned reported_ack_errors;
+    if (reported_ack_errors < 4)
+    {
+      ++reported_ack_errors;
+      ESP_LOGE("ESP_NOW_RTCM", "Send callback reports MAC delivery failure");
+    }
+  }
+#endif
   counter_add(s_send_status == ESP_NOW_SEND_SUCCESS ? &s_stats.tx_packets_acknowledged
                                                     : &s_stats.tx_failures,
               1);
@@ -238,6 +356,13 @@ esp_err_t espnow_rtcm_set_rover_writer(espnow_rtcm_write_fn writer, void* contex
 
 static void worker(void* arg)
 {
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE && defined(ESP_PLATFORM)
+  ESP_LOGI("UG_CPU",
+           "role=radio profile=%d configured_core=%d observed_core=%d",
+           UG_S3_CPU_PROFILE,
+           ug_s3_worker_core(UG_S3_WORKER_RADIO),
+           xPortGetCoreID());
+#endif
   (void)arg;
   for (;;)
   {
@@ -315,8 +440,9 @@ esp_err_t espnow_rtcm_start(void)
   if (!espnow_rtcm_storage_reserve(&s_storage, allocate_radio_storage))
     return ESP_ERR_NO_MEM;
   ESP_LOGI("ESP_NOW_RTCM",
-           "Storage reserved: %u internal bytes; retained until reboot",
-           (unsigned)sizeof(espnow_rtcm_storage_data_t));
+           "Storage reserved: %u %s bytes; retained until reboot",
+           (unsigned)sizeof(espnow_rtcm_storage_data_t),
+           UG_S3_RADIO_STORAGE_PSRAM ? "PSRAM" : "internal");
 #endif
   espnow_rtcm_codec_init(&s_stream);
   espnow_rtcm_codec_init(&s_radio);
@@ -342,6 +468,10 @@ esp_err_t espnow_rtcm_start(void)
   wifi.nvs_enable = false;
   wifi_mode_t existing_mode;
   bool existing_wifi = esp_wifi_get_mode(&existing_mode) == ESP_OK;
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
+  if (!existing_wifi)
+    ug_apply_s3_radio_policy(&wifi, true);
+#endif
   if (!existing_wifi && (err = esp_wifi_init(&wifi)) != ESP_OK)
   {
 #if CONFIG_ESPNOW_RTCM_BASE
@@ -440,11 +570,14 @@ esp_err_t espnow_rtcm_start(void)
     return err;
   }
   uint8_t pmk[16];
-  esp_fill_random(pmk, sizeof(pmk));
-  if ((err = esp_now_set_pmk(pmk)) != ESP_OK ||
-      (err = esp_wifi_get_mac(WIFI_IF_STA, s_local_mac)) != ESP_OK)
+  if (!ug_pairing_derive_pmk(s_key, pmk))
+    return ESP_FAIL;
+  err = esp_now_set_pmk(pmk);
+  volatile uint8_t* erase_pmk = pmk;
+  for (size_t i = 0; i < sizeof(pmk); ++i)
+    erase_pmk[i] = 0;
+  if (err != ESP_OK || (err = esp_wifi_get_mac(WIFI_IF_STA, s_local_mac)) != ESP_OK)
     return err;
-  memset(pmk, 0, sizeof(pmk));
   esp_now_peer_info_t peer = {.channel = s_channel, .ifidx = WIFI_IF_STA, .encrypt = true};
   memcpy(peer.lmk, s_key, sizeof(s_key));
   memcpy(peer.peer_addr, s_peer, sizeof(s_peer));
@@ -455,7 +588,16 @@ esp_err_t espnow_rtcm_start(void)
 #endif
     return err;
   }
-  if (xTaskCreate(worker, "espnow_rtcm", 4096, NULL, 4, &s_worker) != pdPASS)
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE && UG_S3_CPU_PROFILE > 0
+  const bool worker_created =
+      xTaskCreatePinnedToCore(
+          worker, "espnow_rtcm", 4096, NULL, 4, &s_worker, ug_s3_worker_core(UG_S3_WORKER_RADIO)) ==
+      pdPASS;
+#else
+  const bool worker_created =
+      xTaskCreate(worker, "espnow_rtcm", 4096, NULL, 4, &s_worker) == pdPASS;
+#endif
+  if (!worker_created)
     return ESP_ERR_NO_MEM;
 #if CONFIG_ESPNOW_RTCM_BASE
   if ((err = esp_now_register_send_cb(sent)) != ESP_OK)
@@ -516,15 +658,8 @@ void espnow_rtcm_stop_until_reboot(void)
 #if CONFIG_ESPNOW_RTCM_BASE
   portENTER_CRITICAL(&s_lock);
   s_tx_halted = true;
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  if (espnow_rtcm_storage_get(&s_storage))
-  {
-#endif
-    s_stats.dropped += s_queue.count;
-    s_queue.head = s_queue.count = 0;
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  }
-#endif
+  s_stats.dropped += s_queue.count;
+  s_queue.head = s_queue.count = 0;
   portEXIT_CRITICAL(&s_lock);
 #endif
 }
@@ -537,15 +672,8 @@ void espnow_rtcm_invalidate_pending(void)
     s_tx_halted = true;
   else
     ++s_tx_epoch;
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  if (espnow_rtcm_storage_get(&s_storage))
-  {
-#endif
-    s_stats.dropped += s_queue.count;
-    s_queue.head = s_queue.count = 0;
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3 && CONFIG_ESPNOW_RTCM_BASE
-  }
-#endif
+  s_stats.dropped += s_queue.count;
+  s_queue.head = s_queue.count = 0;
   portEXIT_CRITICAL(&s_lock);
 #endif
 }
@@ -648,5 +776,13 @@ void espnow_rtcm_ntrip_bytes(const uint8_t* data, size_t len)
 {
   (void)data;
   (void)len;
+}
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S3) || !CONFIG_IDF_TARGET_ESP32S3 || !CONFIG_ESPNOW_RTCM_BASE
+void espnow_rtcm_get_queue_diagnostics(espnow_rtcm_queue_diagnostics_t* out)
+{
+  if (out)
+    *out = (espnow_rtcm_queue_diagnostics_t){0};
 }
 #endif

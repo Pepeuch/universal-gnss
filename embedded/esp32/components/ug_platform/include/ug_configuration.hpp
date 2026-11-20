@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 #pragma once
 #include "ug_settings.hpp"
+#ifdef ESP_PLATFORM
+#include "sdkconfig.h"
+#endif
 namespace ug::embedded
 {
 // Called once before services/tasks. Storage failure leaves defaults in RAM, writes locked.
@@ -17,6 +20,10 @@ struct ConfigurationHistory
   bool previous_available{};
 };
 ConfigurationHistory ConfigurationBanks();
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && CONFIG_IDF_TARGET_ESP32S3
+// On-demand console report. Contains only timings, record sizes and SDK results.
+void PrintConfigurationWriteDiagnostics();
+#endif
 // Gateway settings only: does not undo receiver commands or clear its journal.
 bool RollbackConfiguration(std::string_view request, std::string& error);
 // Journal must be committed before any receiver configuration is dispatched.

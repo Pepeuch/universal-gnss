@@ -24,6 +24,7 @@ extern "C" {
 #include "ug_pairing_window.hpp"
 #include "ug_portable_settings.hpp"
 #include "ug_resource_policy.hpp"
+#include "ug_s3_execution_policy.h"
 #include "ug_services.hpp"
 #include "ug_supervisor.hpp"
 #include "ug_tls_bootstrap.hpp"
@@ -34,6 +35,7 @@ extern "C" {
 #include "universal_gnss_driver/unicore_model_profile.hpp"
 #endif
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
@@ -270,6 +272,42 @@ esp_err_t Status(httpd_req_t* req)
                               gateway.routing.dropped_full);
   cJSON_AddNumberToObject(root.get(), "stale_drops", gateway.routing.dropped_stale);
   cJSON_AddBoolToObject(root.get(), "receiver_quarantined", ReceiverJournalBlocked());
+#if UG_LOCAL_GNSS
+  // Non-sensitive I/O health for qualification: no coordinates, commands or
+  // credentials. Ages use the receiver owner's same monotonic clock domain.
+  const auto receiver = ReceiverIoSnapshot();
+  auto* io = cJSON_AddObjectToObject(root.get(), "gnss_io");
+  if (!io)
+    return Fail(req, "503 Service Unavailable", "GNSS I/O diagnostic memory unavailable");
+  // Preserve full counter/timestamp precision. Observed times are dequeues in
+  // the owner's monotonic clock, not hardware interrupt timestamps.
+  auto exact = [io](const char* key, std::uint64_t value) {
+    std::array<char, 24> text{};
+    const int count =
+        std::snprintf(text.data(), text.size(), "%llu", static_cast<unsigned long long>(value));
+    return count > 0 && static_cast<std::size_t>(count) < text.size() &&
+           cJSON_AddStringToObject(io, key, text.data());
+  };
+  const auto receipt_now = esp_timer_get_time() * 1000;
+  const auto age_ms = receiver.last_bytes_ns > 0 && receipt_now >= receiver.last_bytes_ns
+                          ? (receipt_now - receiver.last_bytes_ns) / 1000000
+                          : -1;
+  if (!cJSON_AddNumberToObject(io, "bytes", receiver.bytes) ||
+      !cJSON_AddNumberToObject(io, "uart_overflows", receiver.uart_overflows) ||
+      !cJSON_AddNumberToObject(io, "uart_line_errors", receiver.uart_line_errors) ||
+      !cJSON_AddNumberToObject(io, "uart_event_saturations", receiver.uart_event_saturations) ||
+      !cJSON_AddNumberToObject(io, "uart_read_failures", receiver.uart_read_failures) ||
+      !cJSON_AddNumberToObject(io, "uart_drain_limits", receiver.uart_drain_limits) ||
+      !cJSON_AddNumberToObject(io, "last_bytes_age_ms", age_ms) ||
+      !exact("uart_fifo_overflows", receiver.uart_fifo_overflows) ||
+      !exact("uart_ring_buffer_full", receiver.uart_ring_buffer_full) ||
+      !exact("uart_last_fifo_seq", receiver.uart_last_fifo_seq) ||
+      !exact("uart_last_ring_full_seq", receiver.uart_last_ring_full_seq) ||
+      !exact("uart_last_fifo_observed_ns", receiver.uart_last_fifo_observed_ns) ||
+      !exact("uart_last_ring_full_observed_ns", receiver.uart_last_ring_full_observed_ns) ||
+      !exact("uart_max_poll_gap_ns", receiver.uart_max_poll_gap_ns))
+    return Fail(req, "503 Service Unavailable", "GNSS I/O diagnostic memory unavailable");
+#endif
   espnow_rtcm_stats_t radio;
   espnow_rtcm_get_stats(&radio);
   auto* r = cJSON_AddObjectToObject(root.get(), "espnow");
@@ -285,6 +323,26 @@ esp_err_t Status(httpd_req_t* req)
   cJSON_AddNumberToObject(r, "tx_frames", radio.tx_frames);
   cJSON_AddNumberToObject(r, "mac_ack_packets", radio.tx_packets_acknowledged);
   cJSON_AddNumberToObject(r, "tx_failures", radio.tx_failures);
+#if CONFIG_IDF_TARGET_ESP32S3
+  espnow_rtcm_queue_diagnostics_t queue{};
+  espnow_rtcm_get_queue_diagnostics(&queue);
+  auto* q = cJSON_AddObjectToObject(root.get(), "espnow_queue");
+  if (!q)
+    return Fail(req, "503 Service Unavailable", "radio diagnostic memory unavailable");
+  if (!cJSON_AddBoolToObject(q, "available", queue.available) ||
+      !cJSON_AddBoolToObject(q, "oldest_valid", queue.oldest_valid) ||
+      !cJSON_AddNumberToObject(q, "capacity", queue.capacity) ||
+      !cJSON_AddNumberToObject(q, "depth", queue.depth) ||
+      !cJSON_AddNumberToObject(q, "peak", queue.peak) ||
+      !cJSON_AddNumberToObject(q, "oldest_age_ms", queue.oldest_age_ms) ||
+      !cJSON_AddNumberToObject(q, "max_dequeue_age_ms", queue.max_dequeue_age_ms) ||
+      !cJSON_AddNumberToObject(q, "max_push_lock_hold_us", queue.max_push_lock_hold_us) ||
+      !cJSON_AddNumberToObject(q, "max_pop_lock_hold_us", queue.max_pop_lock_hold_us) ||
+      !cJSON_AddNumberToObject(q, "enter_delay_us_max", queue.enter_delay_us_max) ||
+      !cJSON_AddNumberToObject(q, "worker_stack_min_bytes", queue.worker_stack_min_bytes) ||
+      !cJSON_AddNumberToObject(q, "observed_core_mask", queue.observed_core_mask))
+    return Fail(req, "503 Service Unavailable", "radio diagnostic memory unavailable");
+#endif
   const auto services = ServiceHealths();
   const auto now = esp_timer_get_time() * 1000;
   cJSON_AddBoolToObject(
@@ -900,8 +958,23 @@ esp_err_t CommandHistoryReply(httpd_req_t* req)
   return Json(req, root.get());
 }
 #endif
+void ObserveWebCore()
+{
+#if CONFIG_IDF_TARGET_ESP32S3 && defined(ESP_PLATFORM)
+  static std::atomic<unsigned> observed{};
+  const auto core = xPortGetCoreID();
+  const unsigned bit = 1u << core;
+  if (!(observed.fetch_or(bit, std::memory_order_relaxed) & bit))
+    ESP_LOGI("UG_CPU",
+             "role=web profile=%d configured_core=%d observed_core=%d",
+             UG_S3_CPU_PROFILE,
+             ug_s3_worker_core(UG_S3_WORKER_WEB),
+             core);
+#endif
+}
 esp_err_t Get(httpd_req_t* req)
 {
+  ObserveWebCore();
   WebMemoryScope memory(req->uri);
   if (req->content_len)
     return Fail(req, "400 Bad Request", "GET body is not supported");
@@ -1053,6 +1126,7 @@ esp_err_t AuthenticationPost(httpd_req_t* req)
 #endif
 esp_err_t Post(httpd_req_t* req)
 {
+  ObserveWebCore();
   WebMemoryScope memory(req->uri);
 #if CONFIG_IDF_TARGET_ESP32S3
   if (std::string_view(req->uri) == "/api/auth/login" ||
@@ -1334,6 +1408,9 @@ esp_err_t StartWebService()
     return FinishHttpsStartup(loaded.reason, loaded.sdk_error);  // No plaintext fallback.
   httpd_ssl_config_t config = ug_https_defaults();
   auto& httpd = config.httpd;
+#endif
+#if CONFIG_IDF_TARGET_ESP32S3 && UG_S3_CPU_PROFILE > 0
+  httpd.core_id = ug_s3_worker_core(UG_S3_WORKER_WEB);
 #endif
   httpd.task_priority = 2;   // Below correction routing (5) and UART/radio owners (4).
   httpd.stack_size = 24576;  // Same baseline for the initial HTTP/HTTPS comparison.

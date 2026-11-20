@@ -8,6 +8,11 @@ int installs = 0, reads = 0, flushes = 0;
 int flush_result = ESP_OK;
 bool inject_fault = false;
 unsigned last_wait = 0;
+std::int64_t mock_us = 0;
+std::int64_t esp_timer_get_time()
+{
+  return mock_us;
+}
 unsigned uxQueueMessagesWaiting(QueueHandle_t)
 {
   return events.size();
@@ -19,6 +24,7 @@ int xQueueReceive(QueueHandle_t, void* out, unsigned wait)
     return 0;
   *static_cast<uart_event_t*>(out) = events.front();
   events.pop_front();
+  ++mock_us;  // The event was queued before the owner observes it.
   return pdTRUE;
 }
 int gpio_reset_pin(gpio_num_t)
@@ -79,14 +85,25 @@ int main()
   assert(uart.ReadBatch(bytes, sizeof(bytes), false).bytes_read > 0 && last_wait == 0);
   // A driver-reported loss before the read prevents delivery entirely.
   events.push_back({UART_BUFFER_FULL, 0});
+  mock_us = 100;
   const auto before = reads;
   assert(uart.Read(bytes, sizeof(bytes)).bytes_read == 0 && reads == before);
   assert(uart.TakeFault() && flushes == 1 && uart.overflows == 1);
+  assert(uart.ring_buffer_full == 1 && uart.fifo_overflows == 0 && uart.last_ring_full_seq == 1 &&
+         uart.last_ring_full_observed_ns == 101000);
   // A fault racing the SDK read also suppresses that entire batch.
   inject_fault = true;
   assert(uart.Read(bytes, sizeof(bytes)).bytes_read == 0);
   inject_fault = false;
   assert(uart.TakeFault() && uart.overflows == 2);
+  assert(uart.fifo_overflows == 1 && uart.last_fifo_seq == 2 &&
+         uart.last_fifo_observed_ns == 102000);
+  // Both orders in one drain are retained through the most recent per-type sequence.
+  events.push_back({UART_BUFFER_FULL, 0});
+  events.push_back({UART_FIFO_OVF, 0});
+  assert(uart.TakeFault() && uart.overflows == uart.fifo_overflows + uart.ring_buffer_full);
+  assert(uart.last_ring_full_seq == 3 && uart.last_fifo_seq == 4 &&
+         uart.last_ring_full_observed_ns == 103000 && uart.last_fifo_observed_ns == 104000);
   for (const auto type : {UART_PARITY_ERR, UART_FRAME_ERR, UART_BREAK})
     events.push_back({type, 0});
   assert(uart.Read(bytes, sizeof(bytes)).bytes_read == 0);
@@ -105,4 +122,15 @@ int main()
   assert(!uart.TakeFault());
   uart.Close();
   assert(installs == 0 && !uart.IsOpen());
+  const auto gap = uart.max_poll_gap_ns;
+  assert(gap == 100000);
+  mock_us += 10000000;
+  uart.PollEvents();  // Closed time must not become a diagnostic gap on reopen.
+  assert(uart.Open(settings, pins));
+  uart.PollEvents();
+  assert(uart.max_poll_gap_ns == gap && uart.overflows == 4 && uart.last_fifo_seq == 4);
+  mock_us += 201;
+  uart.PollEvents();
+  assert(uart.max_poll_gap_ns == 201000);
+  uart.Close();
 }

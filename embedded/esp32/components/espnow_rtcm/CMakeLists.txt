@@ -11,3 +11,6 @@ idf_component_register(
     REQUIRES ug_pairing ug_rtcm rtcm_filter lora_transport esp_wifi esp_netif esp_event nvs_flash
              esp_timer esp_driver_usb_serial_jtag
 )
+if(CONFIG_IDF_TARGET_ESP32S3 AND CONFIG_ESPNOW_RTCM_BASE)
+    idf_component_optional_requires(PRIVATE ug_supervisor)
+endif()

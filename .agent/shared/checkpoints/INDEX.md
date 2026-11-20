@@ -75,3 +75,12 @@ performed for this documentation reconciliation.
 - `retained/UG-ESP32-RESOURCE-ARCHITECTURE.md` — S3 Gateway allocation and worker
   ownership audit, measured idle-radio-link evidence and the paired qualification
   protocol for a future network lifecycle refactor.
+
+- `active/UG-ESP32-RESOURCE-LIFECYCLE.md` — paused PARTIAL; final software112
+  sanitizer/SDK/QEMU/reproduction PASS, physical UART IRAM81-write correction and
+  nominal902/902 C3 +60/60 HTTPS PASS. Strict100-transition qualification remains
+  incomplete after42 transitions/three MAC failures; independent11/11 recovery.
+  Original logical configuration restored, sources stopped and USB ports free.
+- `retained/ESP32-ENGINEERING-KNOWLEDGE.md` — reusable generic ESP32 evidence
+  preservation and privacy boundary; reports, SDK/maps/builds/raw measures and
+  local qualification tools indexed. Independent repository extraction deferred.

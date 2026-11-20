@@ -16,8 +16,13 @@ public:
   NtripConnection(FrameSink sink, SessionBoundary boundary);
   bool Configure(const universal_gnss_ntrip::NtripConfig& config,
                  bool enabled,
-                 std::function<bool()> cancelled = {});
-  void Tick(std::int64_t now_ns, const universal_gnss::GnssRuntimeState* gga_state = nullptr);
+                 std::function<bool()> cancelled = {},
+                 bool nonblocking = false);
+  bool BlockingStepDue(std::int64_t now_ns) const;
+  void Tick(std::int64_t now_ns,
+            const universal_gnss::GnssRuntimeState* gga_state = nullptr,
+            bool inject_gga = true);
+  void InjectGga(std::int64_t now_ns, const universal_gnss::GnssRuntimeState& state);
   void Stop();
   void SetTrace(NtripTraceSink sink)
   {

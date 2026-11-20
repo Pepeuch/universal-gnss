@@ -40,6 +40,18 @@ typedef struct
   uint64_t output_bytes, output_frames, output_errors;
 } espnow_rtcm_stats_t;
 void espnow_rtcm_get_stats(espnow_rtcm_stats_t* result);
+/* Task context with cache enabled. Ages use wrapping monotonic receipt milliseconds.
+ * Maxima and core mask cover this boot. Stack is the worker's sampled high-water
+ * mark in bytes (zero before the first sample). Other targets return available=false.
+ */
+typedef struct
+{
+  bool available, oldest_valid;
+  uint32_t capacity, depth, peak, oldest_age_ms, max_dequeue_age_ms;
+  uint32_t max_push_lock_hold_us, max_pop_lock_hold_us, enter_delay_us_max;
+  uint32_t worker_stack_min_bytes, observed_core_mask;
+} espnow_rtcm_queue_diagnostics_t;
+void espnow_rtcm_get_queue_diagnostics(espnow_rtcm_queue_diagnostics_t* out);
 /* Permanent software TX stop for a pairing change; only a new boot can release it. */
 void espnow_rtcm_stop_until_reboot(void);
 bool espnow_rtcm_configuration_matches(const char* peer, const char* key, uint8_t channel);

@@ -19,7 +19,8 @@ bool Token(const std::string& s, std::size_t max, bool empty = false)
 bool NtripPublisher::Configure(const universal_gnss_ntrip::NtripConfig& config,
                                bool enabled,
                                std::function<bool()> cancelled,
-                               std::string_view messages)
+                               std::string_view messages,
+                               bool nonblocking)
 {
   if (enabled &&
       (!Token(config.host, 253) || !config.port || !Token(config.mountpoint, 128) ||
@@ -43,6 +44,7 @@ bool NtripPublisher::Configure(const universal_gnss_ntrip::NtripConfig& config,
   tcp_.read_timeout_ms = 20;
   tcp_.write_timeout_ms = 1000;
   tcp_.tcp_nodelay = true;
+  tcp_.nonblocking = nonblocking;
   tcp_.tls_enabled = config.tls_enabled;
   tcp_.tls_verify_peer = config.tls_verify_peer;
   tcp_.tls_ca_file = config.tls_ca_file;
@@ -91,6 +93,13 @@ bool NtripPublisher::WriteAll(const std::uint8_t* data, std::size_t size)
     sent += out.bytes_written;
   }
   return true;
+}
+bool NtripPublisher::BlockingStepDue(std::int64_t now_ns) const
+{
+  return now_ns >= 0 &&
+         (state_ == State::kRequest ||
+          (state_ == State::kConnect &&
+           (!attempted_ || config_.reconnect_policy.ShouldReconnect(reconnect_, now_ns))));
 }
 void NtripPublisher::Tick(const std::int64_t now_ns)
 {
@@ -187,7 +196,9 @@ void NtripPublisher::Tick(const std::int64_t now_ns)
       Fail(now_ns, NtripTraceError::kRead);
   }
 }
-bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns)
+bool NtripPublisher::AcceptFrame(const Gateway::Frame& frame,
+                                 const std::int64_t now_ns,
+                                 std::uint16_t& type)
 {
   if (!streaming())
     return false;
@@ -198,22 +209,93 @@ bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns
   }
   if (frame.size > frame.bytes.size() || !ug_rtcm_frame_valid(frame.bytes.data(), frame.size))
     return false;
-  const auto type = frame.size >= 8 ? rtcm3_get_message_type(frame.bytes.data(), frame.size) : 0;
+  type = frame.size >= 8 ? rtcm3_get_message_type(frame.bytes.data(), frame.size) : 0;
   if (!filter_.Allows(type, now_ns))
   {
     ++metrics_.filtered;
     return false;
   }
+  return true;
+}
+void NtripPublisher::CommitFrame(std::uint16_t type, std::size_t size, std::int64_t now_ns)
+{
+  filter_.Sent(type, now_ns);
+  ++metrics_.frames;
+  metrics_.bytes += size;
+  if (++session_frames_ == 2)
+    config_.reconnect_policy.OnSuccess(reconnect_, now_ns);
+}
+bool NtripPublisher::Send(const Gateway::Frame& frame, const std::int64_t now_ns)
+{
+  std::uint16_t type{};
+  if (!AcceptFrame(frame, now_ns, type))
+    return false;
   if (!WriteAll(frame.bytes.data(), frame.size))
   {
     Fail(now_ns, NtripTraceError::kWrite);
     return false;
   }
-  filter_.Sent(type, now_ns);
-  ++metrics_.frames;
-  metrics_.bytes += frame.size;
-  if (++session_frames_ == 2)
-    config_.reconnect_policy.OnSuccess(reconnect_, now_ns);
+  CommitFrame(type, frame.size, now_ns);
   return true;
+}
+bool NtripPublisher::BeginFrame(PendingFrame& pending,
+                                const Gateway::Frame& frame,
+                                std::int64_t now_ns)
+{
+  if (!tcp_.nonblocking || pending.active)
+    return false;
+  std::uint16_t type{};
+  if (!AcceptFrame(frame, now_ns, type))
+    return false;
+  pending.frame = frame;
+  pending.offset = 0;
+  pending.started_ns = now_ns;
+  pending.message_type = type;
+  pending.active = true;
+  ProgressFrame(pending, now_ns);
+  return true;  // Accepted for bounded progress, not a delivery acknowledgement.
+}
+void NtripPublisher::ProgressFrame(PendingFrame& pending, std::int64_t now_ns)
+{
+  if (!pending.active)
+    return;
+  if (!streaming())
+  {
+    pending.active = false;
+    return;
+  }
+  if ((cancelled_ && cancelled_()) || now_ns < pending.started_ns ||
+      now_ns - pending.started_ns >= 1000000000LL || now_ns < pending.frame.receipt_ns ||
+      now_ns - pending.frame.receipt_ns > 3000000000LL)
+  {
+    pending.active = false;
+    ++metrics_.expired;
+    Fail(now_ns, NtripTraceError::kTimeout);
+    return;
+  }
+  const auto remain = pending.frame.size - pending.offset;
+  const auto out = transport_.Write(pending.frame.bytes.data() + pending.offset, remain);
+  if (out.bytes_written > remain)
+  {
+    pending.active = false;
+    Fail(now_ns, NtripTraceError::kWrite);
+    return;
+  }
+  if (out.status != universal_gnss_transport::TransportStatus::kOk)
+  {
+    // A nonblocking socket that cannot accept bytes retains this single frame.
+    // It never stalls another endpoint or advances its filter interval.
+    if (out.error == universal_gnss_transport::TransportError::kTimeout && !out.bytes_written)
+      return;
+    pending.active = false;
+    Fail(now_ns, NtripTraceError::kWrite);
+    return;
+  }
+  pending.offset += out.bytes_written;
+  if (pending.offset == pending.frame.size)
+  {
+    pending.active = false;
+    CommitFrame(pending.message_type, pending.frame.size, now_ns);
+  }
 }
 }  // namespace ug::embedded
