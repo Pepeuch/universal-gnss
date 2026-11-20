@@ -13,7 +13,9 @@ The proposed15-category engineering classification is deferred at user request.
   Includes numerical comparisons, rejected strategies, exact source trees and
   the read-only Astra HTTPS study. Existing
   [architecture audit](../../../../docs/analysis/ESP32_ARCHITECTURE_RESOURCE_AUDIT.md)
-  remains the ownership reference. Source and regression tests are authoritative.
+  remains the ownership reference. The [15 November memory audit](../../../../docs/analysis/ESP32_S3_MEMORY_AUDIT.md)
+  is preserved unchanged as historical evidence, not current allocation state.
+  Source and regression tests are authoritative.
 - Local, deliberately unversioned copies: `ESP/analyses/` contains the campaign
   report, HTTPS and W5500 TOE read-only notes and the pre-existing memory audit.
   These copies must not be silently included in commits. They are not updated

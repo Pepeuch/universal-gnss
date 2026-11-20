@@ -69,7 +69,7 @@ restore normal image when appropriate. No final acceptance until required cases 
 
 TLS lifecycle, TOE, Rust and authentication latency remain separate studies.
 No hosted CI polling (maintainer owns it). No secrets/raw coordinates/captures or
-backups in Git. Local pre-existing memory audit stays untracked. Invalidate only
+backups in Git. Pre-existing memory audit is now authorized as an unchanged versioned historical proof. Invalidate only
 for changed source/SDK/flags/hardware/topology or contradictory measured evidence.
 
 Saved implementation commit: `b8a8d57f7f120522fb3b999b517dfc6e97e51bbc` (caster dependency `1c1dc9f71fd8da3ebf853c7fc9bf1491ab26197f`).

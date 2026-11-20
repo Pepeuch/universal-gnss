@@ -50,7 +50,8 @@ Local report copies in `ESP/analyses/` are deliberately excluded from the commit
 ## Existing evidence and boundaries
 
 The [19 November architecture audit](ESP32_ARCHITECTURE_RESOURCE_AUDIT.md) is the
-current ownership map; the 15 November local memory audit is an earlier baseline.
+current ownership map; the [15 November memory audit](ESP32_S3_MEMORY_AUDIT.md)
+is an earlier baseline, now versioned unchanged with maintainer approval.
 Console/JSON/satellite/routing PSRAM placement, lazy radio storage and compact
 GNSS buffers are already present. Do not count them as new savings. Shared GNSS
 core, settings schema, partitions and memory guards remain outside this implementation.
